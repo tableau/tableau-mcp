@@ -13,13 +13,12 @@ export const TEMPLATE_PACKAGE_DIRNAME = 'TODO-MANIFEST-ID';
 
 /** POSIX paths (relative to the template root dir) of the files carrying identity tokens. */
 export const TWB_RELPATH = TEMPLATE_TWB_FILENAME;
-export const MANIFEST_RELPATH = `Packages/${TEMPLATE_PACKAGE_DIRNAME}/manifest.json`;
 export const TREX_RELPATH = `Packages/${TEMPLATE_PACKAGE_DIRNAME}/extensions/data-app.trex`;
 
 /**
  * Literal placeholder tokens embedded in the committed template. The same three
- * tokens appear across the .twb, manifest.json, and data-app.trex; the manifest
- * id token (`TODO-MANIFEST-ID`) is also the package directory name.
+ * tokens appear across the .twb and data-app.trex; the manifest id token
+ * (`TODO-MANIFEST-ID`) is also the package directory name.
  */
 const PLACEHOLDER_PACKAGE_ID = 'TODO-MANIFEST-ID';
 const PLACEHOLDER_DISPLAY_NAME = 'TODO App Name';
@@ -50,10 +49,10 @@ export function slug(name: string): string {
 }
 
 /**
- * Reduces a username to a value that is safe to embed verbatim in both a JSON
- * string (manifest.json) and an XML attribute (data-app.trex) without escaping:
- * disallowed characters (including quotes and angle brackets) collapse to a
- * single space; the result is trimmed.
+ * Reduces a username to a value that is safe to embed verbatim in an XML
+ * attribute (data-app.trex) without escaping: disallowed characters
+ * (including quotes and angle brackets) collapse to a single space; the
+ * result is trimmed.
  */
 function sanitizeUsername(username: string | undefined): string {
   if (!username) {
@@ -82,33 +81,21 @@ function escapeXmlText(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Escapes a value for insertion into a JSON string literal (manifest.json). */
-function escapeJsonString(value: string): string {
-  const json = JSON.stringify(value);
-  return json.slice(1, json.length - 1);
-}
-
 /**
  * The literal find/replace edits, keyed by the file's POSIX path relative to the
  * template root dir. Consumed by the local writer (applied while copying) and by
  * the remote plan (embedded for the client to apply).
  *
- * `displayName` is user-supplied and inserted verbatim, so it is escaped for the
- * target format of each file (XML text vs JSON string). `packageId` (a slug) and
- * `author` (sanitized) contain no characters needing escaping in either format.
+ * `displayName` is user-supplied and inserted verbatim, so it is XML-escaped.
+ * `packageId` (a slug) and `author` (sanitized) contain no characters needing
+ * escaping.
  */
 export function buildTextReplacements(identity: DataAppIdentity): Record<string, Replacement[]> {
   const displayNameXml = escapeXmlText(identity.displayName);
-  const displayNameJson = escapeJsonString(identity.displayName);
   return {
     [TWB_RELPATH]: [
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },
       { find: PLACEHOLDER_DISPLAY_NAME, replace: displayNameXml },
-    ],
-    [MANIFEST_RELPATH]: [
-      { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },
-      { find: PLACEHOLDER_DISPLAY_NAME, replace: displayNameJson },
-      { find: PLACEHOLDER_AUTHOR, replace: identity.author },
     ],
     [TREX_RELPATH]: [
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },

@@ -105,16 +105,6 @@ describe('createDataAppWorkspace', () => {
       expect(twb).toContain("id='com.tableau.mcp.sales-demo'");
       expect(twb).toContain('tableaulocalext:///com.tableau.mcp.sales-demo/content/index.html');
 
-      // manifest.json fully substituted, valid JSON, no residual placeholders.
-      const manifestRaw = await readFile(join(pkgDir, 'manifest.json'), 'utf8');
-      expect(manifestRaw).not.toContain('TODO-MANIFEST-ID');
-      expect(manifestRaw).not.toContain('TODO App Name');
-      expect(manifestRaw).not.toContain('TODO Username');
-      const manifest = JSON.parse(manifestRaw);
-      expect(manifest.id).toBe('com.tableau.mcp.sales-demo');
-      expect(manifest.name).toBe('Sales Demo');
-      expect(manifest.author).toBe('jdoe via Tableau MCP');
-
       // data-app.trex fully substituted.
       const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
       expect(trex).not.toContain('TODO-MANIFEST-ID');
@@ -133,7 +123,7 @@ describe('createDataAppWorkspace', () => {
       expect(appJs).toContain('AUTHOR YOUR APP HERE');
 
       // Files were written to their finalized paths on disk.
-      expect(existsSync(join(pkgDir, 'manifest.json'))).toBe(true);
+      expect(existsSync(join(pkgDir, 'extensions', 'data-app.trex'))).toBe(true);
     });
 
     it('falls back to "Tableau MCP" author when no username is provided', async () => {
@@ -147,13 +137,17 @@ describe('createDataAppWorkspace', () => {
       const value = result.value;
       invariant(value.filePath);
 
-      const manifest = JSON.parse(
-        await readFile(
-          join(value.filePath, 'Packages', 'com.tableau.mcp.no-user', 'manifest.json'),
-          'utf8',
+      const trex = await readFile(
+        join(
+          value.filePath,
+          'Packages',
+          'com.tableau.mcp.no-user',
+          'extensions',
+          'data-app.trex',
         ),
+        'utf8',
       );
-      expect(manifest.author).toBe('Tableau MCP');
+      expect(trex).toContain('author name="Tableau MCP"');
     });
 
     it('refuses to overwrite an existing workspace', async () => {

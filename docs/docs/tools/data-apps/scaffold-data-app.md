@@ -7,8 +7,8 @@ sidebar_position: 1
 Scaffolds a new Tableau **data app** workspace: a starter Tableau viz (worksheet) extension that
 queries a published datasource live via the Extensions API. Given a single `datappName`, the tool
 derives the extension package id, display name, and author and returns a ready-to-edit workspace — a
-workbook plus an extension package containing `manifest.json`, `index.html`, and a `src/app.js`
-starter you author the query and visualization into.
+workbook plus an extension package containing `index.html` and a `src/app.js` starter you author
+the query and visualization into.
 
 Optionally, provide `datasourceLuid` to also wire a published datasource on the same site/server
 into the workbook (every field on it), so the returned data app is already query-ready.

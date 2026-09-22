@@ -2,7 +2,6 @@ import {
   applyReplacements,
   buildTextReplacements,
   deriveIdentity,
-  MANIFEST_RELPATH,
   mapToFinalRelativePath,
   slug,
   TEMPLATE_TWB_FILENAME,
@@ -49,18 +48,13 @@ describe('deriveIdentity', () => {
 });
 
 describe('buildTextReplacements', () => {
-  it('maps every placeholder token in the .twb, manifest.json, and data-app.trex', () => {
+  it('maps every placeholder token in the .twb and data-app.trex', () => {
     const identity = deriveIdentity('Sales Demo', 'jsmith@example.com');
     const replacements = buildTextReplacements(identity);
 
     expect(replacements[TWB_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
       { find: 'TODO App Name', replace: 'Sales Demo' },
-    ]);
-    expect(replacements[MANIFEST_RELPATH]).toEqual([
-      { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
-      { find: 'TODO App Name', replace: 'Sales Demo' },
-      { find: 'TODO Username via Tableau MCP', replace: 'jsmith@example.com via Tableau MCP' },
     ]);
     expect(replacements[TREX_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
@@ -69,7 +63,7 @@ describe('buildTextReplacements', () => {
     ]);
   });
 
-  it('escapes displayName for the target format of each file', () => {
+  it('escapes displayName for XML text in the .twb and data-app.trex', () => {
     const identity = deriveIdentity('Tom & "Jerry" <Co>', undefined);
     const replacements = buildTextReplacements(identity);
 
@@ -77,11 +71,6 @@ describe('buildTextReplacements', () => {
     const xmlName = { find: 'TODO App Name', replace: 'Tom &amp; "Jerry" &lt;Co&gt;' };
     expect(replacements[TWB_RELPATH]).toContainEqual(xmlName);
     expect(replacements[TREX_RELPATH]).toContainEqual(xmlName);
-    // JSON string (manifest.json): quotes/backslashes escaped, & < > left as-is.
-    expect(replacements[MANIFEST_RELPATH]).toContainEqual({
-      find: 'TODO App Name',
-      replace: 'Tom & \\"Jerry\\" <Co>',
-    });
   });
 });
 
@@ -107,9 +96,6 @@ describe('mapToFinalRelativePath', () => {
   });
 
   it('renames the package directory to the package id', () => {
-    expect(mapToFinalRelativePath('Packages/TODO-MANIFEST-ID/manifest.json', identity)).toBe(
-      'Packages/com.tableau.mcp.sales-demo/manifest.json',
-    );
     expect(mapToFinalRelativePath('Packages/TODO-MANIFEST-ID/content/src/app.js', identity)).toBe(
       'Packages/com.tableau.mcp.sales-demo/content/src/app.js',
     );
