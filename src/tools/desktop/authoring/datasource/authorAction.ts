@@ -312,15 +312,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           // parameter mode needs a source field and an existing target parameter. Both errors
-          // enumerate what the workbook actually offers — the same recovery guidance set mode
-          // gives with "Available sets" — so a first miss becomes a fixable second call rather
-          // than the repeated blind retries this tool used to provoke.
+          // enumerate what the workbook offers, mirroring set mode's "Available sets".
           let resolvedTargetParameter = '';
           if (mode === 'parameter') {
             // Reject empty/whitespace as well as undefined: renderParameterAction omits the
-            // source-field param when it is blank, and the readback predicate only checks the
-            // target survived — so a blank sourceField would otherwise apply a no-op action
-            // (a target with no value to push) and report success. Mirrors targetParameter below.
+            // source-field param when it is blank and readback only checks the target survived,
+            // so a blank sourceField would apply a no-op action and report success.
             if (sourceField === undefined || sourceField.trim().length === 0) {
               return new ArgsValidationError(
                 `sourceField is required in parameter mode. Available fields: ${formatAvailableFields(liveXml)}`,
@@ -337,17 +334,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 `targetParameter must be fully qualified like [Parameters].[X]; unqualified targets can cause a blocking Tableau modal. Available parameters: ${formatAvailableParameters(liveXml)}`,
               ).toErr();
             }
-            // The target parameter must already exist. Tableau persists an action pointing at a
-            // phantom parameter without complaint — and the readback only checks the target
-            // survived, not that it resolves — so the action is applied but can never fire.
-            // Set mode rejects an unknown set the same way ("Set X was not found").
-            //
-            // Match on internal name OR caption, exactly as resolveTargetSet does: a parameter's
-            // internal <column name> ([Parameter N]) is minted at creation and is independent of
-            // its display caption, so a caller naming the parameter by the caption they see in the
-            // Parameters pane must still resolve. Then emit the resolved INTERNAL token — Tableau
-            // only resolves an action against the internal name, so serializing the raw caption
-            // would write an unresolvable [Parameters].[Caption] that silently never fires.
+            // The target parameter must already exist: Tableau persists an action pointing at a
+            // phantom parameter, and readback only checks the target survived, so it can never
+            // fire. Match on internal name OR caption, as resolveTargetSet does — a parameter's
+            // internal <column name> ([Parameter N]) is independent of its display caption, so a
+            // caller naming it by the caption in the Parameters pane must still resolve. Emit the
+            // resolved INTERNAL token; Tableau resolves actions against the internal name only, so
+            // the raw caption would serialize an unresolvable [Parameters].[Caption].
             const requestedParameter = normalizeReferenceToken(qualifiedTarget[2]);
             const matchedParameter =
               normalizeReferenceToken(qualifiedTarget[1]) === 'Parameters'
@@ -370,7 +363,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           const dashboardNames = findElementNames(liveXml, 'dashboards', 'dashboard');
           // parameter and set modes drive off a single required source worksheet. A name that
           // isn't a real worksheet persists as a source the action can never fire from, so reject
-          // it and enumerate the worksheets — the same recovery filter mode already gives.
+          // it and enumerate the worksheets.
           if (mode === 'parameter' || mode === 'set') {
             if (!worksheetNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
@@ -570,9 +563,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             target = filterAction!.target;
             actionXml = renderFilterAction(caption, actionName, filterAction!);
           } else {
-            // Emit the internal token resolved during the existence check above, not the raw
-            // input, so a caption argument serializes as the [Parameters].[Parameter N] Tableau
-            // can actually resolve. Readback below compares against this same `target`.
+            // Emit the internal token resolved during the existence check, so a caption argument
+            // serializes as the [Parameters].[Parameter N] Tableau can resolve. Readback compares
+            // against this same `target`.
             target = resolvedTargetParameter;
             actionXml = renderParameterAction({
               caption,
@@ -991,9 +984,7 @@ function bracketToken(value: string): string {
 
 function formatSetCandidates(candidates: SetCandidate[]): string {
   if (candidates.length === 0) {
-    // "none" alone was a dead end: the traces show the agent retrying against a set that never
-    // existed. Say what recovery actually is — the set must be authored before an action can
-    // point at it.
+    // The set must be authored before an action can point at it; name that recovery.
     return 'none — author one first with author-set, then retry';
   }
   return candidates
@@ -1025,9 +1016,8 @@ function formatAvailableFields(liveXml: string): string {
 // Enumerate the parameters already in the workbook, for the targetParameter recovery message.
 // findWorkbookParameters reads the Parameters datasource (the field summary excludes it). Each
 // entry pairs the caption with the fully qualified token the caller passes as targetParameter,
-// e.g. "p.Period ([Parameters].[Parameter 1])". When the workbook has no parameters yet, "none"
-// alone was the dead end the traces got stuck on — the target has to be authored before an action
-// can point at it, so name that recovery instead of leaving the agent to retry a phantom.
+// e.g. "p.Period ([Parameters].[Parameter 1])". When the workbook has no parameters yet, the
+// target has to be authored before an action can point at it, so name that recovery.
 function formatAvailableParameters(liveXml: string): string {
   const entries = findWorkbookParameters(liveXml).map(
     (parameter) =>
