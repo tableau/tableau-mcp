@@ -164,6 +164,26 @@ describe('server', () => {
     expect(new WebMcpServer().name).toBe(serverName);
   });
 
+  it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'skills-over-mcp',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+  });
+
+  it('does not advertise the skills extension capability when skills-over-mcp is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
+  });
+
   // The server-level `instructions` string (surfaced by the SDK in the `initialize` result) is
   // passed to the McpServer constructor's second options object. McpServer is globally mocked
   // (see testSetup.ts), so assert on the constructor arguments the mock captured.
