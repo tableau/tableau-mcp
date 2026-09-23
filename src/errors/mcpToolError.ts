@@ -312,10 +312,6 @@ export class FileReadError extends McpToolError {
   }
 }
 
-// Thrown by scaffold-data-app when the data app template cannot be served: the bundled template is
-// missing on disk (local workspace, config.bucketS3.enabled=false) or the remote template object is
-// not configured (S3-backed workspace, config.bucketS3.enabled=true). statusCode 500: a server-side
-// prerequisite is unavailable.
 export class DataAppTemplateUnavailableError extends McpToolError {
   constructor(message: string) {
     super({ type: 'data-app-template-unavailable', message, statusCode: 500 });

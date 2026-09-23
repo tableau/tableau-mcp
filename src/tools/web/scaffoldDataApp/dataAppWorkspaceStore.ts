@@ -1,20 +1,5 @@
 /**
  * Creates a new data app workspace from the committed placeholder template.
- *
- * Both output modes serve the exact same static, un-substituted template zip plus a `postUnzip`
- * plan (see `buildPostUnzipPlan`) the client applies after unzipping to finalize the workspace;
- * they differ only in transport:
- *  - disk (`config.bucketS3.enabled` false): the server returns the local filesystem `filePath`
- *    of the bundled template zip — the client skips the network download but still unzips and
- *    applies `postUnzip`.
- *  - S3 (`config.bucketS3.enabled` true): the server uploads its own already-built template zip —
- *    the exact same artifact local mode serves — to S3 fresh on every call, then presigns a
- *    short-lived GET URL (`s3URL`) for what it just uploaded; the client downloads it first, then
- *    unzips and applies `postUnzip`. There is no external publish step and nothing persists waiting
- *    to be trusted later: the object is always the bytes this code path just wrote.
- *
- * Datasource wiring is not performed here at all — it is entirely the caller's/skill's
- * responsibility, applied to the unzipped-and-finalized workbook after this returns.
  */
 
 import { existsSync, readFileSync } from 'fs';
