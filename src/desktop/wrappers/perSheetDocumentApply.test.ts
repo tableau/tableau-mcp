@@ -119,6 +119,44 @@ describe('tryApplyViaPerSheetRoute', () => {
     },
   );
 
+  it('retains inline diagnostics for the exact worksheet addressed by the document POST', async () => {
+    const fixture = FIXTURES[0];
+    const diagnostics = {
+      worksheets: [
+        {
+          worksheetId: fixture.id,
+          status: 'partial' as const,
+          invalidFields: [],
+          message: 'Some fields could not be checked.',
+        },
+      ],
+    };
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-apply',
+        status: 'completed',
+        submitted_at: '',
+        diagnostics,
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(Ok(fixture.listValue)),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: fixture.kind,
+      sheetName: fixture.sheetName,
+      fragmentXml: fixture.fragmentXml,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ status: 'applied', id: fixture.id, diagnostics });
+  });
+
   it.each([
     {
       ...FIXTURES[0],

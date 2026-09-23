@@ -7,6 +7,7 @@ import {
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import {
   extractSheetXml,
@@ -20,9 +21,10 @@ import {
 } from '../metadata/targetWorksheetState.js';
 import type { ParsedWorksheet } from '../metadata/types.js';
 import {
-  formatReadbackVerificationError,
+  isPromisedSortLossWarning,
   type ReadbackFinding,
   type ReadbackVerificationResult,
+  type VerificationFinding,
   verifyWorksheetReadback,
 } from '../validation/readback-verify.js';
 import {
@@ -31,6 +33,10 @@ import {
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
+import {
+  checkUsedFieldValidity,
+  mergeUsedFieldValidityVerification,
+} from '../validation/usedFieldValidity.js';
 import { xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
@@ -52,14 +58,6 @@ export type LoadWorksheetXmlError =
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
-  // Apply succeeded but the post-apply readback proved Tableau silently dropped or
-  // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
-  // carries the agent-facing fix recipe; `findings` the structured evidence.
-  | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string }
-  // Apply reported SUCCEEDED, but Desktop attached a document-warning: it accepted the
-  // document while dropping part of what was submitted. `message` carries Desktop's own
-  // warning text — the only per-drop detail that survives the wire; `warnings` the raw list.
-  | { type: 'document-warning'; warnings: ExecuteCommandWarning[]; message: string }
   | { type: 'source-drift'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-worksheet);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
@@ -75,9 +73,13 @@ export interface LoadWorksheetXmlOk {
   validationWarnings?: ValidationIssue[];
 }
 
-export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
+export type PostApplyWorksheetReadbackVerification = Omit<
+  ReadbackVerificationResult,
+  'findings'
+> & {
   findings: ReadbackFinding[];
-}
+  worksheetId?: string;
+};
 
 export interface ArtifactWorksheetApplyOptions {
   windowXml: string;
@@ -101,9 +103,89 @@ type LoadWorksheetXmlResult = Result<
 export function publicReadbackVerificationResult(
   result: PostApplyWorksheetReadbackVerification,
 ): ReadbackVerificationResult {
-  return result.message
-    ? { ok: result.ok, status: result.status, message: result.message }
-    : { ok: result.ok, status: result.status };
+  const promisedSortLoss = result.findings.some(isPromisedSortLossWarning);
+  const findings: VerificationFinding[] = result.findings.map((finding) => ({
+    severity: finding.severity,
+    source: 'readback' as const,
+    message: `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`,
+  }));
+  if (result.status === 'skipped') {
+    findings.push({
+      severity: 'warning',
+      source: 'readback',
+      message: result.message ?? 'Structural readback verification was unavailable.',
+      reason: 'structural-readback-unavailable',
+    });
+  }
+  return {
+    ok: promisedSortLoss ? false : result.ok,
+    status: promisedSortLoss ? 'failed' : result.status,
+    ...(result.message ? { message: result.message } : {}),
+    ...(findings.length > 0 ? { findings } : {}),
+  };
+}
+
+export async function verifyAppliedWorksheetFields({
+  structural,
+  worksheetId,
+  expectedInstanceId,
+  executor,
+  signal,
+  diagnostics,
+  diagnosticsInvalid,
+}: {
+  structural: PostApplyWorksheetReadbackVerification;
+  worksheetId: string | undefined;
+  expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
+} & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
+  const report = publicReadbackVerificationResult(structural);
+  return verifyAppliedWorksheetFieldReport({
+    report,
+    worksheetId,
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics,
+    diagnosticsInvalid,
+  });
+}
+
+async function verifyAppliedWorksheetFieldReport({
+  report,
+  worksheetId,
+  expectedInstanceId,
+  executor,
+  signal,
+  diagnostics,
+  diagnosticsInvalid,
+}: {
+  report: ReadbackVerificationResult;
+  worksheetId: string | undefined;
+  expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
+} & WithExecutorAndAbortSignal): Promise<ReadbackVerificationResult> {
+  if (!worksheetId || !expectedInstanceId) {
+    return mergeUsedFieldValidityVerification(report, {
+      status: 'unknown',
+      worksheetId,
+      reason: worksheetId ? 'instance-unavailable' : 'target-unresolved',
+      message: worksheetId
+        ? 'Field verification was not checked because the applied Desktop instance was unavailable.'
+        : 'Field verification was not checked because the applied worksheet ID could not be resolved.',
+    });
+  }
+  const validity = await checkUsedFieldValidity({
+    executor,
+    worksheetId,
+    expectedInstanceId,
+    signal,
+    diagnostics,
+    diagnosticsInvalid,
+  });
+  return mergeUsedFieldValidityVerification(report, validity);
 }
 
 /**
@@ -143,13 +225,14 @@ export async function verifyPostApplyWorksheetReadback(
     }
 
     const findings = verifyWorksheetReadback(intendedXml, polled.value.xml);
+    const worksheetId = worksheetFragmentSimpleId(polled.value.xml) ?? undefined;
     if (findings.some((f) => f.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
+      return { ok: false, status: 'failed', findings, worksheetId };
     }
     if (findings.some((f) => f.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
+      return { ok: true, status: 'warning', findings, worksheetId };
     }
-    return { ok: true, status: 'passed', findings: [] };
+    return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log({
@@ -201,13 +284,14 @@ async function verifyPostApplyArtifactReadback(
       };
     }
     const findings = verifyWorksheetReadback(intendedXml, fragment);
+    const worksheetId = worksheetFragmentSimpleId(fragment) ?? undefined;
     if (findings.some((finding) => finding.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
+      return { ok: false, status: 'failed', findings, worksheetId };
     }
     if (findings.some((finding) => finding.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
+      return { ok: true, status: 'warning', findings, worksheetId };
     }
-    return { ok: true, status: 'passed', findings: [] };
+    return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
     return {
       ok: true,
@@ -218,49 +302,97 @@ async function verifyPostApplyArtifactReadback(
   }
 }
 
-/**
- * Turn readback findings into a load outcome: ERROR-severity findings fail the apply
- * (the rendered chart does not match intent), WARNING-severity findings ride along on a
- * successful Ok so the tool can surface them without blocking.
- */
-function readbackOutcome(
-  verification: PostApplyWorksheetReadbackVerification,
-): LoadWorksheetXmlResult {
-  const { findings } = verification;
-  const errors = findings.filter((f) => f.severity === 'error');
-  if (errors.length > 0) {
-    return Err({
-      type: 'load-worksheet-xml-error',
-      error: {
-        type: 'readback-failed',
-        findings,
-        message: formatReadbackVerificationError(findings),
-      },
-    });
-  }
-  return Ok({
-    readbackWarnings: findings,
-    readbackVerification: publicReadbackVerificationResult(verification),
-  });
-}
-
-// The per-drop Tableau code is discarded before the wire, so a warning's message text is
-// the only field-level detail — join and surface it verbatim for the agent to act on.
-function documentWarningOutcome(warnings: ExecuteCommandWarning[]): LoadWorksheetXmlResult {
+async function documentWarningOutcome({
+  warnings,
+  worksheetId,
+  expectedInstanceId,
+  executor,
+  signal,
+  diagnostics,
+  diagnosticsInvalid,
+}: {
+  warnings: ExecuteCommandWarning[];
+  worksheetId: string | undefined;
+  expectedInstanceId: string | undefined;
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlOk> {
   const details = warnings
     .map((warning) => warning.message)
     .filter(Boolean)
     .join('; ');
-  return Err({
-    type: 'load-worksheet-xml-error',
-    error: {
-      type: 'document-warning',
-      warnings,
+  const report = await verifyAppliedWorksheetFieldReport({
+    report: {
+      ok: false,
+      status: 'failed',
       message:
-        `apply succeeded but Tableau could not honor part of the document and dropped it: ${details}. ` +
-        'The rendered chart does NOT match the intent. Fix the flagged node(s) in the worksheet XML and re-apply.',
+        `Desktop accepted the worksheet document but reported dropped state: ${details}. ` +
+        'The write already completed; do not automatically replay it.',
+      findings: warnings.map((warning) => ({
+        severity: 'error',
+        source: 'readback',
+        message: warning.message,
+      })),
     },
+    worksheetId,
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics,
+    diagnosticsInvalid,
   });
+  return { readbackWarnings: [], readbackVerification: report };
+}
+
+async function finalizeWorksheetApply({
+  apply,
+  expectedInstanceId,
+  executor,
+  signal,
+  readback,
+  worksheetIdFor,
+  readbackVerificationOut,
+}: {
+  apply: {
+    documentWarnings: ExecuteCommandWarning[];
+    diagnostics?: WorkbookDiagnostics;
+    diagnosticsInvalid?: boolean;
+  };
+  expectedInstanceId: string | undefined;
+  readback: () => Promise<PostApplyWorksheetReadbackVerification>;
+  worksheetIdFor: (readback?: PostApplyWorksheetReadbackVerification) => string | undefined;
+  readbackVerificationOut?: ReadbackVerificationResult[];
+} & WithExecutorAndAbortSignal): Promise<
+  Pick<LoadWorksheetXmlOk, 'readbackWarnings' | 'readbackVerification'>
+> {
+  if (apply.documentWarnings.length > 0) {
+    const outcome = await documentWarningOutcome({
+      warnings: apply.documentWarnings,
+      worksheetId: worksheetIdFor(),
+      expectedInstanceId,
+      executor,
+      signal,
+      diagnostics: apply.diagnostics,
+      diagnosticsInvalid: apply.diagnosticsInvalid,
+    });
+    if (outcome.readbackVerification) {
+      readbackVerificationOut?.push(outcome.readbackVerification);
+    }
+    return outcome;
+  }
+
+  const structural = await readback();
+  const report = await verifyAppliedWorksheetFields({
+    structural,
+    worksheetId: worksheetIdFor(structural),
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics: apply.diagnostics,
+    diagnosticsInvalid: apply.diagnosticsInvalid,
+  });
+  readbackVerificationOut?.push(report);
+  return { readbackWarnings: structural.findings, readbackVerification: report };
 }
 
 /**
@@ -482,21 +614,19 @@ export async function loadWorksheetXml({
       if (applyResult.isErr()) {
         return Err({ type: 'execute-command-error', error: applyResult.error });
       }
-      if (applyResult.value.documentWarnings.length > 0) {
-        return documentWarningOutcome(applyResult.value.documentWarnings);
-      }
-
-      const verification = await verifyPostApplyArtifactReadback(
-        canonicalName,
-        xml,
+      const finalized = await finalizeWorksheetApply({
+        apply: applyResult.value,
+        expectedInstanceId: artifactApply.expectedInstanceId,
         executor,
         signal,
-      );
-      readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+        readback: () => verifyPostApplyArtifactReadback(canonicalName, xml, executor, signal),
+        worksheetIdFor: (readback) =>
+          readback?.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+        readbackVerificationOut,
+      });
       return Ok({
+        ...finalized,
         appliedName: canonicalName,
-        readbackWarnings: verification.findings,
-        readbackVerification: publicReadbackVerificationResult(verification),
         validationWarnings: [...validation.issues, ...workbookValidation.issues],
       });
     });
@@ -504,6 +634,7 @@ export async function loadWorksheetXml({
 
   if (requireExistingSheet) {
     return withApplyLock(async (): Promise<LoadWorksheetXmlResult> => {
+      const expectedInstanceId = executor.desktopInstanceId;
       // Target the live sheet by the fragment's own simple-id (its External Client API worksheet
       // id) so the apply lands on the right sheet even if it was renamed after the fragment was
       // read; fall back to the name only when the fragment carries no id.
@@ -517,30 +648,32 @@ export async function loadWorksheetXml({
         focus: canonicalFocus,
         executor,
         signal,
+        expectedInstanceId,
       });
       if (outcome.isErr()) {
         return Err({ type: 'execute-command-error', error: outcome.error });
       }
       const applyOutcome = outcome.value;
       if (typeof applyOutcome === 'object' && 'status' in applyOutcome) {
-        if (applyOutcome.documentWarnings.length > 0) {
-          return documentWarningOutcome(applyOutcome.documentWarnings);
-        }
-        const verification = await verifyPostApplyWorksheetReadback(
-          applyOutcome.id,
-          applyOutcome.fragmentXml,
+        const finalized = await finalizeWorksheetApply({
+          apply: applyOutcome,
+          expectedInstanceId,
           executor,
           signal,
-        );
-        readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-        const outcomeResult = readbackOutcome(verification);
-        if (outcomeResult.isErr()) {
-          return outcomeResult;
-        }
+          readback: () =>
+            verifyPostApplyWorksheetReadback(
+              applyOutcome.id,
+              applyOutcome.fragmentXml,
+              executor,
+              signal,
+            ),
+          worksheetIdFor: () => applyOutcome.id,
+          readbackVerificationOut,
+        });
         // Preflight warnings ride along so apply responses can compute the host
         // verification receipt without re-running validation.
         return Ok({
-          ...outcomeResult.value,
+          ...finalized,
           appliedName: applyOutcome.name,
           validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
         });
@@ -619,6 +752,7 @@ async function loadWorksheetXmlViaExternalApi({
   readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
+    const expectedInstanceId = executor.desktopInstanceId;
     const workbookResult = await getWorkbookXml({ executor, signal });
     if (workbookResult.isErr()) {
       return Err({ type: 'execute-command-error', error: workbookResult.error });
@@ -679,32 +813,35 @@ async function loadWorksheetXmlViaExternalApi({
       });
     }
 
-    const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
+    const applyResult = await applyWorkbookText({
+      xml: workbookDoc,
+      focus,
+      executor,
+      signal,
+      applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
+    });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }
-    if (applyResult.value.documentWarnings.length > 0) {
-      return documentWarningOutcome(applyResult.value.documentWarnings);
-    }
-
-    log({
-      level: 'info',
-      message: 'load-worksheet completed',
-      logger: 'worksheetCommands',
-      data: { worksheetName },
-    });
-
-    const verification = await verifyPostApplyWorksheetReadback(
-      worksheetName,
-      xml,
+    const finalized = await finalizeWorksheetApply({
+      apply: applyResult.value,
+      expectedInstanceId,
       executor,
       signal,
-    );
-    readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-    const outcomeResult = readbackOutcome(verification);
-    if (outcomeResult.isErr()) return outcomeResult;
-
-    return outcomeResult;
+      readback: () => {
+        log({
+          level: 'info',
+          message: 'load-worksheet completed',
+          logger: 'worksheetCommands',
+          data: { worksheetName },
+        });
+        return verifyPostApplyWorksheetReadback(worksheetName, xml, executor, signal);
+      },
+      worksheetIdFor: (readback) =>
+        readback?.worksheetId ?? worksheetFragmentSimpleId(xml) ?? undefined,
+      readbackVerificationOut,
+    });
+    return Ok(finalized);
   });
 }
 

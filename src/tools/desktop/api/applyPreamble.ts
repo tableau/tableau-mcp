@@ -126,6 +126,8 @@ export function acceptedNoReadbackApplyResult({
   appliedName,
   resultWarnings,
   hostVerification,
+  messageSuffix = '',
+  additionalUnverified = [],
 }: {
   kind: NoReadbackApplyKind;
   /** Sheet name for the per-sheet applies; a whole-workbook apply names none. */
@@ -134,6 +136,8 @@ export function acceptedNoReadbackApplyResult({
   resultWarnings: readonly unknown[];
   /** Host verification line appended to the message text. */
   hostVerification: string;
+  messageSuffix?: string;
+  additionalUnverified?: readonly string[];
 }): StructuredResult<{ message: string }> {
   const { noun, scope } = NO_READBACK_WORDING[kind];
   const target = appliedName === undefined ? '' : ` for "${appliedName}"`;
@@ -141,7 +145,7 @@ export function acceptedNoReadbackApplyResult({
   const capitalized = kind.charAt(0).toUpperCase() + kind.slice(1);
   return withNextAction(
     {
-      message: `Successfully applied ${kind} update${target}. The ${kind} has been updated.${hostVerification}`,
+      message: `Successfully applied ${kind} update${target}. The ${kind} has been updated.${hostVerification}${messageSuffix}`,
     },
     doneNextAction(
       receipt({
@@ -151,6 +155,7 @@ export function acceptedNoReadbackApplyResult({
         ],
         unverified: [
           `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (${scope} applies have none)`,
+          ...additionalUnverified,
         ],
       }),
       `${capitalized} apply accepted — ${noun} not re-read`,

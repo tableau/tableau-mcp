@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.15), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.16), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -23,6 +23,7 @@ export const EXTERNAL_API_ROUTES = {
   appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDiagnostics: '/v0/workbook/diagnostics',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
@@ -55,6 +56,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetDiagnostics: '/v0/workbook/worksheets/{id}/diagnostics',
   worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
@@ -219,6 +221,10 @@ export type ImageExportQuery = {
 
 export function worksheetRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+export function worksheetDiagnosticsRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/diagnostics`;
 }
 
 export function dashboardRoute(dashboardId: string): string {
@@ -507,7 +513,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.15). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.16). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -727,6 +733,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
@@ -954,6 +961,47 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** One invalid field currently used by a worksheet shelf or marks encoding. */
+export const worksheetInvalidFieldSchema = z
+  .object({
+    fieldName: z.string(),
+    fieldCaption: z.string().optional(),
+    shelf: z.string(),
+    marksSpecificationId: z.string(),
+    encodingType: z.string(),
+    reason: z.string(),
+  })
+  .passthrough();
+export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
+
+/** Diagnostics reported by Desktop for one worksheet. */
+export const worksheetDiagnosticsSchema = z
+  .object({
+    worksheetId: z.string(),
+    status: z.enum(['complete', 'partial', 'unavailable']),
+    invalidFields: z.array(worksheetInvalidFieldSchema).optional(),
+    message: z.string().optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.status === 'complete' && value.invalidFields === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invalidFields'],
+        message: 'Complete worksheet diagnostics must include invalidFields.',
+      });
+    }
+  });
+export type WorksheetDiagnostics = z.infer<typeof worksheetDiagnosticsSchema>;
+
+/** Aggregate diagnostics returned by workbook and worksheet diagnostic reads and completed writes. */
+export const workbookDiagnosticsSchema = z
+  .object({
+    worksheets: z.array(worksheetDiagnosticsSchema),
+  })
+  .passthrough();
+export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and
