@@ -7,16 +7,17 @@
  *  - disk (`config.bucketS3.enabled` false): the server returns the local filesystem `filePath`
  *    of the bundled template zip — the client skips the network download but still unzips and
  *    applies `postUnzip`.
- *  - S3 (`config.bucketS3.enabled` true): the template zip is already published to S3 out of band
- *    (see `config.dataAppTemplateS3Key`); the server presigns a short-lived GET URL (`s3URL`) for
- *    that existing object — the client downloads it first, then unzips and applies `postUnzip`.
- *    Neither uploads nor builds a zip.
+ *  - S3 (`config.bucketS3.enabled` true): the server uploads its own already-built template zip —
+ *    the exact same artifact local mode serves — to S3 fresh on every call, then presigns a
+ *    short-lived GET URL (`s3URL`) for what it just uploaded; the client downloads it first, then
+ *    unzips and applies `postUnzip`. There is no external publish step and nothing persists waiting
+ *    to be trusted later: the object is always the bytes this code path just wrote.
  *
  * Datasource wiring is not performed here at all — it is entirely the caller's/skill's
  * responsibility, applied to the unzipped-and-finalized workbook after this returns.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
@@ -24,7 +25,7 @@ import { Config } from '../../../config.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { presignGetObjectUrl } from '../s3Client.js';
+import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
   DataAppIdentity,
@@ -87,19 +88,27 @@ async function createS3Workspace({
   identity: DataAppIdentity;
   config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  if (!config.dataAppTemplateS3Key) {
+  // S3 mode serves the same static, un-substituted template zip as local mode — the artifact built
+  // at `npm run build` time and resolved on disk here. If it isn't present in this deployment, S3
+  // mode is unavailable for the same reason local mode is.
+  const zipPath = resolveTemplateZip();
+  if (!zipPath) {
     return new DataAppTemplateUnavailableError(
-      'S3 data app scaffolding is not available: DATA_APP_TEMPLATE_S3_KEY must be configured.',
+      'The data app template is not available in this deployment.',
     ).toErr();
   }
 
-  // The template zip is published to S3 out of band; the tool only signs a short-lived GET URL for
-  // that existing object (reusing the same presign path `download-workbook` uses). The client
-  // fetches the zip directly from S3 rather than receiving it inline.
+  // Upload the template zip to S3 fresh on every call, then presign a GET URL for exactly those
+  // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
+  // so a fixed key is intentional — concurrent overwrites are harmless. Nothing is published out of
+  // band; the object is always what this code path just wrote.
   let s3URL: string;
   try {
-    s3URL = await presignGetObjectUrl({
-      key: config.dataAppTemplateS3Key,
+    const buffer = readFileSync(zipPath);
+    const key = `${joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-templates')}${TEMPLATE_ZIP_FILENAME}`;
+    s3URL = await uploadBufferToS3(buffer, {
+      key,
+      contentType: 'application/zip',
       bucket: config.bucketS3.bucket,
       region: config.bucketS3.region,
       presignTtlSeconds: config.bucketS3.presignTtlSeconds,

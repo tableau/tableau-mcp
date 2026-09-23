@@ -59,11 +59,11 @@ differ only in transport, never in when substitution happens (always client-side
   on the server — skip the download and unzip directly.
 
 - **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured (S3
-  output)**: the template zip is already published to S3 out of band (see
-  [`DATA_APP_TEMPLATE_S3_KEY`](../../configuration/mcp-config/env-vars.md#data_app_template_s3_key));
-  the tool only presigns a short-lived GET URL for that existing object — it never builds or
-  uploads a zip. The result's `s3URL` points at the same un-substituted template — download it
-  first, then unzip.
+  output)**: the server uploads its own build artifact — the same template zip disk output serves —
+  to S3 automatically on every call, then presigns a short-lived GET URL for exactly those bytes.
+  There is no manual publish step and nothing persists in the bucket waiting to be trusted; the
+  object is always what the server just wrote. The result's `s3URL` points at the same
+  un-substituted template — download it first, then unzip.
 
 In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
 after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in

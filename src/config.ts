@@ -91,7 +91,6 @@ export class Config extends BaseConfig {
     keyPrefix: string;
     presignTtlSeconds: number;
   };
-  dataAppTemplateS3Key: string;
 
   constructor() {
     super();
@@ -165,7 +164,6 @@ export class Config extends BaseConfig {
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
       FILE_TTL: bucketS3PresignTtlSeconds,
-      DATA_APP_TEMPLATE_S3_KEY: dataAppTemplateS3Key,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -375,10 +373,6 @@ export class Config extends BaseConfig {
         maxValue: 900,
       }),
     };
-
-    // scaffold-data-app (S3 output): S3 key of the pre-published template zip that the S3 path
-    // presigns a GET URL for. Requires MCP_S3_BUCKET. Empty when unconfigured.
-    this.dataAppTemplateS3Key = dataAppTemplateS3Key?.trim() || '';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

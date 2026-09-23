@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { getConfig } from '../../../config.js';
-import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
+import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
@@ -33,6 +33,9 @@ describe('createDataAppWorkspace', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     exportedForTesting.resetS3Bundle();
+    // clearAllMocks clears call history but not implementations, so reset send/getSignedUrl to a
+    // clean success each test — otherwise a rejection stubbed in one test leaks into the next.
+    mocks.send.mockResolvedValue(undefined);
     mocks.getSignedUrl.mockResolvedValue('https://s3.example.com/signed-template-url');
   });
 
@@ -102,13 +105,17 @@ describe('createDataAppWorkspace', () => {
   });
 
   describe('S3 output (MCP_S3_BUCKET configured)', () => {
+    // S3 mode now uploads the same on-disk build artifact local mode serves, so the zip must exist.
+    beforeAll(() => {
+      buildTemplateZip();
+    });
+
     beforeEach(() => {
       vi.stubEnv('MCP_S3_BUCKET', 'tmpl-bucket');
       vi.stubEnv('AWS_DEFAULT_REGION', 'us-west-2');
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', 'templates/data-app.zip');
     });
 
-    it('presigns a GET URL for the pre-published template and returns a postUnzip plan', async () => {
+    it('uploads the on-disk template zip, then presigns a GET URL for what it uploaded', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         config: getConfig(),
@@ -120,11 +127,24 @@ describe('createDataAppWorkspace', () => {
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
 
-      // Never builds or uploads a zip - only presigns a GET against the existing object.
-      expect(mocks.send).not.toHaveBeenCalled();
+      // The server uploads its own build artifact fresh: exactly one PutObjectCommand carrying the
+      // real on-disk template bytes under a fixed, prefix-namespaced key.
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      const putCommand = mocks.send.mock.calls[0][0];
+      expect(putCommand.__command).toBe('put');
+      const putInput = putCommand.input;
+      expect(putInput.Bucket).toBe('tmpl-bucket');
+      expect(putInput.ContentType).toBe('application/zip');
+      expect(putInput.Key).toContain('data-app-templates/');
+      expect(putInput.Key.endsWith(TEMPLATE_ZIP_FILENAME)).toBe(true);
+
+      const expectedBytes = await readFile(join('src/templates', TEMPLATE_ZIP_FILENAME));
+      expect(putInput.Body).toEqual(expectedBytes);
+
+      // The presigned GET is for the exact object just uploaded — same key as the PUT.
       const { GetObjectCommand } = await import('@aws-sdk/client-s3');
       const getInput = vi.mocked(GetObjectCommand).mock.calls[0][0];
-      expect(getInput).toEqual({ Bucket: 'tmpl-bucket', Key: 'templates/data-app.zip' });
+      expect(getInput).toEqual({ Bucket: 'tmpl-bucket', Key: putInput.Key });
       expect(mocks.getSignedUrl).toHaveBeenCalledTimes(1);
 
       invariant(value.postUnzip);
@@ -135,8 +155,8 @@ describe('createDataAppWorkspace', () => {
       });
     });
 
-    it('returns an error, without presigning, when DATA_APP_TEMPLATE_S3_KEY is not configured', async () => {
-      vi.stubEnv('DATA_APP_TEMPLATE_S3_KEY', '');
+    it('returns an error when the upload (PUT) fails', async () => {
+      mocks.send.mockRejectedValue(new Error('S3 put failed'));
 
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
@@ -145,6 +165,7 @@ describe('createDataAppWorkspace', () => {
 
       invariant(result.isErr());
       expect(result.error.type).toBe('data-app-template-unavailable');
+      expect(result.error.message).toContain('S3 put failed');
       expect(mocks.getSignedUrl).not.toHaveBeenCalled();
     });
 

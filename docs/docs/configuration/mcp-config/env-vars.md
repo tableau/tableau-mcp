@@ -714,21 +714,3 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
-
-<hr />
-
-## `DATA_APP_TEMPLATE_S3_KEY`
-
-The S3 key of the pre-published `scaffold-data-app` template zip. Only relevant when
-[`MCP_S3_BUCKET`](#mcp_s3_bucket) is set — in that mode the tool presigns a short-lived GET URL
-against this existing object rather than writing a workspace to disk. The object is expected to
-already exist in the bucket (published out of band); the tool never builds or uploads it.
-
-- Requires the `tableau-data-apps` feature flag to be enabled (see `features.json`).
-- No default — S3 output returns an error if `MCP_S3_BUCKET` is set but this is not configured.
-
-**Example:**
-
-```bash
-DATA_APP_TEMPLATE_S3_KEY=templates/data-app.zip
-```
