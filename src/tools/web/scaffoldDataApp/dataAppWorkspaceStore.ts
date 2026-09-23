@@ -2,7 +2,8 @@
  * Creates a new data app workspace from the committed placeholder template.
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
@@ -59,23 +60,9 @@ export async function createDataAppWorkspace({
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
 
-  return config.bucketS3.enabled
-    ? await createS3Workspace({ datappName, identity, config })
-    : createLocalWorkspace({ datappName, identity });
-}
-
-async function createS3Workspace({
-  datappName,
-  identity,
-  config,
-}: {
-  datappName: string;
-  identity: DataAppIdentity;
-  config: Config;
-}): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  // S3 mode serves the same static, un-substituted template zip as local mode — the artifact built
-  // at `npm run build` time and resolved on disk here. If it isn't present in this deployment, S3
-  // mode is unavailable for the same reason local mode is.
+  // Both output modes serve the same static, un-substituted template zip — the artifact built at
+  // `npm run build` time and resolved on disk here. If it isn't present in this deployment, both
+  // modes are unavailable for the same reason.
   const zipPath = resolveTemplateZip();
   if (!zipPath) {
     return new DataAppTemplateUnavailableError(
@@ -83,13 +70,29 @@ async function createS3Workspace({
     ).toErr();
   }
 
+  return config.bucketS3.enabled
+    ? await createS3Workspace({ datappName, identity, config, zipPath })
+    : createLocalWorkspace({ datappName, identity, zipPath });
+}
+
+async function createS3Workspace({
+  datappName,
+  identity,
+  config,
+  zipPath,
+}: {
+  datappName: string;
+  identity: DataAppIdentity;
+  config: Config;
+  zipPath: string;
+}): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   // Upload the template zip to S3 fresh on every call, then presign a GET URL for exactly those
   // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
   // so a fixed key is intentional — concurrent overwrites are harmless. Nothing is published out of
   // band; the object is always what this code path just wrote.
   let s3URL: string;
   try {
-    const buffer = readFileSync(zipPath);
+    const buffer = await readFile(zipPath);
     const key = `${joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-templates')}${TEMPLATE_ZIP_FILENAME}`;
     s3URL = await uploadBufferToS3(buffer, {
       key,
@@ -114,20 +117,15 @@ async function createS3Workspace({
 function createLocalWorkspace({
   datappName,
   identity,
+  zipPath,
 }: {
   datappName: string;
   identity: DataAppIdentity;
+  zipPath: string;
 }): Result<DataAppWorkspaceResult, McpToolError> {
   // Local mode serves the same static, un-substituted template zip as S3 mode — just from the
   // local filesystem instead of a presigned URL. Nothing is written per call, so nothing can
   // collide; the client unzips and applies the same `postUnzip` plan to finalize.
-  const zipPath = resolveTemplateZip();
-  if (!zipPath) {
-    return new DataAppTemplateUnavailableError(
-      'The data app template is not available in this deployment.',
-    ).toErr();
-  }
-
   return new Ok({
     datappName,
     filePath: zipPath,

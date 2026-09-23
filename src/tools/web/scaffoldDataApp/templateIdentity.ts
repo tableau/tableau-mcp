@@ -86,8 +86,8 @@ function escapeXmlText(value: string): string {
 
 /**
  * The literal find/replace edits, keyed by the file's POSIX path relative to the
- * template root dir. Consumed by the local writer (applied while copying) and by
- * the remote plan (embedded for the client to apply).
+ * template root dir. Consumed by `buildPostUnzipPlan` to build the plan both
+ * output modes return; the client applies the edits after unzipping.
  *
  * `displayName` is user-supplied and inserted verbatim, so it is XML-escaped.
  * `packageId` (a slug) contains no characters needing escaping.

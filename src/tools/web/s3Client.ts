@@ -157,7 +157,7 @@ export async function uploadBufferToS3(
  * Returns a short-lived presigned GET URL for an object already present in S3. Does not read or
  * write the object — only signs a URL the caller can hand out for a direct download.
  */
-export async function presignGetObjectUrl({
+async function presignGetObjectUrl({
   key,
   bucket,
   region,
