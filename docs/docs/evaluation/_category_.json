@@ -1,0 +1,8 @@
+{
+  "label": "Evaluation",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools and benchmarks for evaluating the accuracy of Claude Code against the Tableau MCP server."
+  }
+}
