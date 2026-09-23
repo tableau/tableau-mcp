@@ -1,51 +1,45 @@
 /**
  * Creates a new data app workspace from the committed placeholder template.
  *
- * The two output modes differ in where identity substitution happens:
- *  - disk (`config.bucketS3.enabled` false): the server walks the bundled template, rewrites
- *    identity tokens, and writes the finished files under the server-controlled
- *    `dataAppWorkspaceRoot`, returning the workspace's file path. Fully finalized server-side.
+ * Both output modes serve the exact same static, un-substituted template zip plus a `postUnzip`
+ * plan (see `buildPostUnzipPlan`) the client applies after unzipping to finalize the workspace;
+ * they differ only in transport:
+ *  - disk (`config.bucketS3.enabled` false): the server returns the local filesystem `filePath`
+ *    of the bundled template zip — the client skips the network download but still unzips and
+ *    applies `postUnzip`.
  *  - S3 (`config.bucketS3.enabled` true): the template zip is already published to S3 out of band
- *    (see `config.dataAppTemplateS3Key`); the server only presigns a short-lived GET URL for that
- *    existing object and returns it alongside a `postUnzip` plan describing the same edits/renames
- *    for the client to apply after downloading and unzipping. Neither uploads nor builds a zip.
+ *    (see `config.dataAppTemplateS3Key`); the server presigns a short-lived GET URL (`s3URL`) for
+ *    that existing object — the client downloads it first, then unzips and applies `postUnzip`.
+ *    Neither uploads nor builds a zip.
  *
  * Datasource wiring is not performed here at all — it is entirely the caller's/skill's
- * responsibility, applied to the finalized workbook (disk path) or the unzipped-and-finalized
- * workbook (S3 path) after this returns.
+ * responsibility, applied to the unzipped-and-finalized workbook after this returns.
  */
 
 import { existsSync } from 'fs';
-import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
-import { dirname, join, resolve } from 'path';
+import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
-import {
-  DataAppTemplateUnavailableError,
-  DataAppWorkspaceExistsError,
-  InvalidDataAppNameError,
-  McpToolError,
-} from '../../../errors/mcpToolError.js';
+import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
+import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { presignGetObjectUrl } from '../s3Client.js';
 import {
-  applyReplacements,
   buildPostUnzipPlan,
-  buildTextReplacements,
   DataAppIdentity,
   deriveIdentity,
-  mapToFinalRelativePath,
   PostUnzipPlan,
-  TEMPLATE_ROOT_DIRNAME,
 } from './templateIdentity.js';
 
 /**
- * Result of scaffolding a workspace. A single shape covers both output modes, distinguished by
- * which delivery field is set:
- *  - disk: `filePath` points at the finished, on-disk workspace; `postUnzip` is omitted.
- *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip, and `postUnzip` is the
- *    rename/edit plan the client applies after unzipping to finalize the workspace.
+ * Result of scaffolding a workspace. A single shape covers both output modes; both always return
+ * an un-substituted template zip plus the `postUnzip` plan the client applies after unzipping. The
+ * modes differ only in transport:
+ *  - disk: `filePath` points at the template zip already on the local filesystem — skip download,
+ *    then unzip and apply `postUnzip`.
+ *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
+ *    unzip and apply `postUnzip`.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
@@ -54,35 +48,20 @@ export type DataAppWorkspaceResult = {
   postUnzip?: PostUnzipPlan;
 };
 
-// Candidate parents of the template root dir, tried in order, resolved relative to this module's own
+// Candidate parents of the template zip, tried in order, resolved relative to this module's own
 // directory. In the bundled build everything collapses into `build/index.js`, so `__dirname` is
 // `build/` and the build step's copy lands at `build/templates/`; when running from source (tests,
 // tsx) `__dirname` is this module's directory, three levels below `src/templates/`.
 const TEMPLATE_PARENT_CANDIDATES = ['templates', join('..', '..', '..', 'templates')];
 
-function resolveTemplateRoot(): string | undefined {
+function resolveTemplateZip(): string | undefined {
   for (const candidate of TEMPLATE_PARENT_CANDIDATES) {
-    const path = join(__dirname, candidate, TEMPLATE_ROOT_DIRNAME);
+    const path = join(__dirname, candidate, TEMPLATE_ZIP_FILENAME);
     if (existsSync(path)) {
       return path;
     }
   }
   return undefined;
-}
-
-/** Recursively lists files under `root`, returning POSIX paths relative to it. */
-async function walkFiles(root: string, rel = ''): Promise<string[]> {
-  const entries = await readdir(rel ? join(root, rel) : root, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const childRel = rel ? `${rel}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      files.push(...(await walkFiles(root, childRel)));
-    } else if (entry.isFile()) {
-      files.push(childRel);
-    }
-  }
-  return files;
 }
 
 export async function createDataAppWorkspace({
@@ -96,7 +75,7 @@ export async function createDataAppWorkspace({
 
   return config.bucketS3.enabled
     ? await createS3Workspace({ datappName, identity, config })
-    : await createLocalWorkspace({ datappName, identity, config });
+    : createLocalWorkspace({ datappName, identity });
 }
 
 async function createS3Workspace({
@@ -138,62 +117,26 @@ async function createS3Workspace({
   });
 }
 
-async function createLocalWorkspace({
+function createLocalWorkspace({
   datappName,
   identity,
-  config,
 }: {
   datappName: string;
   identity: DataAppIdentity;
-  config: Config;
-}): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  const resolvedRoot = resolve(config.dataAppWorkspaceRoot);
-  const dest = resolve(resolvedRoot, datappName);
-
-  // Defense-in-depth: the tool's paramsSchema already rejects separators and
-  // "..", but never write outside the server-controlled root regardless.
-  if (dirname(dest) !== resolvedRoot) {
-    return new InvalidDataAppNameError(`Invalid data app name: "${datappName}".`).toErr();
-  }
-
-  if (existsSync(dest)) {
-    return new DataAppWorkspaceExistsError(
-      `A data app workspace named "${datappName}" already exists at ${dest}. Choose a different name.`,
-    ).toErr();
-  }
-
-  const templateRoot = resolveTemplateRoot();
-  if (!templateRoot) {
+}): Result<DataAppWorkspaceResult, McpToolError> {
+  // Local mode serves the same static, un-substituted template zip as S3 mode — just from the
+  // local filesystem instead of a presigned URL. Nothing is written per call, so nothing can
+  // collide; the client unzips and applies the same `postUnzip` plan to finalize.
+  const zipPath = resolveTemplateZip();
+  if (!zipPath) {
     return new DataAppTemplateUnavailableError(
       'The data app template is not available in this deployment.',
     ).toErr();
   }
 
-  const replacements = buildTextReplacements(identity);
-
-  try {
-    const relFiles = (await walkFiles(templateRoot)).sort();
-    for (const rel of relFiles) {
-      const finalRel = mapToFinalRelativePath(rel, identity);
-      const finalPath = join(dest, ...finalRel.split('/'));
-      await mkdir(dirname(finalPath), { recursive: true });
-
-      const edits = replacements[rel];
-      if (edits) {
-        const original = await readFile(join(templateRoot, ...rel.split('/')), 'utf8');
-        await writeFile(finalPath, applyReplacements(original, edits), 'utf8');
-      } else {
-        await writeFile(finalPath, await readFile(join(templateRoot, ...rel.split('/'))));
-      }
-    }
-  } catch (error) {
-    return new DataAppTemplateUnavailableError(
-      `Failed to create the data app workspace: ${getExceptionMessage(error)}.`,
-    ).toErr();
-  }
-
   return new Ok({
     datappName,
-    filePath: dest,
+    filePath: zipPath,
+    postUnzip: buildPostUnzipPlan(identity),
   });
 }

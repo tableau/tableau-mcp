@@ -1,9 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { mkdtemp, readFile, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync } from 'fs';
 import { z } from 'zod';
 
+import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -84,15 +83,8 @@ describe('getScaffoldDataAppTool', () => {
   });
 
   describe('callback', () => {
-    let root: string;
-
-    beforeEach(async () => {
-      root = await mkdtemp(join(tmpdir(), 'dataapp-tool-'));
-      vi.stubEnv('DATA_APP_WORKSPACE_ROOT', root);
-    });
-
-    afterEach(async () => {
-      await rm(root, { recursive: true, force: true });
+    beforeAll(() => {
+      buildTemplateZip();
     });
 
     it('scaffolds a workspace and returns a success result', async () => {
@@ -100,17 +92,13 @@ describe('getScaffoldDataAppTool', () => {
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       const payload = JSON.parse(result.content[0].text);
-      expect(payload.filePath.endsWith('Sales Demo')).toBe(true);
 
-      const twb = await readFile(join(payload.filePath, 'Sales Demo.twb'), 'utf8');
-      expect(twb).toContain('com.tableau.mcp.sales-demo');
-    });
-
-    it('surfaces an error result for names that escape the workspace root', async () => {
-      const result = await invokeCallback('a/b');
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('Invalid data app name');
+      // Local mode returns the un-substituted template zip already on disk, plus a postUnzip plan.
+      expect(existsSync(payload.filePath)).toBe(true);
+      expect(payload.postUnzip.renames).toContainEqual({
+        from: 'Data App Name',
+        to: 'Sales Demo',
+      });
     });
   });
 });

@@ -6,6 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.providers.json ./
 RUN npm ci --ignore-scripts
 
+# zip CLI needed to build the scaffold-data-app template zip during the build step
+RUN apk add --no-cache zip
+
 # Copy source and build
 COPY src ./src
 COPY features.json ./

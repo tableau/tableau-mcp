@@ -32,10 +32,10 @@ Tableau REST API calls.
 
 ### `datappName`
 
-Name for the new data app. Used verbatim as the workspace folder name, the workbook (`.twb`)
-filename, and the extension display name, and slugified into the extension package id
-(`com.tableau.mcp.<slug>`). Letters, digits, spaces, dot, underscore, and hyphen only; must start and
-end with a letter or digit; no path separators or `..`; 1–100 characters.
+Name for the new data app. Used verbatim as the workbook (`.twb`) filename and the extension
+display name, and slugified into the extension package id (`com.tableau.mcp.<slug>`). Letters,
+digits, spaces, dot, underscore, and hyphen only; must start and end with a letter or digit; no
+path separators or `..`; 1–100 characters.
 
 Example: `Sales Demo` → package id `com.tableau.mcp.sales-demo`
 
@@ -51,32 +51,55 @@ The extension's author is fixed to `Tableau MCP` in the template; it is not deri
 
 ## Response behavior
 
-The result is a single object. Where and how identity substitution happens depends on whether S3
-storage is configured:
+The result is a single object. Both output modes return the same static, un-substituted template
+zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping — they
+differ only in transport, never in when substitution happens (always client-side, after unzipping):
 
-- **Otherwise (disk output)**: the server walks the bundled template, substitutes the identity
-  tokens, and writes the finished files under the server-controlled
-  [`DATA_APP_WORKSPACE_ROOT`](../../configuration/mcp-config/env-vars.md#data_app_workspace_root).
-  The workspace is fully finalized; the result reports the `filePath`. An existing workspace of the
-  same name is never overwritten (the tool errors instead).
+- **Otherwise (disk output)**: the result's `filePath` points at the template zip already on disk
+  on the server — skip the download and unzip directly.
 
 - **[`MCP_S3_BUCKET`](../../configuration/mcp-config/env-vars.md#mcp_s3_bucket) configured (S3
   output)**: the template zip is already published to S3 out of band (see
   [`DATA_APP_TEMPLATE_S3_KEY`](../../configuration/mcp-config/env-vars.md#data_app_template_s3_key));
   the tool only presigns a short-lived GET URL for that existing object — it never builds or
-  uploads a zip. The result's `s3URL` points at the **un-substituted** template; `postUnzip`
-  describes the literal find/replace edits and path renames to apply after downloading and
-  unzipping to finalize the workspace.
+  uploads a zip. The result's `s3URL` points at the same un-substituted template — download it
+  first, then unzip.
 
-Datasource wiring is never performed by this tool in either mode — it is the caller's
-responsibility, applied to the finalized workbook after this tool returns.
+In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
+after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in
+either mode — it is the caller's responsibility, applied to the finalized workbook after this tool
+returns.
 
 ## Example result (disk output)
 
 ```json
 {
   "datappName": "Sales Demo",
-  "filePath": "/var/lib/tableau-mcp/data-app-workspaces/Sales Demo"
+  "filePath": "/app/build/templates/data-app-template.zip",
+  "postUnzip": {
+    "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
+    "edits": [
+      {
+        "file": "Data App Name/Data App Name.twb",
+        "replacements": [
+          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
+          { "find": "TODO App Name", "replace": "Sales Demo" }
+        ]
+      },
+      {
+        "file": "Data App Name/Packages/TODO-MANIFEST-ID/extensions/data-app.trex",
+        "replacements": [
+          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
+          { "find": "TODO App Name", "replace": "Sales Demo" }
+        ]
+      }
+    ],
+    "renames": [
+      { "from": "Data App Name/Packages/TODO-MANIFEST-ID", "to": "Data App Name/Packages/com.tableau.mcp.sales-demo" },
+      { "from": "Data App Name/Data App Name.twb", "to": "Data App Name/Sales Demo.twb" },
+      { "from": "Data App Name", "to": "Sales Demo" }
+    ]
+  }
 }
 ```
 
@@ -91,6 +114,13 @@ responsibility, applied to the finalized workbook after this tool returns.
     "edits": [
       {
         "file": "Data App Name/Data App Name.twb",
+        "replacements": [
+          { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
+          { "find": "TODO App Name", "replace": "Sales Demo" }
+        ]
+      },
+      {
+        "file": "Data App Name/Packages/TODO-MANIFEST-ID/extensions/data-app.trex",
         "replacements": [
           { "find": "TODO-MANIFEST-ID", "replace": "com.tableau.mcp.sales-demo" },
           { "find": "TODO App Name", "replace": "Sales Demo" }

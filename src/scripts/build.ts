@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
-import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
+import { chmod, copyFile, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
+import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from './buildTemplateZip.js';
 import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
 import { isVariant, variants } from './variants.js';
 
@@ -92,13 +93,18 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   );
   console.log('✅ features.json copied successfully');
 
-  // scaffold-data-app reads its starter template from a static asset bundled next to index.js
-  // (same idiom as features.json). The stdio path copies this tree per request; keep it verbatim.
-  console.log('🏗️ Copying templates to build directory...');
-  await cp(resolve(process.cwd(), 'src/templates'), resolve(process.cwd(), 'build', 'templates'), {
-    recursive: true,
-  });
-  console.log('✅ templates copied successfully');
+  // scaffold-data-app serves a static, un-substituted template zip (both local and S3 modes) from
+  // an asset bundled next to index.js (same idiom as features.json). Rebuild the zip fresh from the
+  // committed template tree so it can't drift, then ship only that one file — the raw tree is no
+  // longer read directly at runtime.
+  console.log('🏗️ Building scaffold-data-app template zip...');
+  buildTemplateZip();
+  await mkdir(resolve(process.cwd(), 'build', 'templates'), { recursive: true });
+  await copyFile(
+    resolve(process.cwd(), 'src/templates', TEMPLATE_ZIP_FILENAME),
+    resolve(process.cwd(), 'build', 'templates', TEMPLATE_ZIP_FILENAME),
+  );
+  console.log('✅ template zip built and copied successfully');
 
   console.log('🏗️ Building MCP Apps...');
   try {

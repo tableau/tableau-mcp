@@ -1,9 +1,7 @@
 import {
-  applyReplacements,
   buildPostUnzipPlan,
   buildTextReplacements,
   deriveIdentity,
-  mapToFinalRelativePath,
   slug,
   TEMPLATE_TWB_FILENAME,
   TREX_RELPATH,
@@ -58,38 +56,6 @@ describe('buildTextReplacements', () => {
     const xmlName = { find: 'TODO App Name', replace: 'Tom &amp; "Jerry" &lt;Co&gt;' };
     expect(replacements[TWB_RELPATH]).toContainEqual(xmlName);
     expect(replacements[TREX_RELPATH]).toContainEqual(xmlName);
-  });
-});
-
-describe('applyReplacements', () => {
-  it('applies literal find/replace edits in order', () => {
-    const out = applyReplacements('id=com.example.name name=<TODO Name>', [
-      { find: 'com.example.name', replace: 'com.tableau.mcp.x' },
-      { find: '<TODO Name>', replace: 'My App' },
-    ]);
-    expect(out).toBe('id=com.tableau.mcp.x name=My App');
-  });
-
-  it('replaces every occurrence of each find', () => {
-    expect(applyReplacements('<a/><a/>', [{ find: '<a/>', replace: 'X' }])).toBe('XX');
-  });
-});
-
-describe('mapToFinalRelativePath', () => {
-  const identity = deriveIdentity('Sales Demo');
-
-  it('renames the workbook to the display name', () => {
-    expect(mapToFinalRelativePath(TEMPLATE_TWB_FILENAME, identity)).toBe('Sales Demo.twb');
-  });
-
-  it('renames the package directory to the package id', () => {
-    expect(mapToFinalRelativePath('Packages/TODO-MANIFEST-ID/content/src/app.js', identity)).toBe(
-      'Packages/com.tableau.mcp.sales-demo/content/src/app.js',
-    );
-  });
-
-  it('leaves unrelated paths unchanged', () => {
-    expect(mapToFinalRelativePath('Packages', identity)).toBe('Packages');
   });
 });
 

@@ -3,10 +3,11 @@
  * (package id / display name) and for describing how the committed
  * placeholder template becomes a named workspace.
  *
- * The disk output path applies these edits/renames itself while copying the
- * template. The S3 output path instead returns a `postUnzip` plan (see
- * `buildPostUnzipPlan`) describing the exact same edits/renames for the client
- * to apply after downloading and unzipping the static, un-substituted template.
+ * Both output paths (local disk and S3) serve the same static, un-substituted
+ * template zip and return the identical `postUnzip` plan (see
+ * `buildPostUnzipPlan`) describing the edits/renames for the client to apply
+ * after unzipping. They differ only in transport, not in how substitution
+ * happens.
  */
 
 /** Placeholder names present in the committed template tree. */
@@ -105,31 +106,8 @@ export function buildTextReplacements(identity: DataAppIdentity): Record<string,
   };
 }
 
-/** Applies literal (non-regex) find/replace edits in order, replacing every occurrence of each. */
-export function applyReplacements(content: string, replacements: Replacement[]): string {
-  return replacements.reduce((acc, { find, replace }) => acc.split(find).join(replace), content);
-}
-
 /**
- * Maps a template file's POSIX path (relative to the template root dir) to its
- * final path within the finished workspace: the `.twb` is renamed to the display
- * name and the package dir is renamed to the package id. All other paths are
- * unchanged. Used by the local writer to place each copied file directly at its
- * final location.
- */
-export function mapToFinalRelativePath(relPath: string, identity: DataAppIdentity): string {
-  if (relPath === TEMPLATE_TWB_FILENAME) {
-    return `${identity.displayName}.twb`;
-  }
-  const packagePrefix = `Packages/${TEMPLATE_PACKAGE_DIRNAME}/`;
-  if (relPath.startsWith(packagePrefix)) {
-    return `Packages/${identity.packageId}/${relPath.slice(packagePrefix.length)}`;
-  }
-  return relPath;
-}
-
-/**
- * The plan the S3 path returns so the client can finalize the workspace after
+ * The plan both paths return so the client can finalize the workspace after
  * unzipping the static, un-substituted template: apply every `edits` entry
  * first, then the `renames` in order (deepest paths first, the root dir last).
  * Paths are relative to the unzip directory and include the template root dir.

@@ -1,6 +1,5 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
@@ -15,7 +14,6 @@ import {
 } from './sessionStore/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
-import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
@@ -93,7 +91,6 @@ export class Config extends BaseConfig {
     keyPrefix: string;
     presignTtlSeconds: number;
   };
-  dataAppWorkspaceRoot: string;
   dataAppTemplateS3Key: string;
 
   constructor() {
@@ -168,7 +165,6 @@ export class Config extends BaseConfig {
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
       FILE_TTL: bucketS3PresignTtlSeconds,
-      DATA_APP_WORKSPACE_ROOT: dataAppWorkspaceRoot,
       DATA_APP_TEMPLATE_S3_KEY: dataAppTemplateS3Key,
     } = cleansedVars;
 
@@ -380,11 +376,6 @@ export class Config extends BaseConfig {
       }),
     };
 
-    // scaffold-data-app (disk output): the server-controlled root under which per-app workspaces
-    // are written. Never caller-selected. Defaults to a folder next to the running bundle so a
-    // default install works without configuration.
-    this.dataAppWorkspaceRoot =
-      dataAppWorkspaceRoot?.trim() || join(getDirname(), 'data-app-workspaces');
     // scaffold-data-app (S3 output): S3 key of the pre-published template zip that the S3 path
     // presigns a GET URL for. Requires MCP_S3_BUCKET. Empty when unconfigured.
     this.dataAppTemplateS3Key = dataAppTemplateS3Key?.trim() || '';

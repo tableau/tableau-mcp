@@ -26,6 +26,10 @@ tableau-mcp.mcpb
 # MCP Apps
 src/web/apps/dist/
 
+# scaffold-data-app template zip: generated at build/test time from src/templates/Data App Name/;
+# never commit it (it would drift from the template tree). Also matched by *.zip above.
+src/templates/data-app-template.zip
+
 # Playwright
 /test-results/
 /playwright-report/

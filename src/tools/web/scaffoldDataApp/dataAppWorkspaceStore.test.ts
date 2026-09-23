@@ -1,13 +1,16 @@
+import { execFileSync } from 'child_process';
 import { existsSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { getConfig } from '../../../config.js';
+import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
+import { buildPostUnzipPlan, deriveIdentity } from './templateIdentity.js';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -38,18 +41,11 @@ describe('createDataAppWorkspace', () => {
   });
 
   describe('disk output (S3 not configured)', () => {
-    let root: string;
-
-    beforeEach(async () => {
-      root = await mkdtemp(join(tmpdir(), 'dataapp-'));
-      vi.stubEnv('DATA_APP_WORKSPACE_ROOT', root);
+    beforeAll(() => {
+      buildTemplateZip();
     });
 
-    afterEach(async () => {
-      await rm(root, { recursive: true, force: true });
-    });
-
-    it('writes the finalized, substituted workspace tree to disk', async () => {
+    it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         config: getConfig(),
@@ -58,66 +54,49 @@ describe('createDataAppWorkspace', () => {
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       invariant(value.filePath);
-      expect(value.filePath.endsWith('Sales Demo')).toBe(true);
+      expect(existsSync(value.filePath)).toBe(true);
+      expect(statSync(value.filePath).size).toBeGreaterThan(0);
       expect(value.s3URL).toBeUndefined();
-      expect(value.postUnzip).toBeUndefined();
 
-      const pkgDir = join(value.filePath, 'Packages', 'com.tableau.mcp.sales-demo');
-
-      // Workbook renamed to the display name and fully substituted: the extension
-      // id and tableaulocalext path must resolve to the package id, or publishing fails.
-      const twbPath = join(value.filePath, 'Sales Demo.twb');
-      expect(existsSync(twbPath)).toBe(true);
-      const twb = await readFile(twbPath, 'utf8');
-      expect(twb).not.toContain('TODO-MANIFEST-ID');
-      expect(twb).not.toContain('TODO App Name');
-      expect(twb).toContain("id='com.tableau.mcp.sales-demo'");
-      expect(twb).toContain('tableaulocalext:///com.tableau.mcp.sales-demo/content/index.html');
-
-      // data-app.trex fully substituted.
-      const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
-      expect(trex).not.toContain('TODO-MANIFEST-ID');
-      expect(trex).not.toContain('TODO App Name');
-      expect(trex).not.toContain('TODO Username');
-      expect(trex).toContain('id="com.tableau.mcp.sales-demo"');
-      expect(trex).toContain('name="Tableau MCP"');
-
-      // Vendored Extensions API library copied byte-for-byte (large binary).
-      const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.js');
-      expect(existsSync(libPath)).toBe(true);
-      expect(statSync(libPath).size).toBe(2112831);
-
-      // Starter app.js left untouched with its authoring marker.
-      const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
-      expect(appJs).toContain('AUTHOR YOUR APP HERE');
-
-      // Files were written to their finalized paths on disk.
-      expect(existsSync(join(pkgDir, 'extensions', 'data-app.trex'))).toBe(true);
-    });
-
-    it('refuses to overwrite an existing workspace', async () => {
-      const first = await createDataAppWorkspace({
-        datappName: 'Dupe',
-        config: getConfig(),
+      // Local mode returns the exact same plan S3 mode does - the client always unzips and finalizes.
+      invariant(value.postUnzip);
+      expect(value.postUnzip).toEqual(buildPostUnzipPlan(deriveIdentity('Sales Demo')));
+      expect(value.postUnzip.renames).toContainEqual({
+        from: 'Data App Name/Packages/TODO-MANIFEST-ID',
+        to: 'Data App Name/Packages/com.tableau.mcp.sales-demo',
       });
-      expect(first.isOk()).toBe(true);
-
-      const second = await createDataAppWorkspace({
-        datappName: 'Dupe',
-        config: getConfig(),
+      expect(value.postUnzip.renames).toContainEqual({
+        from: 'Data App Name/Data App Name.twb',
+        to: 'Data App Name/Sales Demo.twb',
       });
-      invariant(second.isErr());
-      expect(second.error.message).toContain('already exists');
-    });
+      expect(value.postUnzip.renames).toContainEqual({ from: 'Data App Name', to: 'Sales Demo' });
 
-    it('rejects names that would escape the workspace root', async () => {
-      for (const datappName of ['a/b', '..']) {
-        const result = await createDataAppWorkspace({
-          datappName,
-          config: getConfig(),
-        });
-        invariant(result.isErr());
-        expect(result.error.message).toContain('Invalid data app name');
+      // The zip itself is un-substituted and its top-level entry is the raw template dir name.
+      const extractDir = await mkdtemp(join(tmpdir(), 'dataapp-extract-'));
+      try {
+        execFileSync('unzip', ['-q', value.filePath, '-d', extractDir]);
+
+        const root = join(extractDir, 'Data App Name');
+        const pkgDir = join(root, 'Packages', 'TODO-MANIFEST-ID');
+
+        const twb = await readFile(join(root, 'Data App Name.twb'), 'utf8');
+        expect(twb).toContain('TODO-MANIFEST-ID');
+        expect(twb).toContain('TODO App Name');
+
+        const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
+        expect(trex).toContain('TODO-MANIFEST-ID');
+        expect(trex).toContain('TODO App Name');
+
+        // Vendored Extensions API library copied byte-for-byte (large binary).
+        const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.js');
+        expect(existsSync(libPath)).toBe(true);
+        expect(statSync(libPath).size).toBe(2112831);
+
+        // Starter app.js left untouched with its authoring marker.
+        const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
+        expect(appJs).toContain('AUTHOR YOUR APP HERE');
+      } finally {
+        await rm(extractDir, { recursive: true, force: true });
       }
     });
   });
