@@ -84,6 +84,8 @@ export class Config extends BaseConfig {
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
+  flowWriteToolsEnabled: boolean;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -160,6 +162,7 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -349,6 +352,7 @@ export class Config extends BaseConfig {
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived

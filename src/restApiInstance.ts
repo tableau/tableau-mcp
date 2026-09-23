@@ -49,8 +49,12 @@ type JwtScopes =
   | 'tableau:users:read'
   | 'tableau:users:update'
   | 'tableau:flows:read'
+  | 'tableau:flows:download'
+  | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
+  | 'tableau:flow_runs:update'
+  | 'tableau:flow_tasks:run'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write';
 

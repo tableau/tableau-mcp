@@ -62,8 +62,8 @@ describe('getWorkbookTool', () => {
     resetResourceAccessCheckerSingleton();
     // Safe defaults: no connections, empty published lineage, and an indeterminate
     // has-query-permissions result so isQueryable is left unset and stays out of the
-    // discovery/merge assertions below. Queryability mapping (including feature-disabled → false)
-    // is exercised in the 'isQueryable enrichment' block.
+    // discovery/merge assertions below. Queryability mapping (including feature-disabled → unset and
+    // workbook-datasource-not-enabled → false) is exercised in the 'isQueryable enrichment' block.
     mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
     mocks.mockGraphql.mockResolvedValue(emptyWorkbookLineage);
     mocks.mockUserHasQueryPermissions.mockResolvedValue(
@@ -387,12 +387,39 @@ describe('getWorkbookTool', () => {
       expect(response.data.upstreamDatasources ?? []).toEqual([]);
     });
 
-    it('sets isQueryable false for every datasource when VDS is systemically unavailable (feature-disabled)', async () => {
-      // feature-disabled covers both systemic cases: the feature is off site-wide, or the endpoint
-      // is absent on an older server. VDS can't be queried at all, so isQueryable is false for both
-      // published and embedded. Since the first (probe) check already proves the systemic failure,
-      // the remaining data sources are marked false without another call — exactly one call total.
+    it('leaves isQueryable unset for every datasource when the endpoint is absent (feature-disabled)', async () => {
+      // feature-disabled = the user-has-query-permissions endpoint is absent on an older server, so
+      // the API can't answer for any data source. Queryability is undeterminable and isQueryable is
+      // left unset for both published and embedded. Since the first (probe) check already proves the
+      // systemic failure, the remaining data sources are skipped without another call — exactly one
+      // call total.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
+
+      const response = await getResponseData({ workbookId });
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(1);
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+        },
+      ]);
+    });
+
+    it('sets isQueryable false for every datasource when the workbook-datasource feature is off (workbook-datasource-not-enabled)', async () => {
+      // workbook-datasource-not-enabled = the VDSForWorkbookDatasources feature is off site-wide. The
+      // endpoint answered but querying is disabled for every data source, so isQueryable is false for
+      // both published and embedded. The probe proves the systemic failure, so the rest are skipped
+      // without another call — exactly one call total.
+      mocks.mockUserHasQueryPermissions.mockResolvedValue(
+        Err({ type: 'workbook-datasource-not-enabled' }),
+      );
 
       const response = await getResponseData({ workbookId });
 

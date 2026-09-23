@@ -213,13 +213,16 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 /**
  * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
  * endpoint. The first data source is probed on its own: if that probe reports a *systemic* failure
- * (feature-disabled — VDS off site-wide or the endpoint absent on older servers), no data source is
- * queryable, so every entry is marked `false` and the remaining checks are skipped. Otherwise the
- * probe result is kept and the remaining data sources are checked concurrently, in batches of
- * {@link VDS_QUERYABILITY_CONCURRENCY} so VDS isn't hit by an unbounded burst. Each check maps to:
+ * (one that applies to every data source), the probe's verdict is broadcast to all entries and the
+ * remaining checks are skipped. Otherwise the probe result is kept and the remaining data sources are
+ * checked concurrently, in batches of {@link VDS_QUERYABILITY_CONCURRENCY} so VDS isn't hit by an
+ * unbounded burst. Each check maps to:
  *  - 200 → the API's `hasQueryPermission` value.
- *  - feature-disabled, errorCode 403800 (permission denied), or 404937 (data source not found)
- *    → `false`: not queryable.
+ *  - errorCode 403800 (permission denied) or 404937 (data source not found) → `false`: not queryable.
+ *  - workbook-datasource-not-enabled (VDSForWorkbookDatasources off site-wide) → `false`: querying is
+ *    disabled. Systemic.
+ *  - feature-disabled (endpoint absent — the API isn't available yet) → left unset: queryability is
+ *    undeterminable. Systemic.
  *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
  *
  * Best-effort: a failed check never fails get-workbook.
@@ -252,10 +255,17 @@ export async function enrichUpstreamDatasourceQueryability({
           systemic: false,
         };
       }
-      // feature-disabled is systemic: VDS is off site-wide or the endpoint is absent, so NO data
-      // source is queryable. Flag it so the caller can skip the rest.
-      if (result.error.type === 'feature-disabled') {
+      // workbook-datasource-not-enabled is systemic: the VDSForWorkbookDatasources feature is off
+      // site-wide, so the endpoint answered but querying is disabled for EVERY data source →
+      // isQueryable false. Flag it so the caller can broadcast false and skip the rest.
+      if (result.error.type === 'workbook-datasource-not-enabled') {
         return { datasource: { ...ds, isQueryable: false }, systemic: true };
+      }
+      // feature-disabled is systemic too, but different: the user-has-query-permissions endpoint is
+      // absent on an older server, so it can't answer for ANY data source. Queryability is
+      // undeterminable, so isQueryable is left unset. Flag it so the caller can skip the rest.
+      if (result.error.type === 'feature-disabled') {
+        return { datasource: ds, systemic: true };
       }
       // Per-data-source denials are false but not systemic:
       // * 403800: the caller lacks permission to query this data source
@@ -285,13 +295,19 @@ export async function enrichUpstreamDatasourceQueryability({
 
   const [first, ...rest] = upstreamDatasources;
 
-  // PROBE: Check the first data source on its own. If it fails systemically (FF is off or endpoint is absent),
-  // we can short-circuit and set isQueryable to false for all data sources without checking the rest.
+  // PROBE: Check the first data source on its own. A systemic failure applies to every data source,
+  // so we broadcast the probe's verdict to all of them and skip the remaining checks: an absent
+  // endpoint leaves isQueryable unset (undeterminable), while the feature being off site-wide marks
+  // every data source false.
   const probe = await checkDatasourceQueryability(first);
   if (probe.systemic) {
+    const { isQueryable } = probe.datasource;
+    if (isQueryable === undefined) {
+      return workbook;
+    }
     return {
       ...workbook,
-      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, isQueryable: false })),
+      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, isQueryable })),
     };
   }
 
