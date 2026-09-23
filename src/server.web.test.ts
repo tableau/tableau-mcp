@@ -209,8 +209,23 @@ describe('server', () => {
     // Admin capability menu + generic-intent tie-in.
     expect(instructions).toContain('site-administration capabilities');
     expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('user-license reclamation');
     expect(instructions).toContain('query-admin-insights');
+    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).toContain(promptName);
+    }
+    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+    expect(instructions).toContain('read-only report');
+    expect(instructions).toContain('dry-run by default');
     // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
     // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
     // so a future edit that drops the rendering guidance can't silently pass.
@@ -242,6 +257,17 @@ describe('server', () => {
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
+    // The named admin prompts are part of the admin-only block and must also be absent.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).not.toContain(promptName);
+    }
     // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
     // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
     // stayed out of the base instructions).
