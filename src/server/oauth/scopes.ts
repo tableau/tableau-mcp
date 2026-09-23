@@ -8,6 +8,7 @@
 import { getConfig } from '../../config.js';
 import { getFeatureGate } from '../../features/init.js';
 import { isSlackClient } from '../../telemetry/clientDisplayName.js';
+import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -172,7 +173,14 @@ export async function isValidScope(scope: string, clientId?: string): Promise<bo
 
 const toolScopeMap: Record<
   WebToolName,
-  { mcp: ReadonlyArray<McpScope>; api: ReadonlySet<TableauApiScope> }
+  {
+    mcp: ReadonlyArray<McpScope>;
+    api: ReadonlySet<TableauApiScope>;
+    // Checking registration conditions for a tool involves calling REST APIs.
+    // Each condition check has its own set of scopes used. Each tool needs to provide
+    // the set of scopes used to check all conditions it requires.
+    conditionApiScopes?: ReadonlySet<TableauApiScope>;
+  }
 > = {
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -201,14 +209,17 @@ const toolScopeMap: Record<
   'query-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'inspect-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:read'],
     api: new Set(['tableau:knowledge:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'manage-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:write'],
     api: new Set(['tableau:knowledge:write']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
@@ -340,18 +351,22 @@ const toolScopeMap: Record<
   'list-all-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metric-definitions-from-definition-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metrics-from-metric-definition-id': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metrics-from-metric-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metric-subscriptions': {
     mcp: ['tableau:mcp:pulse:read'],
@@ -362,14 +377,23 @@ const toolScopeMap: Record<
       'tableau:insight_metrics:read',
       'tableau:mcp_site_settings:read',
     ]),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set([
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
+    ]),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set([
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
+    ]),
   },
   'generate-insight-cards': {
     mcp: ['tableau:mcp:insight:create', 'tableau:mcp:datasource:read'],
@@ -378,6 +402,10 @@ const toolScopeMap: Record<
       'tableau:content:read',
       'tableau:viz_data_service:read',
       'tableau:mcp_site_settings:read',
+    ]),
+    conditionApiScopes: new Set([
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
     ]),
   },
   'search-content': {
@@ -537,11 +565,20 @@ export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope
 export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
+  const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
+    'enforce-registration-conditions',
+  );
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
       for (const scope of scopeConfig.api) {
         scopes.add(scope);
+      }
+      // adding api scopes needed to check the registration conditions required by this tool
+      if (enforceRegistrationConditions) {
+        for (const scope of scopeConfig.conditionApiScopes ?? []) {
+          scopes.add(scope);
+        }
       }
     }
   }
@@ -624,6 +661,15 @@ export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<M
 
 export function getRequiredApiScopesForTool(toolName: WebToolName): ReadonlyArray<TableauApiScope> {
   return Array.from(toolScopeMap[toolName].api);
+}
+
+/**
+ * The API scopes used when checking a tool's registration condition as declared in {@link toolScopeMap}.
+ * Must match what the tool instance's `registrationConditions` map to; a parity test guards against
+ * the two drifting apart.
+ */
+export function getConditionApiScopesForTool(toolName: WebToolName): ReadonlySet<TableauApiScope> {
+  return toolScopeMap[toolName].conditionApiScopes ?? new Set();
 }
 
 /**

@@ -6,12 +6,14 @@ import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
@@ -157,6 +159,30 @@ describe('server', () => {
         },
         expect.any(Function),
       );
+    }
+  });
+
+  // The scope layer advertises each tool's registration-condition probe scopes from a
+  // `conditionApiScopes` field in scopes.ts's toolScopeMap. Those scopes must match what the tool
+  // instance's declared `registrationConditions` map to via REGISTRATION_CONDITION_API_SCOPES. If the
+  // two drift, a conditional tool's probe scope silently stops being advertised. This asserts they
+  // stay identical for every tool.
+  it('should keep toolScopeMap conditionApiScopes in sync with each tool instance registrationConditions', async () => {
+    const server = getServer();
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
+
+    for (const tool of allTools) {
+      const expectedScopes = [
+        ...new Set(
+          tool.registrationConditions.flatMap((condition) => [
+            ...REGISTRATION_CONDITION_API_SCOPES[condition],
+          ]),
+        ),
+      ].sort();
+      const mapScopes = [...getConditionApiScopesForTool(tool.name)].sort();
+      expect(mapScopes, `condition scope mismatch for ${tool.name}`).toEqual(expectedScopes);
     }
   });
 
