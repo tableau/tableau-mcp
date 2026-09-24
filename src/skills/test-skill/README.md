@@ -1,6 +1,6 @@
 # test-skill
 
-A minimal test skill used to verify the **skills-over-mcp** integration end to end.
+A test skill used to verify the **skills-over-mcp** integration end to end.
 
 When invoked, the skill:
 
