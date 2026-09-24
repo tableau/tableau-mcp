@@ -79,9 +79,18 @@ export function deriveIdentity(datappName: string): DataAppIdentity {
   };
 }
 
-/** Escapes a value for insertion into XML element text (.twb, .trex). */
+/**
+ * Escapes a value for insertion into XML (.twb, .trex). Escapes quotes too, not just the three
+ * element-text-minimum characters, so this stays safe if a placeholder ever ends up inside an
+ * attribute value instead of element text — no need to track where callers use the result.
+ */
 function escapeXmlText(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 /**

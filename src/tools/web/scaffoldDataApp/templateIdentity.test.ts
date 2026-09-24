@@ -52,8 +52,11 @@ describe('buildTextReplacements', () => {
     const identity = deriveIdentity('Tom & "Jerry" <Co>');
     const replacements = buildTextReplacements(identity);
 
-    // XML text (.twb, .trex): & < > escaped, quotes left as-is.
-    const xmlName = { find: 'TODO App Name', replace: 'Tom &amp; "Jerry" &lt;Co&gt;' };
+    // & < > and quotes are all escaped, so the result is safe in XML text or an attribute value.
+    const xmlName = {
+      find: 'TODO App Name',
+      replace: 'Tom &amp; &quot;Jerry&quot; &lt;Co&gt;',
+    };
     expect(replacements[TWB_RELPATH]).toContainEqual(xmlName);
     expect(replacements[TREX_RELPATH]).toContainEqual(xmlName);
   });
