@@ -90,6 +90,11 @@ async function createS3Workspace({
   // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
   // so a fixed key is intentional — concurrent overwrites are harmless. Nothing is published out of
   // band; the object is always what this code path just wrote.
+  //
+  // Don't "optimize" this into an exists-check-then-skip-upload: the key has no version or content
+  // hash in it, so a stale object from a previous deploy (or a different pod on shared storage)
+  // would look like a hit and get served forever instead of refreshed. Always writing first is what
+  // guarantees the object matches this instance's on-disk template.
   let s3URL: string;
   try {
     const buffer = await readFile(zipPath);
