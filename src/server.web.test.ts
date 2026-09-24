@@ -6,12 +6,14 @@ import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
@@ -160,6 +162,30 @@ describe('server', () => {
     }
   });
 
+  // The scope layer advertises each tool's registration-condition probe scopes from a
+  // `conditionApiScopes` field in scopes.ts's toolScopeMap. Those scopes must match what the tool
+  // instance's declared `registrationConditions` map to via REGISTRATION_CONDITION_API_SCOPES. If the
+  // two drift, a conditional tool's probe scope silently stops being advertised. This asserts they
+  // stay identical for every tool.
+  it('should keep toolScopeMap conditionApiScopes in sync with each tool instance registrationConditions', async () => {
+    const server = getServer();
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
+
+    for (const tool of allTools) {
+      const expectedScopes = [
+        ...new Set(
+          tool.registrationConditions.flatMap((condition) => [
+            ...REGISTRATION_CONDITION_API_SCOPES[condition],
+          ]),
+        ),
+      ].sort();
+      const mapScopes = [...getConditionApiScopesForTool(tool.name)].sort();
+      expect(mapScopes, `condition scope mismatch for ${tool.name}`).toEqual(expectedScopes);
+    }
+  });
+
   it('should use the web variant server name', () => {
     expect(new WebMcpServer().name).toBe(serverName);
   });
@@ -203,8 +229,23 @@ describe('server', () => {
     // Admin capability menu + generic-intent tie-in.
     expect(instructions).toContain('site-administration capabilities');
     expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('user-license reclamation');
     expect(instructions).toContain('query-admin-insights');
+    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).toContain(promptName);
+    }
+    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+    expect(instructions).toContain('read-only report');
+    expect(instructions).toContain('dry-run by default');
     // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
     // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
     // so a future edit that drops the rendering guidance can't silently pass.
@@ -236,6 +277,17 @@ describe('server', () => {
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
+    // The named admin prompts are part of the admin-only block and must also be absent.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).not.toContain(promptName);
+    }
     // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
     // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
     // stayed out of the base instructions).
@@ -280,6 +332,8 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
+    expect(registeredToolNames).not.toContain('describe-flow');
+    expect(registeredToolNames).not.toContain('get-flow-task');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -301,6 +355,8 @@ describe('server', () => {
     expect(registeredToolNames).toContain('get-flow');
     expect(registeredToolNames).toContain('list-flow-runs');
     expect(registeredToolNames).toContain('list-flow-tasks');
+    expect(registeredToolNames).toContain('describe-flow');
+    expect(registeredToolNames).toContain('get-flow-task');
     // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -319,7 +375,64 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
+    expect(registeredToolNames).not.toContain('describe-flow');
+    expect(registeredToolNames).not.toContain('get-flow-task');
     expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register mutating flow tools only when both static gates and the flow-tools feature flag are enabled', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('run-flow');
+    expect(registeredToolNames).toContain('run-flow-task');
+    expect(registeredToolNames).toContain('cancel-flow-run');
+  });
+
+  it('should not register mutating flow tools when only the write gate is enabled', async () => {
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).not.toContain('run-flow');
+    expect(registeredToolNames).not.toContain('run-flow-task');
+    expect(registeredToolNames).not.toContain('cancel-flow-run');
+  });
+
+  it('should register read-only flow tools but not mutating flow tools when FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'flow-tools',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
+    expect(registeredToolNames).toContain('get-flow-task');
+
+    expect(registeredToolNames).not.toContain('run-flow');
+    expect(registeredToolNames).not.toContain('run-flow-task');
+    expect(registeredToolNames).not.toContain('cancel-flow-run');
   });
 
   it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {

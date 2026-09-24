@@ -7,6 +7,9 @@ import {
 } from '../../errors/mcpToolError.js';
 import { RestApiArgs, useRestApi } from '../../restApiInstance.js';
 import { PULSE_PREMIUM_INSIGHTS_ENTITLEMENT } from '../../sdks/tableau/types/pulse.js';
+// Type-only: erased at compile time, so scopes.ts can import the value map below without a
+// runtime import cycle.
+import type { TableauApiScope } from '../../server/oauth/scopes.js';
 import { retry } from '../../utils/retry.js';
 
 /**
@@ -20,6 +23,22 @@ export type RegistrationCondition =
   | 'RequiresPulse'
   | 'RequiresPulsePremium'
   | 'MissingConditionCheck';
+
+/**
+ * Map of registration conditions to the JWT scopes needed for checking said condition.
+ *
+ * Each tool that requires registration conditions must also add the associated scopes to the
+ * `toolScopeMap` in scopes.ts
+ */
+export const REGISTRATION_CONDITION_API_SCOPES: Record<
+  RegistrationCondition,
+  ReadonlyArray<TableauApiScope>
+> = {
+  RequiresKnowledge: ['tableau:knowledge:read'],
+  RequiresPulse: ['tableau:insight_definitions_metrics:read'],
+  RequiresPulsePremium: ['tableau:entitlements:read'],
+  MissingConditionCheck: [],
+};
 
 /**
  * Context to be populated during tool registration. Useful for storing
@@ -86,8 +105,9 @@ export async function checkRegistrationConditions(
         continue;
       }
       /**
-       * Adding a new registration condition - Step 2: Add a case for checking new condition above,
-       * and populate the `context` object to prevent the same condition from being rechecked with each pass.
+       * Adding a new registration condition - Step 2: Add a case for checking new condition above.
+       * Update `REGISTRATION_CONDITION_API_SCOPES` with any JWT scopes required for checking the new condition.
+       * After checking a condition, populate the `context` object to prevent the same condition from being rechecked with each pass.
        * See `getCurrentUserSiteRole` or above functions for examples on checking conditions.
        */
       default: {
@@ -154,7 +174,7 @@ async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolea
       () =>
         useRestApi({
           ...restApiArgs,
-          jwtScopes: ['tableau:knowledge:read'],
+          jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge,
           callback: async (restApi) => {
             await restApi.knowledgeMethods.listGraphs();
             return true;
@@ -210,7 +230,7 @@ async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean> {
       () =>
         useRestApi({
           ...restApiArgs,
-          jwtScopes: ['tableau:insight_definitions_metrics:read'],
+          jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
           callback: async (restApi) => {
             const result = await restApi.pulseMethods.listAllPulseMetricDefinitions(
               undefined,
@@ -280,7 +300,7 @@ async function checkPulsePremium(
       () =>
         useRestApi({
           ...restApiArgs,
-          jwtScopes: ['tableau:entitlements:read'],
+          jwtScopes: REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
           callback: async (restApi) => {
             const result = await restApi.pulseMethods.getPulseEntitlements();
 

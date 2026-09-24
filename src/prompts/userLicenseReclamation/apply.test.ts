@@ -154,6 +154,23 @@ describe('user-license-reclamation-apply prompt', () => {
     expect(text).not.toContain('"Login"');
   });
 
+  it('scopes the ts-events query (Step 2a) to the Step-1 candidate names to avoid the 10000-row truncation blind spot', async () => {
+    const text = await textOf();
+    // The ts-events query carries an `Actor User Name` SET filter with a replace-me placeholder.
+    expect(text).toContain(
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username (equals the email on Tableau Cloud); one string per candidate>',
+    );
+    // The Step 2a instruction tells the model to scope, not to fetch site-wide events.
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do NOT fetch site-wide events.');
+  });
+
+  it('explains ts-events 0 rows (Step 2a) is valid but flags an unsubstituted placeholder', async () => {
+    const text = await textOf();
+    expect(text).toContain('0 rows in the TS Events result (2a) is a VALID outcome');
+    expect(text).toContain('fails to rescue genuinely-active users');
+  });
+
   it('provides a deterministic VDS query for ts-users (Step 2b) with Desktop/Prep captions', async () => {
     const text = await textOf();
     expect(text).toContain('"kind": "ts-users"');
