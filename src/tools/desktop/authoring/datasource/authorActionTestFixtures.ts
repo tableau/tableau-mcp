@@ -105,6 +105,8 @@ export type AuthorActionArgs = {
   datasource?: string;
   setMembership?: 'assign' | 'add' | 'remove';
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
+  sourceFieldAggregation?: string;
+  clearValue?: string;
   singleSelect?: boolean;
   activation?: 'on-select' | 'on-hover' | 'on-menu';
   url?: string;
@@ -170,6 +172,8 @@ export async function getToolResult({
       activation: args.activation ?? 'on-select',
       setMembership: args.setMembership ?? 'assign',
       clearSelection: args.clearSelection ?? 'do-nothing',
+      sourceFieldAggregation: args.sourceFieldAggregation,
+      clearValue: args.clearValue,
       url: args.url,
       sourceDashboard: args.sourceDashboard,
       excludeSourceSheets: args.excludeSourceSheets,
