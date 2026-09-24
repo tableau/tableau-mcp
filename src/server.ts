@@ -126,6 +126,7 @@ export abstract class Server {
    */
   protected async enableSkillsCapability(): Promise<void> {
     if (await getFeatureGate().isFeatureEnabled('skills-over-mcp')) {
+      // directoryRead set to false (the default value) since we will not support resources/directory/read
       this.mcpServer.server.registerCapabilities({
         extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
       });
