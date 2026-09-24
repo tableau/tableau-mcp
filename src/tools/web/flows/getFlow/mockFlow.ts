@@ -33,6 +33,11 @@ export const mockConnections = [
   },
 ] satisfies Array<FlowConnection>;
 
+/**
+ * Baseline runs, deliberately WITHOUT any `failureReason` — the shape a pre-3.30
+ * server returns. Existing tests assert the no-reason behavior against this, which
+ * is the AC3 regression baseline, so do not add reasons here.
+ */
 export const mockFlowRuns = [
   {
     id: 'a1a1a1a1-1111-1111-1111-111111111111',
@@ -51,5 +56,14 @@ export const mockFlowRuns = [
     completedAt: '2025-03-31T10:02:00Z',
     progress: 50,
     backgroundJobId: 'b2b2b2b2-2222-2222-2222-222222222222',
+  },
+] satisfies Array<FlowRun>;
+
+/** The same window as `mockFlowRuns`, but on a REST 3.30+ server. */
+export const mockFlowRunsWithFailureReason = [
+  mockFlowRuns[0],
+  {
+    ...mockFlowRuns[1],
+    failureReason: { available: true, message: 'Table "orders" was not found.' },
   },
 ] satisfies Array<FlowRun>;
