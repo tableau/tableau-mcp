@@ -83,8 +83,8 @@ describe('getScaffoldDataAppTool', () => {
   });
 
   describe('callback', () => {
-    beforeAll(() => {
-      buildTemplateZip();
+    beforeAll(async () => {
+      await buildTemplateZip();
     });
 
     it('scaffolds a workspace and returns a success result', async () => {

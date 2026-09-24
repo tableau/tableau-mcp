@@ -44,8 +44,8 @@ describe('createDataAppWorkspace', () => {
   });
 
   describe('disk output (S3 not configured)', () => {
-    beforeAll(() => {
-      buildTemplateZip();
+    beforeAll(async () => {
+      await buildTemplateZip();
     });
 
     it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {
@@ -106,8 +106,8 @@ describe('createDataAppWorkspace', () => {
 
   describe('S3 output (MCP_S3_BUCKET configured)', () => {
     // S3 mode now uploads the same on-disk build artifact local mode serves, so the zip must exist.
-    beforeAll(() => {
-      buildTemplateZip();
+    beforeAll(async () => {
+      await buildTemplateZip();
     });
 
     beforeEach(() => {

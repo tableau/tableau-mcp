@@ -98,7 +98,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // committed template tree so it can't drift, then ship only that one file — the raw tree is no
   // longer read directly at runtime.
   console.log('🏗️ Building scaffold-data-app template zip...');
-  buildTemplateZip();
+  await buildTemplateZip();
   await mkdir(resolve(process.cwd(), 'build', 'templates'), { recursive: true });
   await copyFile(
     resolve(process.cwd(), 'src/templates', TEMPLATE_ZIP_FILENAME),
