@@ -35,11 +35,7 @@ describe('FeatureGate', () => {
 
       expect(getDirname).toHaveBeenCalled();
       expect(readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('/mock/module/directory'),
-        'utf-8',
-      );
-      expect(readFileSync).toHaveBeenCalledWith(
-        expect.stringMatching(/\/mock\/module\/directory.*features\.json$/),
+        expect.stringMatching(/[\\/]mock[\\/]module[\\/]directory[\\/]features\.json$/),
         'utf-8',
       );
     });

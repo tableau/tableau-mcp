@@ -402,6 +402,27 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
+    it('should include tableau:flows:download when flowToolsEnabled and flow-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:flows:download');
+    });
+
+    it('should exclude tableau:flows:download when flowToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:flows:download');
+    });
+
     it('should exclude tableau:workbooks:create when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -522,6 +543,48 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:content:read');
       expect(scopes).toContain('tableau:mcp_site_settings:read');
     });
+
+    // Registration-condition probe scopes must be advertised too, or the token minted from this
+    // metadata lacks them and the probe fails closed, hiding the very tools it gates. The Pulse
+    // premium probe reads `tableau:entitlements:read`, which no tool declares in its own scope set.
+    // They are advertised only when `enforce-registration-conditions` is on, since that flag is what
+    // makes the probes actually run.
+    it('should advertise tableau:entitlements:read for the RequiresPulsePremium probe when enforce-registration-conditions is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'enforce-registration-conditions',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:entitlements:read');
+    });
+
+    it('should NOT advertise condition probe scopes when enforce-registration-conditions is disabled', async () => {
+      // Default mock: every feature (including enforce-registration-conditions) is off.
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      // `tableau:entitlements:read` is only ever contributed by the RequiresPulsePremium condition,
+      // so its absence proves condition scopes are not advertised when the flag is off.
+      expect(scopes).not.toContain('tableau:entitlements:read');
+    });
+
+    it('should advertise the Knowledge availability probe scope when knowledge-tools and enforce-registration-conditions are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          featureName === 'knowledge-tools' || featureName === 'enforce-registration-conditions',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:knowledge:read');
+    });
   });
 
   it('should separate Knowledge inspection and management API scopes', () => {
@@ -531,6 +594,90 @@ describe('scopes', () => {
     expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
       'tableau:knowledge:write',
     ]);
+  });
+
+  describe('flowWriteToolsEnabled gating', () => {
+    it('includes the flow run mcp + api scopes when flowWriteToolsEnabled and flow-tools are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: true,
+        flowWriteToolsEnabled: true,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).toContain('tableau:mcp:flow:run');
+      expect(mcp).toContain('tableau:mcp:flow:cancel');
+
+      const api = await getSupportedApiScopes();
+      expect(api).toContain('tableau:flows:run');
+      expect(api).toContain('tableau:flow_tasks:run');
+      expect(api).toContain('tableau:flow_runs:update');
+    });
+
+    it('does not advertise flow run scopes when FLOW_TOOLS_ENABLED is false even if flowWriteToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: false,
+        flowWriteToolsEnabled: true,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).not.toContain('tableau:mcp:flow:run');
+      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+
+      const api = await getSupportedApiScopes();
+      expect(api).not.toContain('tableau:flows:run');
+      expect(api).not.toContain('tableau:flow_tasks:run');
+      expect(api).not.toContain('tableau:flow_runs:update');
+    });
+
+    it('excludes (does not advertise) the flow run scopes when flowWriteToolsEnabled is false', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: true,
+        flowWriteToolsEnabled: false,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).not.toContain('tableau:mcp:flow:run');
+      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+      // The read flow scope is unaffected when the read tools remain enabled.
+      expect(mcp).toContain('tableau:mcp:flow:read');
+
+      const api = await getSupportedApiScopes();
+      expect(api).not.toContain('tableau:flows:run');
+      expect(api).not.toContain('tableau:flow_tasks:run');
+      expect(api).not.toContain('tableau:flow_runs:update');
+    });
+
+    it('excludes flow run scopes when the flow-tools feature flag is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: true,
+        flowWriteToolsEnabled: true,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).not.toContain('tableau:mcp:flow:run');
+      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+
+      const api = await getSupportedApiScopes();
+      expect(api).not.toContain('tableau:flows:run');
+      expect(api).not.toContain('tableau:flow_tasks:run');
+      expect(api).not.toContain('tableau:flow_runs:update');
+    });
+
+    it('treats the flow run scope as invalid when flowWriteToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowWriteToolsEnabled: false,
+      } as any);
+
+      expect(await isValidScope('tableau:mcp:flow:run')).toBe(false);
+      expect(await isValidScope('tableau:mcp:flow:cancel')).toBe(false);
+    });
   });
 
   describe('getSupportedScopes', () => {

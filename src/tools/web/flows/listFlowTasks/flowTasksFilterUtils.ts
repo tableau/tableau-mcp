@@ -62,6 +62,7 @@ export function parseAndValidateFlowTasksFilterString(filterString: string): str
     filterString,
     allowedOperatorsByField,
     filterFieldSchema: FilterFieldSchema,
+    dateTimeFields: ['schedule.nextRunAt', 'schedule.createdAt', 'schedule.updatedAt'],
   });
 }
 

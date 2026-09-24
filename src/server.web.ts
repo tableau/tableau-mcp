@@ -60,15 +60,23 @@ const BASE_INSTRUCTIONS =
 // so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
 // (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
 const ADMIN_INSTRUCTIONS =
-  'This server also has site-administration capabilities. For general admin/site-health, governance, ' +
-  'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
-  'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
-  '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
-  'rather than naming a specific tool. ' +
-  'Do not require the user to state or re-confirm admin status before using these tools — invoke them ' +
-  'whenever the task warrants; the server authorizes each call and cleanly rejects non-admins. ' +
-  'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
-  'them as Markdown tables.';
+  'This server also has site-administration capabilities, exposed as named MCP prompts (retrieve them ' +
+  'by name via prompts/get) that package multi-step admin workflows with their built-in safety ' +
+  'scaffolding. For general admin/site-health, governance, cleanup, or cost/license questions, invoke ' +
+  'the matching prompt by name rather than reconstructing the workflow from raw tool calls. Each ' +
+  'concern has an "-inform" prompt (read-only report) and, where changes can be applied, an "-apply" ' +
+  'prompt (destructive: dry-run by default, requires explicit human-in-the-loop confirmation before ' +
+  'any write or delete). The exact prompt names are: stale-content-cleanup-inform and ' +
+  'stale-content-cleanup-apply (stale workbooks/datasources); job-optimization-inform (job & ' +
+  'extract-refresh performance) and extract-optimization-apply (reschedule or delete extract-refresh ' +
+  'tasks); user-license-reclamation-inform and user-license-reclamation-apply (downgrade inactive ' +
+  'licensed users to Unlicensed). Use the query-admin-insights tool (e.g. stale-content, ' +
+  'job-performance, ts-users) for supporting data — even when the user asks broadly rather than ' +
+  'naming a specific tool. ' +
+  'Do not require the user to state or re-confirm admin status before using these prompts or tools — ' +
+  'invoke them whenever the task warrants; the server authorizes each call and cleanly rejects ' +
+  'non-admins. When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack ' +
+  'surface, present them as Markdown tables.';
 
 // Appended to the initialize instructions when the caller's site role could not be fetched (after
 // retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
@@ -201,6 +209,8 @@ export class WebMcpServer extends Server {
     }
 
     registerPrompts(this);
+
+    await this.enableSkillsCapability();
   };
 
   protected _getToolsToRegister = async (

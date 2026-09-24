@@ -11,6 +11,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
       server: {
         notification: vi.fn(),
         setRequestHandler: vi.fn(),
+        registerCapabilities: vi.fn(),
         getClientVersion: vi.fn().mockReturnValue({
           version: '1.0.0',
           name: 'test-client',

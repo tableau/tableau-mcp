@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
+import { getFeatureGate } from './features/init.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import invariant from './utils/invariant.js';
@@ -116,6 +117,20 @@ export abstract class Server {
     sdkServer._instructions = sdkServer._instructions
       ? `${sdkServer._instructions} ${sentence}`
       : sentence;
+  }
+
+  /**
+   * If skills-over-mcp feature flag is enabled, io.modelcontextprotocol/skills in the server’s
+   * initialization capabilities which advertises that tableau-mcp supports the skills over mcp
+   * When skills-over-mcp feature flag is removed, move this capability to the server constructor
+   */
+  protected async enableSkillsCapability(): Promise<void> {
+    if (await getFeatureGate().isFeatureEnabled('skills-over-mcp')) {
+      // directoryRead set to false (the default value) since we will not support resources/directory/read
+      this.mcpServer.server.registerCapabilities({
+        extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+      });
+    }
   }
 
   get userAgent(): string {

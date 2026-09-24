@@ -91,6 +91,44 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('"Event Date"');
   });
 
+  it('scopes the ts-events query to the Step-1 candidate names to avoid the 10000-row truncation blind spot', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    // The ts-events query carries an `Actor User Name` SET filter with a replace-me placeholder.
+    expect(text).toContain(
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username (equals the email on Tableau Cloud); one string per candidate>',
+    );
+    // The Step 2 instruction tells the model to scope, not to fetch site-wide events.
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do not fetch site-wide events.');
+  });
+
+  it('warns when the ts-events query hits the 10000-row truncation limit', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('If the TS Events query returns exactly 10000 rows');
+    expect(text).toContain('wrongly kept as a candidate');
+  });
+
+  it('explains ts-events 0 rows is valid but flags an unsubstituted placeholder', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('0 rows here is a VALID result');
+    expect(text).toContain('fails to rescue genuinely-active users');
+  });
+
   it('includes the ts-users Desktop/Prep cross-reference query block', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});

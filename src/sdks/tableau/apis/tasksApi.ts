@@ -7,6 +7,7 @@ import {
   updateCloudExtractRefreshTaskResponseSchema,
 } from '../types/extractRefreshTask.js';
 import { flowRunTaskSchema } from '../types/flowRunTask.js';
+import { runFlowJobResponseSchema } from '../types/job.js';
 
 const taskEntrySchema = z.object({
   extractRefresh: extractRefreshTaskSchema,
@@ -176,10 +177,57 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
   response: updateCloudExtractRefreshTaskResponseSchema,
 });
 
+const getFlowRunTaskEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/tasks/runFlow/:taskId',
+  alias: 'getFlowRunTask',
+  description: 'Returns a single scheduled flow run task by id.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.object({
+    task: z.object({
+      flowRun: flowRunTaskSchema,
+    }),
+  }),
+});
+
+const runFlowTaskEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/tasks/runFlow/:taskId/runNow',
+  alias: 'runFlowTask',
+  description:
+    'Runs an existing scheduled flow run task immediately and returns the async background job.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: runFlowJobResponseSchema,
+});
+
 const tasksApi = makeApi([
   listExtractRefreshTasksEndpoint,
   getFlowRunTasksEndpoint,
   deleteExtractRefreshTaskEndpoint,
   updateCloudExtractRefreshTaskEndpoint,
+  getFlowRunTaskEndpoint,
+  runFlowTaskEndpoint,
 ]);
 export const tasksApis = [...tasksApi] as const satisfies ZodiosEndpointDefinitions;

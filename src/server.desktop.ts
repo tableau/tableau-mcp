@@ -60,6 +60,8 @@ export class DesktopMcpServer extends Server {
         toolCallback,
       );
     }
+
+    await this.enableSkillsCapability();
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {

@@ -7,5 +7,6 @@
   "knowledge-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": true
+  "workbook-file-mode": true,
+  "skills-over-mcp": false
 }
