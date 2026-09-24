@@ -5,7 +5,7 @@ description: A minimal test skill used to verify the skills-over-mcp wiring end 
 
 # Test Skill
 
-A minimal skill for exercising the skills-over-mcp path. Follow these steps in order.
+A skill for exercising the skills-over-mcp path. Follow these steps in order.
 
 ## Instructions
 
