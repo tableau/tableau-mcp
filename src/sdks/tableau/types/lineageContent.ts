@@ -11,11 +11,20 @@ export const publishedParentSchema = z.object({
 
 export type PublishedParent = z.infer<typeof publishedParentSchema>;
 
+// Whether the calling user can query this data source with the query-datasource tool; `reason`
+// explains a false verdict. The whole object is omitted when queryability could not be determined.
+export const queryabilitySchema = z.object({
+  isQueryable: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export type Queryability = z.infer<typeof queryabilitySchema>;
+
 export const lineageContentSchema = z.object({
   luid: z.string(),
   name: z.string(),
   datasourceType: z.enum(['published', 'embedded']).optional(),
-  isQueryable: z.boolean().optional(),
+  queryability: queryabilitySchema.optional(),
   publishedParent: publishedParentSchema.optional(),
 });
 
