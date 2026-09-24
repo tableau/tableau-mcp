@@ -209,6 +209,8 @@ export class WebMcpServer extends Server {
     }
 
     registerPrompts(this);
+
+    await this.enableSkillsCapability();
   };
 
   protected _getToolsToRegister = async (
