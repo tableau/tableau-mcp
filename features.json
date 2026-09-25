@@ -8,6 +8,6 @@
   "view-file-mode": false,
   "view-data-file-mode": false,
   "workbook-file-mode": true,
-  "tableau-data-apps": false,
+  "data-apps": false,
   "skills-over-mcp": false
 }

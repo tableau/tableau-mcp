@@ -14,8 +14,8 @@ This tool only **scaffolds and names** the app — it does not wire a datasource
 logic, build, publish, or embed data. Those remain separate steps.
 
 :::warning[Disabled by Default]
-This tool is gated behind the `tableau-data-apps` feature flag, which defaults to `false` in
-`features.json`. It is unavailable unless an administrator enables `tableau-data-apps`. See
+This tool is gated behind the `data-apps` feature flag, which defaults to `false` in
+`features.json`. It is unavailable unless an administrator enables `data-apps`. See
 [Feature Flags](../../developers/feature-flags.md).
 :::
 

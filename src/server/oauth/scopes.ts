@@ -496,7 +496,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
-  const dataAppsEnabled = await featureGate.isFeatureEnabled('tableau-data-apps');
+  const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {

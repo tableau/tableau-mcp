@@ -68,14 +68,14 @@ describe('getScaffoldDataAppTool', () => {
   });
 
   describe('feature gate (disabled provider)', () => {
-    it('is disabled when the tableau-data-apps flag is off', async () => {
+    it('is disabled when the data-apps flag is off', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
       const tool = getScaffoldDataAppTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
-      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('tableau-data-apps');
+      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
     });
 
-    it('is enabled when the tableau-data-apps flag is on', async () => {
+    it('is enabled when the data-apps flag is on', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
       const tool = getScaffoldDataAppTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);

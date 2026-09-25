@@ -39,7 +39,7 @@ export const getScaffoldDataAppTool = (server: WebMcpServer): WebTool<typeof par
       openWorldHint: false,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('tableau-data-apps')),
+      async () => !(await getFeatureGate().isFeatureEnabled('data-apps')),
     ),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({

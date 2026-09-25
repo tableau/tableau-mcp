@@ -10,7 +10,7 @@ const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
-const tableauDataAppsEnabled = Boolean(features['tableau-data-apps']);
+const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
@@ -81,7 +81,7 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (tableau-data-apps feature flag)
+      // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
 
       let expectedToolNames = [...webToolNames];
@@ -115,7 +115,7 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
       }
 
-      // Filter out data-app tools if they are not enabled (tableau-data-apps feature flag)
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
       if (!tableauDataAppsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
@@ -279,7 +279,7 @@ describe('server', () => {
         'inspect-knowledge-context',
         'manage-knowledge-context',
       ];
-      // data-app tools are gated off by default (tableau-data-apps feature flag)
+      // data-app tools are gated off by default (data-apps feature flag)
       const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
 
       let expectedWebToolNames = [...webToolNames];
@@ -321,7 +321,7 @@ describe('server', () => {
         );
       }
 
-      // Filter out data-app tools if they are not enabled (tableau-data-apps feature flag)
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
       if (!tableauDataAppsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
