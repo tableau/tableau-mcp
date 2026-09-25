@@ -324,6 +324,9 @@ const EMPTY_SUMMARY_ROWS_GUIDANCE =
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
+const SUMMARY_ROWS_TIMEOUT_ERROR = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
+const SUMMARY_ROWS_TIMEOUT_GUIDANCE =
+  'Summary readback did not finish; verify the existing sheet with get-summary-data. Do NOT call bind-template again or replay apply just to retry summary readback.';
 const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
 const UNIT_HETEROGENEITY_DIMENSION_RE =
   /^(currency([ _-]?code)?|curr|fx([ _-]?rate)?|unit([ _-]?of[ _-]?measure)?)$/i;
@@ -493,15 +496,18 @@ async function readAppliedSummaryRows({
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let deadlineFired = false;
   const timeoutFailure = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
-      const reason = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
-      timeoutController.abort(new Error(reason));
-      reject(new Error(reason));
+      deadlineFired = true;
+      timeoutController.abort(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
+      reject(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
     }, SUMMARY_ROWS_TIMEOUT_MS);
   });
   const read: SummaryDataRead = async (_endpoint, readEndpoint) => {
+    timeoutController.signal.throwIfAborted();
     const result = await readEndpoint(executor, timeoutController.signal);
+    timeoutController.signal.throwIfAborted();
     return result.isErr() ? new DesktopCommandExecutionError(result.error).toErr() : result;
   };
 
@@ -511,6 +517,7 @@ async function readAppliedSummaryRows({
         read,
         worksheet: worksheetName,
         maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
+        materializeEmpty: true,
       }),
       timeoutFailure,
     ]);
@@ -526,7 +533,11 @@ async function readAppliedSummaryRows({
       result.value.readScope,
     );
   } catch (error) {
-    return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
+      ),
+    };
   } finally {
     if (timeout !== undefined) {
       clearTimeout(timeout);
@@ -2720,6 +2731,7 @@ async function performAutoApply({
     : {};
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
+  const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2742,6 +2754,7 @@ async function performAutoApply({
     incomplete ||
     (injected.warnings?.length ?? 0) > 0 ||
     emptySummaryReadback ||
+    summaryReadbackTimedOut ||
     postApplyUncertain;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
@@ -2772,7 +2785,7 @@ async function performAutoApply({
         : needsFollowUp
           ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
           : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),

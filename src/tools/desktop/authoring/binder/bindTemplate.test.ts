@@ -3877,7 +3877,7 @@ function summaryRowsExecutor(
           {
             id: 'sheet-sales',
             name: 'Sales by Region',
-            datasources: [{ id: 'superstore', name: 'Superstore' }],
+            datasources: ['superstore'],
           },
         ],
       }),
@@ -3887,6 +3887,9 @@ function summaryRowsExecutor(
     ),
     getWorksheetDocument: vi.fn(routeMissing),
     getWorksheetSummaryData,
+    exportWorksheetImage: vi
+      .fn()
+      .mockResolvedValue(Ok({ imageBase64: 'cG5n', width: 1, height: 1 })),
   });
 }
 
@@ -4453,18 +4456,20 @@ describe('bindTemplateTool auto_apply gate', () => {
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
     const rows = Array.from({ length: 20 }, (_, index) => [`Region ${index}`, index * 100]);
+    const getExecutor = summaryRowsExecutor(mocks, {
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ],
+      rows,
+    });
+    const executor = await getExecutor('1');
 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      getExecutor: summaryRowsExecutor(mocks, {
-        columns: [
-          { name: 'Region', dataType: 'string' },
-          { name: 'Sales', dataType: 'real' },
-        ],
-        rows,
-      }),
+      getExecutor,
     });
 
     invariant(result.content[0].type === 'text');
@@ -4479,6 +4484,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.summary_rows_scope).toEqual({ target: 'worksheet', ignoreSelection: true });
     expect(body.summary_rows_error).toBeUndefined();
     expect(body.truncated).toBeUndefined();
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
+    expect(executor.exportWorksheetImage).not.toHaveBeenCalled();
   });
 
   it('omits summary rows when the serialized preview exceeds 2KB', async () => {
@@ -4570,12 +4577,14 @@ describe('bindTemplateTool auto_apply gate', () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
+    const getExecutor = summaryRowsExecutor(mocks, { columns: [], rows: [] });
+    const executor = await getExecutor('1');
 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      getExecutor: summaryRowsExecutor(mocks, { columns: [], rows: [] }),
+      getExecutor,
     });
 
     invariant(result.content[0].type === 'text');
@@ -4588,6 +4597,102 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.guidance).toContain('check the sheet');
     expect(body.guidance).not.toContain('no further tool calls');
     expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+    expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(2);
+  });
+
+  it('materializes an initially empty summary and returns populated rows just below the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const mocks = setupAutoApplyMocks({
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      });
+      const getExecutor = summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      });
+      const executor = await getExecutor('1');
+      vi.mocked(executor.getWorksheetSummaryData).mockResolvedValueOnce(
+        Ok({ columns: [], rows: [] }),
+      );
+      vi.mocked(executor.exportWorksheetImage).mockImplementation(
+        async (_worksheetId, _query, signal) => {
+          await new Promise((resolve) => setTimeout(resolve, 1999));
+          expect(signal.aborted).toBe(false);
+          return Ok({ imageBase64: 'cG5n', width: 1, height: 1 });
+        },
+      );
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(1999);
+      const result = await resultPromise;
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.applied).toBe(true);
+      expect(body.summary_rows).toEqual({
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      });
+      expect(body.summary_rows_error).toBeUndefined();
+      expect(body.guidance).toContain('no further tool calls');
+      expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+      expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+      expect(executor.exportWorksheetImage).toHaveBeenCalledWith(
+        'sheet-sales',
+        { mimeType: 'image/png' },
+        expect.any(AbortSignal),
+      );
+      expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps bind success and reports the image failure when empty summary materialization fails', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const getExecutor = summaryRowsExecutor(mocks, { columns: [], rows: [] });
+    const executor = await getExecutor('1');
+    vi.mocked(executor.exportWorksheetImage).mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: {
+          code: 'image-unavailable',
+          message: 'worksheet image unavailable',
+          recoverable: false,
+        },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toContain('worksheet image unavailable');
+    expect(body.guidance).toContain('no further tool calls');
+    expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+    expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
   });
 
   it('keeps bind success and reports summary_rows_error when readback fails', async () => {
@@ -4639,6 +4744,137 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect(body.applied).toBe(true);
       expect(body.summary_rows).toBeUndefined();
       expect(body.summary_rows_error).toBe('summary rows readback timed out after 2000ms');
+      expect(body.guidance).toContain('Summary readback did not finish');
+      expect(body.guidance).toContain('get-summary-data');
+      expect(body.guidance).toContain(
+        'Do NOT call bind-template again or replay apply just to retry summary readback.',
+      );
+      expect(body.guidance).not.toContain('no further tool calls');
+      expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'aborts a timed-out image read that later %ss and does not dispatch a summary retry',
+    async (lateOutcome) => {
+      vi.useFakeTimers();
+      try {
+        const mocks = setupAutoApplyMocks({
+          inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+        });
+        const getExecutor = summaryRowsExecutor(mocks, {
+          columns: [
+            { name: 'Region', dataType: 'string' },
+            { name: 'Sales', dataType: 'real' },
+          ],
+          rows: [['West', 1200]],
+        });
+        const executor = await getExecutor('1');
+        vi.mocked(executor.getWorksheetSummaryData).mockResolvedValueOnce(
+          Ok({ columns: [], rows: [] }),
+        );
+        let finishImage = (): void => undefined;
+        let imageSignal: AbortSignal | undefined;
+        vi.mocked(executor.exportWorksheetImage).mockImplementation(
+          async (_worksheetId, _query, signal) => {
+            imageSignal = signal;
+            await new Promise<void>((resolve, reject) => {
+              finishImage = () =>
+                lateOutcome === 'resolve'
+                  ? resolve()
+                  : reject(new Error('late image failure after summary deadline'));
+            });
+            return Ok({ imageBase64: 'cG5n', width: 1, height: 1 });
+          },
+        );
+
+        let settled = false;
+        const resultPromise = getToolResult({
+          session: '1',
+          ask: 'bar chart of Sales by Region',
+          auto_apply: true,
+          getExecutor,
+        }).finally(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        const result = await resultPromise;
+
+        invariant(result.content[0].type === 'text');
+        const body = JSON.parse(result.content[0].text);
+        expect(body.applied).toBe(true);
+        expect(body.summary_rows).toBeUndefined();
+        expect(body.summary_rows_error).toBe('summary rows readback timed out after 2000ms');
+        expect(body.guidance).toContain('Summary readback did not finish');
+        expect(body.guidance).toContain('get-summary-data');
+        expect(body.guidance).toContain(
+          'Do NOT call bind-template again or replay apply just to retry summary readback.',
+        );
+        expect(body.guidance).not.toContain('no further tool calls');
+        expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+        expect(imageSignal?.aborted).toBe(true);
+
+        finishImage();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('aborts a timed-out summary retry after image materialization', async () => {
+    vi.useFakeTimers();
+    try {
+      const mocks = setupAutoApplyMocks({
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      });
+      const getExecutor = summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      });
+      const executor = await getExecutor('1');
+      vi.mocked(executor.getWorksheetSummaryData)
+        .mockResolvedValueOnce(Ok({ columns: [], rows: [] }))
+        .mockReturnValueOnce(new Promise(() => undefined));
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+      expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(2);
+      const retrySignal = vi.mocked(executor.getWorksheetSummaryData).mock.calls[1]?.[2];
+
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.applied).toBe(true);
+      expect(body.summary_rows).toBeUndefined();
+      expect(body.summary_rows_error).toBe('summary rows readback timed out after 2000ms');
+      expect(body.guidance).toContain('Summary readback did not finish');
+      expect(body.guidance).toContain('get-summary-data');
+      expect(body.guidance).toContain(
+        'Do NOT call bind-template again or replay apply just to retry summary readback.',
+      );
+      expect(body.guidance).not.toContain('no further tool calls');
+      expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+      expect(retrySignal?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -4962,6 +5198,55 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
     expect(body.guidance).not.toContain('no further tool calls');
     expect(result.structuredContent).toBeUndefined();
+  });
+
+  it('keeps the waterfall order correction when summary readback times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const mocks = setupAutoApplyMocks({
+        bind: boundWaterfallResult,
+        inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+        workbookReads: [P_AND_L_WORKBOOK_XML],
+        structuralReadback: true,
+      });
+      const getExecutor = summaryRowsExecutor(mocks, 'pending');
+      const executor = await getExecutor('1');
+      executor.listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              id: 'sheet-p-and-l-waterfall',
+              name: 'P&L Waterfall',
+              datasources: ['PL'],
+            },
+          ],
+        }),
+      );
+
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'P&L waterfall',
+        auto_apply: true,
+        getExecutor,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.applied).toBe(true);
+      expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
+      expect(body.guidance).toContain('Waterfall step order: schema has display_order');
+      expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
+      expect(body.guidance).toContain(
+        'Do NOT call bind-template again or replay apply just to retry summary readback.',
+      );
+      expect(body.guidance).not.toContain('Do NOT call bind-template again or replay apply.');
+      expect(body.guidance).not.toContain('no further tool calls');
+      expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps waterfall propose guidance exclusive to the structured Call-2 contract', async () => {
