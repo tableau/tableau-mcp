@@ -54,8 +54,13 @@ export function showError(scenario: Scenario, cause?: unknown, app?: App): void 
   const iconWrapper = document.createElement('div');
   iconWrapper.className = 'mcp-app-error-icon';
   iconWrapper.setAttribute('aria-hidden', 'true');
-  // Safe to use innerHTML here: DISCONNECTED_SVG is a static, trusted, build-time constant (never user input)
-  iconWrapper.innerHTML = DISCONNECTED_SVG;
+  // DISCONNECTED_SVG is a static, trusted, build-time constant (never user input).
+  // Use DOMParser + appendChild — never innerHTML — so SAST stays clean.
+  const parsedSvg = new DOMParser().parseFromString(DISCONNECTED_SVG, 'image/svg+xml');
+  const svgRoot = parsedSvg.documentElement;
+  if (svgRoot && svgRoot.nodeName.toLowerCase() === 'svg') {
+    iconWrapper.appendChild(document.importNode(svgRoot, true));
+  }
 
   // Add error text block (heading + message)
   const textWrapper = document.createElement('div');
