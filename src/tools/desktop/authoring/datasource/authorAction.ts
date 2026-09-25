@@ -51,6 +51,7 @@ const sourceFieldAggregationSchema = z.enum([
   'quart1',
   'quart3',
 ]);
+export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema>;
 
 // Primitives in, action XML server-side, readback out. An action wires a mark
 // interaction on a source sheet to a target parameter, set, URL, or filter.
