@@ -6,12 +6,14 @@ import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './tools/web/knowledge/queryKnowledgeContext.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
@@ -160,8 +162,52 @@ describe('server', () => {
     }
   });
 
+  // The scope layer advertises each tool's registration-condition probe scopes from a
+  // `conditionApiScopes` field in scopes.ts's toolScopeMap. Those scopes must match what the tool
+  // instance's declared `registrationConditions` map to via REGISTRATION_CONDITION_API_SCOPES. If the
+  // two drift, a conditional tool's probe scope silently stops being advertised. This asserts they
+  // stay identical for every tool.
+  it('should keep toolScopeMap conditionApiScopes in sync with each tool instance registrationConditions', async () => {
+    const server = getServer();
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
+
+    for (const tool of allTools) {
+      const expectedScopes = [
+        ...new Set(
+          tool.registrationConditions.flatMap((condition) => [
+            ...REGISTRATION_CONDITION_API_SCOPES[condition],
+          ]),
+        ),
+      ].sort();
+      const mapScopes = [...getConditionApiScopesForTool(tool.name)].sort();
+      expect(mapScopes, `condition scope mismatch for ${tool.name}`).toEqual(expectedScopes);
+    }
+  });
+
   it('should use the web variant server name', () => {
     expect(new WebMcpServer().name).toBe(serverName);
+  });
+
+  it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'skills-over-mcp',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+  });
+
+  it('does not advertise the skills extension capability when skills-over-mcp is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 
   // The server-level `instructions` string (surfaced by the SDK in the `initialize` result) is
@@ -183,8 +229,23 @@ describe('server', () => {
     // Admin capability menu + generic-intent tie-in.
     expect(instructions).toContain('site-administration capabilities');
     expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('user-license reclamation');
     expect(instructions).toContain('query-admin-insights');
+    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).toContain(promptName);
+    }
+    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+    expect(instructions).toContain('read-only report');
+    expect(instructions).toContain('dry-run by default');
     // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
     // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
     // so a future edit that drops the rendering guidance can't silently pass.
@@ -216,6 +277,17 @@ describe('server', () => {
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
+    // The named admin prompts are part of the admin-only block and must also be absent.
+    for (const promptName of [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ]) {
+      expect(instructions).not.toContain(promptName);
+    }
     // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
     // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
     // stayed out of the base instructions).

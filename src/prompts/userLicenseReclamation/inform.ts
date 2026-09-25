@@ -87,8 +87,19 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     const listUsersFilter = `siteRole:in:${roles.join('|')},lastLogin:lt:${cutoffIso}`;
 
     // Field captions verified against live TS Events VDS schema (2026-07-19).
-    // `Actor User Name` is a STRING matching the user's Tableau username (email).
-    // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
+    // `Actor User Name` is a STRING matching the user's Tableau username (== email on
+    // Tableau Cloud). `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't
+    // exist on TS Events.
+    //
+    // Scope to the Step-1 candidates via a SET filter on `Actor User Name`: an UNfiltered
+    // query on a large tenant (e.g. 27k users) returns site-wide Access events that VDS
+    // silently truncates to an arbitrary 10000-row slice, dropping an active candidate's
+    // events → "no Access event" → false-positive reclamation. `Actor User Name` matches
+    // the candidate's Tableau username (== email on Tableau Cloud), so the `values` array
+    // is a render-time placeholder the model replaces with the Step-1 candidate names.
+    const tsEventsActorPlaceholder =
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username ' +
+      '(equals the email on Tableau Cloud); one string per candidate>';
     const tsEventsQuery = {
       fields: [
         { fieldCaption: 'Actor User Name' },
@@ -96,6 +107,12 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
         { fieldCaption: 'Item Name' },
       ],
       filters: [
+        {
+          field: { fieldCaption: 'Actor User Name' },
+          filterType: 'SET',
+          values: [tsEventsActorPlaceholder],
+          exclude: false,
+        },
         {
           field: { fieldCaption: 'Event Type' },
           filterType: 'SET',
@@ -160,13 +177,18 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       '## Step 2 — Cross-reference recent activity',
       '',
-      'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users:',
+      'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users.',
+      '',
+      "**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `Actor User Name` filter's `values` placeholder below with the exact list of candidate `name` values from Step 1 (the Tableau username, which equals the `email` on Tableau Cloud — one string per candidate). This SET filter bounds the response to the candidate set, so the 10000-row cap cannot silently drop an active candidate's Access events and turn them into a false positive. Do not fetch site-wide events.",
       '',
       '```json',
       JSON.stringify({ kind: 'ts-events', query: tsEventsQuery, limit: 10000 }, null, 2),
       '```',
       '',
       `Group the TS Events results by \`Actor User Name\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's \`name\` or \`email\` field from Step 1. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
+      '',
+      "If the TS Events query returns exactly 10000 rows, warn that results were truncated at the 10000-row limit: some candidates' Access events may be missing, so an active user could be wrongly kept as a candidate — narrow the scope with a smaller role set or candidate list and re-run. (With the `Actor User Name` scoping above this should not occur unless the candidate set itself has more than 10000 Access events in the window.)",
+      'Unlike the TS Users query in Step 3, 0 rows here is a VALID result — it means none of the scoped candidates had an Access event in the lookback window, so all candidates are correctly retained. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder unsubstituted (the literal placeholder matches no actor): if you did not replace it with the exact Step-1 candidate names, do so and re-run before relying on the result, since an unsubstituted filter fails to rescue genuinely-active users.',
       '',
       '## Step 3 — Cross-reference Tableau Desktop / Prep activity',
       '',

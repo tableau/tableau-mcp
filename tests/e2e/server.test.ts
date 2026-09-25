@@ -144,7 +144,7 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });
@@ -176,8 +176,14 @@ describe('server', () => {
       // ...and the admin capability menu + generic-intent tie-in is appended.
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
-      expect(instructions).toContain('user-license reclamation');
       expect(instructions).toContain('query-admin-insights');
+      // Each packaged admin prompt is named by its exact invokable identifier (W-23757369).
+      expect(instructions).toContain('stale-content-cleanup-inform');
+      expect(instructions).toContain('stale-content-cleanup-apply');
+      expect(instructions).toContain('job-optimization-inform');
+      expect(instructions).toContain('extract-optimization-apply');
+      expect(instructions).toContain('user-license-reclamation-inform');
+      expect(instructions).toContain('user-license-reclamation-apply');
     });
   });
 
@@ -351,7 +357,7 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });
