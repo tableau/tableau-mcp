@@ -844,6 +844,43 @@ describe('authorActionTool', () => {
     expect(result.content[0].text).toContain('did not survive readback');
   });
 
+  it('rejects clearValue against a non-string parameter', async () => {
+    // clearValue is encoded with the string prefix (s:LROOT:) regardless of the target parameter's
+    // datatype, so applying it to an integer parameter writes a malformed clear-option that Desktop
+    // silently rewrites — and readback can't catch it (it checks the clear-option type, not its
+    // value). Until the tool encodes per datatype, reject clearValue on non-string parameters.
+    const intParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.Count' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Count',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '5',
+      },
+      initialXml: intParamXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('clearValue');
+    expect(result.content[0].text).toContain('string');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('rejects a sourceWorksheet that names no existing worksheet', async () => {
     // "Sales Map" looks plausible but the workbook only has "Profit"; a phantom source persists
     // as an action that can never fire. Reject it and enumerate the real worksheets.

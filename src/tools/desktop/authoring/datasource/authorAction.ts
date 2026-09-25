@@ -87,10 +87,7 @@ const paramsSchema = {
   sourceFieldAggregation: sourceFieldAggregationSchema
     .optional()
     .describe('parameter: how to aggregate the source field. Default attr.'),
-  clearValue: z
-    .string()
-    .optional()
-    .describe('parameter: value the param takes when cleared.'),
+  clearValue: z.string().optional().describe('parameter: reset value on clear; string only.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
@@ -401,6 +398,20 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (matchedParameter === undefined) {
               return new ArgsValidationError(
                 `targetParameter "${targetParameter.trim()}" was not found. Available parameters: ${formatAvailableParameters(liveXml)}`,
+              ).toErr();
+            }
+            // clearValue is always encoded with the string prefix (s:LROOT:), so on a non-string
+            // parameter it writes a malformed clear-option that Desktop silently rewrites — and
+            // readback can't catch it (hasParameterActionSettings checks the clear-option type, not
+            // its value). Reject rather than apply a value that won't survive. Per-datatype
+            // encoding is tracked as a follow-up.
+            if (
+              effectiveClearValue !== undefined &&
+              matchedParameter.datatype !== undefined &&
+              matchedParameter.datatype !== 'string'
+            ) {
+              return new ArgsValidationError(
+                `clearValue is only supported for string parameters; "${matchedParameter.caption ?? matchedParameter.name}" is ${matchedParameter.datatype}. Omit clearValue to leave the parameter unchanged on clear.`,
               ).toErr();
             }
             resolvedTargetParameter = `[Parameters].${bracketToken(matchedParameter.name)}`;
