@@ -16,7 +16,7 @@ import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLea
 import { Provider } from '../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { ToolRules, WebTool } from '../tool.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
@@ -116,6 +116,7 @@ export const getGetDatasourceMetadataTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
 ): WebTool<typeof paramsSchema> => {
+  const rules = getDatasourceMetadataRules(productVersion);
   const getDatasourceMetadataTool = new WebTool({
     server,
     name: 'get-datasource-metadata',
@@ -138,6 +139,8 @@ export const getGetDatasourceMetadataTool = (
       openWorldHint: false,
     },
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
+      const query = getGraphqlQuery(datasourceLuid);
+
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
         args: { datasourceLuid },
@@ -145,6 +148,7 @@ export const getGetDatasourceMetadataTool = (
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
           }
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
@@ -154,18 +158,6 @@ export const getGetDatasourceMetadataTool = (
           if (!isDatasourceAllowedResult.allowed) {
             return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
-
-          const rules = getResultForTableauVersion({
-            productVersion,
-            mappings: {
-              '2025.3.0': {},
-              default: {
-                datasourceModelIsUnavailable: true,
-              },
-            },
-          });
-          const query = getGraphqlQuery(datasourceLuid);
-          const configWithOverrides = await extra.getConfigWithOverrides();
 
           return await useRestApi({
             ...extra,
@@ -243,3 +235,15 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
+
+function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
+  return getResultForTableauVersion({
+    productVersion,
+    mappings: {
+      '2025.3.0': {},
+      default: {
+        datasourceModelIsUnavailable: true,
+      },
+    },
+  });
+}
