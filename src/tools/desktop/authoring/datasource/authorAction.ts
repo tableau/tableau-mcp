@@ -70,7 +70,7 @@ const paramsSchema = {
   sourceField: z
     .string()
     .optional()
-    .describe('parameter, required: source field pushed, e.g. [Profit].'),
+    .describe('parameter, required: exact shelf ref, e.g. [federated.<id>].[sum:Sales].'),
   targetParameter: z
     .string()
     .optional()
@@ -90,7 +90,7 @@ const paramsSchema = {
   clearValue: z
     .string()
     .optional()
-    .describe('parameter: value to keep when the selection clears. Default keeps nothing.'),
+    .describe('parameter: value the param takes when cleared.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
