@@ -511,6 +511,7 @@ async function readAppliedSummaryRows({
         read,
         worksheet: worksheetName,
         maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
+        materializeEmpty: true,
       }),
       timeoutFailure,
     ]);

@@ -3877,7 +3877,7 @@ function summaryRowsExecutor(
           {
             id: 'sheet-sales',
             name: 'Sales by Region',
-            datasources: [{ id: 'superstore', name: 'Superstore' }],
+            datasources: ['superstore'],
           },
         ],
       }),
@@ -3887,6 +3887,9 @@ function summaryRowsExecutor(
     ),
     getWorksheetDocument: vi.fn(routeMissing),
     getWorksheetSummaryData,
+    exportWorksheetImage: vi
+      .fn()
+      .mockResolvedValue(Ok({ imageBase64: 'cG5n', width: 1, height: 1 })),
   });
 }
 
@@ -4453,18 +4456,20 @@ describe('bindTemplateTool auto_apply gate', () => {
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
     const rows = Array.from({ length: 20 }, (_, index) => [`Region ${index}`, index * 100]);
+    const getExecutor = summaryRowsExecutor(mocks, {
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ],
+      rows,
+    });
+    const executor = await getExecutor('1');
 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      getExecutor: summaryRowsExecutor(mocks, {
-        columns: [
-          { name: 'Region', dataType: 'string' },
-          { name: 'Sales', dataType: 'real' },
-        ],
-        rows,
-      }),
+      getExecutor,
     });
 
     invariant(result.content[0].type === 'text');
@@ -4479,6 +4484,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.summary_rows_scope).toEqual({ target: 'worksheet', ignoreSelection: true });
     expect(body.summary_rows_error).toBeUndefined();
     expect(body.truncated).toBeUndefined();
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
+    expect(executor.exportWorksheetImage).not.toHaveBeenCalled();
   });
 
   it('omits summary rows when the serialized preview exceeds 2KB', async () => {
@@ -4570,12 +4577,14 @@ describe('bindTemplateTool auto_apply gate', () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
+    const getExecutor = summaryRowsExecutor(mocks, { columns: [], rows: [] });
+    const executor = await getExecutor('1');
 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
       auto_apply: true,
-      getExecutor: summaryRowsExecutor(mocks, { columns: [], rows: [] }),
+      getExecutor,
     });
 
     invariant(result.content[0].type === 'text');
@@ -4588,6 +4597,86 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.guidance).toContain('check the sheet');
     expect(body.guidance).not.toContain('no further tool calls');
     expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+    expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(2);
+  });
+
+  it('materializes an initially empty summary before returning populated rows', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const getExecutor = summaryRowsExecutor(mocks, {
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ],
+      rows: [['West', 1200]],
+    });
+    const executor = await getExecutor('1');
+    vi.mocked(executor.getWorksheetSummaryData).mockResolvedValueOnce(
+      Ok({ columns: [], rows: [] }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toEqual({
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ],
+      rows: [['West', 1200]],
+    });
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+    expect(executor.exportWorksheetImage).toHaveBeenCalledWith(
+      'sheet-sales',
+      { mimeType: 'image/png' },
+      expect.any(AbortSignal),
+    );
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps bind success and reports the image failure when empty summary materialization fails', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const getExecutor = summaryRowsExecutor(mocks, { columns: [], rows: [] });
+    const executor = await getExecutor('1');
+    vi.mocked(executor.exportWorksheetImage).mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: {
+          code: 'image-unavailable',
+          message: 'worksheet image unavailable',
+          recoverable: false,
+        },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toContain('worksheet image unavailable');
+    expect(body.guidance).toContain('no further tool calls');
+    expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+    expect(executor.exportWorksheetImage).toHaveBeenCalledTimes(1);
+    expect(executor.getWorksheetSummaryData).toHaveBeenCalledTimes(1);
   });
 
   it('keeps bind success and reports summary_rows_error when readback fails', async () => {
