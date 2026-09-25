@@ -352,7 +352,7 @@ describe('getWorkbookTool', () => {
     });
   });
 
-  describe('isQueryable enrichment', () => {
+  describe('queryability enrichment', () => {
     const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
 
     beforeEach(() => {
@@ -387,12 +387,12 @@ describe('getWorkbookTool', () => {
       expect(response.data.upstreamDatasources ?? []).toEqual([]);
     });
 
-    it('leaves isQueryable unset for every datasource when the endpoint is absent (feature-disabled)', async () => {
+    it('omits queryability for every datasource when the endpoint is absent (feature-disabled)', async () => {
       // feature-disabled = the user-has-query-permissions endpoint is absent on an older server, so
-      // the API can't answer for any data source. Queryability is undeterminable and isQueryable is
-      // left unset for both published and embedded. Since the first (probe) check already proves the
-      // systemic failure, the remaining data sources are skipped without another call — exactly one
-      // call total.
+      // the API can't answer for any data source. Queryability is undeterminable, so the queryability
+      // object is omitted for both published and embedded. Since the first (probe) check already
+      // proves the systemic failure, the remaining data sources are skipped without another call —
+      // exactly one call total.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
       const response = await getResponseData({ workbookId });
@@ -412,11 +412,11 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
-    it('sets isQueryable false for every datasource when the workbook-datasource feature is off (workbook-datasource-not-enabled)', async () => {
+    it('sets queryability false with a reason for every datasource when the workbook-datasource feature is off (workbook-datasource-not-enabled)', async () => {
       // workbook-datasource-not-enabled = the VDSForWorkbookDatasources feature is off site-wide. The
       // endpoint answered but querying is disabled for every data source, so isQueryable is false for
-      // both published and embedded. The probe proves the systemic failure, so the rest are skipped
-      // without another call — exactly one call total.
+      // both published and embedded, with a systemic reason. The probe proves the systemic failure, so
+      // the rest are skipped without another call — exactly one call total.
       mocks.mockUserHasQueryPermissions.mockResolvedValue(
         Err({ type: 'workbook-datasource-not-enabled' }),
       );
@@ -429,18 +429,26 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: false,
+          queryability: {
+            isQueryable: false,
+            reason:
+              'Querying workbook (embedded) data sources is not enabled for this Tableau site.',
+          },
         },
         {
           luid: 'emb-luid-1',
           name: 'Embedded DS',
           datasourceType: 'embedded',
-          isQueryable: false,
+          queryability: {
+            isQueryable: false,
+            reason:
+              'Querying workbook (embedded) data sources is not enabled for this Tableau site.',
+          },
         },
       ]);
     });
 
-    it('sets isQueryable per datasource from a successful has-query-permissions check', async () => {
+    it('sets queryability true on success and false with a generic reason when no capabilities are returned', async () => {
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         Ok({ hasQueryPermission: datasource.datasourceLuid === 'pub-luid-1' }),
       );
@@ -459,13 +467,59 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         {
           luid: 'emb-luid-1',
           name: 'Embedded DS',
           datasourceType: 'embedded',
-          isQueryable: false,
+          queryability: {
+            isQueryable: false,
+            reason: 'The user does not have permission to query this data source.',
+          },
+        },
+      ]);
+    });
+
+    it('sets queryability false with a reason built from the denied capabilities VDS returns', async () => {
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        datasource.datasourceLuid === 'pub-luid-1'
+          ? Ok({ hasQueryPermission: true })
+          : Ok({
+              hasQueryPermission: false,
+              datasourceType: 'WORKBOOK',
+              resources: [
+                {
+                  resourceType: 'Datasource',
+                  luid: 'upstream-pds-1',
+                  capabilities: [
+                    { name: 'Read', mode: 'Allow' },
+                    { name: 'Connect', mode: 'Deny' },
+                    { name: 'VizqlDataApiAccess', mode: 'Deny' },
+                  ],
+                },
+              ],
+            }),
+      );
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          queryability: { isQueryable: true },
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          queryability: {
+            isQueryable: false,
+            reason:
+              'The user is missing required permissions: Connect, VizqlDataApiAccess on Datasource upstream-pds-1.',
+          },
         },
       ]);
     });
@@ -508,9 +562,10 @@ describe('getWorkbookTool', () => {
       expect(response.data.upstreamDatasources).toHaveLength(datasourceCount);
     });
 
-    it('sets isQueryable false when the check returns 403 (no permission to view)', async () => {
-      // A 403 (Forbidden, e.g. errorCode 403800 "does not have permission") means VDS
-      // authenticated the caller and denied query access → isQueryable is false.
+    it("sets queryability false and surfaces VDS's message when the check returns 403 (no permission)", async () => {
+      // A 403 (Forbidden, e.g. errorCode 403800 "does not have permission") means VDS authenticated
+      // the caller and denied query access → isQueryable is false. VDS's own message names the
+      // specific data source, so we surface it rather than a generic reason.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
@@ -530,20 +585,25 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         {
           luid: 'emb-luid-1',
           name: 'Embedded DS',
           datasourceType: 'embedded',
-          isQueryable: false,
+          queryability: {
+            isQueryable: false,
+            reason:
+              'The user does not have permission to view query permissions for data source emb-luid-1.',
+          },
         },
       ]);
     });
 
-    it('sets isQueryable false when the data source is not found (404 / errorCode 404937)', async () => {
+    it("sets queryability false and surfaces VDS's message when the data source is not found (404 / errorCode 404937)", async () => {
       // A 404937 is scoped to the requested data source (it no longer exists), unlike the
-      // missing-endpoint 404950 which is systemic. The data source can't be queried → false.
+      // missing-endpoint 404950 which is systemic. The data source can't be queried → false, with
+      // VDS's own message surfaced as the reason.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
@@ -562,21 +622,24 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         {
           luid: 'emb-luid-1',
           name: 'Embedded DS',
           datasourceType: 'embedded',
-          isQueryable: false,
+          queryability: {
+            isQueryable: false,
+            reason: 'Datasource not found.',
+          },
         },
       ]);
     });
 
-    it('leaves isQueryable unset when the check fails authentication (401)', async () => {
+    it('omits queryability when the check fails authentication (401)', async () => {
       // A 401 means authentication/scope failed, not that VDS evaluated permissions and denied
       // them (e.g. a deployment whose token lacks the viz_data_service scope). That's
-      // indeterminate, so isQueryable stays unset rather than being falsely reported as false.
+      // indeterminate, so queryability is omitted rather than being falsely reported as false.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
@@ -595,13 +658,13 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
     });
 
-    it('leaves isQueryable unset when the check returns a transient HTTP error (e.g. 503)', async () => {
+    it('omits queryability when the check returns a transient HTTP error (e.g. 503)', async () => {
       // Rate-limit / server errors are transient failures, not a permission verdict, so they stay
       // indeterminate rather than being reported as false (matches how query-datasource treats them).
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
@@ -622,15 +685,15 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
     });
 
-    it('leaves isQueryable unset when the check fails without an HTTP response (zodios-error)', async () => {
+    it('omits queryability when the check fails without an HTTP response (zodios-error)', async () => {
       // A transport or schema-parse failure isn't evidence the user can't query, so it stays
-      // indeterminate (unset) rather than being reported as false.
+      // indeterminate (omitted) rather than being reported as false.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
         datasource.datasourceLuid === 'pub-luid-1'
           ? Ok({ hasQueryPermission: true })
@@ -644,13 +707,13 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
     });
 
-    it('leaves isQueryable unset (and still returns the workbook) when the check throws', async () => {
+    it('omits queryability (and still returns the workbook) when the check throws', async () => {
       // A thrown error (e.g. a network failure) must not fail get-workbook — enrichment is best-effort.
       mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) => {
         if (datasource.datasourceLuid === 'pub-luid-1') {
@@ -666,10 +729,116 @@ describe('getWorkbookTool', () => {
           luid: 'pub-luid-1',
           name: 'Published DS',
           datasourceType: 'published',
-          isQueryable: true,
+          queryability: { isQueryable: true },
         },
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
+    });
+  });
+
+  describe('buildQueryabilityReason', () => {
+    const { buildQueryabilityReason } = exportedForTesting;
+
+    it('returns undefined when there are no resources to explain the denial', () => {
+      expect(buildQueryabilityReason(undefined)).toBeUndefined();
+      expect(buildQueryabilityReason([])).toBeUndefined();
+    });
+
+    it('returns undefined when no resource has a denied capability', () => {
+      // A resource with no capabilities, and one that grants everything, both contribute nothing.
+      expect(
+        buildQueryabilityReason([
+          { resourceType: 'Datasource', luid: 'ds-1' },
+          {
+            resourceType: 'Workbook',
+            luid: 'wb-1',
+            capabilities: [{ name: 'Read', mode: 'Allow' }],
+          },
+        ]),
+      ).toBeUndefined();
+    });
+
+    it('lists only the denied capabilities, omitting a resource that grants all of them', () => {
+      // The workbook grants everything (omitted); the datasource denies two (only those are listed).
+      const reason = buildQueryabilityReason([
+        {
+          resourceType: 'Workbook',
+          luid: 'wb-1',
+          capabilities: [
+            { name: 'Read', mode: 'Allow' },
+            { name: 'Connect', mode: 'Allow' },
+            { name: 'VizqlDataApiAccess', mode: 'Allow' },
+          ],
+        },
+        {
+          resourceType: 'Datasource',
+          luid: 'ds-1',
+          capabilities: [
+            { name: 'Read', mode: 'Allow' },
+            { name: 'Connect', mode: 'Deny' },
+            { name: 'VizqlDataApiAccess', mode: 'Deny' },
+          ],
+        },
+      ]);
+
+      expect(reason).toBe(
+        'The user is missing required permissions: Connect, VizqlDataApiAccess on Datasource ds-1.',
+      );
+    });
+
+    it("joins multiple resources with '; ' when each is missing capabilities", () => {
+      // Both resources have denials (doc case #2): the workbook denies two, the datasource denies all.
+      const reason = buildQueryabilityReason([
+        {
+          resourceType: 'Workbook',
+          luid: 'wb-1',
+          capabilities: [
+            { name: 'Read', mode: 'Allow' },
+            { name: 'Connect', mode: 'Deny' },
+            { name: 'VizqlDataApiAccess', mode: 'Deny' },
+          ],
+        },
+        {
+          resourceType: 'Datasource',
+          luid: 'ds-1',
+          capabilities: [
+            { name: 'Read', mode: 'Deny' },
+            { name: 'Connect', mode: 'Deny' },
+            { name: 'VizqlDataApiAccess', mode: 'Deny' },
+          ],
+        },
+      ]);
+
+      expect(reason).toBe(
+        'The user is missing required permissions: Connect, VizqlDataApiAccess on Workbook wb-1; ' +
+          'Read, Connect, VizqlDataApiAccess on Datasource ds-1.',
+      );
+    });
+
+    // resourceType and luid are optional in the VDS wire schema, so the reason text must degrade
+    // gracefully on a partial resource and never leak the literal "undefined".
+    it.each([
+      {
+        name: 'a luid but no resourceType',
+        resources: [{ luid: 'ds-1', capabilities: [{ name: 'Connect', mode: 'Deny' as const }] }],
+        expected: 'The user is missing required permissions: Connect on data source ds-1.',
+      },
+      {
+        name: 'a resourceType but no luid',
+        resources: [
+          { resourceType: 'Workbook', capabilities: [{ name: 'Read', mode: 'Deny' as const }] },
+        ],
+        expected: 'The user is missing required permissions: Read on Workbook.',
+      },
+      {
+        name: 'neither a resourceType nor a luid',
+        resources: [{ capabilities: [{ name: 'Read', mode: 'Deny' as const }] }],
+        expected: 'The user is missing required permissions: Read on this data source.',
+      },
+    ])('names the resource sensibly given $name', ({ resources, expected }) => {
+      const reason = buildQueryabilityReason(resources);
+      expect(reason).toBe(expected);
+      expect(reason).not.toContain('undefined');
     });
   });
 

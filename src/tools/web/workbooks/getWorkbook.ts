@@ -6,6 +6,7 @@ import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { QueryPermissionResource } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import {
   filterLineageContentsByAllowedIds,
   getWorkbookLineageQuery,
@@ -42,8 +43,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     description:
       'Retrieves information about the specified workbook, including information about the views contained in the workbook and backing datasources. ' +
       "The response's upstreamDatasources list each data source the workbook depends on; " +
-      "an entry's isQueryable is true when the calling user can query that data source with the query-datasource tool, " +
-      'false when they cannot, and absent when it could not be determined.',
+      "an entry's queryability.isQueryable is true when the calling user can query that data source with the query-datasource tool " +
+      'and false when they cannot, in which case queryability.reason explains why. ' +
+      'The queryability object is omitted entirely when queryability could not be determined.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
@@ -210,22 +212,44 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
   return getWorkbookTool;
 };
 
+// User-facing reasons for a non-queryable data source's `queryability.reason`.
+const QUERYABILITY_REASONS = {
+  featureNotEnabled:
+    'Querying workbook (embedded) data sources is not enabled for this Tableau site.',
+  permissionDenied: 'The user does not have permission to query this data source.',
+} as const;
+
+// Builds a reason from the denied (mode === 'Deny') capabilities returned on a 200 with
+// hasQueryPermission=false. Returns undefined when none are present, so the caller can fall back.
+function buildQueryabilityReason(
+  resources: Array<QueryPermissionResource> | undefined,
+): string | undefined {
+  const parts = (resources ?? [])
+    .map((resource) => {
+      const denied = (resource.capabilities ?? [])
+        .filter((capability) => capability.mode === 'Deny')
+        .map((capability) => capability.name);
+      if (!denied.length) {
+        return undefined;
+      }
+      const target = resource.luid
+        ? `${resource.resourceType ?? 'data source'} ${resource.luid}`
+        : (resource.resourceType ?? 'this data source');
+      return `${denied.join(', ')} on ${target}`;
+    })
+    .filter((part): part is string => part !== undefined);
+
+  return parts.length
+    ? `The user is missing required permissions: ${parts.join('; ')}.`
+    : undefined;
+}
+
 /**
- * Annotates each upstream data source with `isQueryable` by calling VDS's user-has-query-permissions
- * endpoint. The first data source is probed on its own: if that probe reports a *systemic* failure
- * (one that applies to every data source), the probe's verdict is broadcast to all entries and the
- * remaining checks are skipped. Otherwise the probe result is kept and the remaining data sources are
- * checked concurrently, in batches of {@link VDS_QUERYABILITY_CONCURRENCY} so VDS isn't hit by an
- * unbounded burst. Each check maps to:
- *  - 200 → the API's `hasQueryPermission` value.
- *  - errorCode 403800 (permission denied) or 404937 (data source not found) → `false`: not queryable.
- *  - workbook-datasource-not-enabled (VDSForWorkbookDatasources off site-wide) → `false`: querying is
- *    disabled. Systemic.
- *  - feature-disabled (endpoint absent — the API isn't available yet) → left unset: queryability is
- *    undeterminable. Systemic.
- *  - Anything else (401, transient 429/5xx, zodios-error, thrown) → left unset (indeterminate).
- *
- * Best-effort: a failed check never fails get-workbook.
+ * Annotates each upstream data source with a `queryability` object by calling VDS's
+ * user-has-query-permissions endpoint. The first data source is probed alone: a *systemic* verdict
+ * (applies to every data source) is broadcast to all and the rest are skipped; otherwise the
+ * remaining data sources are checked concurrently in batches of {@link VDS_QUERYABILITY_CONCURRENCY}.
+ * Best-effort: a failed check never fails get-workbook (queryability is just omitted).
  */
 export async function enrichUpstreamDatasourceQueryability({
   workbook,
@@ -250,31 +274,42 @@ export async function enrichUpstreamDatasourceQueryability({
         datasource: { datasourceLuid: ds.luid },
       });
       if (result.isOk()) {
+        const { hasQueryPermission, resources } = result.value;
+        const queryability = hasQueryPermission
+          ? { isQueryable: true }
+          : {
+              isQueryable: false,
+              reason: buildQueryabilityReason(resources) ?? QUERYABILITY_REASONS.permissionDenied,
+            };
+        return { datasource: { ...ds, queryability }, systemic: false };
+      }
+      // Systemic: the feature is off site-wide, so querying is disabled for every data source.
+      if (result.error.type === 'workbook-datasource-not-enabled') {
         return {
-          datasource: { ...ds, isQueryable: result.value.hasQueryPermission },
-          systemic: false,
+          datasource: {
+            ...ds,
+            queryability: { isQueryable: false, reason: QUERYABILITY_REASONS.featureNotEnabled },
+          },
+          systemic: true,
         };
       }
-      // workbook-datasource-not-enabled is systemic: the VDSForWorkbookDatasources feature is off
-      // site-wide, so the endpoint answered but querying is disabled for EVERY data source →
-      // isQueryable false. Flag it so the caller can broadcast false and skip the rest.
-      if (result.error.type === 'workbook-datasource-not-enabled') {
-        return { datasource: { ...ds, isQueryable: false }, systemic: true };
-      }
-      // feature-disabled is systemic too, but different: the user-has-query-permissions endpoint is
-      // absent on an older server, so it can't answer for ANY data source. Queryability is
-      // undeterminable, so isQueryable is left unset. Flag it so the caller can skip the rest.
+      // Systemic: the endpoint is absent (older server), so queryability is undeterminable for all.
       if (result.error.type === 'feature-disabled') {
         return { datasource: ds, systemic: true };
       }
-      // Per-data-source denials are false but not systemic:
-      // * 403800: the caller lacks permission to query this data source
-      // * 404937: the data source no longer exists
+      // Per-data-source denials (not systemic): 403800 = no query permission, 404937 = data source
+      // not found. VDS's own message names the specific data source, so surface it as the reason.
       if (
         result.error.type === 'api-error' &&
         (result.error.errorCode === '403800' || result.error.errorCode === '404937')
       ) {
-        return { datasource: { ...ds, isQueryable: false }, systemic: false };
+        return {
+          datasource: {
+            ...ds,
+            queryability: { isQueryable: false, reason: result.error.message },
+          },
+          systemic: false,
+        };
       }
       detail = JSON.stringify(result.error);
     } catch (error) {
@@ -295,24 +330,20 @@ export async function enrichUpstreamDatasourceQueryability({
 
   const [first, ...rest] = upstreamDatasources;
 
-  // PROBE: Check the first data source on its own. A systemic failure applies to every data source,
-  // so we broadcast the probe's verdict to all of them and skip the remaining checks: an absent
-  // endpoint leaves isQueryable unset (undeterminable), while the feature being off site-wide marks
-  // every data source false.
+  // Probe the first data source alone; a systemic verdict is broadcast to all, skipping the rest.
   const probe = await checkDatasourceQueryability(first);
   if (probe.systemic) {
-    const { isQueryable } = probe.datasource;
-    if (isQueryable === undefined) {
+    const { queryability } = probe.datasource;
+    if (queryability === undefined) {
       return workbook;
     }
     return {
       ...workbook,
-      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, isQueryable })),
+      upstreamDatasources: upstreamDatasources.map((ds) => ({ ...ds, queryability })),
     };
   }
 
-  // The first probe succeeded (or failed non-systemically), so check the rest concurrently, in
-  // batches so no more than VDS_QUERYABILITY_CONCURRENCY calls hit VDS at once.
+  // Non-systemic probe: check the rest concurrently, ≤ VDS_QUERYABILITY_CONCURRENCY calls at a time.
   const restEnriched: Array<{ datasource: LineageContent; systemic: boolean }> = [];
   for (let i = 0; i < rest.length; i += VDS_QUERYABILITY_CONCURRENCY) {
     const batch = rest.slice(i, i + VDS_QUERYABILITY_CONCURRENCY);
@@ -375,4 +406,5 @@ function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
 
 export const exportedForTesting = {
   getDefaultViewWebUrl,
+  buildQueryabilityReason,
 };
