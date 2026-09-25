@@ -1,0 +1,71 @@
+{
+  "_comment": [
+    "Hybrid browser navigate policy for Cursor beforeMCPExecution and Claude PreToolUse.",
+    "denyHosts/denySuffixes win over allowHosts/allowSuffixes. Unlisted hosts return ask.",
+    "allowUrlPrefixes run first and may punch a path hole in a denied host — never prefix IdP/mail/Slack.",
+    "allowHosts / denyHosts: exact hostname match (lowercased).",
+    "allowSuffixes / denySuffixes: host === suffix OR host ends with '.' + suffix.",
+    "allowUrlPrefixes: full URL prefix match (lowercased) — ST Google Sites and ST HtmlService /exec.",
+    "allowHostEndsWith: literal hostname suffix including the separator (Apps Script iframe -script.googleusercontent.com).",
+    "Extend allow* when a recurring QA host is safe to auto-run; extend deny* for high-risk.",
+    "After editing, run: npm run sync-rules (repos with hooks:true) from llm-wiki.",
+    "Audit log: %USERPROFILE%\\.cursor\\browser-mcp-audit.jsonl"
+  ],
+  "allowHosts": [
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "[::1]",
+    "tagmanager.google.com",
+    "www.tagmanager.google.com",
+    "tagassistant.google.com",
+    "www.tagassistant.google.com"
+  ],
+  "allowSuffixes": [
+    "localhost",
+    "servicetitan.com",
+    "youraspire.com",
+    "fieldroutes.com",
+    "crewcontrol.us",
+    "getconduit.com"
+  ],
+  "allowHostEndsWith": [
+    "-script.googleusercontent.com"
+  ],
+  "allowUrlPrefixes": [
+    "https://sites.google.com/servicetitan.com/",
+    "https://script.google.com/a/macros/servicetitan.com/",
+    "https://script.google.com/macros/"
+  ],
+  "sessionPrimeAllowHosts": [
+    "portal.leadforensics.com"
+  ],
+  "sessionPrimeAllowSuffixes": [
+    "leadforensics.com",
+    "myworkday.com"
+  ],
+  "denyHosts": [
+    "login.microsoftonline.com",
+    "accounts.google.com",
+    "mail.google.com",
+    "outlook.office.com",
+    "outlook.office365.com",
+    "app.slack.com",
+    "paypal.com",
+    "www.paypal.com",
+    "script.google.com"
+  ],
+  "denySuffixes": [
+    "okta.com",
+    "auth0.com",
+    "slack.com",
+    "1password.com",
+    "lastpass.com",
+    "bitwarden.com",
+    "stripe.com",
+    "console.aws.amazon.com",
+    "console.cloud.google.com",
+    "portal.azure.com",
+    "login.salesforce.com"
+  ]
+}

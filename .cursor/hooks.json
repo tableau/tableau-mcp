@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/audit-shell-command.js ${command}",
+        "description": "Warn on destructive or exfiltration-shaped shell commands"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "node .cursor/hooks/block-secrets-access.js Read ${filePath}",
+        "description": "Refuse agent reads of credential files"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "node .cursor/hooks/gate-browser-mcp.js",
+        "description": "Hybrid domain gate for browser navigate (deny/allow/ask) + force visible",
+        "failClosed": false
+      },
+      {
+        "command": "node .cursor/hooks/gate-confluence-mcp.js",
+        "description": "Deny Confluence create/update outside MARTECH; ask on comments",
+        "failClosed": false
+      },
+      {
+        "command": "node .cursor/hooks/gate-drive-mcp.js ${server} ${tool}",
+        "description": "Ask before Drive update/trash/copy/share; allow create_file",
+        "failClosed": false
+      }
+    ]
+  }
+}
