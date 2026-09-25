@@ -2,7 +2,21 @@ import { DesktopMcpServer } from './server.desktop.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
+const mocks = vi.hoisted(() => ({
+  mockFeatureGate: {
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
+  },
+}));
+
+vi.mock('./features/init.js', () => ({
+  getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
+}));
+
 describe('DesktopMcpServer', () => {
+  beforeEach(() => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+  });
+
   it('should register tools', async () => {
     const server = getServer();
     await server.registerTools();
@@ -23,6 +37,26 @@ describe('DesktopMcpServer', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'skills-over-mcp',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+  });
+
+  it('does not advertise the skills extension capability when skills-over-mcp is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 });
 
