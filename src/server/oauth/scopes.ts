@@ -473,6 +473,13 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
+  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
+  // caller's/skill's responsibility, applied outside this tool.
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>([]),
+  },
 };
 
 async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
@@ -489,6 +496,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
+  const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -542,6 +550,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+  }
+
+  if (!dataAppsEnabled) {
+    enabledTools.delete('scaffold-data-app');
   }
 
   return enabledTools;
