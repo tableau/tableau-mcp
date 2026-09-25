@@ -519,7 +519,52 @@ describe('listUsersTool', () => {
     }
   });
 
-  it('always emits mcp.resultInfo with returnedCount and truncated:false on an unfiltered complete list', async () => {
+  it('clamps an explicit limit above the per-call maximum (1000) and reports truncationReason "max-limit"', async () => {
+    // A model told "pass a higher limit" could ask for e.g. 5000 and re-trigger
+    // the exact multi-MB overflow this fix prevents. The tool clamps the
+    // effective limit to the hard ceiling (1000) and says so, rather than
+    // silently honoring it or silently capping it.
+    const page = Array.from({ length: 1000 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+    mocks.mockListUsers.mockResolvedValue({
+      users: page,
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 27058 },
+    });
+    const result = await getToolResult({ limit: 5000 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(1000);
+    expect(parsed.mcp.resultInfo.returnedCount).toBe(1000);
+    expect(parsed.mcp.resultInfo.truncated).toBe(true);
+    expect(parsed.mcp.resultInfo.truncationReason).toBe('max-limit');
+    expect(parsed.mcp.resultInfo.summary).toContain('per-call maximum of 1000');
+  });
+
+  it('labels default-limit (not admin-cap) when an admin cap is looser than the injected default', async () => {
+    // Regression guard for honest labeling: with a per-tool admin cap of 150 and
+    // no caller limit, the injected default (100) — not the looser 150 cap — is
+    // what bound the result, so the reason must be default-limit.
+    vi.stubEnv('MAX_RESULT_LIMITS', 'list-users:150');
+    try {
+      const page = Array.from({ length: 100 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+      mocks.mockListUsers.mockResolvedValue({
+        users: page,
+        pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 27058 },
+      });
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.users).toHaveLength(100);
+      expect(parsed.mcp.resultInfo.truncated).toBe(true);
+      expect(parsed.mcp.resultInfo.truncationReason).toBe('default-limit');
+    } finally {
+      vi.unstubAllEnvs();
+      stubDefaultEnvVars();
+    }
+  });
+
+  it('always emits mcp.resultInfo with returnedCount, truncated:false and a summary on an unfiltered complete list', async () => {
     const users = [
       { ...mockUser, id: 'u1' },
       { ...mockUser, id: 'u2' },
@@ -532,7 +577,59 @@ describe('listUsersTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.mcp.resultInfo).toEqual({ returnedCount: 2, truncated: false });
+    expect(parsed.mcp.resultInfo.returnedCount).toBe(2);
+    expect(parsed.mcp.resultInfo.truncated).toBe(false);
+    expect(parsed.mcp.resultInfo).not.toHaveProperty('truncationReason');
+    // The completeness signal is spelled out in the data, not just a boolean.
+    expect(parsed.mcp.resultInfo.summary).toMatch(/^Complete list: all 2 users/);
+  });
+
+  // === W-23757370: an unbounded call must not return an unconsumable payload ===
+
+  it('applies a default limit and flags truncationReason "default-limit" when no limit is given and more users exist', async () => {
+    // A single page of DEFAULT_RESULT_LIMIT (100) users with far more available
+    // site-wide. Under the old behavior an unbounded call paged the entire site
+    // (~27k users, multi-MB payload that overflows the transport). Now the tool
+    // injects a default cap of 100, returns exactly that, and flags the result
+    // as a partial page the model did not itself limit.
+    const page = Array.from({ length: 100 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+    mocks.mockListUsers.mockResolvedValue({
+      users: page,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 27058 },
+    });
+    const result = await getToolResult({});
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(100);
+    expect(parsed.mcp.resultInfo.returnedCount).toBe(100);
+    expect(parsed.mcp.resultInfo.truncated).toBe(true);
+    expect(parsed.mcp.resultInfo.truncationReason).toBe('default-limit');
+    // The summary names the default cap, cites the true (unfiltered) total, and
+    // explicitly warns against treating the page as site-wide totals.
+    expect(parsed.mcp.resultInfo.summary).toContain('default cap of 100');
+    expect(parsed.mcp.resultInfo.summary).toContain('of 27058');
+    expect(parsed.mcp.resultInfo.summary).toContain('NOT the complete list');
+    // The pagination loop stops at a bounded number of fetches (here 2: the
+    // first page, plus one more to prove matches exist beyond the default cap) —
+    // it does NOT page the whole ~27k-user site, which is the payload-overflow
+    // this fix prevents.
+    expect(mocks.mockListUsers.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  it('an explicit limit is respected over the default and is labeled requested-limit, not default-limit', async () => {
+    const page = Array.from({ length: 100 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+    mocks.mockListUsers.mockResolvedValue({
+      users: page,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 27058 },
+    });
+    const result = await getToolResult({ limit: 5 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(5);
+    expect(parsed.mcp.resultInfo.truncated).toBe(true);
+    expect(parsed.mcp.resultInfo.truncationReason).toBe('requested-limit');
   });
 
   it('pages across multiple fetches to accumulate limit matches when matches are sparse', async () => {
@@ -587,7 +684,10 @@ describe('listUsersTool', () => {
         pagination: { pageNumber: 2, pageSize: 100, totalAvailable: 150 },
       });
 
-    const result = await getToolResult({ pageSize: 100 });
+    // Pass an explicit limit above the total so the default cap (100) does not
+    // stop the loop early — this test's purpose is to prove multi-page
+    // accumulation, which the default-cap tests above cover separately.
+    const result = await getToolResult({ pageSize: 100, limit: 200 });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);

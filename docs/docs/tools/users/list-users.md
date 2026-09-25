@@ -48,10 +48,14 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 |----------|------|----------|-------------|
 | `filter` | string | No | Client-side filter string with format `field:operator:value`. Multiple filters are comma-separated (AND logic). |
 | `pageSize` | number | No | Number of users to fetch from the API per page (default 100, max 1000) |
-| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. |
+| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of `100` is applied** (see the note below) and the result is flagged `truncated: true` with `truncationReason: "default-limit"`. A single call returns at most `1000` users: a larger `limit` is clamped to `1000` and the result is flagged `truncated: true` with `truncationReason: "max-limit"`. Add a `filter` to target specific users, or page further. |
 
 :::note[API Limitation]
 The Tableau REST API does not support server-side filtering or pagination for users. All users are fetched and filtering is performed client-side by this tool.
+:::
+
+:::warning[Default limit on unbounded calls]
+An unbounded `list-users` call (no `limit`, no `filter`) on a large site can return tens of thousands of users — a multi-megabyte payload that exceeds the MCP response-size limit and is silently truncated in transit, which can cause a model to report fabricated site-wide totals from a payload it never fully received. To prevent this, when the caller passes no `limit` the tool applies a default cap of `100`, returns that bounded page, and flags the result `truncated: true` with `truncationReason: "default-limit"` and a `summary` explaining it is partial. Pass a `filter` to target specific users, or an explicit higher `limit` to page further.
 :::
 
 :::note[Never-logged-in users]
@@ -113,6 +117,9 @@ Each user in `users` includes:
 - `truncationReason` (present only when `truncated` is `true`):
   - `"requested-limit"` – the `limit` you passed cut the result short. Call again with a higher `limit` (or omit it) to get more.
   - `"admin-cap"` – a site-administrator per-call cap (`MAX_RESULT_LIMIT[S]`) cut the result short. `limit` cannot raise it, so either narrow the `filter` so the matching set fits, or ask an administrator to raise the cap.
+  - `"default-limit"` – you passed no `limit`, so the tool applied its default cap of `100`. This is a **partial** page, **not** site-wide totals; add a `filter` to target specific users or pass a higher `limit` to page further.
+  - `"max-limit"` – your `limit` exceeded the per-call maximum of `1000` and was clamped to it. A single call cannot return more; narrow the `filter` so the matching set fits, or page through the results.
+- `summary` – a plain-language sentence (always present) stating whether the list is complete or partial and, if partial, how to retrieve more. Relay it to the user; never report a `truncated` list as complete or as site-wide totals.
 
 :::note[`limit` bounds matches, not fetched rows]
 Because filtering is client-side, `limit` bounds the number of users that **match the filter**, not the number of raw rows fetched from the API. The tool keeps paging until it has collected `limit` matching users (or the site is exhausted). A limit-truncated filtered list is reported via `mcp.resultInfo.truncated: true` rather than silently appearing complete.
@@ -156,7 +163,8 @@ This tool returns a lean, fixed field set: `id`, `name`, `fullName`, `siteRole`,
     "resultInfo": {
       "returnedCount": 3,
       "truncated": true,
-      "truncationReason": "requested-limit"
+      "truncationReason": "requested-limit",
+      "summary": "Partial list — showing the first 3 matching users; your \"limit\" cut it short and more match. Call again with a higher \"limit\" to get more."
     }
   }
 }
@@ -172,7 +180,11 @@ No users were found. Either none exist or you do not have permission to view the
 
 ## Use Case: License Reclamation
 
-This tool is particularly useful for identifying candidates for license reclamation (JTBD #3 from the Admin Tools roadmap):
+:::tip[Prefer the reclamation prompts for this job]
+For "which licensed users are inactive / can we reclaim licenses" workflows, prefer the purpose-built `user-license-reclamation-inform` / `user-license-reclamation-apply` prompts (they add reclamation-specific analysis and human-in-the-loop safety) or `query-admin-insights` with `kind=ts-users`. Note that `list-users`' `lastLogin` reflects web sign-ins only and is blind to Tableau Desktop/Prep activity, so it can over-report a user as inactive. Use `list-users` to enumerate or inspect specific users; use the prompts to drive a reclamation decision.
+:::
+
+This tool can still help identify candidates for license reclamation (JTBD #3 from the Admin Tools roadmap):
 
 ```javascript
 // Find unlicensed users who haven't logged in for 6+ months
