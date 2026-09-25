@@ -18,7 +18,7 @@ jobs:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
@@ -41,6 +41,8 @@ jobs:
 
       - name: Compute version relative to latest main
         id: apply
+        env:
+          BUMP_TYPE: ${{ steps.bump.outputs.type }}
         run: |
           git fetch origin main
           BASE_VERSION=$(git show origin/main:package.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).version)")
@@ -52,7 +54,7 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
 
-          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          npm version "$BUMP_TYPE" --no-git-tag-version
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push if version changed
@@ -75,7 +77,7 @@ jobs:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: main
           fetch-depth: 0

@@ -2,6 +2,9 @@ name: Publish
 on:
   release:
     types: [published]
+permissions:
+  contents: read
+
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
@@ -9,8 +12,8 @@ jobs:
       contents: read
       id-token: write # Needed for OIDC authentication
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '>=22.7.5'
           registry-url: https://registry.npmjs.org/
@@ -21,8 +24,8 @@ jobs:
         run: |
           git fetch --tags
           git checkout -b publish "$RELEASE_TAG"
-          npm install -g npm@latest
-          npm ci
+          npm install -g npm@11.10.0
+          npm ci --ignore-scripts
           npm run build
           # Prerelease-aware publish. A SemVer prerelease version (one containing a
           # `-`, e.g. 2.18.0-hotfix.1; build metadata `+...` is NOT a prerelease)
@@ -63,21 +66,26 @@ jobs:
     permissions:
       contents: write # Needed to upload release assets
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
-      - run: |
+      - name: Pin npm for install-time cooldown
+        run: npm install -g npm@11.10.0
+      - env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
           git fetch --tags
-          git checkout -b mcpb ${{ github.event.release.tag_name }}
-          npm ci
+          git checkout -b mcpb "$RELEASE_TAG"
+          npm ci --ignore-scripts
           npm run build
           npm run build:manifest
-          npm ci --omit=dev
-          npx -y @anthropic-ai/mcpb pack . tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+          npm ci --omit=dev --ignore-scripts
+          npx -y @anthropic-ai/mcpb pack . "tableau-mcp-${RELEASE_TAG}.mcpb"
       - name: Upload mcpb to release
-        run: |
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp-${{ github.event.release.tag_name }}.mcpb
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" "tableau-mcp-${RELEASE_TAG}.mcpb"

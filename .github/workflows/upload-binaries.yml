@@ -4,36 +4,42 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Use Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
+      - name: Pin npm for min-release-age
+        run: npm install -g npm@11.10.0
       - name: Generate SEA
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
         run: |
           git fetch --tags
-          git checkout -b sea-linux ${{ github.event.release.tag_name }}
-          npm ci
+          git checkout -b sea-linux "$RELEASE_TAG"
+          npm ci --ignore-scripts
           npm run build
           node --experimental-sea-config sea-config.json
           cp $(command -v node) tableau-mcp
           npx -y postject tableau-mcp NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
-          echo "SERVER=${{ secrets.E2E_TEST_SERVER }}" > .env
-          echo "AUTH=${{ secrets.E2E_TEST_AUTH }}" >> .env
-          echo "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" >> .env
-          echo "JWT_SUB_CLAIM=${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}" >> .env
-          echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
-          echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
-          echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
           ./tableau-mcp &
           if [ $? -eq 0 ]; then
             echo "tableau-mcp started successfully"
-            rm .env
             pkill -f tableau-mcp
           else
             echo "tableau-mcp failed to start"
@@ -41,46 +47,49 @@ jobs:
           fi
           tar -czf tableau-mcp.tar.gz tableau-mcp
       - name: Upload archive to release
-        run: |
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp.tar.gz
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" tableau-mcp.tar.gz
 
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Use Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
+      - name: Pin npm for min-release-age
+        run: npm install -g npm@11.10.0
       - name: Generate SEA
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
         run: |
           git fetch --tags
-          git checkout -b sea-windows ${{ github.event.release.tag_name }}
-          npm ci
+          git checkout -b sea-windows $env:RELEASE_TAG
+          npm ci --ignore-scripts
           npm run build
 
           node --experimental-sea-config sea-config.json
           node -e "require('fs').copyFileSync(process.execPath, 'tableau-mcp.exe')"
           npx -y postject tableau-mcp.exe NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
 
-          "SERVER=${{ secrets.E2E_TEST_SERVER }}" | Out-File -FilePath ".env" -Encoding UTF8
-          "AUTH=${{ secrets.E2E_TEST_AUTH }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-          "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-          "JWT_SUB_CLAIM=${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-          "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-          "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-          "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
-
           Start-Process -FilePath .\tableau-mcp.exe -NoNewWindow -ErrorAction SilentlyContinue
           $processId = Get-Process -Name tableau-mcp -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id
 
           if ($processId) {
             Write-Host "tableau-mcp.exe is running"
-            Remove-Item -Path .\.env -Force
             Stop-Process -Id $processId -Force
           } else {
             Write-Host "tableau-mcp.exe failed to start"
@@ -88,7 +97,8 @@ jobs:
           }
           Compress-Archive -Path tableau-mcp.exe -DestinationPath tableau-mcp.zip
       - name: Upload zip to release
-        run: |
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp.zip
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" tableau-mcp.zip

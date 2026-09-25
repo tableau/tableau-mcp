@@ -56,12 +56,28 @@ export function parseDeleteWorkbookConfirmResult(result: unknown): DeleteWorkboo
 
 const CONTAINER_ID = 'deleteWorkbookConfirm';
 
-function row(label: string, value: string | undefined): string {
-  if (!value) {
-    return '';
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) {
+    node.textContent = text;
   }
-  // textContent is set programmatically below; this builds the static label/value scaffold.
-  return `<div class="dww-row"><span class="dww-label">${label}</span><span class="dww-value"></span></div>`;
+  return node;
+}
+
+function appendRow(container: HTMLElement, label: string, value: string | undefined): void {
+  if (!value) {
+    return;
+  }
+  const row = el('div', 'dww-row');
+  row.appendChild(el('span', 'dww-label', label));
+  // textContent (never innerHTML) so workbook/project/owner strings can't inject markup.
+  row.appendChild(el('span', 'dww-value', value));
+  container.appendChild(row);
 }
 
 /**
@@ -76,33 +92,37 @@ export function renderDeleteWorkbookConfirm(app: App, result: unknown): void {
   // Idempotent: replace any prior panel so a re-render doesn't stack duplicates.
   document.getElementById(CONTAINER_ID)?.remove();
 
-  const container = document.createElement('div');
+  const container = el('div', 'dww-panel');
   container.id = CONTAINER_ID;
-  container.className = 'dww-panel';
-  container.innerHTML = `
-    <h2 class="dww-title">Confirm workbook deletion</h2>
-    <p class="dww-warning">This permanently deletes the workbook. It can be restored from the Tableau recycle bin for a limited time.</p>
-    ${row('Workbook', panel.name)}
-    ${row('Project', panel.project)}
-    ${row('Owner', panel.owner)}
-    <p class="dww-countdown" id="dwwCountdown"></p>
-    <div class="dww-actions">
-      <button id="cancelDeleteBtn" type="button" class="dww-cancel">Cancel</button>
-      <button id="confirmDeleteBtn" type="button" class="dww-confirm">Delete workbook</button>
-    </div>
-  `;
+
+  container.appendChild(el('h2', 'dww-title', 'Confirm workbook deletion'));
+  container.appendChild(
+    el(
+      'p',
+      'dww-warning',
+      'This permanently deletes the workbook. It can be restored from the Tableau recycle bin for a limited time.',
+    ),
+  );
+  appendRow(container, 'Workbook', panel.name);
+  appendRow(container, 'Project', panel.project);
+  appendRow(container, 'Owner', panel.owner);
+
+  const countdownEl = el('p', 'dww-countdown');
+  countdownEl.id = 'dwwCountdown';
+  container.appendChild(countdownEl);
+
+  const actions = el('div', 'dww-actions');
+  const cancelBtn = el('button', 'dww-cancel', 'Cancel');
+  cancelBtn.type = 'button';
+  cancelBtn.id = 'cancelDeleteBtn';
+  const confirmBtn = el('button', 'dww-confirm', 'Delete workbook');
+  confirmBtn.type = 'button';
+  confirmBtn.id = 'confirmDeleteBtn';
+  actions.appendChild(cancelBtn);
+  actions.appendChild(confirmBtn);
+  container.appendChild(actions);
+
   host.appendChild(container);
-
-  // Fill values via textContent (never innerHTML) so workbook/project/owner strings can't inject markup.
-  const valueCells = container.querySelectorAll<HTMLElement>('.dww-value');
-  const values = [panel.name, panel.project, panel.owner].filter((v): v is string => Boolean(v));
-  valueCells.forEach((cell, i) => {
-    cell.textContent = values[i] ?? '';
-  });
-
-  const confirmBtn = container.querySelector<HTMLButtonElement>('#confirmDeleteBtn')!;
-  const cancelBtn = container.querySelector<HTMLButtonElement>('#cancelDeleteBtn')!;
-  const countdownEl = container.querySelector<HTMLElement>('#dwwCountdown')!;
 
   let expired = false;
   let timer: ReturnType<typeof setInterval> | undefined;

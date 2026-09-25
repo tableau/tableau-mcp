@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,20 +16,23 @@ jobs:
       matrix:
         node-version: ['>=22.7.5 <23', '24.x']
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
       - name: Set up Docker
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      # min-release-age in .npmrc requires npm 11.10+. Node 20/22 ships npm 10, which ignores the key.
+      - name: Pin npm for install-time cooldown
+        run: npm install -g npm@11.10.0
 
       - name: Install dependencies
-        run: npm ci
-
+        run: npm ci --ignore-scripts
       - name: TypeScript compilation
         run: npx tsc
 
@@ -96,12 +102,12 @@ jobs:
       - name: Build Claude MCP Bundle
         run: |
           npm run build:manifest
-          npm ci --omit=dev
+          npm ci --omit=dev --ignore-scripts
           npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
         if: always() && matrix.node-version == '>=22.7.5 <23'
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
           badge: true
@@ -115,7 +121,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' && '22.x' || matrix.node-version }}
           if-no-files-found: error
