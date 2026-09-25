@@ -5,7 +5,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getAuthorActionTool } from './authorAction.js';
+import { getAuthorActionTool, SourceFieldAggregation } from './authorAction.js';
 
 // The single datasource every author-action test resolves fields against.
 export const DATASOURCE_NAME = 'federated.1syzfv90anwuu119p4zra1ga299n';
@@ -105,6 +105,8 @@ export type AuthorActionArgs = {
   datasource?: string;
   setMembership?: 'assign' | 'add' | 'remove';
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
+  sourceFieldAggregation?: SourceFieldAggregation;
+  clearValue?: string;
   singleSelect?: boolean;
   activation?: 'on-select' | 'on-hover' | 'on-menu';
   url?: string;
@@ -170,6 +172,8 @@ export async function getToolResult({
       activation: args.activation ?? 'on-select',
       setMembership: args.setMembership ?? 'assign',
       clearSelection: args.clearSelection ?? 'do-nothing',
+      sourceFieldAggregation: args.sourceFieldAggregation,
+      clearValue: args.clearValue,
       url: args.url,
       sourceDashboard: args.sourceDashboard,
       excludeSourceSheets: args.excludeSourceSheets,

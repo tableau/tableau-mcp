@@ -28,6 +28,31 @@ const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
 
+// The aggregations a parameter action can apply to its source field before pushing it to the
+// parameter (twb_2026.2.0.xsd, ActionList-Agg-ST). 'attr' is Tableau's default for a click-to-set
+// action and its floor: omitting <agg-type> does not stick — Desktop backfills 'attr' on the
+// document round-trip (field-observed), so there is no "no aggregation" value to offer.
+const sourceFieldAggregationSchema = z.enum([
+  'attr',
+  'sum',
+  'average',
+  'min',
+  'max',
+  'median',
+  'collect',
+  'union',
+  'count',
+  'count-d',
+  'std-dev',
+  'std-dev-p',
+  'var',
+  'var-p',
+  'concatenate',
+  'quart1',
+  'quart3',
+]);
+export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema>;
+
 // Primitives in, action XML server-side, readback out. An action wires a mark
 // interaction on a source sheet to a target parameter, set, URL, or filter.
 // PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
@@ -46,7 +71,7 @@ const paramsSchema = {
   sourceField: z
     .string()
     .optional()
-    .describe('parameter, required: source field pushed, e.g. [Profit].'),
+    .describe('parameter, required: exact shelf ref, e.g. [federated.<id>].[sum:Sales].'),
   targetParameter: z
     .string()
     .optional()
@@ -60,6 +85,10 @@ const paramsSchema = {
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
+  sourceFieldAggregation: sourceFieldAggregationSchema
+    .optional()
+    .describe('parameter: how to aggregate the source field. Default attr.'),
+  clearValue: z.string().optional().describe('parameter: reset value on clear; string only.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
@@ -83,6 +112,10 @@ type AuthorActionResult = AuthorActionResultBase &
     | {
         mode: 'parameter';
         targetParameter: string;
+        // The aggregation applied to the source field ('attr' by default) and the value kept on
+        // clear-selection, if any — both echoed back from the applied XML.
+        sourceFieldAggregation: string;
+        clearValue?: string;
       }
     | {
         mode: 'set';
@@ -143,6 +176,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
         datasource,
         setMembership = 'assign',
         clearSelection = 'do-nothing',
+        sourceFieldAggregation,
+        clearValue,
         singleSelect,
         activation = 'on-select',
         url,
@@ -170,6 +205,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           datasource,
           setMembership,
           clearSelection,
+          sourceFieldAggregation,
+          clearValue,
           singleSelect,
           activation,
           url,
@@ -314,7 +351,15 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // parameter mode needs a source field and an existing target parameter. Both errors
           // enumerate what the workbook offers, mirroring set mode's "Available sets".
           let resolvedTargetParameter = '';
+          // The source-field aggregation (a validated enum token, default 'attr') and the value kept
+          // on clear-selection (undefined leaves the parameter unchanged). Both are parameter-mode-
+          // only; they thread into renderParameterAction and the readback.
+          let effectiveAggregation = 'attr';
+          let effectiveClearValue: string | undefined;
           if (mode === 'parameter') {
+            effectiveAggregation = sourceFieldAggregation ?? 'attr';
+            const requestedClearValue = clearValue?.trim() ?? '';
+            effectiveClearValue = requestedClearValue.length > 0 ? requestedClearValue : undefined;
             // Reject empty/whitespace as well as undefined: renderParameterAction omits the
             // source-field param when it is blank and readback only checks the target survived,
             // so a blank sourceField would apply a no-op action and report success.
@@ -354,6 +399,20 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (matchedParameter === undefined) {
               return new ArgsValidationError(
                 `targetParameter "${targetParameter.trim()}" was not found. Available parameters: ${formatAvailableParameters(liveXml)}`,
+              ).toErr();
+            }
+            // clearValue is always encoded with the string prefix (s:LROOT:), so on a non-string
+            // parameter it writes a malformed clear-option that Desktop silently rewrites — and
+            // readback can't catch it (hasParameterActionSettings checks the clear-option type, not
+            // its value). Reject rather than apply a value that won't survive. Per-datatype
+            // encoding is tracked as a follow-up.
+            if (
+              effectiveClearValue !== undefined &&
+              matchedParameter.datatype !== undefined &&
+              matchedParameter.datatype !== 'string'
+            ) {
+              return new ArgsValidationError(
+                `clearValue is only supported for string parameters; "${matchedParameter.caption ?? matchedParameter.name}" is ${matchedParameter.datatype}. Omit clearValue to leave the parameter unchanged on clear.`,
               ).toErr();
             }
             resolvedTargetParameter = `[Parameters].${bracketToken(matchedParameter.name)}`;
@@ -574,6 +633,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               sourceField: sourceField ?? '',
               targetParameter: target,
               activation,
+              aggregation: effectiveAggregation,
+              clearValue: effectiveClearValue,
             });
           }
           const editResult = spliceActionIntoWorkbook(liveXml, actionXml, filterDependencies);
@@ -610,12 +671,17 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 hasFilterDependencies(xml, filterDependencies)
               );
             }
-            return hasActionWithTargetParam(
-              xml,
-              'edit-parameter-action',
-              caption,
-              'target-parameter',
-              target,
+            // Verify the target survived AND that the aggregation and clear behavior we authored
+            // round-tripped intact — a dropped <agg-type>/<clear-option> must fail readback.
+            return (
+              hasActionWithTargetParam(
+                xml,
+                'edit-parameter-action',
+                caption,
+                'target-parameter',
+                target,
+              ) &&
+              hasParameterActionSettings(xml, caption, effectiveAggregation, effectiveClearValue)
             );
           };
           const outcome = await applyAndVerify({
@@ -695,6 +761,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             mode,
             target,
             targetParameter: target,
+            sourceFieldAggregation: effectiveAggregation,
+            clearValue: effectiveClearValue,
             hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
           });
         },
@@ -772,6 +840,39 @@ function hasActionWithTargetParam(
   });
 }
 
+// Confirm the parameter action carrying `caption` kept the source-field aggregation and
+// clear-selection behavior the tool authored. Tableau can silently drop or rewrite either child
+// on the document round-trip, so the receipt must not report a dropped setting as applied.
+function hasParameterActionSettings(
+  xml: string,
+  caption: string,
+  aggregation: string,
+  clearValue: string | undefined,
+): boolean {
+  const actionPattern = /<edit-parameter-action\b[^>]*>[\s\S]*?<\/edit-parameter-action>/g;
+  return [...xml.matchAll(actionPattern)].some((actionMatch) => {
+    const actionXml = actionMatch[0];
+    const openingTag = actionXml.match(/^<edit-parameter-action\b[^>]*>/)?.[0];
+    if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
+      return false;
+    }
+    const aggTag = actionXml.match(/<agg-type\b[^>]*>/)?.[0];
+    const aggMatches = aggTag !== undefined && getAttr(aggTag, 'type') === aggregation;
+    const clearTag = actionXml.match(/<clear-option\b[^>]*>/)?.[0];
+    if (clearTag === undefined) {
+      return false;
+    }
+    // Assert only the clear-option TYPE, never its value. The type is author-controlled
+    // (do-nothing vs assign-fixed-value); the value is Desktop-owned. Field-observed: for
+    // type='do-nothing' Desktop discards the emitted value='s:LROOT:' and stamps the target
+    // parameter's own default in the param's datatype encoding (e.g. 'i:1' for an integer param),
+    // so demanding the emitted value round-trip made every default apply falsely fail readback.
+    const expectedClearType = clearValue === undefined ? 'do-nothing' : 'assign-fixed-value';
+    const clearMatches = getAttr(clearTag, 'type') === expectedClearType;
+    return aggMatches && clearMatches;
+  });
+}
+
 function nextActionName(xml: string): string {
   const used = new Set(
     [...xml.matchAll(/\bname=(['"])\[Action(\d+)[^\]]*\]\1/g)].map((match) => Number(match[2])),
@@ -826,6 +927,8 @@ function renderParameterAction({
   sourceField,
   targetParameter,
   activation,
+  aggregation,
+  clearValue,
 }: {
   caption: string;
   actionName: string;
@@ -833,18 +936,27 @@ function renderParameterAction({
   sourceField: string;
   targetParameter: string;
   activation: z.infer<typeof activationSchema>;
+  aggregation: string;
+  clearValue: string | undefined;
 }): string {
   const params: string[] = [];
   if (sourceField.trim().length > 0) {
     params.push(`<param name='source-field' value='${escapeXml(sourceField.trim())}' />`);
   }
   params.push(`<param name='target-parameter' value='${escapeXml(targetParameter.trim())}' />`);
+  const aggTypeXml = `<agg-type type='${escapeXml(aggregation)}' />`;
+  // Absent clearValue keeps the parameter unchanged on clear (do-nothing). A clearValue resets it
+  // to that fixed value; the s:LROOT: prefix is the encoding Tableau writes for the kept value.
+  const clearOptionXml =
+    clearValue === undefined
+      ? "<clear-option type='do-nothing' value='s:LROOT:' />"
+      : `<clear-option type='assign-fixed-value' value='s:LROOT:${escapeXml(clearValue)}' />`;
   return (
     `<edit-parameter-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
     renderActivation(activation) +
     `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
-    "<agg-type type='attr' />" +
-    "<clear-option type='do-nothing' value='s:LROOT:' />" +
+    aggTypeXml +
+    clearOptionXml +
     `<params>${params.join('')}</params>` +
     '</edit-parameter-action>'
   );

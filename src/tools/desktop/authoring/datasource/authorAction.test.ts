@@ -117,7 +117,7 @@ describe('authorActionTool', () => {
     );
     const readbackXml = withOne.replace(
       '</actions>',
-      "<edit-parameter-action caption='Second' name='[Action2]'><params><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
+      "<edit-parameter-action caption='Second' name='[Action2]'><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
     );
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
@@ -674,6 +674,211 @@ describe('authorActionTool', () => {
     );
     // The raw caption must never reach the serialized XML.
     expect(loaded).not.toContain('[Parameters].[p.Period]');
+  });
+
+  it('echoes the default aggregation and clear behavior when neither is set', async () => {
+    // Neither sourceFieldAggregation nor clearValue passed: the emitted XML is byte-identical to
+    // what the tool has always emitted (attr + do-nothing), and the receipt reports those defaults.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.sourceFieldAggregation).toBe('attr');
+    expect(parsed.clearValue).toBeUndefined();
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<agg-type type='attr' />");
+    expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('passes readback when Desktop rewrites the do-nothing clear value to the param default', async () => {
+    // Field-observed: for clear-option type='do-nothing', Desktop discards the emitted
+    // value='s:LROOT:' and stamps the target parameter's OWN default in its datatype encoding
+    // (here 'i:1' for an integer param). The clear-option value is Desktop-owned; only its type is
+    // author-controlled. Readback must accept the type it authored, not demand the exact value it
+    // sent survive a round-trip — else every default apply falsely reports "did not survive".
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='i:1' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBeUndefined();
+  });
+
+  it('offers sourceFieldAggregation as a fixed set of Tableau aggregations, not a free string', async () => {
+    // The aggregation is a closed set (twb XSD ActionList-Agg-ST), so it is an enum dropdown like
+    // activation/setMembership — the schema rejects a non-token up front. 'none' is NOT offered:
+    // Desktop backfills <agg-type type='attr'/> when the element is omitted (field-observed), so a
+    // 'none' that omits it can never survive readback and would be a value that does nothing.
+    const tool = getAuthorActionTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
+      string,
+      { safeParse: (value: unknown) => { success: boolean } }
+    >;
+    const agg = paramsSchema['sourceFieldAggregation'];
+    expect(agg.safeParse('attr').success).toBe(true);
+    expect(agg.safeParse('sum').success).toBe(true);
+    expect(agg.safeParse('bogus').success).toBe(false);
+    expect(agg.safeParse('none').success).toBe(false);
+  });
+
+  it('emits the requested source-field aggregation', async () => {
+    // sourceFieldAggregation='sum' overrides the pinned 'attr'; the <agg-type> type attribute
+    // carries it and the receipt echoes it back.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='sum' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        sourceFieldAggregation: 'sum',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.sourceFieldAggregation).toBe('sum');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<agg-type type='sum' />");
+  });
+
+  it('resets the parameter to a fixed value on clear when clearValue is set', async () => {
+    // A clearValue turns the clear-option into assign-fixed-value carrying s:LROOT:<value>, so
+    // deselecting a mark resets the parameter to that value instead of leaving it unchanged.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT:Month' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: 'Month',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe('Month');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:Month' />");
+  });
+
+  it('fails readback when the requested aggregation did not survive', async () => {
+    // The tool authored agg-type='sum' but the readback shows the workbook kept 'attr' — a dropped
+    // setting. Readback must catch it rather than report the requested aggregation as applied.
+    const driftedReadback = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        sourceFieldAggregation: 'sum',
+      },
+      readbackXml: driftedReadback,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('fails readback when the fixed clear value did not survive', async () => {
+    // The tool authored assign-fixed-value but the readback shows do-nothing — the reset behavior
+    // was dropped, so the receipt must not report it as applied.
+    const driftedReadback = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: 'Month',
+      },
+      readbackXml: driftedReadback,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('rejects clearValue against a non-string parameter', async () => {
+    // clearValue is encoded with the string prefix (s:LROOT:) regardless of the target parameter's
+    // datatype, so applying it to an integer parameter writes a malformed clear-option that Desktop
+    // silently rewrites — and readback can't catch it (it checks the clear-option type, not its
+    // value). Until the tool encodes per datatype, reject clearValue on non-string parameters.
+    const intParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.Count' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Count',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '5',
+      },
+      initialXml: intParamXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('clearValue');
+    expect(result.content[0].text).toContain('string');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects a sourceWorksheet that names no existing worksheet', async () => {
