@@ -439,11 +439,11 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 75-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 77-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(75);
+      expect(selected).toHaveLength(77);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -502,6 +502,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         'save-workbook',
         'workbook-export-as',
         'publish-workbook',
+        'start-performance-recording',
+        'stop-performance-recording',
         'refresh-auto-updates',
         'refresh-datasource-data',
         'refresh-datasource-extract',
@@ -774,6 +776,22 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
+    expect(floors.get('start-performance-recording')).toBe('0.2.19');
+    expect(floors.get('stop-performance-recording')).toBe('0.2.19');
+  });
+
+  it('hides performance recording before 0.2.19 and exposes it at 0.2.19', () => {
+    const fullTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'full',
+    );
+    const at218 = filterToolsByApiVersion(fullTools, '0.2.18').map((tool) => tool.name);
+    const at219 = filterToolsByApiVersion(fullTools, '0.2.19').map((tool) => tool.name);
+
+    for (const route of ['start-performance-recording', 'stop-performance-recording']) {
+      expect(at218).not.toContain(route);
+      expect(at219).toContain(route);
+    }
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
