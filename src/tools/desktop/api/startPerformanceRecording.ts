@@ -18,7 +18,7 @@ export const getStartPerformanceRecordingTool = (
   const startPerformanceRecordingTool = new DesktopTool({
     server,
     name: 'start-performance-recording',
-    minApiVersion: '0.2.14',
+    minApiVersion: '0.2.19',
     title,
     description:
       'Start performance recording for the open workbook in Tableau Desktop. Starting again while recording is already active succeeds without resetting the recording.',

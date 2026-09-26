@@ -8,16 +8,20 @@ import {
   composeDashboardCore,
   type ComposeDashboardCoreArgs,
   dashboardCandidateReadbackIssues,
+  resolveRenderedWorksheetNames,
 } from './composeDashboardCore.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
+// `<rows>`/`<cols>` text (any non-empty text, here just the field name) is enough for
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered; see the
+// `resolveRenderedWorksheetNames` describe block below for the blank-vs-populated distinction.
 const PRISTINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
-    <worksheet name="Sales"><table/></worksheet>
-    <worksheet name="Profit"><table/></worksheet>
+    <worksheet name="Sales"><table><rows>Sales</rows></table></worksheet>
+    <worksheet name="Profit"><table><rows>Profit</rows></table></worksheet>
   </worksheets>
   <dashboards><dashboard name="Keep"><zones><zone name="Sales"/></zones></dashboard></dashboards>
   <windows>
@@ -177,6 +181,62 @@ describe('dashboardCandidateReadbackIssues', () => {
       ]),
     ).toEqual([
       'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
+    ]);
+  });
+});
+
+describe('resolveRenderedWorksheetNames', () => {
+  it('does not resolve a named worksheet with a matching window whose table is blank', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="Blank"><table><rows></rows><cols></cols></table></worksheet>
+  </worksheets>
+  <windows>
+    <window class="worksheet" name="Blank"/>
+  </windows>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Blank'])).toEqual([undefined]);
+  });
+
+  it('resolves a worksheet that has a placed field reference even with empty rows/cols text', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="Rendered"><table><view>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>
+      </datasource-dependencies>
+    </view><rows></rows><cols>[Sample - Superstore].[sum:Sales:qk]</cols></table></worksheet>
+  </worksheets>
+  <windows>
+    <window class="worksheet" name="Rendered"/>
+  </windows>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Rendered'])).toEqual(['Rendered']);
+  });
+
+  it('still refuses names that lack a matching window, and names that do not exist at all', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="NoWindow"><table><rows>Sales</rows></table></worksheet>
+  </worksheets>
+  <windows/>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['NoWindow', 'Nonexistent'])).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('resolves a genuinely rendered worksheet with a matching window', () => {
+    expect(resolveRenderedWorksheetNames(PRISTINE, ['Sales', 'Profit'])).toEqual([
+      'Sales',
+      'Profit',
     ]);
   });
 });
@@ -348,7 +408,7 @@ function setupHarness({
     .mockImplementation(async () => readbackResults.shift() ?? Ok(postedXml.at(-1) ?? pristineXml));
   vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockImplementation(async ({ xml }) => {
     postedXml.push(xml);
-    return applyResults.shift() ?? Ok({ validationWarnings: [] });
+    return applyResults.shift() ?? Ok({ validationWarnings: [], documentWarnings: [] });
   });
   return {
     executor: {} as ExternalApiToolExecutor,

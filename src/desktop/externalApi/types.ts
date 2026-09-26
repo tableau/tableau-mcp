@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.14), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.16), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -23,6 +23,7 @@ export const EXTERNAL_API_ROUTES = {
   appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDiagnostics: '/v0/workbook/diagnostics',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
@@ -57,12 +58,15 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetDiagnostics: '/v0/workbook/worksheets/{id}/diagnostics',
+  worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
   worksheetLogicalTableData: '/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data',
   worksheetDelete: '/v0/workbook/worksheets/{id}:delete',
   worksheetRename: '/v0/workbook/worksheets/{id}:rename',
   worksheetSort: '/v0/workbook/worksheets/{id}:sort',
+  worksheetShowMe: '/v0/workbook/worksheets/{id}:showMe',
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
@@ -95,6 +99,17 @@ export type WorksheetSummaryDataQuery = {
   columnsToIncludeByFieldName?: Array<string>;
 };
 
+/** Selection context accepted by {@link worksheetShowMeOptionsRoute}. */
+export type ShowMeOptionsQuery = {
+  /** Internal datasource name used to evaluate the native Show Me model. */
+  dataSource?: string;
+  /**
+   * Ordered fully qualified field names selected in the schema viewer. Omission
+   * preserves Desktop's ambient selection; an explicit empty array clears it.
+   */
+  fieldsSelectedInSchemaViewer?: Array<string>;
+};
+
 /** Query accepted by {@link worksheetLogicalTableDataRoute}. */
 export type WorksheetUnderlyingDataQuery = WorksheetSummaryDataQuery & {
   includeAllColumns?: boolean;
@@ -115,6 +130,44 @@ export type WorksheetSort = {
   direction?: 'asc' | 'desc';
   sortType?: 'data-source-order' | 'alpha';
   clearSort?: boolean;
+};
+
+/** Serialized visualization types known to the captured External API contract. */
+export const SHOW_ME_TYPES = [
+  'text',
+  'heat',
+  'spot-table',
+  'bar-horiz',
+  'bar-stack',
+  'bar-side',
+  'bar-measure',
+  'o-line',
+  'qi-line',
+  'o-area',
+  'qi-area',
+  'circle',
+  'circle-side',
+  'gantt',
+  'scatter',
+  'scatter-matrix',
+  'histogram',
+  'maps',
+  'filled-maps',
+  'pies',
+  'dual-bar-line',
+  'dual-line',
+  'bullet',
+  'treemap',
+  'bubble',
+  'box-plot',
+] as const;
+export type ShowMeType = (typeof SHOW_ME_TYPES)[number];
+
+/** Body of `POST /v0/workbook/worksheets/{id}:showMe`. */
+export type WorksheetShowMeRequest = {
+  showMeType: string;
+  dataSource?: string;
+  fieldsSelectedInSchemaViewer?: Array<string>;
 };
 
 /** Body of `POST /v0/app:openFile`. `filePath` is the absolute path of the file to open. */
@@ -170,6 +223,10 @@ export type ImageExportQuery = {
 
 export function worksheetRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+export function worksheetDiagnosticsRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/diagnostics`;
 }
 
 export function dashboardRoute(dashboardId: string): string {
@@ -235,6 +292,25 @@ export function worksheetSummaryDataRoute(
   return `${worksheetRoute(worksheetId)}/summaryData${suffix}`;
 }
 
+export function worksheetShowMeOptionsRoute(
+  worksheetId: string,
+  query: ShowMeOptionsQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.dataSource !== undefined) {
+    search.set('dataSource', query.dataSource);
+  }
+  if (query.fieldsSelectedInSchemaViewer !== undefined) {
+    search.set('selectionMode', 'explicit');
+    for (const field of query.fieldsSelectedInSchemaViewer) {
+      search.append('fieldsSelectedInSchemaViewer', field);
+    }
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${worksheetRoute(worksheetId)}/showMe${suffix}`;
+}
+
 const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
   worksheet: EXTERNAL_API_ROUTES.workbookWorksheets,
   dashboard: EXTERNAL_API_ROUTES.workbookDashboards,
@@ -264,6 +340,10 @@ export function workbookStoryboardsNewRoute(index?: number): string {
 
 export function worksheetSortRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:sort`;
+}
+
+export function worksheetShowMeRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:showMe`;
 }
 
 export function worksheetPauseAutoUpdatesRoute(worksheetId: string): string {
@@ -435,7 +515,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.13). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.16). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -466,6 +546,8 @@ export const PROBLEM_CODES = [
   'unsupported-file-type',
   'unsupported-target-version',
   'file-not-found',
+  'show-me-not-applicable',
+  'show-me-unavailable',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
@@ -653,6 +735,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
@@ -684,6 +767,34 @@ export const worksheetItemSchema = z
   })
   .passthrough();
 export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+/** Worksheet identity evaluated by the native Show Me presentation model. */
+export const showMeWorksheetSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .passthrough();
+
+/** One runtime option from the native Show Me presentation model. */
+export const showMeOptionSchema = z
+  .object({
+    showMeType: z.string(),
+    isApplicable: z.boolean(),
+    vizHasRequiredFields: z.boolean(),
+    dataSourceHasRequiredFields: z.boolean(),
+    helpUrl: z.string(),
+  })
+  .passthrough();
+
+/** Ordered Show Me discovery result returned for a worksheet. */
+export const showMeOptionsResultSchema = z
+  .object({
+    worksheet: showMeWorksheetSchema,
+    options: z.array(showMeOptionSchema),
+  })
+  .passthrough();
+export type ShowMeOptionsResult = z.infer<typeof showMeOptionsResultSchema>;
 
 /** Worksheet list returned by `GET /v0/workbook/worksheets`. */
 export const worksheetListSchema = z
@@ -860,6 +971,47 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** One invalid field currently used by a worksheet shelf or marks encoding. */
+export const worksheetInvalidFieldSchema = z
+  .object({
+    fieldName: z.string(),
+    fieldCaption: z.string().optional(),
+    shelf: z.string(),
+    marksSpecificationId: z.string(),
+    encodingType: z.string(),
+    reason: z.string(),
+  })
+  .passthrough();
+export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
+
+/** Diagnostics reported by Desktop for one worksheet. */
+export const worksheetDiagnosticsSchema = z
+  .object({
+    worksheetId: z.string(),
+    status: z.enum(['complete', 'partial', 'unavailable']),
+    invalidFields: z.array(worksheetInvalidFieldSchema).optional(),
+    message: z.string().optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.status === 'complete' && value.invalidFields === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invalidFields'],
+        message: 'Complete worksheet diagnostics must include invalidFields.',
+      });
+    }
+  });
+export type WorksheetDiagnostics = z.infer<typeof worksheetDiagnosticsSchema>;
+
+/** Aggregate diagnostics returned by workbook and worksheet diagnostic reads and completed writes. */
+export const workbookDiagnosticsSchema = z
+  .object({
+    worksheets: z.array(worksheetDiagnosticsSchema),
+  })
+  .passthrough();
+export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and

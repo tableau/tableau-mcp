@@ -1,9 +1,9 @@
-import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { escapeXml } from '../binder/escape.js';
 import {
+  ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
   ExecuteCommandResult,
   ExecuteCommandWarning,
@@ -11,6 +11,8 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
+import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
 import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
 import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
@@ -35,6 +37,8 @@ export type PerSheetApplyOutcome =
       fragmentXml: string;
       // Empty on a clean apply; every entry is a node Tableau dropped, never a benign notice.
       documentWarnings: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
+      diagnosticsInvalid?: boolean;
     }
   | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
@@ -65,6 +69,7 @@ export async function tryApplyViaPerSheetRoute({
   focus,
   executor,
   signal,
+  expectedInstanceId,
 }: {
   kind: PerSheetKind;
   sheetName: string;
@@ -72,6 +77,7 @@ export async function tryApplyViaPerSheetRoute({
   expectedSourceHash?: string;
   validationContext?: ValidationContext;
   focus: ApplyFocus;
+  expectedInstanceId?: string;
 } & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
   const client = executor as ExternalApiToolExecutor;
 
@@ -142,6 +148,7 @@ export async function tryApplyViaPerSheetRoute({
     retitledFragment.value,
     client,
     signal,
+    expectedInstanceId,
   );
   if (applyResult.isErr()) {
     // A build with the list route but not the POST route (unlikely) still falls back cleanly.
@@ -175,65 +182,9 @@ export async function tryApplyViaPerSheetRoute({
     name: resolved.value.name,
     fragmentXml: retitledFragment.value,
     documentWarnings: applyResult.value.warnings ?? [],
+    ...(applyResult.value.diagnostics ? { diagnostics: applyResult.value.diagnostics } : {}),
+    ...(applyResult.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
-}
-
-function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'unknown' {
-  const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xml.trim(), 'text/xml');
-  const worksheet = doc.documentElement;
-  if (!worksheet || worksheet.tagName !== 'worksheet') return 'unknown';
-  const table = directChild(worksheet, 'table');
-  if (!table) return 'unknown';
-
-  const rows = directChild(table, 'rows')?.textContent?.trim() ?? '';
-  const cols = directChild(table, 'cols')?.textContent?.trim() ?? '';
-  return rows === '' && cols === '' && !hasPlacedFieldReference(table) ? 'blank' : 'populated';
-}
-
-function hasPlacedFieldReference(table: XmlElement): boolean {
-  const stack = [table];
-  while (stack.length > 0) {
-    const element = stack.pop()!;
-    // Datasource declarations can survive clearing a sheet; they do not prove chart content.
-    if (
-      element.tagName === 'datasources' ||
-      element.tagName === 'datasource-dependencies' ||
-      element.tagName === 'style'
-    ) {
-      continue;
-    }
-
-    for (let index = 0; index < element.attributes.length; index++) {
-      const attribute = element.attributes.item(index);
-      if (
-        attribute &&
-        (attribute.value.includes('].[') ||
-          ((attribute.name === 'column' || attribute.name.endsWith('field')) &&
-            attribute.value.includes('[')))
-      ) {
-        return true;
-      }
-    }
-    for (let index = 0; index < element.childNodes.length; index++) {
-      const child = element.childNodes.item(index);
-      if (child?.nodeType === 1) {
-        stack.push(child as XmlElement);
-      } else if (child?.nodeValue?.includes('].[')) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function directChild(parent: XmlElement, tagName: string): XmlElement | undefined {
-  for (let index = 0; index < parent.childNodes.length; index++) {
-    const child = parent.childNodes.item(index);
-    if (child?.nodeType === 1 && (child as XmlElement).tagName === tagName) {
-      return child as XmlElement;
-    }
-  }
-  return undefined;
 }
 
 function retitleFragment(
@@ -317,10 +268,15 @@ async function applyDocumentForKind(
   documentXml: string,
   client: ExternalApiToolExecutor,
   signal: AbortSignal,
+  expectedInstanceId?: string,
 ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
   switch (kind) {
     case 'worksheet':
-      return client.applyWorksheetDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyWorksheetDocument(id, documentXml, signal, {
+            expectedInstanceId,
+          } satisfies ApplyWorkbookDocumentOptions)
+        : client.applyWorksheetDocument(id, documentXml, signal);
     case 'dashboard':
       return client.applyDashboardDocument(id, documentXml, signal);
     case 'storyboard':

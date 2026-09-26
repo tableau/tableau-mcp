@@ -86,14 +86,23 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               isError: false,
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
+        const mappedError = toolResult.isError === true;
+        if (mappedError) {
+          void emitToolErrorEvent({
+            config: extra.config,
+            sessionId,
+            tool: this.name,
+            error: 'Tool returned an error result.',
+          });
+        }
         void emitEpisodeEvent(extra.config, {
           type: 'tool_end',
           session_id: sessionId,
           episode_id: episodeId,
           tool: this.name,
           duration_ms: performance.now() - startedAt,
-          success: true,
-          outcome: 'succeeded',
+          success: !mappedError,
+          outcome: mappedError ? 'failed' : 'succeeded',
           request_id_hash: hashRequestId(requestId),
           result_size_chars: serializedResultSize(toolResult),
         });

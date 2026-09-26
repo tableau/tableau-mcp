@@ -25,10 +25,10 @@ describe('stop-performance-recording tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the 0.2.14 floor and non-idempotent recorder metadata', () => {
+  it('declares the 0.2.19 floor and non-idempotent recorder metadata', () => {
     const tool = getStopPerformanceRecordingTool(new DesktopMcpServer());
 
-    expect(tool.minApiVersion).toBe('0.2.14');
+    expect(tool.minApiVersion).toBe('0.2.19');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
@@ -241,6 +241,6 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-stop-performance-recording',
-    apiVersion: '0.2.14',
+    apiVersion: '0.2.19',
   };
 }

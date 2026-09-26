@@ -202,10 +202,10 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
-    // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
+    // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
+    // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
+    // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(9_328);
   });
 });
 
@@ -270,13 +270,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2576], // remeasured after standardizing the calc datasource selector as internal name or unique caption
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
-    ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['build-worksheets-from-templates', 1143], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 1433], // remeasured after preserving URL authoring and standardizing the datasource selector as internal name or unique caption
+    ['author-action', 2031], // raised 2026-09-22: the schema skeleton alone already filled the 1521 cap with empty describes, and those empty describes drove ~426 failed calls (missing mode/target guidance). The +510 buys the mode-routing summary and required-field describes that fund the fix; routing prose is concentrated in `mode` (one place, all four modes) to keep it minimal. Earlier: ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -438,110 +438,121 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 70-tool modern surface with scoped XML fallbacks', () => {
-    const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
-    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(70);
-    // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
-    // knowledge doors the system prompt's "consult the expertise library" law routes to.
-    for (const verb of [
-      'author-calc',
-      'author-set',
-      'author-parameter',
-      'author-action',
-      'format-worksheets',
-      'format-dashboard-zones',
-      'compose-story',
-      'ask-user',
-      'search-commands',
-      'list-templates',
-      'bind-template',
-      'build-worksheets-from-templates',
-      'refine-worksheet',
-      'add-field',
-      'remove-field',
-      'resolve-field',
-      'apply-worksheet',
-      'run-dashboard-batch',
-      'read-knowledge-resource',
-      'search-knowledge',
-      'get-summary-data',
-      'get-workbook-inventory',
-      'list-workbook-datasources',
-      'get-datasource-info',
-      'get-datasource-xml',
-      'apply-datasource',
-      'activate-sheet',
-      'delete-sheet',
-      'rename-sheet',
-      'sort-worksheet',
-      'undo-workbook',
-      'redo-workbook',
-      'list-instances',
-      'get-active-dialogs',
-      'invoke-dialog-action',
-      'list-available-fields',
-      'search-workbook-fields',
-      'list-worksheets',
-      'list-dashboards',
-      'list-worksheet-logical-tables',
-      'get-worksheet-underlying-data',
-      'add-worksheet',
-      'add-dashboard',
-      'add-storyboard',
-      'open-file',
-      'set-start-page-visibility',
-      'save-workbook',
-      'workbook-export-as',
-      'publish-workbook',
-      'start-performance-recording',
-      'stop-performance-recording',
-      'refresh-auto-updates',
-      'refresh-datasource-data',
-      'refresh-datasource-extract',
-      'get-workbook-xml',
-      'apply-workbook',
-      'apply-workbook-style',
-      'inspect-custom-theme',
-      'export-custom-theme',
-      'get-dashboard-xml',
-      'apply-dashboard',
-      'get-storyboard-xml',
-      'apply-storyboard',
-      // The manual field-edit path's read leg — mints the worksheetFile add-field/
-      // remove-field/apply-worksheet consume.
-      'get-worksheet-xml',
-    ]) {
-      expect(selected.map((t) => t.name)).toContain(verb);
-    }
-    // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
-    // whole-workbook fallbacks above are the complete XML surface added to this profile.
-    for (const banished of [
-      'build-and-apply-worksheet',
-      'validate-workbook-xml',
-      'validate-worksheet-xml',
-      'inject-template',
-      'list-site-datasources',
-      'list-site-workbooks',
-      'get-app-info',
-      'get-health',
-      'get-worksheet-info',
-      'list-storyboards',
-      'get-api-root',
-      'get-site-info',
-      'get-dashboard-info',
-      'get-storyboard-info',
-      'list-knowledge-resources',
-      'plan-dashboard-creation',
-      'batch-create-and-cache-sheets',
-      'build-and-apply-dashboard',
-      'compose-dashboard',
-      'dashboard-auto-apply',
-    ]) {
-      expect(selected.map((t) => t.name)).not.toContain(banished);
-    }
-  });
+  it.each(['', 'dynamic-authoring'])(
+    'TOOL_PROFILE=%j registers exactly the 77-tool modern surface with scoped XML fallbacks',
+    (profile) => {
+      const selected = selectToolsForProfile(allTools(), profile);
+      expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+      expect(selected).toHaveLength(77);
+      // The full dynamic dialect, semantically named — every author-* verb present,
+      // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
+      // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
+      for (const verb of [
+        'author-calc',
+        'author-set',
+        'author-parameter',
+        'author-action',
+        'format-worksheets',
+        'format-dashboard-zones',
+        'compose-story',
+        'ask-user',
+        'search-commands',
+        'list-templates',
+        'bind-template',
+        'build-worksheets-from-templates',
+        'refine-worksheet',
+        'add-field',
+        'remove-field',
+        'resolve-field',
+        'apply-worksheet',
+        'run-dashboard-batch',
+        'read-knowledge-resource',
+        'search-knowledge',
+        'get-summary-data',
+        'get-workbook-inventory',
+        'list-workbook-datasources',
+        'get-datasource-info',
+        'get-datasource-xml',
+        'apply-datasource',
+        'activate-sheet',
+        'delete-sheet',
+        'rename-sheet',
+        'sort-worksheet',
+        'show-me',
+        'undo-workbook',
+        'redo-workbook',
+        'list-instances',
+        'get-desktop-state',
+        'get-diagnostics',
+        'get-active-dialogs',
+        'invoke-dialog-action',
+        'list-available-fields',
+        'search-workbook-fields',
+        'list-worksheets',
+        'get-show-me-options',
+        'list-dashboards',
+        'list-worksheet-logical-tables',
+        'get-worksheet-underlying-data',
+        'capture-window-screenshot',
+        'add-worksheet',
+        'add-dashboard',
+        'add-storyboard',
+        'open-file',
+        'set-start-page-visibility',
+        'save-workbook',
+        'workbook-export-as',
+        'publish-workbook',
+        'start-performance-recording',
+        'stop-performance-recording',
+        'refresh-auto-updates',
+        'refresh-datasource-data',
+        'refresh-datasource-extract',
+        'get-workbook-xml',
+        'apply-workbook',
+        'apply-workbook-style',
+        'inspect-custom-theme',
+        'export-custom-theme',
+        'get-dashboard-xml',
+        'apply-dashboard',
+        'get-storyboard-xml',
+        'apply-storyboard',
+        'export-worksheet-image',
+        'export-dashboard-image',
+        'export-storyboard-image',
+        // The manual field-edit path's read leg — mints the worksheetFile add-field/
+        // remove-field/apply-worksheet consume.
+        'get-worksheet-xml',
+      ]) {
+        expect(selected.map((t) => t.name)).toContain(verb);
+      }
+      // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
+      // whole-workbook fallbacks above are the complete XML surface added to this profile.
+      for (const banished of [
+        'build-and-apply-worksheet',
+        'validate-workbook-xml',
+        'validate-worksheet-xml',
+        'inject-template',
+        'list-site-datasources',
+        'list-site-workbooks',
+        'get-app-info',
+        'get-health',
+        'get-worksheet-info',
+        'list-storyboards',
+        'get-api-root',
+        'get-site-info',
+        'get-dashboard-info',
+        'get-storyboard-info',
+        'list-knowledge-resources',
+        'plan-dashboard-creation',
+        'batch-create-and-cache-sheets',
+        'build-and-apply-dashboard',
+        'compose-dashboard',
+        'dashboard-auto-apply',
+      ]) {
+        expect(selected.map((t) => t.name)).not.toContain(banished);
+      }
+    },
+  );
 
   it('exposes start-page visibility in dynamic and full surfaces, not specialized profiles', () => {
     const tools = allTools();
@@ -574,6 +585,26 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(
       selectToolsForProfile(tools, 'dynamic-authoring').filter(
         (tool) => tool.name === 'search-workbook-fields',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('registers capture-window-screenshot once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+    const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
+
+    expect(captureTool).toBeDefined();
+    expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
+    expect(captureTool?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('capture-window-screenshot')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'capture-window-screenshot',
       ),
     ).toHaveLength(1);
   });
@@ -721,6 +752,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((factory) => factory(new DesktopMcpServer()))
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
+    expect(floors.get('capture-window-screenshot')).toBe('0.2.17');
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
@@ -734,29 +766,45 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
+    expect(floors.get('show-me')).toBe('0.2.11');
     expect(floors.get('get-active-dialogs')).toBe('0.2.13');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.13');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
+    expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
-    expect(floors.get('start-performance-recording')).toBe('0.2.14');
-    expect(floors.get('stop-performance-recording')).toBe('0.2.14');
+    expect(floors.get('get-show-me-options')).toBe('0.2.18');
+    expect(floors.get('start-performance-recording')).toBe('0.2.19');
+    expect(floors.get('stop-performance-recording')).toBe('0.2.19');
   });
 
-  it('hides performance recording before 0.2.14 and exposes it at 0.2.14', () => {
+  it('hides performance recording before 0.2.19 and exposes it at 0.2.19', () => {
     const fullTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'full',
     );
-    const at213 = filterToolsByApiVersion(fullTools, '0.2.13').map((tool) => tool.name);
-    const at214 = filterToolsByApiVersion(fullTools, '0.2.14').map((tool) => tool.name);
+    const at218 = filterToolsByApiVersion(fullTools, '0.2.18').map((tool) => tool.name);
+    const at219 = filterToolsByApiVersion(fullTools, '0.2.19').map((tool) => tool.name);
 
     for (const route of ['start-performance-recording', 'stop-performance-recording']) {
-      expect(at213).not.toContain(route);
-      expect(at214).toContain(route);
+      expect(at218).not.toContain(route);
+      expect(at219).toContain(route);
     }
+  });
+
+  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
+
+    expect(registered).toHaveLength(1);
+    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
+      'get-diagnostics',
+    );
+    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
+      'get-diagnostics',
+    );
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
@@ -816,18 +864,38 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     }
   });
 
-  it('a connected 0.2.6 Desktop still hides the 0.2.7 export routes', () => {
+  it.each(['full', '', 'dynamic-authoring'])(
+    'keeps worksheet and dashboard image exports while gating the 0.2.7 export routes in TOOL_PROFILE=%j',
+    (profile) => {
+      const profileTools = selectToolsForProfile(
+        desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+        profile,
+      );
+      const at26 = filterToolsByApiVersion(profileTools, '0.2.6').map((tool) => tool.name);
+      const at27 = filterToolsByApiVersion(profileTools, '0.2.7').map((tool) => tool.name);
+
+      for (const route of ['export-storyboard-image', 'workbook-export-as']) {
+        expect(at26).not.toContain(route);
+        expect(at27).toContain(route);
+      }
+      for (const route of ['export-worksheet-image', 'export-dashboard-image']) {
+        expect(at26).toContain(route);
+        expect(at27).toContain(route);
+      }
+    },
+  );
+
+  it('hides Show Me before 0.2.11 and exposes it at its registration floor', () => {
     const fullTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'full',
     );
-    const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
-    const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
-
-    for (const route of ['export-storyboard-image', 'workbook-export-as']) {
-      expect(at26).not.toContain(route);
-      expect(at27).toContain(route);
-    }
+    expect(filterToolsByApiVersion(fullTools, '0.2.10').map((tool) => tool.name)).not.toContain(
+      'show-me',
+    );
+    expect(filterToolsByApiVersion(fullTools, '0.2.11').map((tool) => tool.name)).toContain(
+      'show-me',
+    );
   });
 
   it('a connected 0.2.12 Desktop hides dialog tools and 0.2.13 exposes them', () => {
@@ -874,6 +942,20 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.3.0')).toContain('refresh-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
+  });
+
+  it('gates Show Me option discovery at External Client API 0.2.18', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const namesAt = (apiVersion: string | undefined): string[] =>
+      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
+
+    expect(namesAt('0.2.17')).not.toContain('get-show-me-options');
+    expect(namesAt('0.2.18')).toContain('get-show-me-options');
+    expect(namesAt('0.3.0')).toContain('get-show-me-options');
+    expect(namesAt(undefined)).toContain('get-show-me-options');
   });
 });
 

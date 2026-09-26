@@ -196,7 +196,10 @@ export function addFieldToEncoding(
   const verifyPanes = normalizeArray(worksheet.table.panes.pane);
   const verifyPane = verifyPanes[0];
   const verifyEncodings = normalizeArray(verifyPane?.encodings?.[encodingType]);
-  const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === columnRef);
+  // W-24126644: verify against the corrected ref we actually wrote. For an aggregating
+  // calc, ensureColumnInstanceInDependencies rewrites [ctd:...] -> [usr:...]; checking the
+  // original columnRef here would fail this self-verify and throw before apply.
+  const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === correctedColumnRef);
 
   if (!encodingAdded) {
     // Log detailed debug info
@@ -206,10 +209,10 @@ export function addFieldToEncoding(
       encodingType,
       verifyEncodingsCount: verifyEncodings.length,
       verifyEncodings: verifyEncodings,
-      expectedColumnRef: columnRef,
+      expectedColumnRef: correctedColumnRef,
     });
     throw new Error(
-      `Failed to add encoding: encoding not found in structure after modification. Expected: ${columnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
+      `Failed to add encoding: encoding not found in structure after modification. Expected: ${correctedColumnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
     );
   }
 
@@ -485,6 +488,8 @@ const DATE_PART_DERIVATIONS = new Set<string>([
   'Week-Trunc',
   'Day-Trunc',
 ]);
+
+const COUNT_DERIVATIONS = new Set<string>(['Count', 'CountD', 'CountDistinct']);
 
 // Map a column-instance pivot suffix (qk/ok/nk) to its Tableau type; null when unknown.
 function typeFromPivotSuffix(columnInstanceName: string): string | null {
@@ -803,15 +808,24 @@ function ensureColumnInstanceInDependencies(
     }
   }
 
-  if (!exists) {
-    // Parse the CORRECTED instance name to get base column and derivation
-    const parsedCorrected = parseColumnInstanceName(correctedInstanceName);
-    if (!parsedCorrected) {
-      throw new Error(
-        `Invalid column-instance name format: ${correctedInstanceName}. Expected format: [derivation:ColumnName:type]`,
-      );
-    }
+  const parsedCorrected = parseColumnInstanceName(correctedInstanceName);
+  if (!parsedCorrected) {
+    throw new Error(
+      `Invalid column-instance name format: ${correctedInstanceName}. Expected format: [derivation:ColumnName:type]`,
+    );
+  }
 
+  if (exists && COUNT_DERIVATIONS.has(parsedCorrected.derivation)) {
+    const pivotType = typeFromPivotSuffix(correctedInstanceName);
+    const existingInstance = columnInstances.find(
+      (ci: any) => ci['@_name'] === correctedInstanceName,
+    );
+    if (pivotType && existingInstance) {
+      existingInstance['@_type'] = pivotType;
+    }
+  }
+
+  if (!exists) {
     // Check if base column exists, if not create it
     const columns = [...columnsArray];
     const columnExists = columns.some((col: any) => col['@_name'] === parsedCorrected.column);
@@ -950,12 +964,14 @@ function ensureColumnInstanceInDependencies(
             datasource,
           });
         }
+        // W-24126644: return the User-corrected ref (usr:) the caller places on the
+        // shelf/encoding. Diverging from the written column-instance makes Tableau
+        // reconcile the pill, which readback verification reports as a false drop.
+        correctedInstanceName = actualColumnInstanceName;
       }
     }
 
-    // For date-part derivations the instance type must follow the ref's pivot
-    // suffix, not the base date column's type, or Tableau coerces it back.
-    if (DATE_PART_DERIVATIONS.has(actualDerivation)) {
+    if (DATE_PART_DERIVATIONS.has(actualDerivation) || COUNT_DERIVATIONS.has(actualDerivation)) {
       const pivotType = typeFromPivotSuffix(actualColumnInstanceName);
       if (pivotType) {
         instanceType = pivotType;

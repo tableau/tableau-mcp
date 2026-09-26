@@ -7,6 +7,7 @@ import { getApplyDatasourceTool } from './api/applyDatasource.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
+import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
@@ -20,7 +21,9 @@ import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
+import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getHealthTool } from './api/getHealth.js';
+import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
 import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
@@ -50,6 +53,7 @@ import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
 import { getSetStartPageVisibilityTool } from './api/setStartPageVisibility.js';
+import { getShowMeTool } from './api/showMe.js';
 import { getSortWorksheetTool } from './api/sortWorksheet.js';
 import { getStartPerformanceRecordingTool } from './api/startPerformanceRecording.js';
 import { getStopPerformanceRecordingTool } from './api/stopPerformanceRecording.js';
@@ -103,6 +107,7 @@ import { getSearchWorkbookExamplesTool } from './local/search/searchWorkbookExam
 export const desktopToolFactories = [
   getListInstancesTool,
   getDesktopStateTool,
+  getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
   getGetWorkbookXmlTool,
@@ -124,12 +129,14 @@ export const desktopToolFactories = [
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
+  getShowMeOptionsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
   getDeleteSheetTool,
   getRenameSheetTool,
   getSortWorksheetTool,
+  getShowMeTool,
   getPauseAutoUpdatesTool,
   getRefreshAutoUpdatesTool,
   getResumeAutoUpdatesTool,
@@ -184,6 +191,7 @@ export const desktopToolFactories = [
   getSummaryDataTool,
   getListWorksheetLogicalTablesTool,
   getWorksheetUnderlyingDataTool,
+  getCaptureWindowScreenshotTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
   exportStoryboardImageTool,
