@@ -46,7 +46,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
       "The response's upstreamDatasources list each data source the workbook depends on; " +
       "an entry's queryability.isQueryable is true when the calling user can query that data source with the query-datasource tool " +
       'and false when they cannot, in which case queryability.reason explains why. ' +
-      'The queryability object is omitted entirely when queryability could not be determined.',
+      'The queryability object is omitted entirely when queryability could not be determined. ' +
+      'When a data source is not queryable, its owner (or publishedParent.owner) identifies who to contact to request access.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
