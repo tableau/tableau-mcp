@@ -1,6 +1,10 @@
 import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 
-import { hasPlacedFieldReference, worksheetDocumentState } from './worksheetRenderState.js';
+import {
+  classifyWorkbookWorksheets,
+  hasPlacedFieldReference,
+  worksheetDocumentState,
+} from './worksheetRenderState.js';
 
 describe('worksheetDocumentState', () => {
   it('reports blank for empty rows/cols with only a datasource declaration', () => {
@@ -117,5 +121,76 @@ describe('hasPlacedFieldReference', () => {
     </table>`);
 
     expect(hasPlacedFieldReference(table)).toBe(false);
+  });
+});
+
+describe('classifyWorkbookWorksheets', () => {
+  it('classifies worksheet elements with inherited and locally rebound namespaces in context', () => {
+    const xml = `<workbook xmlns:user='urn:workbook'>
+      <worksheets xmlns:mid='urn:intermediate'>
+        <worksheet name='Blank'><table><view><groupfilter function='level-members' level='Category' user:ui-domain='relevant' user:ui-enumeration='inclusive' /><mid:value /></view><rows /><cols /></table></worksheet>
+        <worksheet name='Populated'><table><view><pane xmlns:user='urn:local'><groupfilter function='level-members' level='[none:Category:nk]' user:ui-domain='database' user:ui-enumeration='all' /></pane></view><rows>[none:Category:nk]</rows><cols /></table></worksheet>
+      </worksheets>
+    </workbook>`;
+
+    expect(classifyWorkbookWorksheets(xml)).toEqual({
+      worksheets: [
+        { name: 'Blank', state: 'blank' },
+        { name: 'Populated', state: 'populated' },
+      ],
+      worksheetWindowNames: [],
+    });
+  });
+
+  it('ignores same-name worksheets and windows outside the canonical workbook collections', () => {
+    const xml = `<workbook>
+      <extension>
+        <worksheets><worksheet name='Canonical'><table><rows>[none:Extension:nk]</rows><cols /></table></worksheet></worksheets>
+        <windows><window class='worksheet' name='Canonical' /></windows>
+      </extension>
+      <worksheets><worksheet name='Canonical'><table><rows /><cols /></table></worksheet></worksheets>
+      <windows><window class='dashboard' name='Canonical' /></windows>
+    </workbook>`;
+
+    expect(classifyWorkbookWorksheets(xml)).toEqual({
+      worksheets: [{ name: 'Canonical', state: 'blank' }],
+      worksheetWindowNames: [],
+    });
+  });
+
+  it('requires workbook as the document root', () => {
+    const xml = `<extension>
+      <worksheets><worksheet name='Nested'><table><rows>[none:Extension:nk]</rows><cols /></table></worksheet></worksheets>
+      <windows><window class='worksheet' name='Nested' /></windows>
+    </extension>`;
+
+    expect(classifyWorkbookWorksheets(xml)).toEqual({
+      worksheets: [],
+      worksheetWindowNames: [],
+    });
+  });
+
+  it('keeps worksheet names that differ only by one level of entity escaping distinct', () => {
+    const xml = `<workbook><worksheets>
+      <worksheet name='A &amp; B'><table><rows>[none:First:nk]</rows><cols /></table></worksheet>
+      <worksheet name='A &amp;amp; B'><table><rows /><cols /></table></worksheet>
+    </worksheets></workbook>`;
+
+    expect(classifyWorkbookWorksheets(xml)).toEqual({
+      worksheets: [
+        { name: 'A & B', state: 'populated' },
+        { name: 'A &amp; B', state: 'blank' },
+      ],
+      worksheetWindowNames: [],
+    });
+  });
+
+  it('still rejects a workbook with an unbound namespace prefix', () => {
+    const xml =
+      '<workbook><worksheets><worksheet name="Broken"><table><user:value /><rows /><cols /></table></worksheet></worksheets></workbook>';
+
+    expect(() => classifyWorkbookWorksheets(xml)).toThrow(
+      'NamespaceError: prefix is non-null and namespace is null',
+    );
   });
 });
