@@ -73,12 +73,14 @@ export function buildDashboardCandidateXml({
   const isExecutiveSummary = layoutType === 'executive-summary';
   const kpis = isExecutiveSummary
     ? (layout?.kpiWorksheetNames ?? []).flatMap((kpiName) => {
-        const canonicalName = canonicalWorksheetNames.find((name) => xmlNamesEqual(kpiName, name));
+        const canonicalName = canonicalWorksheetNames.find((name) =>
+          parsedXmlNamesEqual(kpiName, name),
+        );
         return canonicalName ? [canonicalName] : [];
       })
     : [];
   const charts = canonicalWorksheetNames.filter(
-    (name) => !kpis.some((kpiName) => xmlNamesEqual(kpiName, name)),
+    (name) => !kpis.some((kpiName) => parsedXmlNamesEqual(kpiName, name)),
   );
   const zones = computeZones(title, {
     kpis,
@@ -480,7 +482,7 @@ export function validateComposeDashboardInput(
   }
   const duplicateKpis = requestedKpis.filter(
     (name, index) =>
-      requestedKpis.findIndex((candidate) => xmlNamesEqual(candidate, name)) !== index,
+      requestedKpis.findIndex((candidate) => parsedXmlNamesEqual(candidate, name)) !== index,
   );
   if (duplicateKpis.length > 0) {
     return new ArgsValidationError(
@@ -490,7 +492,7 @@ export function validateComposeDashboardInput(
     );
   }
   const unknownKpis = requestedKpis.filter(
-    (name) => !worksheetNames.some((worksheetName) => xmlNamesEqual(worksheetName, name)),
+    (name) => !worksheetNames.some((worksheetName) => parsedXmlNamesEqual(worksheetName, name)),
   );
   if (unknownKpis.length > 0) {
     return new ArgsValidationError(
