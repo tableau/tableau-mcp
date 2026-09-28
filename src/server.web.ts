@@ -23,10 +23,7 @@ import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
 import { roleRequiresEnforcement, siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
-import {
-  ClientCapabilitiesWithUiExtension,
-  clientSupportsMcpApps,
-} from './server/mcpUiCapability.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
@@ -136,10 +133,6 @@ export class WebMcpServer extends Server {
 
     const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
-    // App tools are only rendered by clients that advertise the SEP-1724 UI capability during the
-    // `initialize` handshake; default to the plain-tool fallback when support is unknown/absent.
-    const supportsMcpApps = clientSupportsMcpApps(this.capabilities);
-
     // claude.ai over OAuth/HTTP advertises the UI capability but its MCP-Apps renderer is broken,
     // so force the plain-tool fallback for it regardless of what it declares. Reuses the existing
     // telemetry client_id → display-name mapping; undefined clientId (e.g. stdio) is never 'Claude'.
@@ -199,7 +192,7 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      if (mcpAppsEnabled && tool.app && supportsMcpApps && !isKnownIncompatibleClient) {
+      if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {
         await this._registerAppTool(tool, toolCallback);
       } else if (tool.app?.hideWhenUnsupported) {
         continue;

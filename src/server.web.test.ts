@@ -554,8 +554,9 @@ describe('server', () => {
 
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
-    // Flag on + client advertises the UI capability + a non-Claude clientId → app tool registers.
-    const server = getServer({ capabilities: uiCapableClientCapabilities });
+    // Flag on + a non-Claude clientId → app tool registers. Client capability is no longer
+    // consulted, so no UI capability needs to be advertised for the app tool to register.
+    const server = getServer();
     const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
@@ -1104,25 +1105,6 @@ describe('server', () => {
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
   });
 
-  it('should register as standard tool when client capabilities lack the UI extension', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
-
-    // Flag on, but no client capabilities advertised → falls back to plain tool.
-    const server = getServer();
-    const mockAppTool = createMockAppTool();
-    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
-
-    await server.registerTools();
-
-    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-      'mock-app-tool',
-      expect.any(Object),
-      expect.any(Function),
-    );
-    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
-    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
-  });
-
   it('should register as standard tool when flag is off even if client is UI-capable', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
 
@@ -1182,26 +1164,6 @@ describe('server', () => {
       expect.any(Function),
     );
     expect(mocks.mockRegisterAppResource).toHaveBeenCalled();
-  });
-
-  it('should not register a hideWhenUnsupported app tool at all when the client lacks MCP-Apps support', async () => {
-    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
-
-    // Flag on, but no UI capability advertised. A hideWhenUnsupported tool skips the plain-tool
-    // fallback entirely, so it must be absent from registration (neither app nor plain).
-    const server = getServer();
-    const mockAppTool = createMockAppTool({ hideWhenUnsupported: true });
-    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
-
-    await server.registerTools();
-
-    expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
-      'mock-app-tool',
-      expect.anything(),
-      expect.anything(),
-    );
-    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
-    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
   });
 
   it('should not register a hideWhenUnsupported app tool for the known-incompatible client (claude.ai)', async () => {
