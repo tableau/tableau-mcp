@@ -47,6 +47,7 @@ import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
 import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
+import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
 import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
@@ -135,6 +136,7 @@ export const desktopToolFactories = [
   getShowMeTool,
   getPauseAutoUpdatesTool,
   getRefreshAutoUpdatesTool,
+  getRefreshDashboardAutoUpdatesTool,
   getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,

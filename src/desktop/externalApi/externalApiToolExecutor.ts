@@ -37,6 +37,9 @@ import {
   DashboardList,
   dashboardListSchema,
   dashboardPauseAutoUpdatesRoute,
+  dashboardRefreshNowRoute,
+  type DashboardRefreshOutcome,
+  dashboardRefreshOutcomeSchema,
   dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
   DatasourceItem,
@@ -878,6 +881,34 @@ export class ExternalApiToolExecutor {
     );
   }
 
+  async refreshDashboardNow(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<
+    Result<ExecuteCommandResult<typeof dashboardRefreshOutcomeSchema>, ExecuteCommandError>
+  > {
+    const result = await this.applyDocument(
+      (http) => http.postEnvelope(dashboardRefreshNowRoute(dashboardId), signal),
+      'refresh-dashboard-now',
+    );
+
+    if (result.isErr()) {
+      if (result.error.type !== 'command-failed' || result.error.result === undefined) {
+        return result;
+      }
+      const parsed = dashboardRefreshOutcomeSchema.safeParse(result.error.result);
+      return parsed.success
+        ? Err({ ...result.error, result: parsed.data })
+        : Err({ type: 'invalid-response', error: parsed.error });
+    }
+
+    const parsed = dashboardRefreshOutcomeSchema.safeParse(result.value.result);
+    if (!parsed.success) {
+      return Err({ type: 'invalid-response', error: parsed.error });
+    }
+    return Ok({ ...result.value, parsedResult: parsed.data as DashboardRefreshOutcome });
+  }
+
   async pauseDashboardAutoUpdates(
     dashboardId: string,
     signal: AbortSignal,
@@ -1178,6 +1209,7 @@ function buildCommandStatus(
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
       },
+      ...(outcome.result !== undefined ? { result: outcome.result } : {}),
     });
   }
 

@@ -47,6 +47,7 @@ export const EXTERNAL_API_ROUTES = {
   dashboardDelete: '/v0/workbook/dashboards/{id}:delete',
   dashboardRename: '/v0/workbook/dashboards/{id}:rename',
   dashboardPauseAutoUpdates: '/v0/workbook/dashboards/{id}:pauseAutoUpdates',
+  dashboardRefreshNow: '/v0/workbook/dashboards/{id}:refreshNow',
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
@@ -358,6 +359,10 @@ export function worksheetRefreshNowRoute(worksheetId: string): string {
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:pauseAutoUpdates`;
+}
+
+export function dashboardRefreshNowRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:refreshNow`;
 }
 
 export function dashboardResumeAutoUpdatesRoute(dashboardId: string): string {
@@ -722,8 +727,8 @@ export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSc
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
  * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
  * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
- * envelope must still parse rather than error. `result` rides only a SUCCEEDED envelope with
- * non-null command output.
+ * envelope must still parse rather than error. `result` normally rides a SUCCEEDED envelope;
+ * a route that explicitly opts into strict aggregate reporting may also retain it on FAILED.
  */
 export const operationEnvelopeSchema = z
   .object({
@@ -816,6 +821,30 @@ export const dashboardListSchema = z
   })
   .passthrough();
 export type DashboardList = z.infer<typeof dashboardListSchema>;
+
+/** One worksheet controller that successfully refreshed as part of a dashboard refresh. */
+export const dashboardRefreshTargetSchema = z
+  .object({
+    worksheetId: z.string(),
+    worksheetName: z.string(),
+  })
+  .passthrough();
+
+/** One worksheet controller that failed while the remaining dashboard targets continued. */
+export const dashboardRefreshFailureSchema = dashboardRefreshTargetSchema.extend({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** Strict aggregate outcome returned by dashboard `:refreshNow`. */
+export const dashboardRefreshOutcomeSchema = z
+  .object({
+    outcome: z.enum(['COMPLETE', 'PARTIAL', 'FAILED']),
+    refreshed: z.array(dashboardRefreshTargetSchema),
+    failed: z.array(dashboardRefreshFailureSchema),
+  })
+  .passthrough();
+export type DashboardRefreshOutcome = z.infer<typeof dashboardRefreshOutcomeSchema>;
 
 /** Storyboard item returned in workbook inventory reads. */
 export const storyboardItemSchema = z

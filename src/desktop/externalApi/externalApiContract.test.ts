@@ -8,6 +8,9 @@ import {
   appInfoSchema,
   dashboardItemSchema,
   dashboardListSchema,
+  dashboardRefreshFailureSchema,
+  dashboardRefreshOutcomeSchema,
+  dashboardRefreshTargetSchema,
   datasourceItemSchema,
   datasourceListSchema,
   desktopStateSchema,
@@ -55,8 +58,10 @@ import {
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
  * Fixture provenance: live Desktop `/openapi.json` captured on 2026-09-15 from External Client
- * API 0.2.16. The worksheet `/showMe` path and its response components were projected on
- * 2026-09-12 from the W-23715530 monolith producer branch
+ * API 0.2.16. The dashboard `:refreshNow` path, result component, and 0.2.19 version were
+ * projected from the authoritative W-24165695 monolith producer contract. The worksheet
+ * `/showMe` path and its response components were projected on 2026-09-12 from
+ * the W-23715530 monolith producer branch
  * `dev/michaelyu/w-23715530-get-show-me-options` because the live 0.2.16 artifact did not yet
  * include that producer addition.
  */
@@ -69,6 +74,9 @@ type SpecProperty = {
   const?: string;
   enum?: Array<string>;
   items?: SpecProperty;
+  required?: Array<string>;
+  properties?: Record<string, SpecProperty>;
+  allOf?: Array<SpecProperty>;
   'x-extensible-enum'?: Array<string>;
 };
 
@@ -148,8 +156,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.16 contract with projected Show Me additions', () => {
-    expect(spec.info.version).toBe('0.2.16');
+  it('tracks the 0.2.19 contract with projected producer additions', () => {
+    expect(spec.info.version).toBe('0.2.19');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -188,6 +196,36 @@ describe('external client API contract (captured openapi fixture)', () => {
       const component = specSchema(name);
       expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
       expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+  });
+
+  describe('DashboardRefreshOutcome', () => {
+    const outcome = specSchema('DashboardRefreshOutcome');
+
+    it('matches the aggregate outcome schema and nested target contracts', () => {
+      expect(declaredKeys(dashboardRefreshOutcomeSchema).sort()).toEqual(
+        Object.keys(outcome.properties ?? {}).sort(),
+      );
+      expect(requiredKeys(dashboardRefreshOutcomeSchema).sort()).toEqual(
+        [...(outcome.required ?? [])].sort(),
+      );
+      expect(outcome.properties?.outcome?.enum).toEqual(['COMPLETE', 'PARTIAL', 'FAILED']);
+
+      const refreshedItem = outcome.properties?.refreshed?.items;
+      expect(Object.keys(refreshedItem?.properties ?? {}).sort()).toEqual(
+        declaredKeys(dashboardRefreshTargetSchema).sort(),
+      );
+      expect([...(refreshedItem?.required ?? [])].sort()).toEqual(
+        requiredKeys(dashboardRefreshTargetSchema).sort(),
+      );
+
+      const failedItem = outcome.properties?.failed?.items;
+      expect(Object.keys(failedItem?.properties ?? {}).sort()).toEqual(
+        declaredKeys(dashboardRefreshFailureSchema).sort(),
+      );
+      expect([...(failedItem?.required ?? [])].sort()).toEqual(
+        requiredKeys(dashboardRefreshFailureSchema).sort(),
+      );
     });
   });
 
@@ -727,8 +765,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('retains the 0.2.14 worksheet refresh-now Operation contract in 0.2.16', () => {
-      expect(spec.info.version).toBe('0.2.16');
+    it('retains the worksheet refresh-now Operation contract in 0.2.19', () => {
+      expect(spec.info.version).toBe('0.2.19');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {
@@ -752,10 +790,48 @@ describe('external client API contract (captured openapi fixture)', () => {
         '404.$ref',
         '#/components/responses/NotFound',
       );
-      expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
     });
 
-    it('retains the projected worksheet Show Me option discovery contract in 0.2.16', () => {
+    it('documents bodyless dashboard refresh with its typed aggregate Operation result', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.dashboardRefreshNow] as {
+        post?: {
+          operationId?: string;
+          requestBody?: unknown;
+          responses?: {
+            '200'?: {
+              content?: {
+                'application/json'?: {
+                  schema?: {
+                    allOf?: Array<SpecProperty>;
+                  };
+                };
+              };
+            };
+            '202'?: { $ref?: string };
+            '404'?: { $ref?: string };
+          };
+        };
+      };
+
+      expect(Object.keys(pathItem)).toEqual(['post']);
+      expect(pathItem.post?.operationId).toBe('refreshDashboardNow');
+      expect(pathItem.post).not.toHaveProperty('requestBody');
+      expect(
+        pathItem.post?.responses?.['200']?.content?.['application/json']?.schema?.allOf,
+      ).toEqual([
+        { $ref: '#/components/schemas/Operation' },
+        {
+          type: 'object',
+          properties: {
+            result: { $ref: '#/components/schemas/DashboardRefreshOutcome' },
+          },
+        },
+      ]);
+      expect(pathItem.post?.responses?.['202']?.$ref).toBe('#/components/responses/Accepted');
+      expect(pathItem.post?.responses?.['404']?.$ref).toBe('#/components/responses/NotFound');
+    });
+
+    it('retains the projected worksheet Show Me option discovery contract in 0.2.19', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
         get?: {
           operationId?: string;
