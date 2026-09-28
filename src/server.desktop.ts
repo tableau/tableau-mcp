@@ -6,6 +6,7 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { ClientInfo, Server } from './server.js';
+import { registerSkills } from './skills/index.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
@@ -62,6 +63,7 @@ export class DesktopMcpServer extends Server {
     }
 
     await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {

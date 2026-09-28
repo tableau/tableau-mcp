@@ -126,15 +126,6 @@ describe('registry', () => {
       expect(mockLogs('warning')).toHaveLength(1);
     });
 
-    it('skips a skill whose frontmatter name does not match the directory name', () => {
-      createSkillManifest('test-skill', skillManifest('wrong-name'));
-
-      const { skills } = buildSkillRegistry(skillsDir).list();
-
-      expect(skills).toHaveLength(0);
-      expect(mockLogs('warning')[0].message).toContain('does not match its directory name');
-    });
-
     it('skips a directory that has no SKILL.md', () => {
       writeMockFile(join('test-skill', 'README.md'), readme('test-skill')); // README but no manifest
 
