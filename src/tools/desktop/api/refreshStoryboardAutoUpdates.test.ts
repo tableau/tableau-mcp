@@ -33,7 +33,7 @@ describe('refresh-storyboard-auto-updates', () => {
     const tool = getRefreshStoryboardAutoUpdatesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('refresh-storyboard-auto-updates');
-    expect(tool.minApiVersion).toBe('0.2.19');
+    expect(tool.minApiVersion).toBe('0.2.20');
     expect(tool.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: false,
@@ -225,7 +225,7 @@ function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-refresh-storyboard-auto-updates',
-    apiVersion: '0.2.19',
+    apiVersion: '0.2.20',
   };
 }
 

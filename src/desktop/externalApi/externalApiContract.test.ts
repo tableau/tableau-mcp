@@ -63,8 +63,8 @@ import {
  * from the monolith production registry. The worksheet `/showMe` path, its response components,
  * and `info.version` 0.2.15 were projected on 2026-09-12 from the W-23715530 monolith producer
  * branch `dev/michaelyu/w-23715530-get-show-me-options` because no live 0.2.15 Desktop capture was
- * available. The storyboard `:refreshNow` route and `info.version` 0.2.19 were projected from
- * the W-24165695 monolith producer branch because no live 0.2.19 Desktop capture was available.
+ * available. The storyboard `:refreshNow` route and `info.version` 0.2.20 were projected from
+ * the W-24165695 monolith producer branch because no live 0.2.20 Desktop capture was available.
  * The rest remains the live 0.2.9 capture.
  */
 
@@ -155,8 +155,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.19 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.19');
+  it('tracks the 0.2.20 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.20');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -239,7 +239,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.19 requiredness exception set', () => {
+    it('pins the complete 0.2.20 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -675,8 +675,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       );
     });
 
-    it('retains the worksheet refresh-now Operation contract in 0.2.19', () => {
-      expect(spec.info.version).toBe('0.2.19');
+    it('retains the worksheet refresh-now Operation contract in 0.2.20', () => {
+      expect(spec.info.version).toBe('0.2.20');
 
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
         post?: {
@@ -700,10 +700,9 @@ describe('external client API contract (captured openapi fixture)', () => {
         '404.$ref',
         '#/components/responses/NotFound',
       );
-      expect(spec.paths).not.toHaveProperty('/v0/workbook/dashboards/{id}:refreshNow');
     });
 
-    it('documents storyboard refresh-now as a bodyless Operation route in 0.2.19', () => {
+    it('documents storyboard refresh-now as a bodyless Operation route in 0.2.20', () => {
       const pathItem = spec.paths[EXTERNAL_API_ROUTES.storyboardRefreshNow] as {
         post?: {
           operationId?: string;

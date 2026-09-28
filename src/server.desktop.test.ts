@@ -738,7 +738,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     );
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
-    expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.19');
+    expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.20');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
@@ -891,7 +891,7 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
   });
 
-  it('gates refresh-storyboard-auto-updates at 0.2.19 and fails open for an unknown version', () => {
+  it('gates refresh-storyboard-auto-updates at 0.2.20 and fails open for an unknown version', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
@@ -899,8 +899,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     const namesAt = (apiVersion: string | undefined): string[] =>
       filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
 
-    expect(namesAt('0.2.18')).not.toContain('refresh-storyboard-auto-updates');
-    expect(namesAt('0.2.19')).toContain('refresh-storyboard-auto-updates');
+    expect(namesAt('0.2.19')).not.toContain('refresh-storyboard-auto-updates');
+    expect(namesAt('0.2.20')).toContain('refresh-storyboard-auto-updates');
     expect(namesAt('0.3.0')).toContain('refresh-storyboard-auto-updates');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('refresh-storyboard-auto-updates');

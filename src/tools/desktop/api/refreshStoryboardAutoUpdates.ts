@@ -25,7 +25,7 @@ export const getRefreshStoryboardAutoUpdatesTool = (
   const refreshStoryboardAutoUpdatesTool = new DesktopTool({
     server,
     name: 'refresh-storyboard-auto-updates',
-    minApiVersion: '0.2.19',
+    minApiVersion: '0.2.20',
     title,
     description: 'Run pending automatic updates for the current point of one storyboard now.',
     annotations: {

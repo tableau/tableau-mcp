@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.19), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.20), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
