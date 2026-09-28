@@ -14,6 +14,7 @@ import {
   LineageContent,
   mergeWorkbookDatasources,
   mergeWorkbookLineage,
+  Owner,
   PublishedParent,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
@@ -118,6 +119,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
               // Published lineage plus the embedded->published-parent linkage, from one response.
               let published: Array<LineageContent> = [];
               let embeddedParents: Map<string, PublishedParent> = new Map();
+              // The workbook's owner enriched from the Metadata API (username/displayName);
+              // merged onto the REST-sourced workbook.owner (which carries only the id) below.
+              let workbookOwner: Owner | undefined;
               if (!configWithOverrides.disableMetadataApiRequests) {
                 try {
                   const response = await restApi.metadataMethods.graphql(
@@ -129,6 +133,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                     datasourceType: 'published' as const,
                   }));
                   embeddedParents = lineage?.embeddedParents ?? new Map();
+                  workbookOwner = lineage?.owner;
                 } catch (error) {
                   log(
                     {
@@ -159,8 +164,15 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   new Map([[workbook.id, merged]]),
                 )[0];
 
+                // Layer the Metadata-API owner (username/displayName) onto the REST owner, keeping
+                // the REST id as the authoritative user LUID. Best-effort: absent an enriched owner
+                // the REST owner is left untouched.
+                const ownerEnriched = workbookOwner
+                  ? { ...mergedWorkbook, owner: { ...workbookOwner, ...mergedWorkbook.owner } }
+                  : mergedWorkbook;
+
                 return await enrichUpstreamDatasourceQueryability({
-                  workbook: mergedWorkbook,
+                  workbook: ownerEnriched,
                   vizqlDataServiceMethods: restApi.vizqlDataServiceMethods,
                   extra,
                 });

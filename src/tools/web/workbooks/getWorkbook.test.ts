@@ -352,6 +352,86 @@ describe('getWorkbookTool', () => {
     });
   });
 
+  describe('owner enrichment', () => {
+    const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
+
+    beforeEach(() => {
+      mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+      mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
+    });
+
+    it('merges the Metadata-API workbook owner onto the REST owner, keeping the REST id', async () => {
+      // The REST workbook carries only owner.id; the Metadata API adds username/displayName. The
+      // merge keeps the REST id (the authoritative user LUID) and layers on the enriched fields.
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                owner: { luid: 'wb-owner-luid', name: 'Jane Owner', username: 'jowner@acme.com' },
+                upstreamDatasources: [],
+              },
+            ],
+          },
+        },
+      });
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.owner).toEqual({
+        id: 'owner-1',
+        username: 'jowner@acme.com',
+        displayName: 'Jane Owner',
+      });
+    });
+
+    it('emits the owner on a published upstream datasource', async () => {
+      mocks.mockGraphql.mockResolvedValue({
+        data: {
+          workbooksConnection: {
+            nodes: [
+              {
+                luid: workbookId,
+                upstreamDatasources: [
+                  {
+                    luid: 'pub-luid-1',
+                    name: 'Published DS',
+                    owner: {
+                      luid: 'ds-owner-luid',
+                      name: 'Dan Source',
+                      username: 'dsource@acme.com',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([]);
+
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          owner: { id: 'ds-owner-luid', username: 'dsource@acme.com', displayName: 'Dan Source' },
+        },
+      ]);
+    });
+
+    it('leaves the REST owner untouched when the Metadata API returns no owner', async () => {
+      // Best-effort: with empty lineage (default mock) there's no Metadata owner, so the REST owner
+      // is emitted unchanged rather than dropped or half-populated.
+      const response = await getResponseData({ workbookId });
+
+      expect(response.data.owner).toEqual({ id: 'owner-1' });
+    });
+  });
+
   describe('queryability enrichment', () => {
     const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
 
