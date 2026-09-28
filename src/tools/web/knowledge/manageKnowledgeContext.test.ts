@@ -1,3 +1,8 @@
+import {
+  objectFromShape,
+  safeParse,
+  ZodRawShapeCompat,
+} from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -6,7 +11,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
+import { advertisedInputSchema } from './knowledgeSchemaTestUtils.js';
+import { getManageKnowledgeContextTool, validateArgs } from './manageKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
@@ -57,25 +63,51 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
-  it('exposes only mutation parameters', async () => {
-    const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema).toHaveProperty('safeParse', expect.any(Function));
-    if (!('safeParse' in schema)) return;
+  it('advertises a non-empty inputSchema carrying the action enum', async () => {
+    // Reproduces the MCP SDK's own schema-advertisement conversion (see
+    // knowledgeSchemaTestUtils.ts). A z.discriminatedUnion (this tool's schema before the fix)
+    // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
+    // flat raw shape this tool now uses does not have that problem.
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
-    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1' }).success).toBe(true);
-    expect(schema.safeParse({ action: 'delete' }).success).toBe(false);
-    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1', statements: [] }).success).toBe(
-      false,
-    );
+    expect(properties).toBeTruthy();
+    expect(Object.keys(properties ?? {}).length).toBeGreaterThan(0);
+    expect(properties?.action?.enum).toEqual(['create', 'update', 'delete']);
+  });
+
+  it('enforces the one-to-100 statement array bound at the schema level', async () => {
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const objectSchema = objectFromShape(paramsSchema as ZodRawShapeCompat);
+
     expect(
-      schema.safeParse({
+      safeParse(objectSchema, { action: 'create', statements: [], isGlobal: true }).success,
+    ).toBe(false);
+    expect(
+      safeParse(objectSchema, {
         action: 'create',
         statements: [{ statement: 'AOV = revenue / orders' }],
         isGlobal: true,
       }).success,
     ).toBe(true);
-    expect(schema.safeParse({ action: 'create', statements: [] }).success).toBe(false);
-    expect(schema.safeParse({ action: 'status' }).success).toBe(false);
+  });
+
+  it('rejects params irrelevant to, or missing for, the chosen mutation action', () => {
+    expect(validateArgs({ action: 'delete', contextId: 'ctx-1' })).toBeNull();
+    expect(validateArgs({ action: 'delete' })).toMatch(
+      /contextId is required when action is "delete"/,
+    );
+    expect(
+      validateArgs({ action: 'delete', contextId: 'ctx-1', statements: [{ statement: 'x' }] }),
+    ).toMatch(/statements is not used when action is "delete"/);
+    expect(
+      validateArgs({
+        action: 'create',
+        statements: [{ statement: 'AOV = revenue / orders' }],
+        isGlobal: true,
+      }),
+    ).toBeNull();
   });
 
   it('uses mutation annotations and requires only the Knowledge write scope', async () => {
@@ -136,9 +168,11 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('rejects create without statements', async () => {
-    const result = await parseParams({ action: 'create', isGlobal: true });
+    const result = await getResult({ action: 'create', isGlobal: true });
 
-    expect(result.success).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('statements is required when action is "create"');
     expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
   });
 
@@ -159,9 +193,11 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('rejects delete without contextId', async () => {
-    const result = await parseParams({ action: 'delete' });
+    const result = await getResult({ action: 'delete' });
 
-    expect(result.success).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('contextId is required when action is "delete"');
     expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
   });
 });
@@ -173,12 +209,6 @@ function getTool(): ReturnType<typeof getManageKnowledgeContextTool> {
 async function getResult(args: Record<string, unknown>): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args as never, getMockRequestHandlerExtra());
-}
-
-async function parseParams(args: Record<string, unknown>): Promise<{ success: boolean }> {
-  const schema = await Provider.from(getTool().paramsSchema);
-  invariant('safeParse' in schema);
-  return schema.safeParse(args);
 }
 
 function payload(result: CallToolResult): any {

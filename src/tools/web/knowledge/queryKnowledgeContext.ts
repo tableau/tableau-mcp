@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -23,6 +24,20 @@ import {
   resultLimitSchema,
 } from './knowledgeToolUtils.js';
 
+// A flat raw shape, not a z.discriminatedUnion. The MCP SDK's normalizeObjectSchema needs a
+// top-level `.shape` to advertise a real inputSchema; a discriminated union (and any
+// `.superRefine` wrapper around one) has none, so the SDK falls back to advertising
+// `{"type":"object","properties":{}}` and agents guess at arguments (see validateQueryArgs below
+// for the per-intent rules this flat shape can no longer express structurally).
+const intentSchema = z
+  .enum(['ground', 'relationships', 'lineage', 'impact', 'sources'])
+  .describe(
+    'Which query to run. "ground": query or nodeId (required), graphId, nodeType, threshold, ' +
+      'limit, includeGlobal. "relationships": query or nodeId (required), graphId, nodeType, ' +
+      'threshold, limit, edgeType, direction. "lineage" / "impact": query or nodeId (required), ' +
+      'graphId, nodeType, threshold, limit. "sources": graphId, nodeType, limit only — query, ' +
+      'nodeId, and threshold are not used.',
+  );
 const graphIdParam = graphIdSchema
   .optional()
   .describe("Knowledge graph ID. Omit to use the site's primary graph.");
@@ -32,77 +47,107 @@ const queryParam = z
   .min(1)
   .max(2000)
   .optional()
-  .describe('Natural-language node search. Returns candidates; it never chooses a node for you.');
+  .describe(
+    'Natural-language node search. Returns candidates; it never chooses a node for you. ' +
+      '(intent=ground|relationships|lineage|impact only — query or nodeId is required for one of ' +
+      'these; not used when intent=sources.)',
+  );
 const nodeIdParam = z
   .string()
   .trim()
   .min(1)
   .max(512)
   .optional()
-  .describe('Exact node ID selected from a prior candidate response.');
+  .describe(
+    'Exact node ID selected from a prior candidate response. (intent=ground|relationships|' +
+      'lineage|impact only — query or nodeId is required for one of these; not used when ' +
+      'intent=sources.)',
+  );
 const nodeTypeParam = nodeTypeSchema.optional().describe('Optional node type filter for search.');
 const thresholdParam = z
   .number()
   .min(0)
   .max(1)
   .optional()
-  .describe('Minimum node-search relevance score.');
+  .describe(
+    'Minimum node-search relevance score. (intent=ground|relationships|lineage|impact only.)',
+  );
 const limitParam = resultLimitSchema.describe(
   'Maximum returned candidates, statements, or traversal rows.',
 );
-const nodeSelectorShape = {
+const includeGlobalParam = z
+  .boolean()
+  .optional()
+  .describe(
+    'Include graph-wide customer-governed context. Defaults to true. (intent=ground only.)',
+  );
+const edgeTypeParam = edgeTypeSchema
+  .optional()
+  .describe(
+    'Relationship type. Use with direction to narrow truncated results. (intent=relationships only.)',
+  );
+const directionParam = z
+  .enum(['outgoing', 'incoming'])
+  .optional()
+  .describe(
+    'Relationship direction. Use with edgeType to narrow truncated results. (intent=relationships only.)',
+  );
+
+const paramsSchema = {
+  intent: intentSchema,
   graphId: graphIdParam,
   query: queryParam,
   nodeId: nodeIdParam,
   nodeType: nodeTypeParam,
   threshold: thresholdParam,
   limit: limitParam,
+  includeGlobal: includeGlobalParam,
+  edgeType: edgeTypeParam,
+  direction: directionParam,
 };
 
-const intentParamsSchema = z.discriminatedUnion('intent', [
-  z
-    .object({
-      intent: z.literal('ground'),
-      ...nodeSelectorShape,
-      includeGlobal: z
-        .boolean()
-        .optional()
-        .describe('Include graph-wide customer-governed context. Defaults to true.'),
-    })
-    .strict(),
-  z
-    .object({
-      intent: z.literal('relationships'),
-      ...nodeSelectorShape,
-      edgeType: edgeTypeSchema
-        .optional()
-        .describe('Relationship type. Use with direction to narrow truncated results.'),
-      direction: z
-        .enum(['outgoing', 'incoming'])
-        .optional()
-        .describe('Relationship direction. Use with edgeType to narrow truncated results.'),
-    })
-    .strict(),
-  z.object({ intent: z.literal('lineage'), ...nodeSelectorShape }).strict(),
-  z.object({ intent: z.literal('impact'), ...nodeSelectorShape }).strict(),
-  z
-    .object({
-      intent: z.literal('sources'),
-      graphId: graphIdParam,
-      nodeType: nodeTypeSchema.optional().describe('Optional source node type filter.'),
-      limit: limitParam,
-    })
-    .strict(),
-]);
+// Type-only helper: gives validateQueryArgs a precise parameter type. This object schema is never
+// registered with the MCP server or used to parse anything — `paramsSchema` above (the flat raw
+// shape) is what the SDK advertises and parses against.
+type QueryArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
 
-const paramsSchema = intentParamsSchema.superRefine((args, context) => {
-  if (args.intent !== 'sources' && !args.nodeId && !args.query) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `query or nodeId is required when intent is "${args.intent}".`,
-    });
+const FIELDS_BY_INTENT: Record<QueryArgs['intent'], ReadonlyArray<keyof QueryArgs>> = {
+  ground: ['graphId', 'query', 'nodeId', 'nodeType', 'threshold', 'limit', 'includeGlobal'],
+  relationships: [
+    'graphId',
+    'query',
+    'nodeId',
+    'nodeType',
+    'threshold',
+    'limit',
+    'edgeType',
+    'direction',
+  ],
+  lineage: ['graphId', 'query', 'nodeId', 'nodeType', 'threshold', 'limit'],
+  impact: ['graphId', 'query', 'nodeId', 'nodeType', 'threshold', 'limit'],
+  sources: ['graphId', 'nodeType', 'limit'],
+};
+
+/**
+ * Pure per-intent validation that the flat schema can no longer express structurally: which
+ * params are allowed for the chosen intent, and (for node-based intents) that query or nodeId was
+ * provided. Returns a clear, actionable message on failure, or null when args are valid.
+ */
+export function validateQueryArgs(args: QueryArgs): string | null {
+  const allowed = new Set<keyof QueryArgs>(['intent', ...FIELDS_BY_INTENT[args.intent]]);
+  const disallowed = (Object.keys(args) as Array<keyof QueryArgs>).filter(
+    (key) => args[key] !== undefined && !allowed.has(key),
+  );
+  if (disallowed.length > 0) {
+    return `${disallowed.join(', ')} ${disallowed.length === 1 ? 'is' : 'are'} not used when intent is "${args.intent}".`;
   }
-});
+
+  if (args.intent !== 'sources' && !args.nodeId && !args.query) {
+    return `query or nodeId is required when intent is "${args.intent}".`;
+  }
+
+  return null;
+}
 
 type QueryWarning = {
   type: 'ENTITY_UNAVAILABLE' | 'ATTACHED_CONTEXT_UNAVAILABLE' | 'GLOBAL_CONTEXT_UNAVAILABLE';
@@ -150,6 +195,13 @@ If relationships are truncated, rerun with edgeType and direction before reporti
         extra,
         args,
         callback: async () => {
+          // Surfaced from inside logAndExecute (not a pre-callback early return) so the invocation
+          // is still logged and telemetry-emitted even when the args are rejected.
+          const validationError = validateQueryArgs(args);
+          if (validationError) {
+            return new ArgsValidationError(validationError).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
