@@ -24,6 +24,7 @@ import {
   operationEnvelopeSchema,
   operationErrorSchema,
   operationWarningSchema,
+  performanceRecordingResultSchema,
   PROBLEM_CODES,
   problemResponseSchema,
   protectedResourceMetadataSchema,
@@ -675,6 +676,21 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
 
+    it('pins the 0.2.19 performance-recording routes outside the older fixture', () => {
+      expect(EXTERNAL_API_ROUTES.workbookStartPerformanceRecording).toBe(
+        '/v0/workbook:startPerformanceRecording',
+      );
+      expect(EXTERNAL_API_ROUTES.workbookStopPerformanceRecording).toBe(
+        '/v0/workbook:stopPerformanceRecording',
+      );
+      expect(Object.keys(spec.paths)).not.toContain(
+        EXTERNAL_API_ROUTES.workbookStartPerformanceRecording,
+      );
+      expect(Object.keys(spec.paths)).not.toContain(
+        EXTERNAL_API_ROUTES.workbookStopPerformanceRecording,
+      );
+    });
+
     it('documents the dialog routes with their exact request and response schemas', () => {
       const paths = spec.paths as Record<
         string,
@@ -865,6 +881,24 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(option.properties).not.toHaveProperty('recommendation');
       expect(option.properties).not.toHaveProperty('rating');
       expect(option.properties).not.toHaveProperty('isDefault');
+    });
+  });
+
+  describe('0.2.19 performance-recording result extension', () => {
+    it('accepts a non-empty filePath and preserves extension fields', () => {
+      expect(
+        performanceRecordingResultSchema.parse({
+          filePath: 'C:/Temp/PerformanceRecording.twbx',
+          futureField: true,
+        }),
+      ).toEqual({
+        filePath: 'C:/Temp/PerformanceRecording.twbx',
+        futureField: true,
+      });
+    });
+
+    it.each([{ filePath: '' }, {}, { filePath: 42 }])('rejects malformed output %#', (result) => {
+      expect(performanceRecordingResultSchema.safeParse(result).success).toBe(false);
     });
   });
 
