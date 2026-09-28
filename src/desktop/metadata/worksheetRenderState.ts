@@ -1,13 +1,61 @@
 import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 
+export type WorksheetRenderState = 'blank' | 'populated' | 'unknown';
+
+export interface WorkbookWorksheetClassification {
+  worksheets: Array<{ name: string; state: WorksheetRenderState }>;
+  worksheetWindowNames: string[];
+}
+
 /**
  * Classify a standalone `<worksheet>` XML fragment as `'blank'` (no shelved fields and no rows/cols
  * text), `'populated'`, or `'unknown'` (not a worksheet fragment, or missing its `<table>`).
  */
-export function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'unknown' {
+export function worksheetDocumentState(xml: string): WorksheetRenderState {
   const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xml.trim(), 'text/xml');
   const worksheet = doc.documentElement;
   if (!worksheet || worksheet.tagName !== 'worksheet') return 'unknown';
+  return worksheetElementState(worksheet);
+}
+
+export function classifyWorkbookWorksheets(xml: string): WorkbookWorksheetClassification {
+  const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xml.trim(), 'text/xml');
+  const workbook = doc.documentElement;
+  if (!workbook || workbook.tagName !== 'workbook') {
+    return { worksheets: [], worksheetWindowNames: [] };
+  }
+
+  const worksheets: WorkbookWorksheetClassification['worksheets'] = [];
+  const worksheetElements = directChild(workbook, 'worksheets');
+  if (worksheetElements) {
+    for (let index = 0; index < worksheetElements.childNodes.length; index++) {
+      const child = worksheetElements.childNodes.item(index);
+      if (child?.nodeType !== 1 || (child as XmlElement).tagName !== 'worksheet') continue;
+      const worksheet = child as XmlElement;
+      const name = worksheet.getAttribute('name');
+      if (typeof name === 'string') {
+        worksheets.push({ name, state: worksheetElementState(worksheet) });
+      }
+    }
+  }
+
+  const worksheetWindowNames: string[] = [];
+  const windows = directChild(workbook, 'windows');
+  if (windows) {
+    for (let index = 0; index < windows.childNodes.length; index++) {
+      const child = windows.childNodes.item(index);
+      if (child?.nodeType !== 1 || (child as XmlElement).tagName !== 'window') continue;
+      const window = child as XmlElement;
+      const name = window.getAttribute('name');
+      if (window.getAttribute('class') === 'worksheet' && typeof name === 'string') {
+        worksheetWindowNames.push(name);
+      }
+    }
+  }
+  return { worksheets, worksheetWindowNames };
+}
+
+function worksheetElementState(worksheet: XmlElement): WorksheetRenderState {
   const table = directChild(worksheet, 'table');
   if (!table) return 'unknown';
 

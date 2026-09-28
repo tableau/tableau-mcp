@@ -239,6 +239,70 @@ describe('resolveRenderedWorksheetNames', () => {
       'Profit',
     ]);
   });
+
+  it('resolves a populated worksheet with workbook, intermediate, and locally rebound namespaces', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets xmlns:user="urn:tableau:user" xmlns:mid="urn:intermediate">
+    <worksheet name="Namespaced"><table><view>
+      <groupfilter function="level-members" level="[none:Category:nk]" user:ui-domain="relevant" user:ui-enumeration="inclusive"/>
+      <mid:metadata-record/>
+      <pane xmlns:user="urn:local"><groupfilter function="level-members" level="[none:Category:nk]" user:ui-domain="database" user:ui-enumeration="all"/></pane>
+    </view><rows>[none:Category:nk]</rows><cols/></table></worksheet>
+  </worksheets>
+  <windows><window class="worksheet" name="Namespaced"/></windows>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Namespaced'])).toEqual(['Namespaced']);
+  });
+
+  it('does not resolve a blank worksheet that depends on ancestor namespace declarations', () => {
+    const workbookXml = `<workbook xmlns:user="urn:workbook">
+      <worksheets><worksheet name="Namespaced Blank"><table><view><groupfilter function="level-members" level="Category" user:ui-domain="relevant" user:ui-enumeration="inclusive"/></view><rows/><cols/></table></worksheet></worksheets>
+      <windows><window class="worksheet" name="Namespaced Blank"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Namespaced Blank'])).toEqual([undefined]);
+  });
+
+  it('does not let an extension worksheet make the canonical blank worksheet renderable', () => {
+    const workbookXml = `<workbook>
+      <extension><worksheets>
+        <worksheet name="Canonical"><table><rows>[none:Extension:nk]</rows><cols/></table></worksheet>
+      </worksheets></extension>
+      <worksheets><worksheet name="Canonical"><table><rows/><cols/></table></worksheet></worksheets>
+      <windows><window class="worksheet" name="Canonical"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+  });
+
+  it('does not let an extension window satisfy the canonical worksheet window check', () => {
+    const workbookXml = `<workbook>
+      <extension><windows><window class="worksheet" name="Canonical"/></windows></extension>
+      <worksheets>
+        <worksheet name="Canonical"><table><rows>[none:Category:nk]</rows><cols/></table></worksheet>
+      </worksheets>
+      <windows><window class="dashboard" name="Canonical"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+  });
+
+  it('resolves worksheet names that differ only by one level of entity escaping independently', () => {
+    const workbookXml = `<workbook><worksheets>
+      <worksheet name="A &amp; B"><table><rows>[none:First:nk]</rows><cols/></table></worksheet>
+      <worksheet name="A &amp;amp; B"><table><rows>[none:Second:nk]</rows><cols/></table></worksheet>
+    </worksheets><windows>
+      <window class="worksheet" name="A &amp; B"/>
+      <window class="worksheet" name="A &amp;amp; B"/>
+    </windows></workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['A & B', 'A &amp; B'])).toEqual([
+      'A & B',
+      'A &amp; B',
+    ]);
+  });
 });
 
 describe('composeDashboardCore', () => {

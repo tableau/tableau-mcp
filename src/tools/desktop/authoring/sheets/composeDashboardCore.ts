@@ -5,13 +5,7 @@ import {
   deleteDashboard,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
-import {
-  findAllWorksheets,
-  normalizeArray,
-  parseXML,
-} from '../../../../desktop/metadata/parser.js';
-import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
-import { worksheetDocumentState } from '../../../../desktop/metadata/worksheetRenderState.js';
+import { classifyWorkbookWorksheets } from '../../../../desktop/metadata/worksheetRenderState.js';
 import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -21,7 +15,7 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { findElement, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
+import { parsedXmlNamesEqual, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -515,26 +509,17 @@ export function resolveRenderedWorksheetNames(
   workbookXml: string,
   requestedNames: string[],
 ): Array<string | undefined> {
-  const workbook = parseXML(workbookXml);
-  const worksheetNames = findAllWorksheets(workbook).map((worksheet) => worksheet['@_name']);
-  const worksheetWindowNames = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window)
-    .filter((window) => window['@_class'] === 'worksheet')
-    .map((window) => window['@_name']);
+  const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
   return requestedNames.map((requestedName) => {
-    const worksheetName = worksheetNames.find(
-      (candidateName) =>
-        xmlNamesEqual(candidateName, requestedName) &&
-        worksheetWindowNames.some((windowName) => xmlNamesEqual(windowName, candidateName)),
+    const worksheet = worksheets.find(
+      (candidate) =>
+        parsedXmlNamesEqual(candidate.name, requestedName) &&
+        worksheetWindowNames.some((windowName) => parsedXmlNamesEqual(windowName, candidate.name)),
     );
-    if (worksheetName === undefined) return undefined;
-    // Name + window presence only proves the sheet exists and has a view; it does not prove the
-    // sheet has anything placed on it. Re-extract the raw <worksheet> fragment (parseXML's object
-    // form has no safe serializer back to XML) and require it to be rendered, not blank.
-    const worksheetFragment = findElement(workbookXml, 'worksheet', worksheetName)?.text;
-    if (!worksheetFragment || worksheetDocumentState(worksheetFragment) !== 'populated') {
+    if (!worksheet || worksheet.state !== 'populated') {
       return undefined;
     }
-    return worksheetName;
+    return worksheet.name;
   });
 }
 

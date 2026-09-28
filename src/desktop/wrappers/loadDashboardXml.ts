@@ -6,10 +6,10 @@ import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/
 import { dashboardFragmentSimpleId, upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard, ParsedZone } from '../metadata/types.js';
-import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
+import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
 import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
-import { findElement, xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -197,10 +197,12 @@ function findBlankReferencedWorksheets(dashboardXml: string, liveWorkbookXml: st
   if (worksheetZoneNames.length === 0) {
     return [];
   }
-  return worksheetZoneNames.filter((name) => {
-    const match = findElement(liveWorkbookXml, 'worksheet', name);
-    return match !== null && worksheetDocumentState(match.text) === 'blank';
-  });
+  const { worksheets } = classifyWorkbookWorksheets(liveWorkbookXml);
+  return worksheetZoneNames.filter((name) =>
+    worksheets.some(
+      (worksheet) => parsedXmlNamesEqual(worksheet.name, name) && worksheet.state === 'blank',
+    ),
+  );
 }
 
 function sheetNotRenderedError(
