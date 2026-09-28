@@ -82,6 +82,7 @@ import {
   storyboardItemSchema,
   StoryboardList,
   storyboardListSchema,
+  storyboardRefreshNowRoute,
   storyboardRoute,
   SummaryData,
   summaryDataSchema,
@@ -752,6 +753,16 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
       'refresh-worksheet-now',
+    );
+  }
+
+  async refreshStoryboardNow(
+    storyboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(storyboardRefreshNowRoute(storyboardId), signal),
+      'refresh-storyboard-now',
     );
   }
 

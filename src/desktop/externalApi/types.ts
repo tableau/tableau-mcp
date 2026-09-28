@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.15), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.19), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -52,6 +52,7 @@ export const EXTERNAL_API_ROUTES = {
   storyboardImage: '/v0/workbook/storyboards/{id}/image',
   storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
   storyboardRename: '/v0/workbook/storyboards/{id}:rename',
+  storyboardRefreshNow: '/v0/workbook/storyboards/{id}:refreshNow',
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
@@ -348,6 +349,10 @@ export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
 
 export function worksheetRefreshNowRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:refreshNow`;
+}
+
+export function storyboardRefreshNowRoute(storyboardId: string): string {
+  return `${storyboardRoute(storyboardId)}:refreshNow`;
 }
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {

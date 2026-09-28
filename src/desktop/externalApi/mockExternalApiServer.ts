@@ -1108,6 +1108,19 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardRefreshNowMatch = path.match(
+      /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
+    );
+    if (method === 'POST' && storyboardRefreshNowMatch) {
+      const storyboardId = decodeURIComponent(storyboardRefreshNowMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendOperation(res, 'refresh-storyboard-now');
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
       let parsed: { filePath?: unknown };
       try {

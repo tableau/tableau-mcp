@@ -19,6 +19,7 @@ export const desktopToolNames = [
   'show-me',
   'pause-auto-updates',
   'refresh-auto-updates',
+  'refresh-storyboard-auto-updates',
   'resume-auto-updates',
   'refine-worksheet',
   'get-dashboard-xml',

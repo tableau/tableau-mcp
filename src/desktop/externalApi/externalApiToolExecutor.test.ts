@@ -926,6 +926,137 @@ describe('ExternalApiToolExecutor', () => {
       }
     });
 
+    it('refreshes a known storyboard now through a bodyless POST', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshStoryboardNow('story-qbr', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr:refreshNow');
+      expect(last?.body).toBe('');
+    });
+
+    it('percent-encodes the storyboard id on refresh-now dispatch', async () => {
+      const encodedPath = '/v0/workbook/storyboards/story%2Fqbr%20now:refreshNow';
+      server.setOverride(`POST ${encodedPath}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-story-refresh-encoded-1',
+          kind: 'storyboard.refreshNow',
+          state: 'SUCCEEDED',
+          createdAt: '2026-09-23T10:00:00Z',
+          completedAt: '2026-09-23T10:00:01Z',
+          result: {},
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshStoryboardNow('story/qbr now', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe(encodedPath);
+      expect(last?.body).toBe('');
+    });
+
+    it('propagates sheet-not-found when refresh-now targets an unknown storyboard id', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshStoryboardNow('missing-storyboard', signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('sheet-not-found');
+        expect(error.error?.message).toBe('Storyboard not found: missing-storyboard');
+      }
+    });
+
+    it('preserves an immediate storyboard refresh-now failure', async () => {
+      server.setOverride('POST /v0/workbook/storyboards/story-qbr:refreshNow', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-story-refresh-immediate-failed',
+          kind: 'storyboard.refreshNow',
+          state: 'FAILED',
+          error: {
+            code: 'operation-failed',
+            message: 'Storyboard refresh failed.',
+            'tableau-error-code': '0x4D60D278',
+          },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshStoryboardNow('story-qbr', signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('operation-failed');
+        expect(error.error?.message).toBe('Storyboard refresh failed.');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('0x4D60D278');
+      }
+    });
+
+    it('polls storyboard refresh-now and preserves its terminal failure', async () => {
+      const operationId = 'op-story-refresh-failed';
+      server.setOverride('POST /v0/workbook/storyboards/story-qbr:refreshNow', {
+        status: 202,
+        contentType: 'application/json',
+        headers: {
+          location: `/v0/operations/${operationId}`,
+          'retry-after': '0',
+          'x-tableau-operation-id': operationId,
+        },
+        body: JSON.stringify({ id: operationId, kind: 'storyboard.refreshNow', state: 'RUNNING' }),
+      });
+      server.setOperation(operationId, {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: operationId,
+            kind: 'storyboard.refreshNow',
+            state: 'FAILED',
+            error: {
+              code: 'operation-failed',
+              message: 'Storyboard refresh failed.',
+              'tableau-error-code': '0x4D60D278',
+            },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.refreshStoryboardNow('story-qbr', signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('operation-failed');
+        expect(error.error?.message).toBe('Storyboard refresh failed.');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('0x4D60D278');
+      }
+      expect(
+        server.requests.some((request) => request.path === `/v0/operations/${operationId}`),
+      ).toBe(true);
+    });
+
     it('dispatches auto-update pause without an id-existence guard (matches the live command)', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
