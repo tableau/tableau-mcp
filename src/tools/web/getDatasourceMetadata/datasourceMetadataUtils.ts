@@ -93,12 +93,12 @@ export const datasourceModelSchema = z.object({
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  // Set to 'published' only when the published-only Metadata-API enrichment matches the LUID (see
-  // combineFields), which is authoritative. Left undefined otherwise — an embedded (workbook) data
-  // source, a not-yet-indexed published one, or when the Metadata API is disabled/failed — since the
-  // API can't be queried for embedded data sources by LUID to confirm the converse. The 'embedded'
-  // variant is kept to mirror the datasourceType discriminator on lineageContentSchema, but this tool
-  // never asserts it.
+  // Published vs embedded (workbook) data source, resolved authoritatively by the caller (see
+  // getDatasourceMetadata): 'published' when the REST datasources collection knows the LUID,
+  // 'embedded' when it doesn't (that endpoint only lists published data sources). Left undefined
+  // only when it can't be determined — e.g. the REST lookup failed for a non-authoritative reason
+  // (permissions/transient) or the enrichment step was skipped. Mirrors the datasourceType
+  // discriminator on lineageContentSchema.
   datasourceType: z.enum(['published', 'embedded']).optional(),
   datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
@@ -185,6 +185,7 @@ export function combineFields(
   readMetadataResult: MetadataResponse,
   listFieldsResult: GraphQLResponse,
   datasourceModelResult?: DatasourceModelResponse,
+  datasourceType?: FieldsResult['datasourceType'],
 ): FieldsResult {
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
@@ -192,10 +193,9 @@ export function combineFields(
   const publishedDatasource = listFieldsResult.data.publishedDatasources?.[0];
   const combinedFields: FieldsResult = {
     datasourceDescription: publishedDatasource?.description ?? '',
-    // A publishedDatasources match authoritatively identifies a published data source. We can't
-    // assert the converse: the Metadata API can't be queried for embedded datasources by LUID, and
-    // a miss can also mean the published data source isn't indexed yet, so leave type unset then.
-    ...(publishedDatasource ? { datasourceType: 'published' as const } : {}),
+    // The caller resolves published vs embedded authoritatively (see getDatasourceMetadata); we just
+    // stamp it. Left unset when the caller couldn't determine it.
+    ...(datasourceType ? { datasourceType } : {}),
     ...(datasourceModelResult
       ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
       : {}),
