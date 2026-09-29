@@ -798,6 +798,59 @@ describe('authorActionTool', () => {
     expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:Month' />");
   });
 
+  it('resets to an empty string on clear when clearValue is "" (not do-nothing)', async () => {
+    // Only an omitted clearValue means "leave unchanged". An explicit empty string is a real reset
+    // value, so it must emit assign-fixed-value (with an empty s:LROOT:), not silently become
+    // do-nothing, and the receipt must echo the empty string the caller asked for.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe('');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:' />");
+  });
+
+  it('preserves surrounding whitespace in clearValue instead of trimming it', async () => {
+    // A padded clearValue like " Month " is a distinct reset value from "Month"; trimming it would
+    // apply — and report — a different value than the caller requested.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT: Month ' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: ' Month ',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe(' Month ');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT: Month ' />");
+  });
+
   it('fails readback when the requested aggregation did not survive', async () => {
     // The tool authored agg-type='sum' but the readback shows the workbook kept 'attr' — a dropped
     // setting. Readback must catch it rather than report the requested aggregation as applied.

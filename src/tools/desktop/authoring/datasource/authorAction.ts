@@ -358,8 +358,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           let effectiveClearValue: string | undefined;
           if (mode === 'parameter') {
             effectiveAggregation = sourceFieldAggregation ?? 'attr';
-            const requestedClearValue = clearValue?.trim() ?? '';
-            effectiveClearValue = requestedClearValue.length > 0 ? requestedClearValue : undefined;
+            // Preserve clearValue verbatim: only an omitted (undefined) value means "leave the
+            // parameter unchanged on clear". An explicit "" or a padded " Month " is a real reset
+            // value, so trimming or empty-coercing it would apply — and report — a different reset
+            // behavior than the caller requested.
+            effectiveClearValue = clearValue;
             // Reject empty/whitespace as well as undefined: renderParameterAction omits the
             // source-field param when it is blank and readback only checks the target survived,
             // so a blank sourceField would apply a no-op action and report success.
