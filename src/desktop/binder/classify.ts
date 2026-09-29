@@ -1351,6 +1351,14 @@ export type LooseFieldReferenceResolution =
   | { kind: 'ambiguous'; candidates: SchemaField[] }
   | { kind: 'not_found'; candidates: SchemaField[] };
 
+function normalizeLooseFieldReferencePhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}\p{M}]+/u)
+    .filter(Boolean)
+    .join(' ');
+}
+
 /**
  * Resolve one calc-formula field token without fuzzy guessing. Exact normalized
  * caption/bare-name matches win, followed by singular/plural equivalence. Business
@@ -1361,13 +1369,13 @@ export function resolveLooseFieldReference(
   query: string,
   s: SchemaSummary,
 ): LooseFieldReferenceResolution {
-  const normalizedQuery = normalizeFieldPhrase(bareName(query).trim());
+  const normalizedQuery = normalizeLooseFieldReferencePhrase(bareName(query).trim());
   if (!normalizedQuery) return { kind: 'not_found', candidates: [] };
 
   const fieldNames = (field: SchemaField): string[] =>
     [field.name, field.caption, bareName(field.columnName)]
       .filter((name): name is string => !!name)
-      .map(normalizeFieldPhrase);
+      .map(normalizeLooseFieldReferencePhrase);
   const exact = s.fields.filter((field) =>
     fieldNames(field).some((name) => name === normalizedQuery),
   );
