@@ -3720,6 +3720,7 @@ function setupAutoApplyMocks({
   activationDispatch,
   workbookReads = [XML],
   structuralReadback = false,
+  calcValidationErrors = [],
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
@@ -3729,6 +3730,7 @@ function setupAutoApplyMocks({
   activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   workbookReads?: string[];
   structuralReadback?: boolean;
+  calcValidationErrors?: string[];
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
@@ -3776,7 +3778,27 @@ function setupAutoApplyMocks({
       : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
   );
 
-  const executeCommand = vi.fn().mockResolvedValue(activationDispatch ?? dispatch);
+  // authorCalculationsWithValidation validates each formula via get-calc-details-pres-model-for-formula
+  // before writing it; it fails closed on a missing errorMsgs field, so this must answer with a
+  // well-formed (empty, i.e. valid) envelope rather than falling through to the generic dispatch mock.
+  const executeCommand = vi.fn(async (args: { command: string }) => {
+    if (args.command === 'get-calc-details-pres-model-for-formula') {
+      return calcValidationErrors.length > 0
+        ? Ok({
+            command_id: 'validate-1',
+            status: 'completed',
+            submitted_at: '',
+            result: { userCalculationDetails: { errorMsgs: calcValidationErrors } },
+          })
+        : Ok({
+            command_id: 'validate-1',
+            status: 'completed',
+            submitted_at: '',
+            result: { userCalculationDetails: { errorMsgs: [] } },
+          });
+    }
+    return activationDispatch ?? dispatch;
+  });
   const applyWorkbookDocument = vi.fn(async (xml: string) => {
     if (dispatch.isOk()) {
       liveXml = xml;

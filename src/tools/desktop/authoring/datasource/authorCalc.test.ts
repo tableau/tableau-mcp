@@ -16,7 +16,6 @@ import invalidValidatorEnvelope from './__fixtures__/calc-validation-invalid.jso
 import validValidatorEnvelope from './__fixtures__/calc-validation-valid.json';
 import { getAuthorCalcTool } from './authorCalc.js';
 import {
-  authorCalculationsInWorkbook,
   authorCalculationsWithValidation,
   calcErrorMessages,
   type CalcSpec,
@@ -570,109 +569,6 @@ describe('authorCalcTool', () => {
       "name='[Calculation_1700000000001]'",
     );
   });
-
-  it('scopes loose field resolution to the selected target datasource', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const initialXml = [
-      "<?xml version='1.0' encoding='utf-8'?>",
-      "<workbook version='18.1'><datasources>",
-      "<datasource name='Orders'>",
-      "<column caption='Revenue' datatype='real' name='[revenue]' role='measure' type='quantitative' />",
-      '</datasource>',
-      "<datasource name='Inventory'>",
-      "<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />",
-      '</datasource>',
-      "</datasources><worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
-    ].join('');
-    const calcXml =
-      "<column caption='Scoped Calc' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Revenue] + 1' /></column>";
-    const readbackXml = initialXml.replace(
-      "<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />",
-      `<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />${calcXml}`,
-    );
-    const applyWorkbookDocument = vi
-      .fn()
-      .mockResolvedValue(new Ok({ command_id: 'apply-1', status: 'completed', result: null }));
-    const executor = {
-      start: vi.fn(),
-      stop: vi.fn(),
-      isAvailable: vi.fn(() => true),
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null })),
-      getWorkbookDocument: vi.fn().mockResolvedValue(
-        new Ok({
-          xml: readbackXml,
-          applicationVersion: undefined,
-          xsdPayloadVersion: undefined,
-        }),
-      ),
-      applyWorkbookDocument,
-    };
-
-    const result = await authorCalculationsInWorkbook({
-      workbookXml: initialXml,
-      calcs: [{ caption: 'Scoped Calc', formula: '[Revenue] + 1' }],
-      datasource: 'Inventory',
-      resolveLooseReferences: true,
-      executor: makeExecutorMock(executor),
-      signal: new AbortController().signal,
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isOk()) throw new Error('expected target-scoped field resolution to fail');
-    expect(result.error.message).toContain('field reference [Revenue] was not found');
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    {
-      commentKind: '//',
-      formula: "// don't do this\n[Fabricated] + [Sales]",
-    },
-    {
-      commentKind: '/* */',
-      formula: "/* don't inspect [Comment Field] */\n[Fabricated] + [Sales]",
-    },
-  ])(
-    'checks fabricated field references after an apostrophe in a $commentKind comment',
-    async ({ formula }) => {
-      const applyWorkbookDocument = vi
-        .fn()
-        .mockResolvedValue(new Ok({ command_id: 'apply-1', status: 'completed', result: null }));
-      const executor = {
-        start: vi.fn(),
-        stop: vi.fn(),
-        isAvailable: vi.fn(() => true),
-        executeCommand: vi
-          .fn()
-          .mockResolvedValue(
-            new Ok({ command_id: 'command-1', status: 'completed', result: null }),
-          ),
-        getWorkbookDocument: vi.fn().mockResolvedValue(
-          new Ok({
-            xml: BASE_XML,
-            applicationVersion: undefined,
-            xsdPayloadVersion: undefined,
-          }),
-        ),
-        applyWorkbookDocument,
-      };
-
-      const result = await authorCalculationsInWorkbook({
-        workbookXml: BASE_XML,
-        calcs: [{ caption: 'Unsafe Calc', formula }],
-        resolveLooseReferences: true,
-        executor: makeExecutorMock(executor),
-        signal: new AbortController().signal,
-      });
-
-      expect(result.isErr()).toBe(true);
-      if (result.isOk()) throw new Error('expected fabricated field reference to fail');
-      expect(result.error.message).toContain('field reference [Fabricated] was not found');
-      expect(applyWorkbookDocument).not.toHaveBeenCalled();
-    },
-  );
 });
 
 type AuthorCalcArgs = {
@@ -1274,6 +1170,135 @@ describe('authorCalculationsWithValidation', () => {
         .mock.calls.filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula'),
     ).toHaveLength(1);
   });
+
+  // Two independent (non-dependent) calcs land in the same layer, so the good one gets created
+  // and applied to the live document before the bad one's validation is even known to have
+  // failed — that write must not survive a batch that overall fails, or a caller that only
+  // checks for a failure (like bind-template) would leave an orphaned calc behind while
+  // reporting nothing happened.
+  it('rolls back an already-applied calc when a sibling in the same batch fails validation', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    let currentXml = BASE_XML;
+    const applyWorkbookDocument = vi.fn(async (xml: string) => {
+      currentXml = xml;
+      return new Ok({
+        command_id: 'apply-1',
+        status: 'completed' as const,
+        submitted_at: '',
+        result: {},
+      });
+    });
+    const getWorkbookDocument = vi.fn(
+      async () =>
+        new Ok({ xml: currentXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+    );
+    const executor = makeExecutorMock({
+      executeCommand: vi.fn().mockImplementation(async ({ command, args }: ExecuteCommandArgs) => {
+        if (command === 'get-calc-details-pres-model-for-formula') {
+          const caption = (args as Record<string, unknown>)['calculation-caption'];
+          return caption === 'Good Calc'
+            ? new Ok({
+                command_id: 'validate-1',
+                status: 'completed',
+                result: validValidatorEnvelope.result,
+              })
+            : new Ok({
+                command_id: 'validate-1',
+                status: 'completed',
+                result: invalidValidatorEnvelope.result,
+              });
+        }
+        return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+      }),
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    });
+
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('Good Calc', '[Sales] + 1'), spec('Bad Calc', '[Sales] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('a batch with any failure must report a batch-level error');
+    expect(result.error.message).toContain('Bad Calc');
+    expect(result.error.message).toContain('rolled back');
+    // One apply to create "Good Calc", one more to roll it back — the live document ends up
+    // exactly where it started.
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(currentXml).toBe(BASE_XML);
+  });
+
+  // Migrated from the retired authorCalculationsInWorkbook suite: resolveLooseFormulaReferences
+  // is shared by both authoring paths, so this scoping guard needs coverage here too. A loose
+  // reference failure is a per-calc 'failed' outcome (not a batch Err) on this path — unlike
+  // prepareCalculationBatch, which aborts the whole batch on an unresolvable loose reference.
+  it('scopes loose field resolution to the selected target datasource', async () => {
+    const initialXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'><datasources>",
+      "<datasource name='Orders'>",
+      "<column caption='Revenue' datatype='real' name='[revenue]' role='measure' type='quantitative' />",
+      '</datasource>',
+      "<datasource name='Inventory'>",
+      "<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />",
+      '</datasource>',
+      "</datasources><worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+    ].join('');
+    const executor = validationExecutor(undefined);
+    const result = await authorCalculationsWithValidation({
+      workbookXml: initialXml,
+      calcs: [spec('Scoped Calc', '[Revenue] + 1')],
+      datasource: 'Inventory',
+      resolveLooseReferences: true,
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error('expected a per-calc failure, not a batch error');
+    const [outcome] = result.value;
+    invariant(outcome.status === 'failed');
+    expect(outcome.failure).toBe('invalid-formula');
+    expect(outcome.message).toContain('field reference [Revenue] was not found');
+    expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+  });
+
+  // Migrated from the retired authorCalculationsInWorkbook suite (same reasoning as above): a
+  // fabricated field reference must still be caught after an apostrophe inside a comment,
+  // which is a subtler edge case for rewriteUnquotedFieldReferences's quote/comment tracking.
+  it.each([
+    {
+      commentKind: '//',
+      formula: "// don't do this\n[Fabricated] + [Sales]",
+    },
+    {
+      commentKind: '/* */',
+      formula: "/* don't inspect [Comment Field] */\n[Fabricated] + [Sales]",
+    },
+  ])(
+    'checks fabricated field references after an apostrophe in a $commentKind comment',
+    async ({ formula }) => {
+      const executor = validationExecutor(undefined);
+      const result = await authorCalculationsWithValidation({
+        workbookXml: BASE_XML,
+        calcs: [spec('Unsafe Calc', formula)],
+        resolveLooseReferences: true,
+        executor,
+        signal: new AbortController().signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error('expected a per-calc failure, not a batch error');
+      const [outcome] = result.value;
+      invariant(outcome.status === 'failed');
+      expect(outcome.failure).toBe('invalid-formula');
+      expect(outcome.message).toContain('field reference [Fabricated] was not found');
+      expect(vi.mocked(executor.applyWorkbookDocument)).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('calcErrorMessages (captured validator payloads)', () => {
