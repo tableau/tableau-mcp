@@ -525,8 +525,10 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle empty listFields response and return basic metadata only', async () => {
-    // This is the embedded (workbook) datasource path: the published-only Metadata-API enrichment
-    // returns no match, so the tool falls back to VDS-sourced metadata and labels the type embedded.
+    // Embedded (workbook) datasource path: the published-only Metadata-API enrichment returns no
+    // match, so the tool falls back to VDS-sourced metadata. datasourceType is left unset — a miss
+    // can't distinguish an embedded data source from a not-yet-indexed published one, so we never
+    // assert 'embedded'.
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
 
@@ -535,7 +537,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
-    expect(responseData.datasourceType).toBe('embedded');
+    expect(responseData).not.toHaveProperty('datasourceType');
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should have basic fields from readMetadata without enrichment

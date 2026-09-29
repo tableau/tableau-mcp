@@ -93,10 +93,12 @@ export const datasourceModelSchema = z.object({
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  // Published vs embedded (workbook) data source. Optional and inferred from whether the published-
-  // only Metadata-API enrichment matched (see combineFields); left undefined when the Metadata API
-  // is disabled or its request failed, since type can't be determined then. Mirrors the
-  // datasourceType discriminator on lineageContentSchema.
+  // Set to 'published' only when the published-only Metadata-API enrichment matches the LUID (see
+  // combineFields), which is authoritative. Left undefined otherwise — an embedded (workbook) data
+  // source, a not-yet-indexed published one, or when the Metadata API is disabled/failed — since the
+  // API can't be queried for embedded data sources by LUID to confirm the converse. The 'embedded'
+  // variant is kept to mirror the datasourceType discriminator on lineageContentSchema, but this tool
+  // never asserts it.
   datasourceType: z.enum(['published', 'embedded']).optional(),
   datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
@@ -190,9 +192,10 @@ export function combineFields(
   const publishedDatasource = listFieldsResult.data.publishedDatasources?.[0];
   const combinedFields: FieldsResult = {
     datasourceDescription: publishedDatasource?.description ?? '',
-    // The GraphQL enrichment queries publishedDatasources only, so a match means the LUID is a
-    // published data source; a miss (with VDS metadata still present) means it's embedded.
-    datasourceType: publishedDatasource ? 'published' : 'embedded',
+    // A publishedDatasources match authoritatively identifies a published data source. We can't
+    // assert the converse: the Metadata API can't be queried for embedded datasources by LUID, and
+    // a miss can also mean the published data source isn't indexed yet, so leave type unset then.
+    ...(publishedDatasource ? { datasourceType: 'published' as const } : {}),
     ...(datasourceModelResult
       ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
       : {}),
