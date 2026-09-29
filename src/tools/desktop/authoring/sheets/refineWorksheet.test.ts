@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import { planRoundStackedBar } from '../../../../desktop/refine/roundStackedBar.js';
+import type { ReadbackVerificationResult } from '../../../../desktop/validation/readback-verify.js';
 import * as applyRoundedStackedBarModule from '../../../../desktop/wrappers/applyRoundedStackedBar.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
@@ -140,6 +141,8 @@ interface MockOpts {
    * node is present, so it is not an async-settle miss — the confirm just never matches).
    */
   readbackXml?: string;
+  readbackErr?: ErrOf<GetResult>;
+  verification?: ReadbackVerificationResult;
 }
 
 const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.getWorksheetXml>> =>
@@ -177,6 +180,7 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
     }
     // A readback poll.
     readbackCalls += 1;
+    if (opts.readbackErr) return Err(opts.readbackErr) as GetResult;
     if (opts.readbackXml !== undefined) return Ok({ xml: opts.readbackXml, name }) as GetResult;
     if (opts.readback === 'source') return Ok({ xml: source, name }) as GetResult;
     if (typeof opts.readback === 'number') {
@@ -191,7 +195,11 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
 
   loadMock().mockImplementation(async ({ xml }: { xml: string }): Promise<LoadResult> => {
     lastApplied = xml;
-    return (opts.applyErr ? Err(opts.applyErr) : Ok.EMPTY) as LoadResult;
+    return (
+      opts.applyErr
+        ? Err(opts.applyErr)
+        : Ok({ readbackWarnings: [], readbackVerification: opts.verification })
+    ) as LoadResult;
   });
 
   return { applied: () => lastApplied };
@@ -217,9 +225,12 @@ describe('refineWorksheetTool — instance', () => {
       markType: expect.any(Object),
       preset: expect.any(Object),
     });
+    expect(paramsSchema.operation.safeParse('round_bar').success).toBe(true);
     expect(paramsSchema.operation.safeParse('round_stacked_bar').success).toBe(true);
     expect(paramsSchema.preset.safeParse('subtle').success).toBe(true);
     expect(paramsSchema.preset.safeParse('strong').success).toBe(false);
+    expect(paramsSchema.preset.description).toContain('round_bar');
+    expect(paramsSchema.preset.description).toContain('round_stacked_bar');
     expect(paramsSchema.sortDirection.description).toContain('numeric DESC=largest');
     expect(paramsSchema.direction.description).toContain('numeric desc=largest');
     expect(tool.annotations).toMatchObject({
@@ -229,7 +240,7 @@ describe('refineWorksheetTool — instance', () => {
   });
 });
 
-describe('refineWorksheetTool — round_stacked_bar', () => {
+describe('refineWorksheetTool — rounded bars', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('refuses a missing subtle preset without reading or writing Tableau', async () => {
@@ -265,19 +276,68 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
     expect(roundedApplyMock()).not.toHaveBeenCalled();
   });
 
-  it('refuses an unsupported chart shape before applying', async () => {
+  it('routes a simple horizontal bar through the shared rounded-bar wrapper', async () => {
     setupMocks({ source: SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'Sales by Region',
+      },
+      baseline: {
+        worksheetId: '00000000-0000-0000-0000-000000000001',
+        groups: [{ category: 'West', value: 10 }],
+        segmentOrderFromZero: [],
+        expectedVertexRows: 12,
+        categoryVisualOrder: 'live-only',
+      },
+    });
 
     const result = await getToolResult({
       worksheetName: 'Sales by Region',
-      operation: 'round_stacked_bar',
+      operation: 'round_bar',
       preset: 'subtle',
     });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
-    expect(parsed.reason).toMatch(/stacked|segment|color/i);
+    expect(successSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      refined: true,
+      operation: 'round_bar',
+      verification: { helperFields: 14, summaryGroups: 1, summaryRows: 12 },
+    });
+    expect(roundedApplyMock()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intendedWorksheetXml: expect.stringContaining("<mark class='Polygon' />"),
+        contract: expect.objectContaining({ orientation: 'horizontal' }),
+      }),
+    );
+    expect(roundedApplyMock().mock.calls[0]?.[0].contract).not.toHaveProperty('segment');
+  });
+
+  it('refuses a grouped bar before applying', async () => {
+    const grouped = SOURCE.replace(
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n        <column datatype='string' name='[Segment]' role='dimension' type='nominal' />\n        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />",
+    ).replace(
+      '<rows>[Superstore].[none:Region:nk]</rows>',
+      '<rows>[Superstore].[none:Region:nk] / [Superstore].[none:Segment:nk]</rows>',
+    );
+    setupMocks({ source: grouped });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'round_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(refusalSchema.parse(JSON.parse(result.content[0].text)).reason).toMatch(
+      /one.*Category|grouped|shelf/i,
+    );
     expect(roundedApplyMock()).not.toHaveBeenCalled();
   });
 
@@ -324,7 +384,7 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
     expect(parsed.message).toContain(
       'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, the worksheet caption and alt text.',
     );
-    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain('Manually inspect rendered bar geometry.');
     expect(parsed.message).toContain(
       'Tableau Data Guide and View Data may show internal polygon helper fields.',
     );
@@ -335,6 +395,45 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
         focus: { navigate: 'artifact', sheetName: 'Profit by Category' },
       }),
     );
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('routes preferred round_bar through the same planner and wrapper', async () => {
+    setupMocks({ source: ROUND_STACKED_SOURCE });
+    roundedApplyMock().mockResolvedValue({
+      state: 'applied',
+      mutation: 'sent',
+      retrySafe: false,
+      worksheet: {
+        id: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        name: 'Profit by Category',
+      },
+      baseline: {
+        worksheetId: '{B157D4FA-12A0-495E-BEC4-3572B3567648}',
+        groups: [
+          { category: 'Furniture', segment: 'Consumer', value: 10 },
+          { category: 'Furniture', segment: 'Corporate', value: 5 },
+        ],
+        segmentOrderFromZero: ['Corporate', 'Consumer'],
+        expectedVertexRows: 24,
+        categoryVisualOrder: 'live-only',
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Profit by Category',
+      operation: 'round_bar',
+      preset: 'subtle',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(successSchema.parse(JSON.parse(result.content[0].text))).toMatchObject({
+      refined: true,
+      operation: 'round_bar',
+      worksheetName: 'Profit by Category',
+    });
+    expect(roundedApplyMock()).toHaveBeenCalledOnce();
     expect(loadMock()).not.toHaveBeenCalled();
   });
 
@@ -400,7 +499,7 @@ describe('refineWorksheetTool — round_stacked_bar', () => {
       'Programmatic readback confirmed the 18-field helper structure, 2 summary groups, 24 summary rows, preserved caption suppression state and alt text.',
     );
     expect(parsed.message).not.toContain('the worksheet caption');
-    expect(parsed.message).toContain('Manually inspect rendered stack order.');
+    expect(parsed.message).toContain('Manually inspect rendered bar geometry.');
     expect(parsed.message).toContain(
       'Tableau Data Guide and View Data may show internal polygon helper fields.',
     );
@@ -512,6 +611,99 @@ describe('refineWorksheetTool — mark_type', () => {
         requireExistingSheet: true,
       }),
     );
+  });
+
+  it('forwards clean shared verification with the completed write receipt', async () => {
+    const verification: ReadbackVerificationResult = { ok: true, status: 'passed' };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+  });
+
+  it('keeps node confirmation separate from failed shared field verification', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          shelf: 'Color',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.message).toContain('confirmed');
+    expect(payload.message).toMatch(/verification failed/i);
+    expect(payload.message).toMatch(/do not retry/i);
+  });
+
+  it('does not present unavailable shared field verification as clean success', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: true,
+      status: 'skipped',
+      message: 'Field verification was unavailable.',
+      findings: [
+        {
+          severity: 'warning',
+          source: 'used-field-validity',
+          message: 'Field verification was unavailable.',
+          reason: 'unsupported-api',
+        },
+      ],
+    };
+    setupMocks({ verification });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: true,
+      applied: true,
+      retrySafe: false,
+      verification,
+    });
+    expect(payload.message).toContain('confirmed');
+    expect(payload.message).toMatch(/verification (?:was )?incomplete/i);
+    expect(payload.message).toMatch(/do not retry/i);
   });
 
   it('refuses a multi-pane worksheet without applying', async () => {
@@ -851,6 +1043,50 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     // Applied exactly once — a wrong-direction readback never triggers a re-apply.
     expect(loadMock()).toHaveBeenCalledTimes(1);
   });
+
+  it('post-apply contract: keeps warning verification and applied state when confirmation lands in the wrong direction', async () => {
+    vi.useFakeTimers();
+    const warningMessage = 'Desktop reported a pre-existing structural warning.';
+    const verification: ReadbackVerificationResult = {
+      ok: true,
+      status: 'warning',
+      findings: [{ severity: 'warning', source: 'readback', message: warningMessage }],
+    };
+    const wrongDirectionReadback = SORT_BY_FIELD_SOURCE.replace(
+      '</datasource-dependencies>',
+      "</datasource-dependencies>\n      <computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    setupMocks({
+      source: SORT_BY_FIELD_SOURCE,
+      readbackXml: wrongDirectionReadback,
+      verification,
+    });
+
+    const resultPromise = getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      sortByField: 'display_order',
+      direction: 'desc',
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(JSON.stringify(payload.verification)).toContain(warningMessage);
+    expect(payload.reason).toMatch(/direction is ASC/);
+    expect(payload.reason).toMatch(/requested DESC/);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('refineWorksheetTool — readback race (async apply settle)', () => {
@@ -920,6 +1156,117 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     expect(parsed.reason).toMatch(/async-settle miss/);
     expect(getMock()).toHaveBeenCalledTimes(9);
   });
+
+  it('post-apply contract: keeps applied state when clean verification is followed by nonsettlement', async () => {
+    vi.useFakeTimers();
+    setupMocks({
+      readback: 'source',
+      verification: { ok: true, status: 'passed' },
+    });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(JSON.stringify(payload.verification)).toMatch(/not confirmed|did not contain|8 polls/i);
+    expect(payload.reason).toMatch(/not confirmed|did not contain/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(getMock()).toHaveBeenCalledTimes(9);
+  });
+
+  it('preserves failed shared verification when the requested node never lands', async () => {
+    vi.useFakeTimers();
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          shelf: 'Color',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({ readback: 'source', verification });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'used-field-validity',
+            fieldName: '[Sales]',
+          }),
+        ]),
+      },
+    });
+    expect(JSON.stringify(payload.verification)).toContain('Sales is invalid on Color.');
+    expect(payload.reason).toMatch(/node was not confirmed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+  });
+
+  it('preserves unavailable shared verification when the requested node never lands', async () => {
+    vi.useFakeTimers();
+    const verification: ReadbackVerificationResult = {
+      ok: true,
+      status: 'skipped',
+      message: 'Field verification was unavailable.',
+    };
+    setupMocks({ readback: 'source', verification });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: { ok: false, status: 'failed' },
+    });
+    expect(JSON.stringify(payload.verification)).toContain('Field verification was unavailable.');
+    expect(payload.reason).toMatch(/node was not confirmed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+  });
 });
 
 describe('refineWorksheetTool — refusals and errors', () => {
@@ -956,6 +1303,115 @@ describe('refineWorksheetTool — refusals and errors', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
     expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('preserves failed shared verification when the post-write node readback errors', async () => {
+    const verification: ReadbackVerificationResult = {
+      ok: false,
+      status: 'failed',
+      findings: [
+        {
+          severity: 'error',
+          source: 'used-field-validity',
+          message: 'Sales is invalid on Color.',
+          fieldName: '[Sales]',
+          reason: 'Field does not exist.',
+        },
+      ],
+    };
+    setupMocks({
+      verification,
+      readbackErr: {
+        type: 'get-worksheet-xml-error',
+        error: {
+          type: 'no-worksheet-found',
+          message: 'Worksheet disappeared during readback.',
+        },
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: false,
+        status: 'failed',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'used-field-validity',
+            fieldName: '[Sales]',
+          }),
+        ]),
+      },
+    });
+    expect(JSON.stringify(payload.verification)).toContain('Sales is invalid on Color.');
+    expect(payload.verification.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'warning',
+          source: 'readback',
+          message: expect.stringContaining('Worksheet disappeared during readback.'),
+        }),
+      ]),
+    );
+    expect(payload.reason).toMatch(/node could not be confirmed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+  });
+
+  it('post-apply contract: marks a confirmation read error skipped after a clean verification', async () => {
+    const readbackMessage = 'Worksheet disappeared during readback.';
+    setupMocks({
+      verification: { ok: true, status: 'passed' },
+      readbackErr: {
+        type: 'get-worksheet-xml-error',
+        error: {
+          type: 'no-worksheet-found',
+          message: readbackMessage,
+        },
+      },
+    });
+
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'mark_type',
+      markType: 'area',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      refined: false,
+      applied: true,
+      retrySafe: false,
+      verification: {
+        ok: true,
+        status: 'skipped',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            severity: 'warning',
+            source: 'readback',
+            message: expect.stringContaining(readbackMessage),
+          }),
+        ]),
+      },
+    });
+    expect(JSON.stringify(payload.verification)).toContain(readbackMessage);
+    expect(payload.reason).toMatch(/could not be confirmed/i);
+    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).not.toMatch(/fallback|standard path/i);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
   });
 
   it('refuses on preflight failure and NEVER applies', async () => {
@@ -1055,6 +1511,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new WorksheetXmlLoadFailedError(applyErr.error).message);
     expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(getMock()).toHaveBeenCalledTimes(1);
   });
 
   it('refuses when readback never confirms the expected node, after exhausting all polls (applied once)', async () => {
@@ -1176,7 +1633,14 @@ describe('refineWorksheetTool — refusals and errors', () => {
 
 const successSchema = z.object({
   refined: z.literal(true),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
+  operation: z.enum([
+    'top_n',
+    'sort_direction',
+    'sort_by_field',
+    'mark_type',
+    'round_bar',
+    'round_stacked_bar',
+  ]),
   worksheetName: z.string(),
   message: z.string(),
   verification: z
@@ -1190,7 +1654,14 @@ const successSchema = z.object({
 
 const refusalSchema = z.object({
   refined: z.literal(false),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field', 'mark_type', 'round_stacked_bar']),
+  operation: z.enum([
+    'top_n',
+    'sort_direction',
+    'sort_by_field',
+    'mark_type',
+    'round_bar',
+    'round_stacked_bar',
+  ]),
   worksheetName: z.string(),
   reason: z.string(),
 });
@@ -1209,7 +1680,13 @@ async function getToolResult({
   executor = makeExecutorMock(),
 }: {
   worksheetName: string;
-  operation: 'top_n' | 'sort_direction' | 'sort_by_field' | 'mark_type' | 'round_stacked_bar';
+  operation:
+    | 'top_n'
+    | 'sort_direction'
+    | 'sort_by_field'
+    | 'mark_type'
+    | 'round_bar'
+    | 'round_stacked_bar';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
   targetField?: string;

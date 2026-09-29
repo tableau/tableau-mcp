@@ -11,7 +11,11 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
-import type { ReadbackFinding, ReadbackVerificationResult } from './readback-verify.js';
+import {
+  isPromisedSortLossWarning,
+  type ReadbackFinding,
+  type ReadbackVerificationResult,
+} from './readback-verify.js';
 import type { ValidationIssue } from './types.js';
 
 export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
@@ -20,14 +24,6 @@ export interface WorksheetReceiptInput {
   validationWarnings: ValidationIssue[];
   readback: ReadbackVerificationResult | undefined;
   readbackFindings?: ReadbackFinding[];
-}
-
-function isPromisedSortLossWarning(finding: ReadbackFinding): boolean {
-  return (
-    finding.kind === 'sort' &&
-    finding.severity === 'warning' &&
-    (finding.node === 'computed-sort' || finding.node === 'shelf-sort-v2')
-  );
 }
 
 function formatPreflight(validationWarnings: ValidationIssue[]): string {
@@ -54,7 +50,7 @@ export function classifyWorksheetPromiseOutcome(input: WorksheetReceiptInput): P
       outcome = 'unverified';
       break;
   }
-  if (outcome === 'verified' && input.readbackFindings?.some(isPromisedSortLossWarning)) {
+  if (input.readbackFindings?.some(isPromisedSortLossWarning)) {
     outcome = 'failed';
   }
   return outcome;
@@ -63,6 +59,7 @@ export function classifyWorksheetPromiseOutcome(input: WorksheetReceiptInput): P
 /** One compact line: outcome + the checks that back it + the claim guard. */
 export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): string {
   const parts: string[] = [formatPreflight(input.validationWarnings), 'apply completed'];
+  const hasFindings = (input.readback?.findings?.length ?? 0) > 0;
   switch (input.readback?.status) {
     case 'passed':
       parts.push('readback clean');
@@ -71,11 +68,13 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
       parts.push('readback warnings (listed above)');
       break;
     case 'failed':
-      parts.push('readback FAILED (nodes dropped)');
+      parts.push(
+        hasFindings ? 'verification failed (see findings)' : 'readback FAILED (nodes dropped)',
+      );
       break;
     case 'skipped':
     default:
-      parts.push('readback unavailable');
+      parts.push(hasFindings ? 'verification incomplete (see findings)' : 'readback unavailable');
       break;
   }
   const outcome = classifyWorksheetPromiseOutcome(input);

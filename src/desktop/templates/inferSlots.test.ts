@@ -3,7 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseInstanceRef } from './bookmarkTemplate.js';
+import { bookmarkToTemplateWorkbook, parseInstanceRef } from './bookmarkTemplate.js';
+import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import {
   autoPurpose,
   deriveTemplateFitFacts,
@@ -117,6 +118,54 @@ describe('inferFromBookmark — canonical Desktop derivations', () => {
           slot.derivation === inferred.derivation,
       )?.instance_role,
     ).toBe(instanceRole);
+  });
+
+  it('types count results as quantitative without changing the raw field slot kind', () => {
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<datasources><datasource name='ds'>" +
+      "<column name='[String]' datatype='string' role='dimension' type='nominal'/>" +
+      "<column name='[Boolean]' datatype='boolean' role='dimension' type='nominal'/>" +
+      "<column name='[Number]' datatype='integer' role='dimension' type='ordinal'/>" +
+      "<column name='[Date]' datatype='date' role='dimension' type='ordinal'/>" +
+      "<column name='[State]' datatype='string' role='dimension' type='nominal' semantic-role='[State].[Name]'/>" +
+      '</datasource></datasources><table>' +
+      '<rows>' +
+      '[ds].[none:String:nk] [ds].[ctd:String:qk] ' +
+      '[ds].[none:Boolean:nk] [ds].[cnt:Boolean:qk] ' +
+      '[ds].[none:Number:ok] [ds].[ctd:Number:qk] ' +
+      '[ds].[none:Date:ok] [ds].[cnt:Date:qk] ' +
+      '[ds].[none:State:nk] [ds].[ctd:State:qk]' +
+      '</rows></table></bookmark>';
+
+    const inference = inferFromBookmark(raw);
+    const kind = (field: string, derivation: string): string | undefined =>
+      inference.slots.find((slot) => slot.sourceField === field && slot.derivation === derivation)
+        ?.kind;
+
+    for (const [field, derivation] of [
+      ['String', 'ctd'],
+      ['Boolean', 'cnt'],
+      ['Number', 'ctd'],
+      ['Date', 'cnt'],
+      ['State', 'ctd'],
+    ]) {
+      expect(kind(field, derivation)).toBe('quantitative');
+    }
+    expect(kind('String', 'none')).toBe('categorical');
+    expect(kind('Boolean', 'none')).toBe('categorical');
+    expect(kind('Number', 'none')).toBe('categorical');
+    expect(kind('Date', 'none')).toBe('temporal');
+    expect(kind('State', 'none')).toBe('geo');
+
+    const descriptor = inferBindingDescriptor('count-result-kinds', inference);
+    for (const slot of descriptor.slots.filter(
+      (candidate) => candidate.derivation === 'cnt' || candidate.derivation === 'ctd',
+    )) {
+      expect(slot.kind).toBe('quantitative');
+      expect(slot.communicative_role).toBe('measure-value');
+      expect(slot.purpose).toContain('Continuous measure');
+    }
   });
 });
 
@@ -365,11 +414,13 @@ describe('inferFromBookmark — unknown kinds are counted, never guessed', () =>
       "<column name='[Sales]' datatype='real' role='measure'/>" +
       "<column name='[Mystery]' datatype='' role='measure'/>" +
       '</datasource></datasources>' +
-      '<table><cols>[ds1].[sum:Sales:qk]</cols><rows>[ds1].[none:Mystery:nk]</rows></table>' +
+      '<table><cols>[ds1].[sum:Sales:qk]</cols>' +
+      '<rows>[ds1].[none:Mystery:nk] [ds1].[cnt:Mystery:qk] [ds1].[ctd:Mystery:qk]</rows>' +
+      '</table>' +
       '</bookmark>';
     const inf = inferFromBookmark(raw);
     expect(inf.slots.map((s) => s.sourceField)).toEqual(['Sales']);
-    expect(inf.unknownCount).toBe(1);
+    expect(inf.unknownCount).toBe(3);
   });
 });
 
@@ -476,6 +527,75 @@ describe('inferFromBookmark — walks all reference sites (filter / title / labe
         expect(s.purpose).not.toContain(name);
       }
     }
+  });
+});
+
+describe('inferFromBookmark — bookmark-root title layout', () => {
+  const TITLE_FIELDS =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<layout-options><title><formatted-text><run fontalignment='1'>Executive &lt;[donor].[attr:Company:nk]&gt;</run>" +
+    "<run italic='true'><![CDATA[ / <[donor].[attr:Region:nk]>]]></run>" +
+    "<run bold='true'> — performance</run></formatted-text></title></layout-options>" +
+    "<datasources><datasource name='donor'>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Secret]' datatype='string' role='dimension' type='nominal'/>" +
+    "<layout-options marker='nested-donor'><title><formatted-text><run>&lt;[donor].[attr:Secret:nk]&gt;</run></formatted-text></title></layout-options>" +
+    '</datasource></datasources>' +
+    "<table><view><datasource-dependencies datasource='donor'>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Secret]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource-dependencies></view></table>' +
+    "<window class='worksheet' name='Title Only'/></bookmark>";
+
+  it('binds one title field, prunes another, and preserves static title formatting', () => {
+    const inference = inferFromBookmark(TITLE_FIELDS);
+    expect(
+      inference.slots.map(({ sourceField, derivation, shelves, required, role }) => ({
+        sourceField,
+        derivation,
+        shelves,
+        required,
+        role,
+      })),
+    ).toEqual([
+      {
+        sourceField: 'Company',
+        derivation: 'attr',
+        shelves: ['title'],
+        required: false,
+        role: 'decoration',
+      },
+      {
+        sourceField: 'Region',
+        derivation: 'attr',
+        shelves: ['title'],
+        required: false,
+        role: 'decoration',
+      },
+    ]);
+
+    const converted = bookmarkToTemplateWorkbook(TITLE_FIELDS, inference);
+    const [companySlot] = inference.slots;
+    const rebound = rewriteFieldReferences(
+      converted.xml,
+      { [companySlot.templateField]: '[Target Data].[attr:Customer Name:nk]' },
+      'Target Data',
+      undefined,
+      { templateSlots: inferBindingDescriptor('title-fields', inference).slots },
+    );
+    const title = rebound.match(/<title>[\s\S]*?<\/title>/)?.[0] ?? '';
+
+    expect(title).toContain('fontalignment="1"');
+    expect(title).toContain('italic="true"');
+    expect(title).toContain('bold="true"');
+    expect(title).toContain('[Target Data].[attr:Customer Name:nk]');
+    expect(title).toContain(' — performance');
+    expect(title).not.toContain('Region');
+    expect(rebound).not.toContain('donor');
+    expect(rebound).not.toContain('nested-donor');
+    expect(rebound).not.toMatch(/\{\{(?:DATASOURCE|field_base_\d+)\}\}/);
   });
 });
 

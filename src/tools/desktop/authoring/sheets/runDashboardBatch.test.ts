@@ -744,9 +744,14 @@ function artifactTitle(artifactId: string): string {
   return `New ${artifactId}`;
 }
 
+// Non-empty `<rows>` text is enough for worksheetRenderState's `worksheetDocumentState` to
+// classify a `<table>` as rendered rather than blank (mirrors the fixture fix in
+// composeDashboardCore.test.ts's PRISTINE). These names represent worksheets meant to already be
+// live and rendered in the workbook; tests that need an unrendered worksheet build their own
+// blank `<table/>` fixture directly rather than going through this helper.
 function renderedWorkbook(names: string[]): string {
   return `<?xml version="1.0"?><workbook><worksheets>${names
-    .map((name) => `<worksheet name="${name}"><table/></worksheet>`)
+    .map((name) => `<worksheet name="${name}"><table><rows>${name}</rows></table></worksheet>`)
     .join('')}</worksheets><windows>${names
     .map((name) => `<window class="worksheet" name="${name}"/>`)
     .join('')}</windows></workbook>`;

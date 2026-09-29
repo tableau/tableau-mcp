@@ -263,6 +263,146 @@ describe('addFieldToRows user derivations', () => {
   });
 });
 
+describe('count aggregation instance types over string dimensions', () => {
+  function columnDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  function instanceDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column-instance\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  it.each([
+    ['cnt', 'Count'],
+    ['ctd', 'CountD'],
+    ['countdistinct', 'CountD'],
+  ])(
+    'uses the explicit qk suffix for %s without changing raw field metadata',
+    (prefix, derivation) => {
+      const modified = addFieldToEncoding(
+        WORKSHEET_XML,
+        'text',
+        `[Sample].[${prefix}:Category:qk]`,
+      );
+
+      expect(columnDeclaration(modified, 'Category')).toContain('datatype="string"');
+      expect(columnDeclaration(modified, 'Category')).toContain('role="dimension"');
+      expect(columnDeclaration(modified, 'Category')).toContain('type="nominal"');
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        `derivation="${derivation}"`,
+      );
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        'type="quantitative"',
+      );
+    },
+  );
+
+  it('respects an explicit discrete nk suffix for CountD', () => {
+    const modified = addFieldToEncoding(WORKSHEET_XML, 'text', '[Sample].[ctd:Category:nk]');
+
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('derivation="CountD"');
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('type="nominal"');
+  });
+
+  it('repairs an existing CountD instance whose type disagrees with its qk suffix', () => {
+    const withMismatchedInstance = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      '<column-instance name="[ctd:Category:qk]" column="[Category]" derivation="CountD" pivot="key" type="nominal"/></datasource-dependencies>',
+    );
+
+    const modified = addFieldToEncoding(
+      withMismatchedInstance,
+      'text',
+      '[Sample].[ctd:Category:qk]',
+    );
+
+    expect(instanceDeclaration(modified, 'ctd:Category:qk')).toContain('type="quantitative"');
+    expect(modified.match(/name="\[ctd:Category:qk\]"/g)).toHaveLength(1);
+  });
+});
+
+describe('addFieldToRows aggregate correction consistency (regression)', () => {
+  // ensureColumnInstanceInDependencies corrects an aggregating calculated field to a
+  // "usr:" derivation in two places: (1) when the base column is ALREADY in the
+  // worksheet's <datasource-dependencies> (fields.ts ~790), and (2) when the base
+  // column is copied in from the workbook because it was absent (fields.ts ~936-943).
+  // Only the SECOND site updates `actualColumnInstanceName`; the function still
+  // returns the (uncorrected) `correctedInstanceName` from the first site. When only
+  // the second correction fires -- an aggregating calc present in the workbook but
+  // absent from the worksheet's deps -- the written column-instance is "usr:..." but
+  // the value returned to the caller (and placed on the shelf) is the original
+  // aggregate-prefixed ref, leaving the shelf pointing at a pill that was never written.
+  it('places the same [usr:...] ref on the shelf that it writes as the column-instance name', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    // Calculation_1 is absent from WORKSHEET_XML's <datasource-dependencies>, so it is
+    // copied in from the workbook here -- the path that triggers the SECOND correction
+    // without the FIRST one ever running.
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[ctd:Calculation_1:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    const writtenInstanceName = modified.match(
+      /<column-instance[^>]*name="(\[[^"]*Calculation_1[^"]*\])"[^>]*column="\[Calculation_1\]"/,
+    )?.[1];
+    expect(writtenInstanceName).toBe('[usr:Calculation_1:qk]');
+
+    const rowsField = listFields(modified).find(
+      (f) => f.location === 'rows' && f.column.includes('Calculation_1'),
+    );
+
+    // The shelf reference must name the column-instance that was actually written,
+    // or the rows shelf points at a pill that does not exist in the datasource-deps.
+    expect(rowsField?.column).toBe(`[Sample].${writtenInstanceName}`);
+  });
+});
+
+describe('addFieldToEncoding aggregate correction consistency (regression)', () => {
+  // Companion to the Rows regression above. addFieldToEncoding writes the encoding under
+  // the corrected [usr:...] ref but self-verifies the written structure afterward; that
+  // check must compare against the corrected ref, not the caller's original [ctd:...],
+  // or an aggregating calc absent from the worksheet deps throws before apply on
+  // Color/Size/Text.
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Calculation_1]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it.each(['color', 'size', 'text'] as const)(
+    'writes the corrected [usr:...] ref to %s without throwing on self-verify',
+    (encodingType) => {
+      const modified = addFieldToEncoding(
+        WORKSHEET_XML,
+        encodingType,
+        '[Sample].[ctd:Calculation_1:qk]',
+        undefined,
+        workbookXml,
+      );
+
+      expect(modified).toContain('[usr:Calculation_1:qk]');
+      expect(modified).not.toContain('[ctd:Calculation_1:qk]');
+    },
+  );
+});
+
 describe('addFieldToRows date-part derivations', () => {
   // Regression: mapDerivationToProperCase dropped the date-part keys, so a
   // [mn:...] ref was written with derivation="mn" (invalid) and Tableau
@@ -292,14 +432,22 @@ describe('addFieldToRows date-part derivations', () => {
     return m?.[1];
   }
 
+  function instanceTypeOf(xml: string, columnInstanceName: string): string | undefined {
+    return xml.match(
+      new RegExp(`<column-instance[^>]*name="\\[${columnInstanceName}\\]"[^>]*type="([^"]*)"`),
+    )?.[1];
+  }
+
   it('maps the discrete month part [mn:...] to derivation="Month", not "mn"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[mn:Order Date:ok]');
     expect(derivationOf(modified, 'mn:Order Date:ok')).toBe('Month');
+    expect(instanceTypeOf(modified, 'mn:Order Date:ok')).toBe('ordinal');
   });
 
   it('maps the truncated year part [tyr:...] to derivation="Year-Trunc"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[tyr:Order Date:qk]');
     expect(derivationOf(modified, 'tyr:Order Date:qk')).toBe('Year-Trunc');
+    expect(instanceTypeOf(modified, 'tyr:Order Date:qk')).toBe('quantitative');
   });
 
   it('still maps aggregations correctly (sum -> Sum)', () => {

@@ -31,8 +31,10 @@ const NON_TOOL_VOCABULARY = [
   'apply-native-custom-theme',
   'apply-theme',
   'as-is',
+  'assign-fixed-value',
   'async-settle',
   'auto-apply',
+  'auto-clear',
   'auto-grid',
   'auto-updates',
   'awaiting-user',
@@ -44,7 +46,6 @@ const NON_TOOL_VOCABULARY = [
   'border-style',
   'border-width',
   'byte-order',
-  'cached-file',
   'calc-dependency-unmet',
   'calculation-caption',
   'calculation-formula',
@@ -58,6 +59,7 @@ const NON_TOOL_VOCABULARY = [
   'command-postcondition',
   'computed-sort',
   'corner-radius',
+  'count-d',
   'cross-datasource-binding',
   'custom-theme',
   'dashboard-image',
@@ -97,6 +99,7 @@ const NON_TOOL_VOCABULARY = [
   'follow-up',
   'for-parallel-build',
   'formatted-text',
+  'generate-viz-from-notional-spec',
   'get-calc-details-pres-model-for-formula',
   'get-dashboard-xml-error',
   'get-worksheet-xml-error',
@@ -105,7 +108,9 @@ const NON_TOOL_VOCABULARY = [
   'in-dashboard',
   'in-place',
   'in-use',
+  'include-null',
   'input-validation',
+  'instance-unavailable',
   'intermediate-leg',
   'invalid-formula',
   'invalid-response',
@@ -132,8 +137,10 @@ const NON_TOOL_VOCABULARY = [
   'mark-labels',
   'mark-labels-show',
   'missing-required-slot',
+  'multi-select',
   'name-only',
   'name-style',
+  'nav-action',
   'nav-type',
   'no-desktop-instances-found',
   'non-empty',
@@ -143,9 +150,11 @@ const NON_TOOL_VOCABULARY = [
   'not-applied',
   'not-found',
   'not-run',
+  'on-empty',
   'on-hover',
   'on-menu',
   'on-select',
+  'operation-pending',
   'order-dependent',
   'output-serialization-failed',
   'packaged-workbook',
@@ -195,18 +204,28 @@ const NON_TOOL_VOCABULARY = [
   'slot-not-offered',
   'slot-to-field',
   'source-field',
+  'special-fields',
   'specific-zone',
+  'stable-id',
+  'start-page',
+  'std-dev',
+  'std-dev-p',
   'story-point',
   'story-points',
   'storyboard-image',
+  'structural-readback-unavailable',
   'studio-theme',
   'style-rule',
   'style-theme',
   'success-already-present',
   'summary-data',
   'tableau-agent-idempotency-key',
+  'target-changed',
   'target-group',
   'target-parameter',
+  'target-read-failed',
+  'target-unproven',
+  'target-unresolved',
   'template-artifact-unavailable',
   'template-not-found',
   'template-not-offered',
@@ -216,6 +235,7 @@ const NON_TOOL_VOCABULARY = [
   'too-new',
   'top-level',
   'top-n',
+  'tsl-filter',
   'type-v2',
   'ui-builder',
   'ui-domain',
@@ -226,17 +246,21 @@ const NON_TOOL_VOCABULARY = [
   'unexpected-error',
   'unresolved-column-ref',
   'unresolved-field-mapping',
+  'unsupported-api',
   'unsupported-version',
   'url-action-target',
   'url-action-type',
   'url-escape',
+  'used-field-validity',
   'utf-8',
   'validation-failed',
   'validation-passing',
+  'var-p',
   'viewpoint-injection',
   'viewpoint-workbook-apply',
   'viz-specific',
   'well-formed',
+  'window-screenshot',
   'workbook-change',
   'workbook-datasource',
   'workbook-drift',
@@ -256,12 +280,15 @@ type Candidate = {
   literal: string;
 };
 
-// Every non-test .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's guidance
-// prose is covered the moment its file lands, with no list to remember to update.
+// Every non-test-support .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's
+// guidance prose is covered the moment its file lands, with no list to remember to update.
+// Test-support modules (unit tests, mocks, shared fixtures) are scaffolding, not guidance the
+// model ever sees, so skip them all
+const TEST_SUPPORT_RE = /(\.test|\.mock|\.testutils|testfixtures)\.ts$/i;
 function sourceFiles(): string[] {
   return readdirSync(DESKTOP_TOOLS_ROOT, { recursive: true })
     .map(String)
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT_RE.test(file))
     .map((file) => join(DESKTOP_TOOLS_ROOT, file))
     .concat(EXTRA_FILES.map((file) => join(REPO_ROOT, file)));
 }

@@ -93,6 +93,11 @@ export interface BindRecoveryProposalContext {
       required: boolean;
       compatible_field_names: string[];
       compatible_field_options?: Array<{ name: string; label: string }>;
+      conditional_field_options?: Array<{
+        name: string;
+        label?: string;
+        requires_derivation: Array<'cnt' | 'ctd'>;
+      }>;
     }>;
   }>;
   proposal_requirements: {

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
+import * as episodeEvents from '../../../desktop/episode-events.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -230,6 +231,8 @@ describe('export-image tools', () => {
   });
 
   it('surfaces a neither-bytes-nor-path envelope as an error (no inline block, no file)', async () => {
+    const eventSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent');
+    const errorSpy = vi.spyOn(episodeEvents, 'emitToolErrorEvent');
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
@@ -244,7 +247,24 @@ describe('export-image tools', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('neither image bytes nor a file path');
       expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: 'export-worksheet-image',
+          error: 'Tool returned an error result.',
+        }),
+      );
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          type: 'tool_end',
+          tool: 'export-worksheet-image',
+          success: false,
+          outcome: 'failed',
+        }),
+      );
     } finally {
+      errorSpy.mockRestore();
+      eventSpy.mockRestore();
       await harness.close();
     }
   });
@@ -356,8 +376,13 @@ describe('export-image tools', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('image export exceeded');
-      expect(result.content[0].text).toContain('modal dialog');
-      expect(result.content[0].text).toContain('Do not blindly retry');
+      expect(result.content[0].text).toContain('Do not blindly retry the originating operation');
+      expect(result.content[0].text).toContain('get-active-dialogs');
+      expect(result.content[0].text).toContain('exact returned dialog identity');
+      expect(result.content[0].text).toContain('exact returned action');
+      expect(result.content[0].text).toContain('at most one invoke-dialog-action call');
+      expect(result.content[0].text).toContain('Do not guess or assume Cancel is safe');
+      expect(result.content[0].text).toContain('ask the user to handle the dialog');
     } finally {
       await harness.close();
     }

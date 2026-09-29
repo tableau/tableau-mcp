@@ -90,7 +90,7 @@ export async function applyRoundedStackedBar({
     if (summary.isErr()) {
       return beforeMutationFailure(
         'summary-read',
-        'Could not read the visible Category×Segment groups before applying rounded bars.',
+        'Could not read the visible bar groups before applying rounded bars.',
         summary.error,
       );
     }
@@ -120,13 +120,15 @@ export async function applyRoundedStackedBar({
     if (!logicalTableId) {
       return beforeMutationFailure(
         'logical-table-preflight',
-        `Rounded stacked bars require exactly one logical table with an id (found ${tables.length}).`,
+        `Rounded bars require exactly one logical table with an id (found ${tables.length}).`,
       );
     }
 
     const requestedUnderlyingColumns = unique([
       qualifyField(contract.datasource.caption, contract.category.column),
-      qualifyField(contract.datasource.caption, contract.segment.column),
+      ...(contract.segment
+        ? [qualifyField(contract.datasource.caption, contract.segment.column)]
+        : []),
       qualifyField(contract.datasource.caption, contract.measure.column),
       ...(contract.filter
         ? [qualifyField(contract.datasource.caption, contract.filter.column)]
@@ -227,7 +229,7 @@ export async function applyRoundedStackedBar({
             : applyOutcome.type;
       return beforeMutationFailure(
         'apply-preflight',
-        `Rounded stacked bars were not sent because the per-sheet route returned ${detail}.`,
+        `Rounded bars were not sent because the per-sheet route returned ${detail}.`,
       );
     }
     if (applyOutcome.documentWarnings.length > 0) {

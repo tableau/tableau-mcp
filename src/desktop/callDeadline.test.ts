@@ -3,6 +3,7 @@ import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
   DesktopCallTimeoutError,
   desktopCallTimeoutMessage,
+  INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
   isDesktopCallTimeout,
 } from './callDeadline.js';
 
@@ -99,7 +100,7 @@ describe('createCallDeadline', () => {
 });
 
 describe('desktopCallTimeoutMessage', () => {
-  it('names the budget, the likely cause, and forbids a blind retry', () => {
+  it('gives an ordinary timeout one exact dialog action with conservative fallback', () => {
     const message = desktopCallTimeoutMessage({
       budgetMs: 60_000,
       tool: 'apply-workbook',
@@ -109,7 +110,45 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).toContain('did not respond within 60s');
     expect(message).toContain('tool: apply-workbook, session: 31875');
     expect(message).toContain('blocking dialog');
-    expect(message).toContain('Do not retry this call');
+    expect(message).toContain('Do not blindly retry the originating operation');
+    expect(message).toContain('get-active-dialogs');
+    expect(message).toContain('exact returned dialog identity');
+    expect(message).toContain('exact returned action');
+    expect(message).toContain('at most one invoke-dialog-action call');
+    expect(message).toContain('Do not guess or assume Cancel is safe');
+    expect(message).toContain('action-invoked-dialog-remains');
+    expect(message).toContain('ask the user to handle the dialog');
     expect(message).toContain('list-instances');
+  });
+
+  it('does not retry dialog inspection when get-active-dialogs times out', () => {
+    const message = desktopCallTimeoutMessage({
+      budgetMs: 60_000,
+      tool: 'get-active-dialogs',
+      session: '31875',
+    });
+
+    expect(message).toContain('dialog inspection itself timed out');
+    expect(message).toContain('Do not retry get-active-dialogs');
+    expect(message).toContain('do not call invoke-dialog-action without a fresh exact result');
+    expect(message).toContain('Ask the user to inspect and handle');
+    expect(message).not.toContain('at most one invoke-dialog-action call');
+  });
+
+  it('treats a invoke-dialog-action timeout as indeterminate and forbids another click', () => {
+    const message = desktopCallTimeoutMessage({
+      budgetMs: 60_000,
+      tool: 'invoke-dialog-action',
+      session: '31875',
+    });
+
+    expect(message).toContain('invoke-dialog-action outcome is indeterminate');
+    expect(message).toContain('action may already have been invoked');
+    expect(message).toContain('Do not call invoke-dialog-action again or click another action');
+    expect(message).toContain('get-active-dialogs once for fresh inspection only');
+    expect(message).toContain('Ask the user to handle any consequential choice');
+    expect(message).toContain('leave the dialog to the user');
+    expect(message).not.toContain('at most one invoke-dialog-action call');
+    expect(message).toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
   });
 });

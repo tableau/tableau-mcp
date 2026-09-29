@@ -52,7 +52,7 @@ describe('buildAndApplyDashboardTool', () => {
       mockWorkbookXmlWithViewpoints,
     );
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
@@ -93,7 +93,7 @@ describe('buildAndApplyDashboardTool', () => {
       .mockResolvedValue(Ok({ validationWarnings: [] }));
     const mockWorkbookLoad = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     await getToolResult({ layoutSpec: defaultLayoutSpec, worksheetNames: ['Chart 1'] });
 

@@ -1,3 +1,4 @@
+import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -176,6 +177,30 @@ describe('bookmarkToTemplateWorkbook', () => {
     const { xml } = bookmarkToTemplateWorkbook(raw, inf);
     expect(xml).toContain("<worksheet name='{{TITLE}}'>");
     expect(xml).toContain("<window class='worksheet' name='{{TITLE}}'>");
+  });
+
+  it('hoists only bookmark-root title layout into the emitted worksheet', () => {
+    const inf = inference([slot('Sales')], ['federated.x']);
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<layout-options><title><formatted-text><run fontalignment='1'>&lt;Sheet Name&gt;</run></formatted-text></title></layout-options>" +
+      "<datasources><datasource name='federated.x'><layout-options marker='nested-donor'/></datasource></datasources>" +
+      '<table><cols>[federated.x].[sum:Sales:qk]</cols></table>' +
+      "<window class='worksheet' name='Sheet 1'/></bookmark>";
+
+    const { xml } = bookmarkToTemplateWorkbook(raw, inf);
+    const document = new DOMParser().parseFromString(xml, 'text/xml');
+    const worksheet = document.getElementsByTagName('worksheet')[0];
+    const directChildren = Array.from(worksheet.childNodes).filter(
+      (node): node is XmlElement => node.nodeType === 1,
+    );
+
+    expect(directChildren.map((child) => child.tagName)).toEqual(['layout-options', 'table']);
+    expect(directChildren[0].getElementsByTagName('run')[0].getAttribute('fontalignment')).toBe(
+      '1',
+    );
+    expect(directChildren[0].textContent).toBe('<Sheet Name>');
+    expect(xml).not.toContain('nested-donor');
   });
 
   it('hoists a bookmark-root <cards> into the emitted <window>', () => {

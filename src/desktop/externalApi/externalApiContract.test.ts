@@ -8,11 +8,20 @@ import {
   appInfoSchema,
   dashboardItemSchema,
   dashboardListSchema,
+  dashboardRefreshFailureSchema,
+  dashboardRefreshOutcomeSchema,
+  dashboardRefreshTargetSchema,
   datasourceItemSchema,
   datasourceListSchema,
+  desktopStateSchema,
+  dialogActionSchema,
+  dialogIdentitySchema,
+  dialogListSchema,
   EXTERNAL_API_ROUTES,
   healthSchema,
   imageResultSchema,
+  invokeDialogActionRequestSchema,
+  invokeDialogActionResultSchema,
   logicalTableItemSchema,
   logicalTableListSchema,
   operationEnvelopeSchema,
@@ -21,6 +30,9 @@ import {
   PROBLEM_CODES,
   problemResponseSchema,
   protectedResourceMetadataSchema,
+  showMeOptionSchema,
+  showMeOptionsResultSchema,
+  showMeWorksheetSchema,
   siteDatasourceItemSchema,
   siteDatasourceListSchema,
   siteSchema,
@@ -31,35 +43,55 @@ import {
   summaryDataSchema,
   validationResultSchema,
   windowInfoSchema,
+  workbookDiagnosticsSchema,
   workbookInventorySchema,
+  worksheetDiagnosticsSchema,
+  worksheetInvalidFieldSchema,
   worksheetItemSchema,
   worksheetListSchema,
 } from './types.js';
 
 /**
- * Contract-intake harness: validates OUR zod schemas against the captured
+ * Contract-intake harness: validates OUR zod schemas against the checked-in
  * `/openapi.json` artifact. When the API owner ships a new spec, overwrite the
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.9 — grows `AppInfo`
- * with `isStartPageVisible`/`isDataSourcePageActive`/`isPresentationMode` and `Operation`/
- * `OperationList` with `progressWindows`, documents `UnprocessableContent` (422) on the
- * document-replace routes, on top of the 0.2.8 surface (`workbook:publish`,
- * `datasources/{id}:refreshData`/`:refreshExtract`, `workbook:exportAs`,
- * `storyboards/{id}/image`, `DatasourceItem.type`/`isExtract`/`hasDownloadFilePermission`,
- * required `index`/`type`/`StoryboardItem.storyPointCount`, `unsupported-target-version`).
- * No hand-edits.
+ * Fixture provenance: live Desktop `/openapi.json` captured on 2026-09-15 from External Client
+ * API 0.2.16. The dashboard `:refreshNow` path, result component, and 0.2.19 version were
+ * projected from the authoritative W-24165695 monolith producer contract. The worksheet
+ * `/showMe` path and its response components were projected on 2026-09-12 from
+ * the W-23715530 monolith producer branch
+ * `dev/michaelyu/w-23715530-get-show-me-options` because the live 0.2.16 artifact did not yet
+ * include that producer addition.
  */
 
-type SpecSchema = {
+type SpecProperty = {
+  $ref?: string;
+  type?: string;
+  minLength?: number;
+  maxLength?: number;
+  const?: string;
+  enum?: Array<string>;
+  items?: SpecProperty;
   required?: Array<string>;
-  properties?: Record<string, { 'x-extensible-enum'?: Array<string> }>;
+  properties?: Record<string, SpecProperty>;
+  allOf?: Array<SpecProperty>;
+  'x-extensible-enum'?: Array<string>;
+};
+
+type SpecSchema = {
+  type?: string;
+  description?: string;
+  required?: Array<string>;
+  properties?: Record<string, SpecProperty>;
+  oneOf?: Array<SpecSchema>;
 };
 
 const spec = JSON.parse(
   readFileSync(path.join(__dirname, '__fixtures__', 'externalClientApi-openapi.json'), 'utf-8'),
 ) as {
+  info: { version: string };
   paths: Record<string, unknown>;
   components: { schemas: Record<string, SpecSchema> };
 };
@@ -124,6 +156,10 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
+  it('tracks the 0.2.19 contract with projected producer additions', () => {
+    expect(spec.info.version).toBe('0.2.19');
+  });
+
   describe('Operation ↔ operationEnvelopeSchema', () => {
     const operation = specSchema('Operation');
 
@@ -163,6 +199,36 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('DashboardRefreshOutcome', () => {
+    const outcome = specSchema('DashboardRefreshOutcome');
+
+    it('matches the aggregate outcome schema and nested target contracts', () => {
+      expect(declaredKeys(dashboardRefreshOutcomeSchema).sort()).toEqual(
+        Object.keys(outcome.properties ?? {}).sort(),
+      );
+      expect(requiredKeys(dashboardRefreshOutcomeSchema).sort()).toEqual(
+        [...(outcome.required ?? [])].sort(),
+      );
+      expect(outcome.properties?.outcome?.enum).toEqual(['COMPLETE', 'PARTIAL', 'FAILED']);
+
+      const refreshedItem = outcome.properties?.refreshed?.items;
+      expect(Object.keys(refreshedItem?.properties ?? {}).sort()).toEqual(
+        declaredKeys(dashboardRefreshTargetSchema).sort(),
+      );
+      expect([...(refreshedItem?.required ?? [])].sort()).toEqual(
+        requiredKeys(dashboardRefreshTargetSchema).sort(),
+      );
+
+      const failedItem = outcome.properties?.failed?.items;
+      expect(Object.keys(failedItem?.properties ?? {}).sort()).toEqual(
+        declaredKeys(dashboardRefreshFailureSchema).sort(),
+      );
+      expect([...(failedItem?.required ?? [])].sort()).toEqual(
+        requiredKeys(dashboardRefreshFailureSchema).sort(),
+      );
+    });
+  });
+
   describe('data-first read schemas', () => {
     it.each([
       ['ApiRoot', apiRootSchema],
@@ -178,6 +244,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SiteWorkbookList', siteWorkbookListSchema],
       ['WorksheetItem', worksheetItemSchema],
       ['WorksheetList', worksheetListSchema],
+      ['WorksheetInvalidField', worksheetInvalidFieldSchema],
+      ['WorkbookDiagnostics', workbookDiagnosticsSchema],
       ['StoryboardItem', storyboardItemSchema],
       ['StoryboardList', storyboardListSchema],
       ['WorkbookInventory', workbookInventorySchema],
@@ -186,6 +254,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['SummaryData', summaryDataSchema],
       ['LogicalTableItem', logicalTableItemSchema],
       ['LogicalTableList', logicalTableListSchema],
+      ['ShowMeWorksheet', showMeWorksheetSchema],
+      ['ShowMeOption', showMeOptionSchema],
+      ['ShowMeOptions', showMeOptionsResultSchema],
       ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
       ['ImageExport', imageResultSchema],
@@ -201,7 +272,7 @@ describe('external client API contract (captured openapi fixture)', () => {
       },
     );
 
-    it('pins the complete 0.2.9 requiredness exception set', () => {
+    it('pins the complete 0.2.16 requiredness exception set', () => {
       expect(KNOWN_READ_REQUIREDNESS_EXCEPTIONS).toEqual({
         ApiRoot: ['apiVersion', 'applicationVersion', 'links'],
         AppInfo: [
@@ -282,6 +353,30 @@ describe('external client API contract (captured openapi fixture)', () => {
         }).success,
       ).toBe(true);
     });
+
+    it('WorksheetDiagnostics matches the producer shape and complete-status invariant', () => {
+      const component = specSchema('WorksheetDiagnostics');
+      expect(Object.keys(component.properties ?? {}).sort()).toEqual([
+        'invalidFields',
+        'message',
+        'status',
+        'worksheetId',
+      ]);
+      expect([...(component.required ?? [])].sort()).toEqual(['status', 'worksheetId']);
+      expect(
+        worksheetDiagnosticsSchema.safeParse({
+          worksheetId: 'sheet-1',
+          status: 'complete',
+          invalidFields: [],
+        }).success,
+      ).toBe(true);
+      expect(
+        worksheetDiagnosticsSchema.safeParse({
+          worksheetId: 'sheet-1',
+          status: 'complete',
+        }).success,
+      ).toBe(false);
+    });
   });
 
   describe('Problem ↔ problemResponseSchema', () => {
@@ -314,14 +409,207 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('dialog contracts', () => {
+    it.each([
+      ['DialogIdentity', dialogIdentitySchema],
+      ['DialogList', dialogListSchema],
+      ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
+    ] as const)('%s properties and required set match exactly', (name, schema) => {
+      const component = specSchema(name);
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+
+    it('reuses WindowInfo for every dialog snapshot', () => {
+      const dialogList = specSchema('DialogList');
+      const dismissResult = specSchema('InvokeDialogActionResult');
+
+      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+      for (const outcome of dismissResult.oneOf ?? []) {
+        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+      }
+    });
+
+    it('documents bounded detailed text and its truncation marker', () => {
+      const windowInfo = specSchema('WindowInfo');
+
+      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
+      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
+    });
+
+    it('models exact labeled button and semantic close actions', () => {
+      const variants = specSchema('DialogAction').oneOf ?? [];
+      const byKind = Object.fromEntries(
+        variants.map((variant) => [variant.properties?.kind?.const, variant]),
+      );
+
+      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
+      expect(byKind.button.properties?.label?.minLength).toBe(1);
+      expect(byKind.close.required).toEqual(['kind']);
+      expect(byKind.close.properties?.label).toBe(false);
+      expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
+      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
+      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
+      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
+      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
+      expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
+    });
+
+    it('requires an exact returned action in requests and invoked responses', () => {
+      const request = specSchema('InvokeDialogActionRequest');
+      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
+
+      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
+      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
+      expect(
+        invokeDialogActionRequestSchema.safeParse({
+          dialog: { objectName: '', title: '', className: '' },
+          action: { kind: 'button', label: '' },
+        }).success,
+      ).toBe(false);
+      expect(
+        invokeDialogActionRequestSchema.safeParse({
+          dialog: { objectName: '', title: '', className: '' },
+          action: { kind: 'button', label: ' ' },
+        }).success,
+      ).toBe(true);
+      expect(
+        invokeDialogActionRequestSchema.safeParse({
+          dialog: { objectName: 'dialog', title: 'Save' },
+          action: { kind: 'button', label: 'Discard' },
+        }).success,
+      ).toBe(false);
+      for (const outcome of outcomes.filter(
+        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
+      )) {
+        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
+        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
+      }
+    });
+
+    it('models the exact three outcome branches and their required fields', () => {
+      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
+      const requiredByOutcome = Object.fromEntries(
+        outcomeSchemas.map((outcome) => [
+          outcome.properties?.outcome?.const,
+          [...(outcome.required ?? [])].sort(),
+        ]),
+      );
+
+      expect(requiredByOutcome).toEqual({
+        'no-active-dialog': ['dialogs', 'outcome'],
+        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
+        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
+      });
+
+      expect(
+        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
+          .success,
+      ).toBe(true);
+      expect(
+        invokeDialogActionResultSchema.safeParse({
+          outcome: 'dismissed',
+          dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
+          action: { kind: 'button', label: 'Discard' },
+          dialogs: [],
+        }).success,
+      ).toBe(true);
+      expect(
+        invokeDialogActionResultSchema.safeParse({
+          outcome: 'action-invoked-dialog-remains',
+          dialogs: [],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
+  describe('app-state contract', () => {
+    const appState = specSchema('AppState');
+
+    it('pins the producer properties, required fields, and shared window references', () => {
+      expect(Object.keys(appState.properties ?? {}).sort()).toEqual([
+        'activeActivities',
+        'blockedBy',
+        'blockingWindows',
+        'progressWindows',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect([...(appState.required ?? [])].sort()).toEqual([
+        'activeActivities',
+        'state',
+        'uiSnapshotAvailable',
+      ]);
+      expect(appState.properties?.blockingWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+      expect(appState.properties?.progressWindows?.items?.$ref).toBe(
+        '#/components/schemas/WindowInfo',
+      );
+    });
+
+    it('normalizes omitted window arrays and preserves shared dialog action context', () => {
+      expect(desktopStateSchema.parse({ state: 'IDLE', uiSnapshotAvailable: true })).toEqual({
+        state: 'IDLE',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [],
+        progressWindows: [],
+      });
+
+      const parsed = desktopStateSchema.parse({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        uiSnapshotAvailable: true,
+        activeActivities: [],
+        blockingWindows: [
+          {
+            objectName: 'modal',
+            title: 'Save changes',
+            className: 'QMessageBox',
+            detailedTextTruncated: true,
+            actions: [{ kind: 'button', label: 'Save' }, { kind: 'close' }],
+          },
+        ],
+      });
+      expect(parsed.blockingWindows[0].actions).toEqual([
+        { kind: 'button', label: 'Save' },
+        { kind: 'close' },
+      ]);
+      expect(parsed.blockingWindows[0].detailedTextTruncated).toBe(true);
+    });
+
+    it('rejects BLOCKED without a cause and IDLE without complete empty evidence', () => {
+      expect(
+        desktopStateSchema.safeParse({ state: 'BLOCKED', uiSnapshotAvailable: true }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({ state: 'IDLE', uiSnapshotAvailable: false }).success,
+      ).toBe(false);
+      expect(
+        desktopStateSchema.safeParse({
+          state: 'IDLE',
+          uiSnapshotAvailable: true,
+          activeActivities: ['QUERYING'],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('routes', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.appDialogs,
+      EXTERNAL_API_ROUTES.appState,
+      EXTERNAL_API_ROUTES.appInvokeDialogAction,
       EXTERNAL_API_ROUTES.root,
       EXTERNAL_API_ROUTES.workbook,
+      EXTERNAL_API_ROUTES.workbookDiagnostics,
       EXTERNAL_API_ROUTES.workbookDashboards,
       EXTERNAL_API_ROUTES.workbookDatasources,
+      EXTERNAL_API_ROUTES.workbookDatasource,
+      EXTERNAL_API_ROUTES.workbookDatasourceDocument,
       EXTERNAL_API_ROUTES.workbookDocument,
       EXTERNAL_API_ROUTES.workbookDocumentValidate,
       EXTERNAL_API_ROUTES.workbookStoryboards,
@@ -333,16 +621,19 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardById,
       EXTERNAL_API_ROUTES.storyboardDocument,
       EXTERNAL_API_ROUTES.worksheetById,
+      EXTERNAL_API_ROUTES.worksheetDiagnostics,
       EXTERNAL_API_ROUTES.worksheetDocument,
       EXTERNAL_API_ROUTES.worksheetImage,
       EXTERNAL_API_ROUTES.worksheetSummaryData,
       EXTERNAL_API_ROUTES.worksheetLogicalTables,
       EXTERNAL_API_ROUTES.worksheetLogicalTableData,
+      EXTERNAL_API_ROUTES.worksheetShowMeOptions,
       EXTERNAL_API_ROUTES.worksheetDelete,
       EXTERNAL_API_ROUTES.worksheetRename,
       EXTERNAL_API_ROUTES.worksheetSort,
       EXTERNAL_API_ROUTES.worksheetPauseAutoUpdates,
       EXTERNAL_API_ROUTES.worksheetResumeAutoUpdates,
+      EXTERNAL_API_ROUTES.worksheetRefreshNow,
       EXTERNAL_API_ROUTES.dashboardDelete,
       EXTERNAL_API_ROUTES.dashboardRename,
       EXTERNAL_API_ROUTES.dashboardPauseAutoUpdates,
@@ -372,8 +663,284 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(Object.keys(spec.paths)).toContain(route);
     });
 
+    it('documents the individual datasource operation contracts', () => {
+      const metadata = spec.paths[EXTERNAL_API_ROUTES.workbookDatasource] as {
+        get?: { operationId?: string };
+      };
+      const document = spec.paths[EXTERNAL_API_ROUTES.workbookDatasourceDocument] as {
+        get?: { operationId?: string };
+        post?: { operationId?: string };
+      };
+
+      expect(metadata.get?.operationId).toBe('getWorkbookDatasource');
+      expect(document.get?.operationId).toBe('getDatasourceDocument');
+      expect(document.post?.operationId).toBe('applyDatasourceDocument');
+    });
+
+    it('documents workbook and worksheet diagnostics with the shared aggregate response', () => {
+      const paths = spec.paths as Record<
+        string,
+        {
+          get?: {
+            operationId?: string;
+            responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+          };
+        }
+      >;
+
+      expect(paths[EXTERNAL_API_ROUTES.workbookDiagnostics]?.get?.operationId).toBe(
+        'getWorkbookDiagnostics',
+      );
+      expect(
+        paths[EXTERNAL_API_ROUTES.workbookDiagnostics]?.get?.responses?.['200']?.content?.[
+          'application/json'
+        ]?.schema?.$ref,
+      ).toBe('#/components/schemas/WorkbookDiagnostics');
+      expect(paths[EXTERNAL_API_ROUTES.worksheetDiagnostics]?.get?.operationId).toBe(
+        'getWorksheetDiagnostics',
+      );
+      expect(
+        paths[EXTERNAL_API_ROUTES.worksheetDiagnostics]?.get?.responses?.['200']?.content?.[
+          'application/json'
+        ]?.schema?.$ref,
+      ).toBe('#/components/schemas/WorkbookDiagnostics');
+      expect(specSchema('Operation').properties?.diagnostics?.$ref).toBe(
+        '#/components/schemas/WorkbookDiagnostics',
+      );
+    });
+
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
+    });
+
+    it('documents the dialog routes with their exact request and response schemas', () => {
+      const paths = spec.paths as Record<
+        string,
+        {
+          get?: {
+            responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+          };
+          post?: {
+            summary?: string;
+            requestBody?: { content?: Record<string, { schema?: SpecProperty }> };
+            responses?: Record<string, { content?: Record<string, { schema?: SpecProperty }> }>;
+          };
+        }
+      >;
+
+      expect(
+        paths[EXTERNAL_API_ROUTES.appDialogs]?.get?.responses?.['200']?.content?.[
+          'application/json'
+        ]?.schema?.$ref,
+      ).toBe('#/components/schemas/DialogList');
+      expect(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.summary).toBe(
+        'Invoke an active dialog action',
+      );
+      expect(
+        paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.requestBody?.content?.[
+          'application/json'
+        ]?.schema?.$ref,
+      ).toBe('#/components/schemas/InvokeDialogActionRequest');
+      expect(
+        paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses?.['200']?.content?.[
+          'application/json'
+        ]?.schema?.$ref,
+      ).toBe('#/components/schemas/InvokeDialogActionResult');
+      expect(
+        Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
+      ).toContain('409');
+    });
+
+    it('documents the app-state read with the shared AppState response', () => {
+      const path = spec.paths[EXTERNAL_API_ROUTES.appState] as {
+        get?: {
+          operationId?: string;
+          responses?: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }>;
+        };
+      };
+
+      expect(path.get?.operationId).toBe('getAppState');
+      expect(path.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe(
+        '#/components/schemas/AppState',
+      );
+    });
+
+    it('retains the worksheet refresh-now Operation contract in 0.2.19', () => {
+      expect(spec.info.version).toBe('0.2.19');
+
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetRefreshNow] as {
+        post?: {
+          operationId?: string;
+          requestBody?: unknown;
+          responses?: Record<string, unknown>;
+        };
+      };
+      expect(Object.keys(pathItem)).toEqual(['post']);
+      expect(pathItem.post?.operationId).toBe('refreshWorksheetNow');
+      expect(pathItem.post).not.toHaveProperty('requestBody');
+      expect(pathItem.post?.responses).toHaveProperty(
+        '200.content.application/json.schema.$ref',
+        '#/components/schemas/Operation',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '202.$ref',
+        '#/components/responses/Accepted',
+      );
+      expect(pathItem.post?.responses).toHaveProperty(
+        '404.$ref',
+        '#/components/responses/NotFound',
+      );
+    });
+
+    it('documents bodyless dashboard refresh with its typed aggregate Operation result', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.dashboardRefreshNow] as {
+        post?: {
+          operationId?: string;
+          requestBody?: unknown;
+          responses?: {
+            '200'?: {
+              content?: {
+                'application/json'?: {
+                  schema?: {
+                    allOf?: Array<SpecProperty>;
+                  };
+                };
+              };
+            };
+            '202'?: { $ref?: string };
+            '404'?: { $ref?: string };
+          };
+        };
+      };
+
+      expect(Object.keys(pathItem)).toEqual(['post']);
+      expect(pathItem.post?.operationId).toBe('refreshDashboardNow');
+      expect(pathItem.post).not.toHaveProperty('requestBody');
+      expect(
+        pathItem.post?.responses?.['200']?.content?.['application/json']?.schema?.allOf,
+      ).toEqual([
+        { $ref: '#/components/schemas/Operation' },
+        {
+          type: 'object',
+          properties: {
+            result: { $ref: '#/components/schemas/DashboardRefreshOutcome' },
+          },
+        },
+      ]);
+      expect(pathItem.post?.responses?.['202']?.$ref).toBe('#/components/responses/Accepted');
+      expect(pathItem.post?.responses?.['404']?.$ref).toBe('#/components/responses/NotFound');
+    });
+
+    it('retains the projected worksheet Show Me option discovery contract in 0.2.19', () => {
+      const pathItem = spec.paths[EXTERNAL_API_ROUTES.worksheetShowMeOptions] as {
+        get?: {
+          operationId?: string;
+          parameters?: Array<{
+            name?: string;
+            in?: string;
+            required?: boolean;
+            schema?: SpecProperty;
+          }>;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(Object.keys(pathItem)).toEqual(['get']);
+      expect(pathItem.get?.operationId).toBe('getWorksheetShowMeOptions');
+      expect(pathItem.get?.parameters).toEqual([
+        expect.objectContaining({
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'dataSource',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        }),
+        expect.objectContaining({
+          name: 'fieldsSelectedInSchemaViewer',
+          in: 'query',
+          required: false,
+          schema: { type: 'array', items: { type: 'string' } },
+        }),
+        expect.objectContaining({
+          name: 'selectionMode',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['ambient', 'explicit'] },
+        }),
+      ]);
+      expect(Object.keys(pathItem.get?.responses ?? {})).toEqual([
+        '200',
+        '202',
+        '400',
+        '401',
+        '404',
+        '421',
+        '500',
+        '503',
+      ]);
+      expect(pathItem.get?.responses).toHaveProperty(
+        '200.content.application/json.schema.$ref',
+        '#/components/schemas/ShowMeOptions',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('202.$ref', '#/components/responses/Accepted');
+      expect(pathItem.get?.responses).toHaveProperty(
+        '400.$ref',
+        '#/components/responses/BadRequest',
+      );
+      expect(pathItem.get?.responses).toHaveProperty('404.$ref', '#/components/responses/NotFound');
+    });
+
+    it('projects observable Show Me apply rejections', () => {
+      const pathItem = spec.paths['/v0/workbook/worksheets/{id}:showMe'] as {
+        post?: {
+          operationId?: string;
+          responses?: Record<string, unknown>;
+        };
+      };
+
+      expect(pathItem.post?.operationId).toBe('showMeWorksheet');
+      expect(pathItem.post?.responses).toHaveProperty(
+        '409.$ref',
+        '#/components/responses/Conflict',
+      );
+      expect(PROBLEM_CODES).toEqual(
+        expect.arrayContaining(['show-me-not-applicable', 'show-me-unavailable']),
+      );
+    });
+  });
+
+  describe('Show Me option discovery provenance', () => {
+    it('preserves native option ordering and the worksheet identity shape', () => {
+      const result = specSchema('ShowMeOptions');
+
+      expect(result.properties?.worksheet?.$ref).toBe('#/components/schemas/ShowMeWorksheet');
+      expect(result.properties?.options?.type).toBe('array');
+      expect(result.properties?.options?.items?.$ref).toBe('#/components/schemas/ShowMeOption');
+      expect(result.description).toContain('native order');
+    });
+
+    it('keeps showMeType runtime-extensible and exposes only native applicability evidence', () => {
+      const option = specSchema('ShowMeOption');
+      const showMeType = option.properties?.showMeType;
+
+      expect(showMeType?.type).toBe('string');
+      expect(showMeType).not.toHaveProperty('enum');
+      expect(showMeType).not.toHaveProperty('x-extensible-enum');
+      expect(Object.keys(option.properties ?? {})).toEqual([
+        'showMeType',
+        'isApplicable',
+        'vizHasRequiredFields',
+        'dataSourceHasRequiredFields',
+        'helpUrl',
+      ]);
+      expect(option.properties).not.toHaveProperty('recommendation');
+      expect(option.properties).not.toHaveProperty('rating');
+      expect(option.properties).not.toHaveProperty('isDefault');
     });
   });
 

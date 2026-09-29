@@ -41,7 +41,9 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(WORKBOOK_XML));
   vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
   vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
-  vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok({ validationWarnings: [] }));
+  vi.mocked(loadWorkbookXml).mockResolvedValue(
+    new Ok({ validationWarnings: [], documentWarnings: [] }),
+  );
   vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }));
   vi.mocked(getDashboardXml).mockResolvedValue(
     new Ok({ xml: DASHBOARD_XML, name: 'My Dashboard' }),

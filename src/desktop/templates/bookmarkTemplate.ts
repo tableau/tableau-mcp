@@ -18,7 +18,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 
 import type {
   CommunicativeRole,
@@ -383,6 +383,19 @@ export function bookmarkToTemplateWorkbook(
   const tableM = xml.match(/<table>[\s\S]*<\/table>/);
   const windowM = xml.match(/<window\b[^>]*>[\s\S]*<\/window>/);
   const table = tableM ? tableM[0] : '<table />';
+  const bookmarkDocument = new DOMParser({ errorHandler: () => {} }).parseFromString(
+    xml,
+    'text/xml',
+  );
+  const bookmarkRoot = bookmarkDocument.documentElement;
+  const rootLayoutOptions = bookmarkRoot
+    ? Array.from(bookmarkRoot.childNodes).find(
+        (node): node is XmlElement => node.nodeType === 1 && node.nodeName === 'layout-options',
+      )
+    : undefined;
+  const layoutOptions = rootLayoutOptions
+    ? new XMLSerializer().serializeToString(rootLayoutOptions)
+    : '';
   const windowInner = windowM
     ? windowM[0].replace(/^<window\b[^>]*>/, '').replace(/<\/window>$/, '')
     : '';
@@ -402,7 +415,7 @@ export function bookmarkToTemplateWorkbook(
     : `${rootCardsM ? rootCardsM[0] : ''}${stableWindowInner}`;
   const hasCards = nestedCards || hoisted;
 
-  let body = `<worksheet name='{{TITLE}}'>\n${table}\n</worksheet>`;
+  let body = `<worksheet name='{{TITLE}}'>\n${layoutOptions ? `${layoutOptions}\n` : ''}${table}\n</worksheet>`;
   let win = `<window class='worksheet' name='{{TITLE}}'>${windowBody}</window>`;
 
   // Parameterize the DONOR DATASOURCE. A bookmark hard-codes its own datasource's

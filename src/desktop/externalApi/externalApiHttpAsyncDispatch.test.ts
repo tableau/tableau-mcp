@@ -7,7 +7,9 @@ import {
 import {
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
+  startPageVisibilitySchema,
   summaryDataSchema,
+  worksheetDocumentRoute,
   worksheetListSchema,
   worksheetSummaryDataRoute,
 } from './types.js';
@@ -285,6 +287,61 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
   });
 
   describe('typed read path', () => {
+    it('polls an overflowed start-page JSON POST to its typed terminal result', async () => {
+      server.setOverride('POST /v0/app:toggleStartPage', accepted202('op-start-page'));
+      server.setOperation('op-start-page', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-start-page', kind: 'app.toggleStartPage', state: 'RUNNING' },
+          {
+            id: 'op-start-page',
+            kind: 'app.toggleStartPage',
+            state: 'SUCCEEDED',
+            result: { isStartPageVisible: false },
+          },
+        ],
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: false },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toEqual({ isStartPageVisible: false });
+      expect(server.requests.some((r) => r.path === '/v0/operations/op-start-page')).toBe(true);
+    });
+
+    it('surfaces a failed overflowed start-page operation as a Problem', async () => {
+      server.setOverride('POST /v0/app:toggleStartPage', accepted202('op-start-page-fail'));
+      server.setOperation('op-start-page-fail', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-start-page-fail',
+            kind: 'app.toggleStartPage',
+            state: 'FAILED',
+            error: { code: 'operation-failed', message: 'start page transition failed' },
+          },
+        ],
+      });
+
+      const result = await http.postJsonForBody(
+        EXTERNAL_API_ROUTES.appToggleStartPage,
+        { isStartPageVisible: true },
+        startPageVisibilitySchema,
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'problem',
+        status: 500,
+        code: 'operation-failed',
+        detail: 'start page transition failed',
+      });
+    });
+
     // A document read polled to terminal carries its XML under result.document (a JSON string).
     it('polls a workbook-document read to its terminal result.document (never JSON-as-XML)', async () => {
       server.setOverride('GET /v0/workbook/document', accepted202('op-read-1'));
@@ -304,7 +361,31 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       const result = await http.getXml(EXTERNAL_API_ROUTES.workbookDocument);
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+      expect(result.unwrap().xsdPayloadVersion).toBeUndefined();
       expect(server.requests.some((r) => r.path === '/v0/operations/op-read-1')).toBe(true);
+    });
+
+    it('preserves the served payload version on a polled sheet-document read', async () => {
+      const route = worksheetDocumentRoute('sheet-sales');
+      server.setOverride(`GET ${route}`, accepted202('op-sheet-read'));
+      server.setOperation('op-sheet-read', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-sheet-read',
+            kind: 'sheet.getDocument',
+            state: 'SUCCEEDED',
+            result: { document: '<worksheet name="Sales" />', payloadVersion: '2026.3' },
+          },
+        ],
+      });
+
+      const result = await http.getXml(route);
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        xml: '<worksheet name="Sales" />',
+        xsdPayloadVersion: '2026.3',
+      });
     });
 
     // JSON reads DO poll: the terminal operation's `result` carries the body the 200 would have.

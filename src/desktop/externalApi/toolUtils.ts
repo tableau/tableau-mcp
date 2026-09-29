@@ -3,16 +3,23 @@ import { Ok, Result } from 'ts-results-es';
 import { ArgsValidationError, McpToolError } from '../../errors/mcpToolError.js';
 import { decodeXmlEntities } from '../xmlElement.js';
 
-export function isRouteMissing(error: unknown): boolean {
+export type RouteMissingOptions = {
+  /** Safe only for endpoints whose contract has no resource-level `not-found` outcome. */
+  stableNotFoundMeansRouteMissing?: boolean;
+};
+
+export function isRouteMissing(error: unknown, options: RouteMissingOptions = {}): boolean {
   if (typeof error !== 'object' || error === null) {
     return false;
   }
   const e = error as { type?: string; error?: { code?: string; message?: string } };
+  const stableNotFound = e.type === 'command-failed' && e.error?.code === 'not-found';
+  if (!stableNotFound) {
+    return false;
+  }
   return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
+    options.stableNotFoundMeansRouteMissing === true ||
+    (typeof e.error?.message === 'string' && e.error.message.includes('No route matches'))
   );
 }
 

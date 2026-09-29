@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/wrappers/loadDashboardXml.js';
 import { DesktopCommandExecutionError, FileReadError } from '../../../errors/mcpToolError.js';
@@ -12,8 +13,13 @@ import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApplyDashboardTool } from './applyDashboard.js';
+import { mockContainedCacheReadFromFs } from './applyPreamble.testUtils.js';
 
 vi.mock('../../../desktop/wrappers/loadDashboardXml.js');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('fs');
 
 describe('applyDashboardTool', () => {
@@ -33,6 +39,7 @@ describe('applyDashboardTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -91,7 +98,7 @@ describe('applyDashboardTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: true,
       sourceHash: 'b'.repeat(64),
     });
@@ -116,7 +123,7 @@ describe('applyDashboardTool', () => {
   it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<dashboard name="Sales Dashboard"></dashboard>');
-    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: false,
       message: 'Cache produced by a different Desktop session — re-read in the current session.',
     });

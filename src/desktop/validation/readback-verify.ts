@@ -21,12 +21,36 @@ export interface ReadbackFinding {
   severity: ReadbackFindingSeverity;
 }
 
+export function isPromisedSortLossWarning(finding: ReadbackFinding): boolean {
+  return (
+    finding.kind === 'sort' &&
+    finding.severity === 'warning' &&
+    (finding.node === 'computed-sort' || finding.node === 'shelf-sort-v2')
+  );
+}
+
 export type ReadbackVerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+
+export type VerificationSource = 'readback' | 'used-field-validity';
+
+export interface VerificationFinding {
+  severity: ReadbackFindingSeverity;
+  source: VerificationSource;
+  message: string;
+  worksheetId?: string;
+  fieldName?: string;
+  fieldCaption?: string;
+  shelf?: string;
+  marksSpecificationId?: string;
+  encodingType?: string;
+  reason?: string;
+}
 
 export interface ReadbackVerificationResult {
   ok: boolean;
   status: ReadbackVerificationStatus;
   message?: string;
+  findings?: VerificationFinding[];
 }
 
 type XmlRecord = Record<string, any>;

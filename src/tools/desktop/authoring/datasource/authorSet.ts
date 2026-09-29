@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
@@ -14,6 +14,11 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
+import {
+  type DatasourceElement,
+  findDatasourceElements,
+  selectTargetDatasource,
+} from './authorCalcCore.js';
 
 const endSchema = z.enum(['top', 'bottom']);
 const modeSchema = z.enum(['top-n', 'empty', 'condition']);
@@ -31,17 +36,7 @@ const paramsSchema = {
   count: z.string().optional().describe(''),
   conditionExpression: z.string().optional().describe(''),
   end: endSchema.default('top').describe(''),
-  datasource: z.string().optional().describe(''),
-};
-
-type DatasourceElement = {
-  name: string;
-  openStart: number;
-  openEnd: number;
-  closeStart: number;
-  closeEnd: number;
-  xml: string;
-  selfClosing: boolean;
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
 };
 
 type AuthorSetResult = {
@@ -231,84 +226,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
 
   return tool;
 };
-
-function selectTargetDatasource(
-  xml: string,
-  requested: string | undefined,
-): Result<DatasourceElement, ArgsValidationError> {
-  const datasources = findDatasourceElements(xml);
-  const candidates = datasources.filter((datasource) => datasource.name !== 'Parameters');
-  if (requested !== undefined) {
-    const selected = candidates.find((datasource) => datasource.name === requested);
-    if (selected) {
-      return new Ok(selected);
-    }
-    return new ArgsValidationError(
-      `Datasource "${requested}" was not found. Candidates: ${candidates.map((d) => d.name).join(', ')}`,
-    ).toErr();
-  }
-  if (candidates.length === 1) {
-    return new Ok(candidates[0]);
-  }
-  if (candidates.length === 0) {
-    return new ArgsValidationError('No non-Parameters datasource found.').toErr();
-  }
-  return new ArgsValidationError(
-    `Multiple datasources found; specify datasource. Candidates: ${candidates.map((d) => d.name).join(', ')}`,
-  ).toErr();
-}
-
-function findDatasourceElements(xml: string): DatasourceElement[] {
-  const elements: DatasourceElement[] = [];
-  // Only the top-level <datasources> block holds the real ones; worksheet
-  // <dependencies> clone <datasource name='...'> and splicing into a clone is
-  // silently discarded by Tableau (author-calc lesson, 2026-07-19).
-  const blockStart = xml.indexOf('<datasources>');
-  const blockEnd = xml.indexOf('</datasources>', blockStart);
-  const scanFrom = blockStart === -1 ? 0 : blockStart;
-  const scanTo = blockEnd === -1 ? xml.length : blockEnd;
-  const openTagRe = /<datasource\b[^>]*(?:\/>|>)/g;
-  for (const match of xml.matchAll(openTagRe)) {
-    if (match.index < scanFrom || match.index >= scanTo) {
-      continue;
-    }
-    const openTag = match[0];
-    const openStart = match.index;
-    const openEnd = openStart + openTag.length;
-    const name = getAttr(openTag, 'name');
-    if (name === undefined) {
-      continue;
-    }
-    const selfClosing = /\/\s*>$/.test(openTag);
-    if (selfClosing) {
-      elements.push({
-        name: unescapeXml(name),
-        openStart,
-        openEnd,
-        closeStart: openEnd,
-        closeEnd: openEnd,
-        xml: openTag,
-        selfClosing,
-      });
-      continue;
-    }
-    const closeStart = xml.indexOf('</datasource>', openEnd);
-    if (closeStart === -1) {
-      continue;
-    }
-    const closeEnd = closeStart + '</datasource>'.length;
-    elements.push({
-      name: unescapeXml(name),
-      openStart,
-      openEnd,
-      closeStart,
-      closeEnd,
-      xml: xml.slice(openStart, closeEnd),
-      selfClosing,
-    });
-  }
-  return elements;
-}
 
 function hasGroupCaption(datasourceXml: string, caption: string): boolean {
   return findGroupTags(datasourceXml).some(

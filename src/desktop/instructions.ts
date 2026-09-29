@@ -46,11 +46,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'rounded-stacked-bar',
+    id: 'rounded-bar',
     trigger:
-      'a request for slight rounded outer corners on an existing or just-built stacked bar chart',
+      'a request for slight rounded outer corners on a compatible ordinary vertical or horizontal simple or stacked bar chart',
     action:
-      'call refine-worksheet with operation=round_stacked_bar and preset=subtle. It rebuilds a compatible stack as Polygon, not a native Bar corner property. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with the separate dashboard rounded-corners route. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
+      'New chart: follow plain-chart to build it, then call refine-worksheet on its returned worksheet. Existing or just-built compatible bar: call refine-worksheet directly. Use operation=round_bar and preset=subtle. It rebuilds compatible bars as Polygon geometry, not a native Bar corner property. Grouped, dual-axis, and specialty bars are outside this route; report a refusal and stop. V1 refuses any workbook with top-level actions. If refine refuses a workbook with actions, stop. Dashboard object/container radius stays with the separate dashboard rounded-corners route. After success require programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields. Do not fall back to shell commands or raw whole-workbook XML.',
     toolSequence: ['refine-worksheet'],
     stopConditions: [
       'If refine refuses a workbook with actions, stop',
@@ -58,7 +58,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'Do not fall back to shell commands or raw whole-workbook XML',
     ],
     requiredEvidence: [
-      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered stack order; disclose that Data Guide and View Data may show internal polygon helper fields',
+      'programmatic structure and summary readback, plus the worksheet caption or preserved caption suppression state and alt text; manually inspect rendered bar geometry; disclose that Data Guide and View Data may show internal polygon helper fields',
     ],
   },
   {
@@ -94,9 +94,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'derived-metric',
     trigger:
-      'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
+      'an explicit request to create or change a conventional derived metric, or a visualization using one, with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      'author the conventional calculation with author-calc, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      "Do not create or change workbook content for an analytical question alone. Author the conventional calculation with author-calc. For a field-only request, stop after the requested field's readback. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.",
     toolSequence: [
       'author-calc',
       'list-templates',
@@ -104,8 +104,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'build-worksheets-from-templates',
       'apply-worksheet',
     ],
-    stopConditions: ['author the conventional calculation with author-calc'],
-    requiredEvidence: ['calculation readback and worksheet apply receipt'],
+    stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'Author the conventional calculation with author-calc',
+      "For a field-only request, stop after the requested field's readback",
+    ],
+    requiredEvidence: [
+      'requested calculation readback, plus worksheet apply receipt for a visualization request',
+    ],
   },
   {
     kind: 'route',
@@ -121,12 +127,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dashboard',
-    trigger: 'a dashboard ask',
+    trigger: 'an explicit request to create or rebuild a dashboard',
     action:
-      'For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
+      'Do not create or change workbook content for an analytical question alone. A dashboard preview does not enter this route. For a dashboard, use the normal bind-template proposal protocol with auto_apply:true on every call; finish one applied sheet per analytical view. For an overview, executive, leadership, performance, or summary dashboard, or one with explicit KPIs, also finish one applied kpi-text sheet per KPI metric, at most three KPIs by default, in user order; otherwise use clear measures from the data, or omit KPIs and ask. Name each KPI worksheet and title for its metric; never pass a generic starter name such as Sheet 1 or this-one. Pass only live non-KPI chart names in existingWorksheetNames and ordered live KPI names in kpiWorksheetNames to run-dashboard-batch with layoutType executive-summary. For a plain four-view dashboard without KPIs, pass its live chart names with layoutType auto-grid and gridColumns 2. Omit artifactIds unless using the separate guarded artifact fallback; use rows or columns only when explicitly asked. For an executive first draft, limit a top/best products view to the Top 10 before composition unless the user gives another N: pass top_n:10 to bind-template or topN:10 in the guarded artifact fallback. Keep the computed descending sort authored by the template/refinement; never add a native sort call. run-dashboard-batch is for new dashboards only; never use it for formatting, polish, or refinement of an existing dashboard. Set replaceExisting only after an explicit rebuild/replace request. On a retry-safe name preflight, correct it once and retry with the same layout; never downgrade executive-summary. Never replay a partial or unknown batch; inspect live workbook state first.',
     toolSequence: ['bind-template', 'run-dashboard-batch'],
     forbiddenTools: ['sort-worksheet'],
     stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'A dashboard preview does not enter this route',
       'use the normal bind-template proposal protocol with auto_apply:true on every call',
       'finish one applied sheet per analytical view',
       'finish one applied kpi-text sheet per KPI metric',
@@ -215,10 +223,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'dynamic-authoring',
     trigger:
-      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (examples include running total and LOD)',
+      'an explicit request to create or change a dynamic construct or non-conventional calculated field, or a visualization using one (examples include running total, LOD, and interactivity on mark interaction such as by selecting or hovering over marks or selecting a link in a tooltip menu)',
     action:
-      'use author-parameter first, then author-set, author-calc, author-action, and format-worksheets as needed; then list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
+      'Do not create or change workbook content for an analytical question alone. Before authoring, consult the knowledge docs via search-knowledge. Use only the author-* verbs the request needs: author-parameter, author-set, author-calc, author-action, and format-worksheets. When a requested construct depends on a parameter, author and verify that parameter before its dependents. For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully. For a visualization request, then use list-templates -> list-available-fields -> build-worksheets-from-templates -> apply-worksheet.',
     toolSequence: [
+      'search-knowledge',
       'author-parameter',
       'author-set',
       'author-calc',
@@ -229,7 +238,12 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'build-worksheets-from-templates',
       'apply-worksheet',
     ],
-    stopConditions: ['use author-parameter first'],
+    stopConditions: [
+      'Do not create or change workbook content for an analytical question alone',
+      'Use only the author-* verbs the request needs',
+      'When a requested construct depends on a parameter, author and verify that parameter before its dependents',
+      'For an author-only request, verify every requested author-* result and stop after all requested constructs have read back successfully',
+    ],
     requiredEvidence: ["each author-* verb's readback-verified result object"],
   },
   {
@@ -242,7 +256,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_stacked_bar on a compatible stacked bar; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
@@ -257,7 +271,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded stacked bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',

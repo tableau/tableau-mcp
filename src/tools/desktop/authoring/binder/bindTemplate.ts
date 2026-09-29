@@ -37,6 +37,7 @@ import {
   extractSheetXml,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
+  worksheetFragmentSimpleId,
 } from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
 import {
@@ -81,7 +82,7 @@ import {
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   type PostApplyWorksheetReadbackVerification,
-  publicReadbackVerificationResult,
+  verifyAppliedWorksheetFields,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
@@ -97,6 +98,7 @@ import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import {
   fetchWorksheetSummaryData,
   type SummaryDataRead,
+  type SummaryDataReadScope,
   type SummaryRowOrder,
 } from '../../api/summaryDataCore.js';
 import {
@@ -114,7 +116,7 @@ import {
   authorCalculationsInWorkbook,
   type AuthoredCalc,
   datatypeSchema,
-  hasColumnNameAndCaption,
+  hasColumnNameAndCaptionInDatasource,
   prepareCalculationsInWorkbook,
   roleSchema,
 } from '../datasource/authorCalcCore.js';
@@ -128,16 +130,16 @@ import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
-  ask: z.string().describe('Ask.'),
+  ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply now.'),
+  auto_apply: z.boolean().optional().describe('Apply now'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
   target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Calc source id/name.'),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
   calcs: z
     .array(
       z.object({
@@ -214,6 +216,7 @@ type AppliedFastPathResult = {
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
   summary_rows_order?: SummaryRowOrder;
+  summary_rows_scope?: SummaryDataReadScope;
   summary_rows_error?: string;
   truncated?: true;
   /**
@@ -321,6 +324,9 @@ const EMPTY_SUMMARY_ROWS_GUIDANCE =
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
+const SUMMARY_ROWS_TIMEOUT_ERROR = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
+const SUMMARY_ROWS_TIMEOUT_GUIDANCE =
+  'Summary readback did not finish; verify the existing sheet with get-summary-data. Do NOT call bind-template again or replay apply just to retry summary readback.';
 const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
 const UNIT_HETEROGENEITY_DIMENSION_RE =
   /^(currency([ _-]?code)?|curr|fx([ _-]?rate)?|unit([ _-]?of[ _-]?measure)?)$/i;
@@ -397,13 +403,14 @@ function currencyHeterogeneityCaveat(
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
-  'summary_rows' | 'summary_rows_order' | 'summary_rows_error' | 'truncated'
+  'summary_rows' | 'summary_rows_order' | 'summary_rows_scope' | 'summary_rows_error' | 'truncated'
 >;
 
 function capSummaryRows(
   columns: unknown[],
   rows: unknown[][],
   rowOrder: SummaryRowOrder,
+  readScope: SummaryDataReadScope,
 ): SummaryRowsEnrichment {
   if (rows.length === 0) {
     return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
@@ -411,6 +418,7 @@ function capSummaryRows(
 
   const cappedColumns = [...columns];
   let cellTruncated = false;
+  let byteTruncated = false;
   const candidateRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS).map((row) =>
     row.map((cell) => {
       if (typeof cell !== 'string' || cell.length <= SUMMARY_ROWS_MAX_CELL_CHARS) {
@@ -430,20 +438,37 @@ function capSummaryRows(
     const nextRowBytes =
       Buffer.byteLength(serializedRow, 'utf8') + (cappedRows.length === 0 ? 0 : 1);
     if (payloadBytes + nextRowBytes > SUMMARY_ROWS_MAX_BYTES) {
+      byteTruncated = true;
       break;
     }
     cappedRows.push(row);
     payloadBytes += nextRowBytes;
   }
 
-  if (cappedRows.length === 0) {
-    return { summary_rows_error: 'oversize readback' };
+  const omissionReasons = [
+    ...(rows.length > SUMMARY_ROWS_MAX_ROWS
+      ? [`more than the ${SUMMARY_ROWS_MAX_ROWS}-row preview limit`]
+      : []),
+    ...(cellTruncated
+      ? [`a cell exceeded the ${SUMMARY_ROWS_MAX_CELL_CHARS}-character preview limit`]
+      : []),
+    ...(byteTruncated
+      ? [`the payload exceeded the ${SUMMARY_ROWS_MAX_BYTES}-byte preview limit`]
+      : []),
+  ];
+  if (omissionReasons.length > 0) {
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        `summary rows omitted because ${omissionReasons.join('; ')}`,
+      ),
+      truncated: true,
+    };
   }
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
     summary_rows_order: rowOrder,
-    ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
+    summary_rows_scope: readScope,
   };
 }
 
@@ -471,15 +496,18 @@ async function readAppliedSummaryRows({
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let deadlineFired = false;
   const timeoutFailure = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
-      const reason = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
-      timeoutController.abort(new Error(reason));
-      reject(new Error(reason));
+      deadlineFired = true;
+      timeoutController.abort(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
+      reject(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
     }, SUMMARY_ROWS_TIMEOUT_MS);
   });
   const read: SummaryDataRead = async (_endpoint, readEndpoint) => {
+    timeoutController.signal.throwIfAborted();
     const result = await readEndpoint(executor, timeoutController.signal);
+    timeoutController.signal.throwIfAborted();
     return result.isErr() ? new DesktopCommandExecutionError(result.error).toErr() : result;
   };
 
@@ -489,6 +517,7 @@ async function readAppliedSummaryRows({
         read,
         worksheet: worksheetName,
         maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
+        materializeEmpty: true,
       }),
       timeoutFailure,
     ]);
@@ -497,9 +526,18 @@ async function readAppliedSummaryRows({
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
     }
-    return capSummaryRows(result.value.columns, result.value.rows, result.value.rowOrder);
+    return capSummaryRows(
+      result.value.columns,
+      result.value.rows,
+      result.value.rowOrder,
+      result.value.readScope,
+    );
   } catch (error) {
-    return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
+      ),
+    };
   } finally {
     if (timeout !== undefined) {
       clearTimeout(timeout);
@@ -542,6 +580,19 @@ function correctionFallbackResult(): StructuredBindTemplateToolResult {
     'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
     'Use template artifact fallback',
   );
+}
+
+type Call2ContractSlot = Call2Contract['proposal_choices'][number]['slots'][number];
+
+function declaredFieldNames(
+  slot: Call2ContractSlot,
+  derivation?: BindingProposal['bindings'][number]['derivation'],
+): string[] {
+  const ordinary = slot.compatible_field_names;
+  const conditional = slot.conditional_field_options?.map((field) => field.name) ?? [];
+  const prioritized = derivation === 'cnt' || derivation === 'ctd' ? conditional : ordinary;
+  const remaining = prioritized === conditional ? ordinary : conditional;
+  return [...new Set([...prioritized, ...remaining])];
 }
 
 function proposalContractMismatches(
@@ -597,14 +648,15 @@ function proposalContractMismatches(
       }
       continue;
     }
-    if (!slot.compatible_field_names.includes(binding.field)) {
+    const declaredFields = declaredFieldNames(slot, binding.derivation);
+    if (!declaredFields.includes(binding.field)) {
       if (
         addMismatch({
           code: 'field-not-compatible',
           template: proposal.template,
           slot_id: binding.slot_id,
           field: binding.field,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFields.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -618,7 +670,7 @@ function proposalContractMismatches(
           code: 'required-slot-missing',
           template: proposal.template,
           slot_id: slot.slot_id,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFieldNames(slot).slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -933,19 +985,28 @@ function proposalContractMismatchResult({
       mismatch.code === 'required_filter_fields_mismatch' &&
       mismatch.required_filter_values !== undefined,
   );
+  const templateMismatch = mismatches.some((mismatch) => mismatch.code === 'template-not-offered');
   const bindingMismatch = mismatches.some(
-    (mismatch) => mismatch.code !== 'required_filter_fields_mismatch',
+    (mismatch) =>
+      mismatch.code !== 'required_filter_fields_mismatch' &&
+      mismatch.code !== 'template-not-offered',
   );
   const correctionGuidance = correctionAvailable
-    ? filterSetMismatch && bindingMismatch
+    ? filterSetMismatch && templateMismatch
       ? filterValueMismatch
-        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
-        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
-      : filterSetMismatch
+        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and replace proposal.template with one exact template-not-offered value from mismatches[].choices.'
+        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and replace proposal.template with one exact template-not-offered value from mismatches[].choices. Values and context may vary.'
+      : filterSetMismatch && bindingMismatch
         ? filterValueMismatch
-          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
-          : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
-        : 'One changed corrected proposal may proceed.'
+          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
+          : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
+        : filterSetMismatch
+          ? filterValueMismatch
+            ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
+            : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
+          : templateMismatch
+            ? 'One corrected proposal may proceed: replace only proposal.template with one exact template-not-offered value from mismatches[].choices.'
+            : 'One changed corrected proposal may proceed.'
     : hasFilters
       ? 'The correction allowance is exhausted. Stop and use ask-user: the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
       : 'The correction allowance is exhausted; stop calling bind-template and ask the user or use the artifact fallback.';
@@ -958,15 +1019,25 @@ function proposalContractMismatchResult({
       rejected_proposal: proposal,
       guidance:
         `Blocked before Desktop work: the proposal violates the retained call_2_contract. ${correctionGuidance} ` +
-        (filterSetMismatch && bindingMismatch
-          ? 'Preserve every other proposal field unchanged.'
-          : filterSetMismatch
-            ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
-            : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
+        (templateMismatch
+          ? correctionAvailable
+            ? filterSetMismatch
+              ? 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+              : 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, filters, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+            : 'Do not submit another correction.'
+          : filterSetMismatch && bindingMismatch
+            ? 'Preserve every other proposal field unchanged.'
+            : filterSetMismatch
+              ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
+              : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
     },
     prefillNextAction(
       correctionAvailable
-        ? 'Correct invalid bindings'
+        ? templateMismatch
+          ? filterSetMismatch
+            ? 'Correct required filters and template ID'
+            : 'Replace invalid template ID'
+          : 'Correct invalid bindings'
         : hasFilters
           ? 'Ask user to resolve proposal'
           : 'Use fallback or ask user',
@@ -1417,11 +1488,24 @@ function buildCall2Contract({
         const labeledOptions = compatibleFields.flatMap((field) =>
           field.label ? [{ name: field.name, label: field.label }] : [],
         );
+        const conditionalFieldOptions =
+          slot.kind === 'quantitative'
+            ? llmInput.fields
+                .filter((field) => field.role === 'dimension')
+                .map((field) => ({
+                  name: field.name,
+                  ...(field.label ? { label: field.label } : {}),
+                  requires_derivation: ['cnt', 'ctd'] as Array<'cnt' | 'ctd'>,
+                }))
+            : [];
         return {
           slot_id: slot.slot_id,
           required: slot.required,
           compatible_field_names: compatibleFields.map((field) => field.name),
           ...(labeledOptions.length > 0 ? { compatible_field_options: labeledOptions } : {}),
+          ...(conditionalFieldOptions.length > 0
+            ? { conditional_field_options: conditionalFieldOptions }
+            : {}),
         };
       }),
     })),
@@ -1429,8 +1513,8 @@ function buildCall2Contract({
       title: 'Choose a worksheet title.',
       confidence: 'Set a confidence from 0 to 1.',
       field_selection: llmInput.fields.some((field) => field.label)
-        ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
-        : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+        ? 'Use labels to compare table grain. Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.'
+        : 'Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.',
     },
     ...(requiredFilterFields !== undefined ? { required_filter_fields: requiredFilterFields } : {}),
     ...(requiredFilterValues !== undefined && requiredFilterValues.length > 0
@@ -2204,7 +2288,7 @@ async function verifyTrustedWorkbookReadback({
       read: () => getWorkbookXml({ executor, signal }),
       settled: (xml) => {
         const calculationsPresent = atomicCalcs.every((calc) =>
-          hasColumnNameAndCaption(xml, calc.calcName, calc.caption),
+          hasColumnNameAndCaptionInDatasource(xml, calc.datasource, calc.calcName, calc.caption),
         );
         const fragment = extractSheetXml(xml, worksheetName);
         return (
@@ -2227,7 +2311,13 @@ async function verifyTrustedWorkbookReadback({
     }
 
     const missingCalcs = atomicCalcs.filter(
-      (calc) => !hasColumnNameAndCaption(polled.value, calc.calcName, calc.caption),
+      (calc) =>
+        !hasColumnNameAndCaptionInDatasource(
+          polled.value,
+          calc.datasource,
+          calc.calcName,
+          calc.caption,
+        ),
     );
     const fragment = extractSheetXml(polled.value, worksheetName);
     if (missingCalcs.length > 0 || fragment === null) {
@@ -2246,13 +2336,14 @@ async function verifyTrustedWorkbookReadback({
     }
 
     const findings = verifyWorksheetReadback(intendedWorksheetXml, fragment);
+    const worksheetId = worksheetFragmentSimpleId(fragment) ?? undefined;
     if (findings.some((finding) => finding.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
+      return { ok: false, status: 'failed', findings, worksheetId };
     }
     if (findings.some((finding) => finding.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
+      return { ok: true, status: 'warning', findings, worksheetId };
     }
-    return { ok: true, status: 'passed', findings: [] };
+    return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
     return {
       ok: true,
@@ -2446,6 +2537,7 @@ async function performAutoApply({
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   await reportProgress(2, 'Applying workbook changes');
   const applyStart = Date.now();
+  const expectedInstanceId = executor.desktopInstanceId;
   const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
@@ -2455,6 +2547,7 @@ async function performAutoApply({
     executor,
     signal,
     skipValidation,
+    applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applyResult.isErr()) {
     const failureDisposition = applyFailureDisposition(applyResult.error);
@@ -2509,9 +2602,27 @@ async function performAutoApply({
         }
       : undefined;
   const readbackMs = Date.now() - readbackStart;
+  const verificationReport = await verifyAppliedWorksheetFields({
+    structural: verification ?? {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: `Applied worksheet "${literalTitle}" could not be extracted for verification.`,
+    },
+    worksheetId:
+      verification?.worksheetId ??
+      (intendedWorksheetXml
+        ? (worksheetFragmentSimpleId(intendedWorksheetXml) ?? undefined)
+        : undefined),
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics: applyResult.value.diagnostics,
+    diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
+  });
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
-    readback: verification ? publicReadbackVerificationResult(verification) : undefined,
+    readback: verificationReport,
     readbackFindings: verification?.findings ?? [],
   };
   const promiseOutcome = classifyWorksheetPromiseOutcome(receiptInput);
@@ -2533,14 +2644,24 @@ async function performAutoApply({
   const promiseCheck = readbackRan ? formatWorksheetPromiseCheck(receiptInput) : '';
   const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
-  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
+  const invalidUsedFields = verificationReport.findings?.filter(
+    (finding) => finding.source === 'used-field-validity' && finding.severity === 'error',
+  );
+  const nativeFieldEvidence = invalidUsedFields?.length
+    ? `\n\nField verification failed after apply: ${invalidUsedFields
+        .map(
+          (finding) =>
+            `${finding.fieldCaption ?? finding.fieldName ?? 'field'}: ${finding.reason ?? finding.message}`,
+        )
+        .join('; ')}. Diagnose the listed fields. Do NOT call bind-template again or replay apply.`
+    : '';
+  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}${nativeFieldEvidence}`;
 
   if (
     trustedDeterministicApply &&
     verification &&
     (verification.status === 'failed' || verification.status === 'skipped')
   ) {
-    const publicVerification = publicReadbackVerificationResult(verification);
     const failed = applyFallback(
       {
         ...base,
@@ -2557,7 +2678,7 @@ async function performAutoApply({
         sheet_name: literalTitle,
         may_have_applied: true,
         retry_safe: false,
-        verification: publicVerification,
+        verification: verificationReport,
         phase_ms: {
           bind: bindMs,
           inject: injectMs,
@@ -2610,6 +2731,7 @@ async function performAutoApply({
     : {};
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
+  const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2618,10 +2740,22 @@ async function performAutoApply({
     unfilledEncodings !== undefined ||
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed';
+  const usedFieldValidityUnknown = receiptInput.readback.findings?.find(
+    (finding) =>
+      finding.source === 'used-field-validity' && receiptInput.readback?.status === 'skipped',
+  );
+  const postApplyUncertain =
+    !readbackRan ||
+    (usedFieldValidityUnknown !== undefined &&
+      usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
   const needsFollowUp =
-    incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback || !readbackRan;
+    incomplete ||
+    (injected.warnings?.length ?? 0) > 0 ||
+    emptySummaryReadback ||
+    summaryReadbackTimedOut ||
+    postApplyUncertain;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2638,20 +2772,20 @@ async function performAutoApply({
     : '';
   const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
   const guidance = `${
-    unfilledEncodings
-      ? appendUnfilledEncodingGuidance(
-          receiptText,
-          literalTitle,
-          unfilledEncodings,
-          ask,
-          schemaSummary,
-        )
-      : needsFollowUp
-        ? `${appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)}${
-            !readbackRan ? ` ${POST_APPLY_UNCERTAINTY_GUIDANCE}` : ''
-          }`
-        : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+    promiseOutcome === 'failed' || postApplyUncertain
+      ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
+      : unfilledEncodings
+        ? appendUnfilledEncodingGuidance(
+            receiptText,
+            literalTitle,
+            unfilledEncodings,
+            ask,
+            schemaSummary,
+          )
+        : needsFollowUp
+          ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+          : `${receiptText} ${terminalGuidance}`
+  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
@@ -2670,13 +2804,11 @@ async function performAutoApply({
           total: bindMs + injectMs + applyMs + readbackMs + summaryMs,
         }
       : { bind: bindMs, inject: injectMs, apply: applyMs },
-    ...(trustedDeterministicApply && receiptInput.readback
-      ? { verification: receiptInput.readback }
-      : {}),
+    verification: receiptInput.readback,
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
-  if (unfilledEncodings) {
+  if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
     return {
       incomplete: true,
       result: withNextAction(
@@ -2710,10 +2842,10 @@ async function performAutoApply({
                   : []),
                 ...(readbackRan
                   ? [
-                      'whether the sheet renders any marks — structural readback compared XML but did not inspect rendered output',
+                      'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                     ]
                   : [
-                      'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
+                      'whether the applied sheet retained its intended structure, or query execution or rendering succeeds — structural readback did not run',
                     ]),
               ],
             }),
@@ -3491,16 +3623,23 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal?.bindings.map((binding) => binding.field) ?? [],
             );
             if (existingTitle !== undefined) {
-              return new Ok(
-                reusedSheetResult(
-                  {
-                    sheetName: existingTitle,
-                    template: res.args.template_name,
-                    ts: new Date().toISOString(),
-                  },
-                  authoredCalcCaptions,
-                ),
-              );
+              if (atomicCalcs.length === 0) {
+                return new Ok(
+                  reusedSheetResult(
+                    {
+                      sheetName: existingTitle,
+                      template: res.args.template_name,
+                      ts: new Date().toISOString(),
+                    },
+                    authoredCalcCaptions,
+                  ),
+                );
+              }
+              if (classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'in-dashboard') {
+                return new ArgsValidationError(
+                  `deterministic worksheet "${existingTitle}" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`,
+                ).toErr();
+              }
             }
           }
 

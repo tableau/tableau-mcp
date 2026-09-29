@@ -7,6 +7,7 @@ import {
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import {
   blockingValidationIssues,
   introducedBlockingValidationIssues,
@@ -28,6 +29,9 @@ export type LoadWorkbookXmlError =
 
 export interface LoadWorkbookXmlOk {
   validationWarnings: ValidationIssue[];
+  documentWarnings: ExecuteCommandWarning[];
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 }
 
 export function describeLoadWorkbookXmlError(error: LoadWorkbookXmlError): string {
@@ -150,7 +154,7 @@ export async function loadWorkbookXml({
     }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    return Ok({ validationWarnings: validation.issues, ...result.value });
   });
 }
 
@@ -196,7 +200,14 @@ export async function applyWorkbookText({
   focus: ApplyFocus;
   applyOptions?: ApplyWorkbookDocumentOptions;
 } & WithExecutorAndAbortSignal): Promise<
-  Result<{ documentWarnings: ExecuteCommandWarning[] }, ExecuteCommandError>
+  Result<
+    {
+      documentWarnings: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
+      diagnosticsInvalid?: boolean;
+    },
+    ExecuteCommandError
+  >
 > {
   const result = await executor.applyWorkbookDocument(xml, signal, applyOptions);
 
@@ -224,5 +235,9 @@ export async function applyWorkbookText({
   // fails the apply that already landed.
   await dispatchApplyFocus({ focus, postedXml: xml, executor, signal });
 
-  return Ok({ documentWarnings: result.value.warnings ?? [] });
+  return Ok({
+    documentWarnings: result.value.warnings ?? [],
+    ...(result.value.diagnostics ? { diagnostics: result.value.diagnostics } : {}),
+    ...(result.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
+  });
 }

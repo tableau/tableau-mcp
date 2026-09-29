@@ -42,17 +42,20 @@ export function buildInlineImageCapFileMessage(params: {
   bytes: number;
   capBytes: number;
   file: string;
+  nextStep?: string;
 }): string {
-  const { label, bytes, capBytes, file } = params;
+  const { label, bytes, capBytes, file, nextStep } = params;
   return [
     `${label} image is ${bytes} bytes, over the ${capBytes}-byte inline cap. Written to a file ` +
       'instead of returned inline to keep large images out of the conversation.',
     '',
     `Image file: ${file}`,
     '',
-    'Open the file to view the image. To get a smaller inline image next time, request a ' +
-      'worksheet instead of a whole dashboard, or pass a filePath to have Tableau write the ' +
-      'image directly to a location of your choosing.',
+    nextStep ??
+      'Open the file to view the image. This local cache file remains until manually removed. ' +
+        'To get a smaller inline image next time, request a worksheet instead of a whole ' +
+        'dashboard, or pass a filePath to have Tableau write the image directly to a location ' +
+        'of your choosing.',
   ].join('\n');
 }
 

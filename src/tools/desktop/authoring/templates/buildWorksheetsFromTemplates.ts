@@ -21,22 +21,18 @@ import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop process ID; omit for the current instance.'),
-  templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
-  title: z.string().trim().min(1).max(255).describe('Worksheet name to build.'),
-  datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
+  session: z.string().optional().describe('Desktop PID.'),
+  templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
     .describe('Map slot ID to exact returned column_ref.'),
-  topN: z
-    .number()
-    .int()
-    .min(1)
-    .max(50)
+  derivationOverrides: z
+    .record(z.string(), z.enum(['cnt', 'ctd']))
     .optional()
-    .describe(
-      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
-    ),
+    .describe('Count derivation by slot ID.'),
+  topN: z.number().int().min(1).max(50).optional().describe('Rank limit (1-50).'),
 };
 
 interface BuildWorksheetsFromTemplatesDependencies {
@@ -54,7 +50,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
     server,
     name: 'build-worksheets-from-templates',
     title: 'Building template worksheet',
-    description: 'Build one worksheet artifact without changing Desktop.',
+    description: 'Build a worksheet artifact.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -63,12 +59,20 @@ export const getBuildWorksheetsFromTemplatesTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, templateName, title, datasource, fieldMapping, topN },
+      { session, templateName, title, datasource, fieldMapping, derivationOverrides, topN },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, templateName, title, datasource, fieldMapping, topN },
+        args: {
+          session,
+          templateName,
+          title,
+          datasource,
+          fieldMapping,
+          derivationOverrides,
+          topN,
+        },
         getSuccessResult: (payload) => jsonToolResult(payload, { isError: false }),
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -94,6 +98,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             title,
             datasource,
             fieldMapping,
+            derivationOverrides,
             topN,
           };
           const built = buildTemplateWorksheetArtifact({

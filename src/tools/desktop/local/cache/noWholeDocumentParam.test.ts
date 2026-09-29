@@ -1,5 +1,6 @@
 import { Ok } from 'ts-results-es';
 
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import * as getWorksheetXmlCmd from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlCmd from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
@@ -9,6 +10,7 @@ import {
 } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
 import { getGetWorksheetXmlTool } from '../../api/getWorksheetXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
@@ -18,6 +20,10 @@ import { getReadCachedXmlTool } from './readCachedXml.js';
 import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('fs');
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
   ...(await importOriginal<typeof loadWorksheetXmlCmd>()),
@@ -93,6 +99,7 @@ describe('the served profile still has a working edit path with no document para
     vi.mocked(writeFileSync).mockImplementation((p, data) => {
       store.set(String(p), String(data));
     });
+    mockContainedCacheReadFromFs();
   });
 
   it('runs the get -> slice-read -> splice-write -> apply(file) repair path', async () => {

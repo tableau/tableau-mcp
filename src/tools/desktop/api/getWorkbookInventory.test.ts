@@ -47,6 +47,12 @@ describe('getWorkbookInventoryTool', () => {
     expect(tool.name).toBe('get-workbook-inventory');
     expect(tool.description).toContain('title, unsaved changes');
     expect(tool.description).toContain('worksheet/dashboard/storyboard inventory');
+    expect(tool.description).toContain(
+      'an empty list does not mean the workbook has no connected datasource',
+    );
+    expect(tool.description).toContain(
+      'Use list-workbook-datasources only when connection inventory matters',
+    );
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       readOnlyHint: true,

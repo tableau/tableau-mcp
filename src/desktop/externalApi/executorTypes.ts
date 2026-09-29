@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
+import type { WorkbookDiagnostics } from './types.js';
 
 export type { ExternalApiToolExecutor };
 
@@ -40,7 +41,12 @@ export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> =
 } & WithAbortSignal;
 
 export type ExecuteCommandError =
-  | { type: 'command-failed'; error: ExecuteCommandResponseError }
+  | {
+      type: 'command-failed';
+      error: ExecuteCommandResponseError;
+      /** Typed command output retained by the API when a mapped aggregate failure is terminal. */
+      result?: Record<string, unknown>;
+    }
   | { type: 'command-timed-out'; error: string }
   | { type: 'invalid-response'; error: unknown }
   | { type: 'unknown'; error: unknown };
@@ -61,5 +67,14 @@ export type ApplyWorkbookDocumentOptions = {
 
 export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
   Z extends z.ZodTypeAny
-    ? GetCommandStatusResponse & { parsedResult: z.infer<Z>; warnings?: ExecuteCommandWarning[] }
-    : GetCommandStatusResponse & { warnings?: ExecuteCommandWarning[] };
+    ? GetCommandStatusResponse & {
+        parsedResult: z.infer<Z>;
+        warnings?: ExecuteCommandWarning[];
+        diagnostics?: WorkbookDiagnostics;
+        diagnosticsInvalid?: boolean;
+      }
+    : GetCommandStatusResponse & {
+        warnings?: ExecuteCommandWarning[];
+        diagnostics?: WorkbookDiagnostics;
+        diagnosticsInvalid?: boolean;
+      };

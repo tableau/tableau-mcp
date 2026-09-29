@@ -113,10 +113,10 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Fifty-four tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
- * first-class workbook/data reads/navigation, scoped dashboard/story cached-XML fallbacks, and a
- * narrow whole-workbook cached-XML fallback. Standalone validation and unrelated info/site tools
- * stay out. This is the
+ * Seventy-five tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
+ * first-class workbook/data reads/navigation, scoped datasource/dashboard/story cached-XML
+ * fallbacks, dialog inspection and action handling, and a narrow whole-workbook cached-XML
+ * fallback. Standalone validation and unrelated info/site tools stay out. This is the
  * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
  * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
@@ -136,6 +136,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-dashboard-xml',
     'get-storyboard-xml',
     'get-workbook-xml',
+    'export-worksheet-image',
+    'export-dashboard-image',
+    'export-storyboard-image',
     // The edit leg. apply-* no longer accepts a document, so the agent needs a way to
     // read a slice of the cached file and splice an edit back into it. Without these
     // two, an edit that add-field/remove-field/refine-worksheet cannot express has no
@@ -157,29 +160,42 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'delete-sheet',
     'rename-sheet',
     'sort-worksheet',
+    'show-me',
     'add-worksheet',
     'add-dashboard',
     'add-storyboard',
     'compose-story',
     'open-file',
+    'set-start-page-visibility',
     'save-workbook',
     'workbook-export-as',
     'pause-auto-updates',
+    'refresh-auto-updates',
+    'refresh-dashboard-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
     'redo-workbook',
     'ask-user',
     'list-instances',
+    'get-desktop-state',
+    'get-diagnostics',
+    'get-active-dialogs',
+    'invoke-dialog-action',
     'list-available-fields',
     'search-workbook-fields',
     'list-worksheets',
+    'get-show-me-options',
     'list-dashboards',
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
+    'capture-window-screenshot',
     'get-workbook-inventory',
     'list-workbook-datasources',
+    'get-datasource-info',
+    'get-datasource-xml',
+    'apply-datasource',
     'refresh-datasource-data',
     'refresh-datasource-extract',
     'author-calc',
@@ -301,8 +317,11 @@ export class DesktopMcpServer extends Server {
     if (!this.knowledgeCorpusChecked) {
       this.knowledgeCorpusChecked = true;
       if (getKnowledgeCorpusEntryCount() === 0) {
+        const configuredDir = getConfiguredKnowledgeDir();
         log({
-          message: `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+          message: configuredDir
+            ? `Knowledge corpus is empty; expected assets under ${configuredDir}`
+            : 'Knowledge corpus is empty; set TABLEAU_KNOWLEDGE_DIR to a knowledge root to serve one',
           level: 'warning',
           logger: 'DesktopMcpServer',
         });
@@ -429,7 +448,8 @@ export class DesktopMcpServer extends Server {
     this.registerResource({
       name: 'tableau-expertise-knowledge',
       title: 'Tableau authoring knowledge',
-      description: 'Expertise modules scanned from resources/desktop/knowledge',
+      description:
+        'Expertise modules scanned from the configured knowledge root (TABLEAU_KNOWLEDGE_DIR)',
       template,
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];

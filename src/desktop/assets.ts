@@ -4,7 +4,7 @@
 // running from a normal build or under tests, the same calls fall back to reading
 // the files from disk. SEA asset keys are forward-slash paths relative to the
 // build root, e.g. "desktop/data/corpus.json" or
-// "resources/desktop/knowledge/strategy/viz-design/chart-selection.md".
+// "resources/desktop/dashboard-xml-guide.md".
 
 import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
@@ -252,24 +252,19 @@ function walkMarkdownSlugs(root: string): string[] {
 }
 
 export function listKnowledgeSlugs(): string[] {
+  // Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). With no root
+  // configured the corpus is simply empty -- the desktop build no longer bundles one.
   const externalRoots = externalKnowledgeRoots();
-  if (externalRoots.length > 0) {
-    const slugs = new Set<string>();
-    for (const root of externalRoots) {
-      for (const slug of walkMarkdownSlugs(root)) {
-        slugs.add(slug);
-      }
+  if (externalRoots.length === 0) {
+    return [];
+  }
+  const slugs = new Set<string>();
+  for (const root of externalRoots) {
+    for (const slug of walkMarkdownSlugs(root)) {
+      slugs.add(slug);
     }
-    return [...slugs].sort();
   }
-  if (runningAsSea()) {
-    const prefix = 'resources/desktop/knowledge/';
-    return listSeaAssetKeys('resources/desktop/knowledge')
-      .filter((key) => key.endsWith('.md'))
-      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
-      .sort();
-  }
-  return walkMarkdownSlugs(join(getResourcesRoot(), 'knowledge')).sort();
+  return [...slugs].sort();
 }
 
 function isSafeKnowledgeSlug(slug: string): boolean {
@@ -285,7 +280,7 @@ export function readKnowledgeBySlug(slug: string): string | null {
   }
   const externalRoots = externalKnowledgeRoots();
   if (externalRoots.length === 0) {
-    return readResourceAsset(`knowledge/${slug}.md`);
+    return null;
   }
   for (const root of externalRoots) {
     try {
@@ -299,7 +294,5 @@ export function readKnowledgeBySlug(slug: string): string | null {
 
 export function getConfiguredKnowledgeDir(): string {
   const externalRoots = externalKnowledgeRoots();
-  return externalRoots.length > 0
-    ? externalRoots.join(delimiter)
-    : join(getResourcesRoot(), 'knowledge');
+  return externalRoots.length > 0 ? externalRoots.join(delimiter) : '';
 }

@@ -2,10 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { DatasourceItem } from '../../../desktop/externalApi/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { projectDatasource } from './datasourceResult.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -57,27 +57,3 @@ export const getListWorkbookDatasourcesTool = (
 
   return listWorkbookDatasources;
 };
-
-function projectDatasource(datasource: DatasourceItem): {
-  id?: string;
-  luid?: string;
-  name?: string;
-  caption?: string;
-  type?: string;
-  isExtract?: boolean;
-  hasDownloadFilePermission?: boolean;
-} {
-  return {
-    ...(datasource.id !== undefined ? { id: datasource.id } : {}),
-    // The API emits luid: null for embedded/federated datasources; only surface a real LUID.
-    ...(typeof datasource.luid === 'string' ? { luid: datasource.luid } : {}),
-    ...(datasource.name !== undefined ? { name: datasource.name } : {}),
-    ...(datasource.caption !== undefined ? { caption: datasource.caption } : {}),
-    ...(datasource.type !== undefined ? { type: datasource.type } : {}),
-    ...(datasource.isExtract !== undefined ? { isExtract: datasource.isExtract } : {}),
-    // The API emits hasDownloadFilePermission: null when unpublished (permission N/A); surface only a real boolean.
-    ...(typeof datasource.hasDownloadFilePermission === 'boolean'
-      ? { hasDownloadFilePermission: datasource.hasDownloadFilePermission }
-      : {}),
-  };
-}

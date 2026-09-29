@@ -7,6 +7,7 @@ import {
   XmlValidationError,
 } from '../../errors/mcpToolError.js';
 import { bindExplicitTemplate, formatExplicitBindErrors } from '../binder/explicit-bind.js';
+import type { Derivation } from '../binder/manifest-types.js';
 import { summarizeSchema } from '../binder/schema-summary.js';
 import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
 import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
@@ -48,6 +49,7 @@ export interface WorksheetTemplatePlan {
   title: string;
   datasource: string;
   fieldMapping: Record<string, string>;
+  derivationOverrides?: Record<string, Derivation>;
   topN?: number;
 }
 
@@ -112,6 +114,7 @@ export function buildTemplateWorksheetArtifact({
       contract: snapshot.descriptor,
       title: plan.title,
       datasource: resolvedPlanDatasource,
+      derivationOverrides: plan.derivationOverrides,
     });
     if (!explicitBind.ok) {
       return new ArgsValidationError(
