@@ -331,9 +331,13 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
               'already matches null-lastLogin users, so they are in these results.)',
             '**Completeness check (required).** After the call, inspect `mcp.resultInfo.truncated`. If it is ' +
               '`true`, MORE inactive users match than were returned — the candidate set is PARTIAL. Because there ' +
-              'is no page offset, narrow the `filter` (a tighter `siteRole:in` subset or a smaller inactivity ' +
-              'window) and re-run per slice, combining results, until every call returns ' +
-              '`mcp.resultInfo.truncated: false`.',
+              'is no page offset, try narrowing the `filter` (a tighter `siteRole:in` subset or a smaller ' +
+              'inactivity window) and re-running per slice, combining results. But narrowing does NOT always ' +
+              'converge: a never-signed-in user has a null `lastLogin`, which matches every `lastLogin:lt` window ' +
+              'no matter how small, so an overflow concentrated in one role\'s never-signed-in population cannot ' +
+              'be shrunk below the ceiling this way. If after narrowing as far as the criteria allow the result is ' +
+              'still truncated, STOP retrying — report the candidate set as PARTIAL in the final output (state ' +
+              'the `truncationReason`) rather than looping indefinitely or presenting it as complete.',
           ]),
       '',
       `**Step 2 — Activity signals (read-only).** Make TWO \`${ADMIN_INSIGHTS_TOOL}\` calls.`,

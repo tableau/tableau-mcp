@@ -131,6 +131,9 @@ describe('user-license-reclamation-apply prompt', () => {
     // Completeness gate so a truncated inventory is not mistaken for the full inactive set.
     expect(text).toContain('Completeness check (required).');
     expect(text).toContain('mcp.resultInfo.truncated');
+    // Narrowing does not always converge (never-signed-in users match every lastLogin:lt
+    // window) — the model must stop and report PARTIAL rather than loop indefinitely.
+    expect(text).toContain('STOP retrying');
   });
 
   it('de-duplicates repeated userIds', async () => {

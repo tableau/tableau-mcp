@@ -49,6 +49,10 @@ describe('user-license-reclamation-inform prompt', () => {
     // The model must confirm the result was not truncated before treating candidates as complete.
     expect(text).toContain('Completeness check (required');
     expect(text).toContain('mcp.resultInfo.truncated');
+    // Narrowing the filter does not always converge (e.g. an overflow of never-signed-in users
+    // in a single role matches every lastLogin:lt window) — the model must stop and report
+    // PARTIAL rather than loop indefinitely.
+    expect(text).toContain('STOP retrying');
   });
 
   it('uses default inactiveDays of 90 and roles of Creator,Explorer', async () => {
