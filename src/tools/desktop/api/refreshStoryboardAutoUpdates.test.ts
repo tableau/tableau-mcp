@@ -56,9 +56,11 @@ describe('refresh-storyboard-auto-updates', () => {
         body: '',
       });
       expect(parseResult(result)).toEqual({
-        refreshed: true,
         storyboard: { id: STORYBOARD_ID, name: STORYBOARD_NAME },
-        message: `Refreshed auto-updates for storyboard "${STORYBOARD_NAME}".`,
+        outcome: 'COMPLETE',
+        refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+        failed: [],
+        message: `Refreshed auto-updates for the current point of storyboard "${STORYBOARD_NAME}".`,
       });
       expect(JSON.stringify(parseResult(result))).not.toContain('operation');
     } finally {
@@ -182,6 +184,105 @@ describe('refresh-storyboard-auto-updates', () => {
       await harness.close();
     }
   });
+
+  it.each([
+    ['PARTIAL', [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }]],
+    ['FAILED', []],
+  ] as const)(
+    'preserves a %s current-point outcome and per-worksheet failures',
+    async (outcome, refreshed) => {
+      const failed = [
+        {
+          worksheetId: 'sheet-profit',
+          worksheetName: 'Profit by Category',
+          code: 'model-invalid-after-refresh',
+          message: 'The worksheet model remained invalid after refresh.',
+        },
+      ];
+      const harness = await startHarness((server) => {
+        server.setOverride(`POST ${REFRESH_ROUTE}`, {
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'op-storyboard-refresh-incomplete',
+            kind: 'storyboard.refreshNow',
+            state: 'FAILED',
+            error: {
+              code: 'storyboard-refresh-now-failed',
+              message: 'One or more storyboard worksheets could not be refreshed.',
+              tableauErrorCode: '4D60D278',
+            },
+            result: { outcome, refreshed, failed },
+          }),
+        });
+      });
+      try {
+        const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+        const body = parseResult(result);
+
+        expect(result.isError).toBe(true);
+        expect(body).toMatchObject({
+          storyboard: { id: STORYBOARD_ID, name: STORYBOARD_NAME },
+          outcome,
+          refreshed,
+          failed,
+          error: { code: 'storyboard-refresh-now-failed', 'tableau-error-code': '4D60D278' },
+        });
+        expect(result.structuredContent).toMatchObject(body);
+        expect(result.structuredContent).toHaveProperty('nextAction.kind', 'prefill');
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('retains a polled partial current-point result', async () => {
+    const operationId = 'op-storyboard-partial-polled';
+    const partial = {
+      outcome: 'PARTIAL',
+      refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+      failed: [
+        {
+          worksheetId: 'sheet-profit',
+          worksheetName: 'Profit by Category',
+          code: 'refresh-attempt-failed',
+          message: 'The worksheet refresh attempt failed.',
+        },
+      ],
+    };
+    const harness = await startHarness((server) => {
+      server.setOverride(`POST ${REFRESH_ROUTE}`, {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: `/v0/operations/${operationId}` },
+        body: JSON.stringify({ id: operationId, kind: 'storyboard.refreshNow', state: 'RUNNING' }),
+      });
+      server.setOperation(operationId, {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: operationId,
+            kind: 'storyboard.refreshNow',
+            state: 'FAILED',
+            error: { code: 'storyboard-refresh-now-failed', message: 'One worksheet failed.' },
+            result: partial,
+          },
+        ],
+      });
+    });
+    try {
+      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+
+      expect(result.isError).toBe(true);
+      expect(parseResult(result)).toMatchObject(partial);
+      expect(result.structuredContent).toMatchObject(partial);
+      expect(
+        harness.server.requests.some((request) => request.path === `/v0/operations/${operationId}`),
+      ).toBe(true);
+    } finally {
+      await harness.close();
+    }
+  });
 });
 
 type RefreshStoryboardArgs = {
@@ -236,7 +337,7 @@ function refreshRequests(server: MockExternalApiServer): RecordedRequest[] {
 }
 
 type RefreshResult = {
-  refreshed: boolean;
+  refreshed: boolean | { worksheetId: string; worksheetName: string }[];
   storyboard: { id: string; name: string };
   message: string;
 };

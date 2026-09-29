@@ -851,6 +851,10 @@ export const dashboardRefreshOutcomeSchema = z
   .passthrough();
 export type DashboardRefreshOutcome = z.infer<typeof dashboardRefreshOutcomeSchema>;
 
+/** The aggregate outcome for a storyboard's current point uses the same worksheet target shape. */
+export const storyboardRefreshOutcomeSchema = dashboardRefreshOutcomeSchema;
+export type StoryboardRefreshOutcome = z.infer<typeof storyboardRefreshOutcomeSchema>;
+
 /** Storyboard item returned in workbook inventory reads. */
 export const storyboardItemSchema = z
   .object({

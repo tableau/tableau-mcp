@@ -1144,7 +1144,18 @@ export async function startMockExternalApiServer(
         sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
         return;
       }
-      sendOperation(res, 'refresh-storyboard-now');
+      sendJson(res, 200, {
+        id: 'op-refresh-storyboard-now-1',
+        kind: 'storyboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+          failed: [],
+        },
+      });
       return;
     }
 

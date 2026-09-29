@@ -88,6 +88,8 @@ import {
   StoryboardList,
   storyboardListSchema,
   storyboardRefreshNowRoute,
+  type StoryboardRefreshOutcome,
+  storyboardRefreshOutcomeSchema,
   storyboardRoute,
   SummaryData,
   summaryDataSchema,
@@ -885,11 +887,35 @@ export class ExternalApiToolExecutor {
   async refreshStoryboardNow(
     storyboardId: string,
     signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    return this.applyDocument(
+  ): Promise<
+    Result<
+      ExecuteCommandResult<undefined> & { parsedResult?: StoryboardRefreshOutcome },
+      ExecuteCommandError
+    >
+  > {
+    const result = await this.applyDocument(
       (http) => http.postEnvelope(storyboardRefreshNowRoute(storyboardId), signal),
       'refresh-storyboard-now',
     );
+
+    if (result.isErr()) {
+      if (result.error.type !== 'command-failed' || result.error.result === undefined) {
+        return result;
+      }
+      const parsed = storyboardRefreshOutcomeSchema.safeParse(result.error.result);
+      return parsed.success
+        ? Err({ ...result.error, result: parsed.data })
+        : Err({ type: 'invalid-response', error: parsed.error });
+    }
+
+    if (result.value.status !== 'completed') {
+      return result;
+    }
+    const parsed = storyboardRefreshOutcomeSchema.safeParse(result.value.result);
+    if (!parsed.success) {
+      return Err({ type: 'invalid-response', error: parsed.error });
+    }
+    return Ok({ ...result.value, parsedResult: parsed.data });
   }
 
   async refreshDashboardNow(

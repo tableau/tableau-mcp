@@ -1416,6 +1416,11 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().status).toBe('completed');
+      expect(result.unwrap().parsedResult).toEqual({
+        outcome: 'COMPLETE',
+        refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+        failed: [],
+      });
       const last = server.requests.at(-1);
       expect(last?.method).toBe('POST');
       expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr:refreshNow');
@@ -1433,7 +1438,7 @@ describe('ExternalApiToolExecutor', () => {
           state: 'SUCCEEDED',
           createdAt: '2026-09-23T10:00:00Z',
           completedAt: '2026-09-23T10:00:01Z',
-          result: {},
+          result: { outcome: 'COMPLETE', refreshed: [], failed: [] },
         }),
       });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });

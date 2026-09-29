@@ -4,10 +4,16 @@ import { z } from 'zod';
 
 import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
+import { StoryboardRefreshOutcome } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
-import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  DesktopCommandExecutionError,
+  IncompleteOperationError,
+} from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
+import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
@@ -18,6 +24,13 @@ const paramsSchema = {
     .describe('Storyboard name or stable id whose current point should refresh now.'),
 };
 const title = 'Refresh Storyboard Auto Updates';
+type RefreshStoryboardToolResult = {
+  storyboard: { id: string; name: string };
+  message: string;
+  refreshed?: boolean | StoryboardRefreshOutcome['refreshed'];
+  outcome?: StoryboardRefreshOutcome['outcome'];
+  failed?: StoryboardRefreshOutcome['failed'];
+};
 
 export const getRefreshStoryboardAutoUpdatesTool = (
   server: DesktopMcpServer,
@@ -36,7 +49,7 @@ export const getRefreshStoryboardAutoUpdatesTool = (
     },
     paramsSchema,
     callback: async ({ session, storyboard }, extra): Promise<CallToolResult> => {
-      return await refreshStoryboardAutoUpdatesTool.logAndExecute({
+      return await refreshStoryboardAutoUpdatesTool.logAndExecute<RefreshStoryboardToolResult>({
         extra,
         args: { session, storyboard },
         callback: async () => {
@@ -63,16 +76,33 @@ export const getRefreshStoryboardAutoUpdatesTool = (
             if (isRefreshRouteMissing(result.error)) {
               return endpointNotInThisBuild('refresh-storyboard-auto-updates').toErr();
             }
+            if (result.error.type === 'command-failed' && result.error.result !== undefined) {
+              return new IncompleteOperationError(
+                attachNextAction(
+                  {
+                    storyboard: { id: ref.id, name: previousName },
+                    ...result.error.result,
+                    error: result.error.error,
+                  },
+                  prefillNextAction('Review failed current-point storyboard refresh targets'),
+                ),
+              ).toErr();
+            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          const completed = result.value.status === 'completed';
+          if (result.value.status !== 'completed') {
+            return new Ok({
+              refreshed: false,
+              storyboard: { id: ref.id, name: previousName },
+              message: `Requested refreshing auto-updates for storyboard "${previousName}"; Desktop is still applying it.`,
+            });
+          }
+
           return new Ok({
-            refreshed: completed,
             storyboard: { id: ref.id, name: previousName },
-            message: completed
-              ? `Refreshed auto-updates for storyboard "${previousName}".`
-              : `Requested refreshing auto-updates for storyboard "${previousName}"; Desktop is still applying it.`,
+            ...result.value.parsedResult,
+            message: `Refreshed auto-updates for the current point of storyboard "${previousName}".`,
           });
         },
       });
