@@ -17,13 +17,17 @@ import {
   QueryRequest,
   querySchema,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
-import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import {
+  getEmbeddedDatasourceVersionHint,
+  getVizqlDataServiceDisabledError,
+} from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
@@ -164,7 +168,14 @@ export const getQueryDatasourceTool = (
               if (result.isErr()) {
                 const vdsError = result.error;
                 if (vdsError.type === 'feature-disabled') {
-                  return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
+                  // Any 404 from the VDS query endpoint maps to feature-disabled. On REST API < 3.30
+                  // that 404 can instead mean the target is an embedded datasource (unsupported below
+                  // 3.30), so append a hedged hint — the base "enable VDS via TSM" text stays correct
+                  // for a genuinely-disabled VDS.
+                  const message = RestApi.versionIsAtLeast('3.30')
+                    ? getVizqlDataServiceDisabledError()
+                    : `${getVizqlDataServiceDisabledError()} ${getEmbeddedDatasourceVersionHint()}`;
+                  return new FeatureDisabledError(message).toErr();
                 }
                 if (vdsError.type === 'workbook-datasource-not-enabled') {
                   return new WorkbookDatasourceNotEnabledError().toErr();
