@@ -48,14 +48,14 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 |----------|------|----------|-------------|
 | `filter` | string | No | Client-side filter string with format `field:operator:value`. Multiple filters are comma-separated (AND logic). |
 | `pageSize` | number | No | Number of users to fetch from the API per page (default 100, max 1000) |
-| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of `100` is applied** (see the note below) and the result is flagged `truncated: true` with `truncationReason: "default-limit"`. A single call returns at most `1000` users: a larger `limit` is clamped to `1000` and the result is flagged `truncated: true` with `truncationReason: "max-limit"`. Add a `filter` to target specific users, or page further. |
+| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of `100` is applied** (see the note below) and the result is flagged `truncated: true` with `truncationReason: "default-limit"`. A single call returns at most `1000` users: a larger `limit` is clamped to `1000` and the result is flagged `truncated: true` with `truncationReason: "max-limit"`. To see more, add a `filter` to target specific users or pass a higher `limit` (up to `1000`). The `1000` per-call ceiling is a hard cap with no page offset, so neither a bigger `limit` nor repeated calls advance past it — to reach matches beyond it you must narrow the `filter`. |
 
 :::note[API Limitation]
 The Tableau REST API does not support server-side filtering or pagination for users. All users are fetched and filtering is performed client-side by this tool.
 :::
 
 :::warning[Default limit on unbounded calls]
-An unbounded `list-users` call (no `limit`, no `filter`) on a large site can return tens of thousands of users — a multi-megabyte payload that exceeds the MCP response-size limit and is silently truncated in transit, which can cause a model to report fabricated site-wide totals from a payload it never fully received. To prevent this, when the caller passes no `limit` the tool applies a default cap of `100`, returns that bounded page, and flags the result `truncated: true` with `truncationReason: "default-limit"` and a `summary` explaining it is partial. Pass a `filter` to target specific users, or an explicit higher `limit` to page further.
+An unbounded `list-users` call (no `limit`, no `filter`) on a large site can return tens of thousands of users — a multi-megabyte payload that exceeds the MCP response-size limit and is silently truncated in transit, which can cause a model to report fabricated site-wide totals from a payload it never fully received. To prevent this, when the caller passes no `limit` the tool applies a default cap of `100`, returns that bounded page, and flags the result `truncated: true` with `truncationReason: "default-limit"` and a `summary` explaining it is partial. Pass a `filter` to target specific users, or an explicit higher `limit` (up to the `1000` per-call maximum) to return more in one call.
 :::
 
 :::note[Never-logged-in users]
@@ -115,10 +115,10 @@ Each user in `users` includes:
 - `returnedCount` – number of users in `users`.
 - `truncated` – `false` means `users` is the **complete** set matching the filter; `true` means more matching users exist server-side than were returned.
 - `truncationReason` (present only when `truncated` is `true`):
-  - `"requested-limit"` – the `limit` you passed cut the result short. Call again with a higher `limit` (or omit it) to get more.
+  - `"requested-limit"` – the `limit` you passed cut the result short. Call again with a higher `limit` to get more.
   - `"admin-cap"` – a site-administrator per-call cap (`MAX_RESULT_LIMIT[S]`) cut the result short. `limit` cannot raise it, so either narrow the `filter` so the matching set fits, or ask an administrator to raise the cap.
-  - `"default-limit"` – you passed no `limit`, so the tool applied its default cap of `100`. This is a **partial** page, **not** site-wide totals; add a `filter` to target specific users or pass a higher `limit` to page further.
-  - `"max-limit"` – your `limit` exceeded the per-call maximum of `1000` and was clamped to it. A single call cannot return more; narrow the `filter` so the matching set fits, or page through the results.
+  - `"default-limit"` – you passed no `limit`, so the tool applied its default cap of `100`. This is a **partial** page, **not** site-wide totals; add a `filter` to target specific users or pass a higher `limit` (up to `1000`) to return more.
+  - `"max-limit"` – your `limit` exceeded the per-call maximum of `1000` and was clamped to it. A single call cannot return more, and there is no page offset — neither a higher `limit` nor repeated calls advance past the ceiling; narrow the `filter` so fewer users match.
 - `summary` – a plain-language sentence (always present) stating whether the list is complete or partial and, if partial, how to retrieve more. Relay it to the user; never report a `truncated` list as complete or as site-wide totals.
 
 :::note[`limit` bounds matches, not fetched rows]

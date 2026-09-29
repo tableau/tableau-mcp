@@ -34,7 +34,7 @@ const DEFAULT_RESULT_LIMIT = 100;
 /**
  * Hard ceiling on how many users a SINGLE call can return, applied even to an
  * explicit caller `limit`. The default-limit summary/description invite the
- * model to "pass a higher limit" to page further; without a ceiling a model
+ * model to "pass a higher limit" to see more; without a ceiling a model
  * could pass e.g. `limit: 100000` and re-trigger the exact multi-MB payload
  * overflow this fix exists to prevent (W-23757370). We reuse {@link MAX_PAGE_SIZE}
  * (1000) — the most a single Tableau page returns — as a sane, already-justified
@@ -65,7 +65,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   **Parameters:**
   - \`filter\` (optional) – Filter string with format \`field:operator:value\`. Multiple filters are comma-separated (AND logic). Same field can appear multiple times for range queries (e.g. \`lastLogin:gt:X,lastLogin:lt:Y\`).
   - \`pageSize\` (optional) – Number of users to fetch from the API per page (default 100, max 1000). Controls server-side pagination.
-  - \`limit\` (optional) – Maximum number of MATCHING users to return. \`limit\` bounds results AFTER \`filter\` is applied: the tool keeps paging until it has \`limit\` filter-matches (or the site is exhausted), so \`limit:5\` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of ${DEFAULT_RESULT_LIMIT} is applied** — the full user list on a large site can exceed the response-size limit and be silently truncated in transit, so an unbounded call returns a bounded, readable page flagged \`truncated:true\` with \`truncationReason:"default-limit"\`. Add a \`filter\` to target specific users, or pass a higher \`limit\` to page further. A single call returns at most ${MAX_USERS_PER_CALL} users: a larger \`limit\` is clamped to that ceiling and reported as \`truncationReason:"max-limit"\` (page with a \`filter\` for more).
+  - \`limit\` (optional) – Maximum number of MATCHING users to return. \`limit\` bounds results AFTER \`filter\` is applied: the tool keeps paging until it has \`limit\` filter-matches (or the site is exhausted), so \`limit:5\` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of ${DEFAULT_RESULT_LIMIT} is applied** — the full user list on a large site can exceed the response-size limit and be silently truncated in transit, so an unbounded call returns a bounded, readable page flagged \`truncated:true\` with \`truncationReason:"default-limit"\`. To see more, add a \`filter\` to target specific users or pass a higher \`limit\` (up to ${MAX_USERS_PER_CALL}). A single call returns at most ${MAX_USERS_PER_CALL} users: a larger \`limit\` is clamped to that ceiling and reported as \`truncationReason:"max-limit"\`. That ceiling is a hard per-call cap and there is no page offset, so neither a bigger \`limit\` nor repeated calls advance past it — narrow the \`filter\` to reach matches beyond ${MAX_USERS_PER_CALL}.
 
   **Filterable Fields:**
 
@@ -97,7 +97,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   \`mcp.resultInfo\` is present on every non-empty result and reports completeness of the (filtered) list (a filter matching zero users returns a plain message instead):
   - \`returnedCount\` – number of users in \`users\`.
   - \`truncated\` – \`false\` means \`users\` is the COMPLETE set matching the filter; \`true\` means more matching users exist server-side than were returned.
-  - \`truncationReason\` (only when \`truncated\`): \`"requested-limit"\` (your \`limit\` cut it short — call again with a higher \`limit\`), \`"admin-cap"\` (a site per-call cap cut it short — narrow the \`filter\` or ask an admin to raise the cap), \`"default-limit"\` (you passed no \`limit\` so the tool applied a default cap of ${DEFAULT_RESULT_LIMIT} — this is a PARTIAL page, NOT site-wide totals; add a \`filter\` to target users or pass a higher \`limit\`), or \`"max-limit"\` (your \`limit\` exceeded the per-call maximum of ${MAX_USERS_PER_CALL} and was clamped — \`limit\` cannot raise it; narrow the \`filter\` and page).
+  - \`truncationReason\` (only when \`truncated\`): \`"requested-limit"\` (your \`limit\` cut it short — call again with a higher \`limit\`), \`"admin-cap"\` (a site per-call cap cut it short — narrow the \`filter\` or ask an admin to raise the cap), \`"default-limit"\` (you passed no \`limit\` so the tool applied a default cap of ${DEFAULT_RESULT_LIMIT} — this is a PARTIAL page, NOT site-wide totals; add a \`filter\` to target users or pass a higher \`limit\`), or \`"max-limit"\` (your \`limit\` exceeded the per-call maximum of ${MAX_USERS_PER_CALL} and was clamped — neither a higher \`limit\` nor repeated calls can return more, as there is no page offset; narrow the \`filter\` so fewer users match).
   - \`summary\` – a plain-language sentence stating whether the list is complete or partial and, if partial, how to get more. Always present. Relay it to the user; never report a \`truncated\` list as complete or as site-wide totals.
   `,
     paramsSchema,
@@ -336,7 +336,7 @@ export function buildUsersResultSummary({
     case 'max-limit':
       return (
         `Partial list — showing the first ${returnedCount} ${noun}${plural}; your "limit" exceeded the per-call maximum of ${MAX_USERS_PER_CALL} and was clamped to it. ` +
-        'A single call cannot return more; narrow the "filter" so the matching set fits, or page through with repeated calls.'
+        'A single call cannot return more, and there is no page offset — a higher "limit" or repeated calls return the same leading users, not the next page. Narrow the "filter" so the matching set fits under the cap.'
       );
     case 'requested-limit':
     default:
