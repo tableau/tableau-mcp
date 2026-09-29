@@ -1,9 +1,13 @@
 {
   "mcp-apps": false,
   "enforce-role-requirements": false,
+  "enforce-registration-conditions": false,
   "authoring-tools": true,
   "flow-tools": false,
+  "knowledge-tools": false,
   "view-file-mode": false,
   "view-data-file-mode": false,
-  "workbook-file-mode": true
+  "workbook-file-mode": true,
+  "data-apps": false,
+  "skills-over-mcp": false
 }

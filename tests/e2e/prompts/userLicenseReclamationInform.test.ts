@@ -110,6 +110,22 @@ describe('user-license-reclamation-inform prompt', () => {
       expect(text).toContain('Desktop/Prep activity data may be unavailable on this tenant');
     });
 
+    it('scopes the ts-events query to Step-1 candidate names and warns on truncation (W-23801564)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME);
+      // The ts-events query carries an Actor User Name SET filter with a replace-me placeholder.
+      expect(text).toContain(
+        '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username (equals the email on Tableau Cloud); one string per candidate>',
+      );
+      expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+      expect(text).toContain('Do not fetch site-wide events.');
+      expect(text).toContain('If the TS Events query returns exactly 10000 rows');
+      // 0 rows is valid for ts-events but an unsubstituted placeholder must be flagged.
+      expect(text).toContain('0 rows here is a VALID result');
+    });
+
     it('scopes the ts-users query to Step-1 candidate emails and warns on truncation (W-23757367)', async () => {
       if (!promptAvailable) {
         return;

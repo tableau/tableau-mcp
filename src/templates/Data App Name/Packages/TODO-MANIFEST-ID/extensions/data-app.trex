@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
+  <worksheet-extension id="TODO-MANIFEST-ID" extension-version="1.0.0">
+    <default-locale>en_US</default-locale>
+    <name resource-id="name" />
+    <description>Tableau data app: queries its published datasource live via the Extensions API.</description>
+    <author name="Tableau MCP" email="noreply@tableau.com" website="https://www.tableau.com" />
+    <min-api-version>1.11</min-api-version>
+    <source-location>
+      <url>index.html</url>
+    </source-location>
+    <icon>iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=</icon>
+    <permissions>
+      <permission>full data</permission>
+    </permissions>
+    <encoding id="field">
+      <display-name>Data</display-name>
+      <role-spec>
+        <role-type>discrete-dimension</role-type>
+        <role-type>discrete-measure</role-type>
+        <role-type>continuous-dimension</role-type>
+        <role-type>continuous-measure</role-type>
+      </role-spec>
+      <fields max-count="50" />
+      <encoding-icon token="level" />
+    </encoding>
+  </worksheet-extension>
+  <resources>
+    <resource id="name">
+      <text locale="en_US">TODO App Name</text>
+    </resource>
+  </resources>
+</manifest>

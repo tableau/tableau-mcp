@@ -3,11 +3,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { FlowRun } from '../../../../sdks/tableau/types/flow.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import {
   LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE,
@@ -19,8 +21,19 @@ import { genericFilterDescription } from '../../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 import { extractEqValue, looksLikeUuid } from '../flowFilterUtils.js';
+import {
+  buildRunHistoryUrl,
+  countDistinctFlows,
+  FlowRunFailureSummary,
+  getFailedRuns,
+  needsUiFallback,
+  summarizeFlowRunFailures,
+} from '../flowRunFailure.js';
 import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
-import { parseAndValidateFlowRunsFilterString } from './flowRunsFilterUtils.js';
+import {
+  parseAndValidateFlowRunsFilterString,
+  ValidatedFlowRunsFilter,
+} from './flowRunsFilterUtils.js';
 
 // Server page size for the run-history pagination loop. The "Get Flow Runs"
 // endpoint returns NO pagination block (no `totalAvailable`), so this tool
@@ -29,13 +42,10 @@ import { parseAndValidateFlowRunsFilterString } from './flowRunsFilterUtils.js';
 // for (the "+1 probe", which lets it report `truncated` without a count).
 const FLOW_RUNS_PAGE_SIZE = 100;
 
-// Sentinel for "no caller limit and no admin cap" — pagination still terminates
-// at the server's last (short) page, so this just means "return everything".
-const UNBOUNDED = Number.MAX_SAFE_INTEGER;
-
 // The Get Flow Runs endpoint was introduced in REST API 3.10 (Tableau Server
 // 2020.4). Older servers return 404, so gate the call to give a clear message.
 const MIN_REST_VERSION = '3.10';
+const STATUS_FILTER_SORT_MIN_REST_VERSION = '3.30';
 
 // Safety backstop for an otherwise-unbounded call (no caller `limit` AND no admin
 // MAX_RESULT_LIMIT). Flow runs accumulate quickly on active sites, so default to
@@ -58,13 +68,19 @@ export type ListFlowRunsResultInfo = {
 };
 
 /**
- * Pointer to investigate flow-run failures in the Tableau UI. The Get Flow Runs
- * endpoint never returns *why* a run failed, so when the returned window holds
- * one or more `Failed` runs the tool resolves ONE affected flow's `webpageUrl`
- * (via Query Flow) into a run-history deep link the caller can open to read the
- * error. Only one example is resolved (a single extra REST call); `failedFlowCount`
- * tells the caller how many other flows failed so it can offer to fetch their
- * links (via get-flow) on request.
+ * FALLBACK pointer to investigate flow-run failures in the Tableau UI, for when
+ * the runs themselves cannot explain the failure — either the server predates
+ * REST API 3.30 (no `failureReason` at all) or every reason it returned has
+ * `available: false`, whose message is a placeholder rather than a cause.
+ *
+ * On that path the tool resolves ONE affected flow's `webpageUrl` (via Query
+ * Flow) into a run-history deep link the caller can open to read the error. Only
+ * one example is resolved (a single extra REST call); `failedFlowCount` tells the
+ * caller how many other flows failed so it can offer to fetch their links (via
+ * get-flow) on request.
+ *
+ * When a resolved reason IS available, `mcp.failureSummary` answers the question
+ * directly and this field — along with its extra REST call — is skipped.
  */
 export type ListFlowRunsFailureInsight = {
   // Number of `Failed` runs within the returned (post-limit) window.
@@ -87,13 +103,17 @@ export type ListFlowRunsFailureInsight = {
  * does not return a server-side count, so completeness is reported via the
  * `truncated` flag (computed with a "+1 probe") only.
  *
- * `mcp.failureInsight` is present ONLY when the returned window contains a
- * `Failed` run (the API hides failure reasons, so this links to the UI page).
+ * `mcp.failureSummary` is present whenever a `Failed` run carries a
+ * `failureReason` (REST API 3.30+). `mcp.failureInsight` is ADDED when no reason
+ * resolves the failure (see needsUiFallback), so a window whose reasons are all
+ * `available: false` carries both: the summary counts the failures, the link is
+ * where the actual cause can be read.
  */
 export type ListFlowRunsResult = {
   flowRuns: FlowRun[];
   mcp: {
     resultInfo: ListFlowRunsResultInfo;
+    failureSummary?: FlowRunFailureSummary;
     failureInsight?: ListFlowRunsFailureInsight;
   };
 };
@@ -110,19 +130,20 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   const listFlowRunsTool = new WebTool({
     server,
     name: 'list-flow-runs',
+    minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
     ),
     description: `
-  Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one execution attempt with its \`status\` (Pending, InProgress, Success, Failed, Cancelled), \`startedAt\`/\`completedAt\` timestamps, \`progress\`, the \`flowId\` it belongs to, and the \`backgroundJobId\`. Use this tool to answer questions about flow execution outcomes — e.g. "which flows failed recently", "show the run history for flow X", "what's still running".
+  Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one execution attempt with its \`status\` (Pending, InProgress, Success, Failed, Cancelled), \`startedAt\`/\`completedAt\` timestamps, \`progress\`, the \`flowId\` it belongs to, the \`backgroundJobId\`, and — on \`Failed\` runs, REST API 3.30+ — a \`failureReason\` giving the cause. Use this tool to answer questions about flow execution outcomes — e.g. "why did my flow fail", "which flows failed recently and why", "show the run history for flow X", "what's still running".
 
   **This vs. get-flow / list-flows**
   - \`list-flows\` lists flow *definitions* (metadata), not executions.
   - \`get-flow\` returns recent runs for ONE flow (capped, as a sidecar). \`list-flow-runs\` is the dedicated, filterable, site-wide run history — use it for cross-flow questions ("all failures today") or deeper single-flow history.
 
   **What a run record does NOT include**
-  - **Failure reason:** a run reports only its \`status\`, never *why* it failed — the run data carries no error message. A failed run's \`backgroundJobId\` identifies the underlying background job that holds the error detail, but reading that detail requires Tableau **site-administrator** access. \`backgroundJobId\` is populated only for recent runs. As a workaround, when the returned window contains \`Failed\` runs the tool resolves a **run-history deep link** for one affected flow into \`mcp.failureInsight\` — open it in Tableau to read the error there (see Response Shape).
+  - **Failure reason — mostly now available.** On Tableau REST API **3.30+**, a \`Failed\` run carries \`failureReason: { available, message }\` giving the cause directly, readable by any caller (it comes from the flow's output-step errors, not the admin-only background job). Residual gaps: (1) only \`Failed\` runs get one — there is nothing for \`Cancelled\`, and nothing that explains why a run is slow or stuck \`InProgress\`; (2) \`message\` is a short localized reason, NOT a stack trace or job log — the full job detail behind \`backgroundJobId\` still requires **site-administrator** access (and \`backgroundJobId\` is populated only for recent runs); (3) \`available: false\` means Tableau could not determine the cause and \`message\` is a generic placeholder. On servers **below 3.30** the field is absent entirely. Whenever a reason is missing or unresolved, the tool falls back to a **run-history deep link** in \`mcp.failureInsight\` — open it in Tableau to read the error there (see Response Shape).
   - **Trigger origin:** a run does not record whether it was started by a *schedule* or *ad-hoc / on-demand*, and there is no field to filter scheduled-only runs. To see which flows have schedules, use \`list-flow-tasks\`.
 
   **Caller-role visibility**
@@ -138,12 +159,17 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
       - \`"default-cap"\` — you supplied no \`limit\` and no admin cap is set, so the tool returned the newest ${DEFAULT_FLOW_RUNS_LIMIT} runs as a safety default (flow runs can be very numerous); pass a higher \`limit\` and/or a narrower \`filter\` to get more.
       - \`"admin-cap"\` — a site-administrator per-call cap (\`MAX_RESULT_LIMIT[S]\`) cut it short; narrow the \`filter\` (e.g. a tighter \`startedAt\` window or a single \`flowId\`) or ask an admin to raise the cap.
   - There is NO \`totalAvailable\` — the Tableau Flow Runs endpoint does not return a total count. When \`truncated\` is \`true\`, report "at least N" (never invent a total).
-  - \`mcp.failureInsight\` (present ONLY when the returned window contains at least one \`Failed\` run): a pointer to investigate failures in the Tableau UI, since the API does not expose the error message. Fields:
+  - \`mcp.failureSummary\` (present when the window's \`Failed\` runs carry a \`failureReason\`, i.e. REST API 3.30+): the window's failures grouped by reported message and availability so you can tell one systemic problem from many unrelated ones. Fields:
       - \`failedRunCount\` — number of \`Failed\` runs in the returned window.
       - \`failedFlowCount\` — number of DISTINCT flows with a failure in that window.
+      - \`reasons\` — one entry per distinct \`{ message, available }\` pair, biggest first: \`{ message, available, runCount, flowIds }\`. \`runCount\` is how many runs reported that pair and \`flowIds\` are the DISTINCT flows it affected (its blast radius). A group is not always a single root cause: Tableau reports a short localized message, and different underlying errors can share one (e.g. a flow-execution failure and an authentication failure both surface as "Flow processing error"), so treat a group as one symptom that may have more than one cause. \`available: false\` means the cause could not be determined and \`message\` is a generic placeholder — do NOT present it as a diagnosis. Unresolved groups are common and often the largest; to investigate one, call \`get-flow\` on any of its \`flowIds\` and append \`/runHistory\` to the returned \`webpageUrl\` to get that flow's run-history page.
+      - Because the top-level counts cover ALL \`Failed\` runs while \`reasons\` covers only those carrying a reason, \`sum(reasons[].runCount)\` can be less than \`failedRunCount\`.
+  - \`mcp.failureInsight\` (the FALLBACK, present when the window has a \`Failed\` run that nothing can explain — no \`failureReason\`, or none with \`available: true\`): a pointer to investigate in the Tableau UI. Fields:
+      - \`failedRunCount\` / \`failedFlowCount\` — as above, and always equal to \`failureSummary\`'s when both fields are present.
       - \`example\` (when resolvable) — \`{ flowId, runHistoryUrl }\` for ONE affected flow (the most-recent failure); open \`runHistoryUrl\` in a browser and expand the failed run to read why it failed.
+  - **The two can co-occur.** \`failureSummary\` appears whenever a reason exists; \`failureInsight\` is added whenever none resolves. So a window whose reasons are ALL \`available: false\` carries both — treat the summary as a count of what failed and the link as where the cause actually lives. In a MIXED window (some reasons resolved, some not) \`failureInsight\` is deliberately absent, so an \`available: false\` group there has no link of its own — use the \`get-flow\` route above to reach one.
 
-  **Reporting to the user (every call):** translate \`mcp.resultInfo\` into one plain sentence — never say "resultInfo". \`truncated:false\` → "these are all N matching runs". \`"requested-limit"\` → "here are N; more match — say if you want the rest". \`"default-cap"\` → "here are the newest N; more runs exist — say if you want a larger set (or narrow by flow/date)". \`"admin-cap"\` → "here are N; a site limit caps results per call — I can narrow the search, or an admin can raise the cap". When \`mcp.failureInsight\` is present, also note that the API can't return the failure reason but it is viewable in Tableau, and share \`example.runHistoryUrl\`; if \`failedFlowCount\` > 1, add that this link is for one of N affected flows and offer to fetch the others (resolve each via \`get-flow\`). Also surface the **Caller-role visibility** limit when presenting results: these runs cover ONLY flows the user can *run* (the Execute / "Run Flow Now" capability), not flows they can only view — so a flow they can see in the Tableau web UI may be missing here. Call this out especially on empty or unexpectedly short results, or when the user asks for "all" failures. (Site/server administrators are exempt — they get runs for every flow, so do not state this limit to an admin caller.)
+  **Reporting to the user (every call):** translate \`mcp.resultInfo\` into one plain sentence — never say "resultInfo". \`truncated:false\` → "these are all N matching runs". \`"requested-limit"\` → "here are N; more match — say if you want the rest". \`"default-cap"\` → "here are the newest N; more runs exist — say if you want a larger set (or narrow by flow/date)". \`"admin-cap"\` → "here are N; a site limit caps results per call — I can narrow the search, or an admin can raise the cap". When \`mcp.failureSummary\` is present, lead with the biggest cause with \`available: true\` and its \`runCount\` ("38 of the 43 failures are <message>"), and when one reason's \`flowIds\` covers several flows say so — that shared cause is usually the thing worth fixing first. For a reason with \`available: false\`, say the cause could not be determined and never repeat the placeholder \`message\` as if it were the diagnosis; when no \`mcp.failureInsight\` accompanies it, offer to fetch that group's run-history link (\`get-flow\` on one of its \`flowIds\`, then \`webpageUrl\` + \`/runHistory\`) instead of only naming Tableau. When \`mcp.failureInsight\` is present, note that these failures have no resolved reason from the API but are viewable in Tableau, and share \`example.runHistoryUrl\`; if \`failedFlowCount\` > 1, add that this link is for one of N affected flows and offer to fetch the others (resolve each via \`get-flow\`). When BOTH fields are present, every reason in the window is a placeholder: give the counts from \`failureSummary\` and send the user to \`example.runHistoryUrl\` for the cause — do not present a placeholder \`message\` as the answer. When \`truncated\` is \`true\`, \`failedRunCount\` and \`failedFlowCount\` describe ONLY the returned window — present them as "N in this window", never as a site-wide failure count or rate. Also surface the **Caller-role visibility** limit when presenting results: these runs cover ONLY flows the user can *run* (the Execute / "Run Flow Now" capability), not flows they can only view — so a flow they can see in the Tableau web UI may be missing here. Call this out especially on empty or unexpectedly short results, or when the user asks for "all" failures. (Site/server administrators are exempt — they get runs for every flow, so do not state this limit to an admin caller.)
 
   **Response-Size Guidance** — flow runs accumulate quickly on active sites, so favour narrow calls:
   - Single-flow history: \`filter: "flowId:eq:<uuid>"\` (+ optional \`limit\`).
@@ -158,11 +184,11 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   | progress    | eq, gt, gte, lt, lte | Percent complete (0–100). |
   | startedAt   | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
   | completedAt | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
-  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. **Applied client-side** (the Tableau API does not filter runs by status server-side), so it is matched against the runs fetched for the rest of the filter — pair it with \`flowId\` and/or a \`startedAt\` window for precise results. |
+  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. |
 
   **Filter value contracts** (mismatches return 0 runs):
   - \`flowId\` must be the flow UUID; a flow name (or any id that doesn't resolve to a visible flow) returns no runs and the tool hints toward list-flows.
-  - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list.
+   - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list. On REST API 3.30+, a multi-value \`in\` may contain only terminal statuses (Success, Failed, Cancelled), matching the REST API contract.
   - \`in:\` lists use bracket/comma form, e.g. \`flowId:in:[uuid1,uuid2]\` or \`status:in:[Failed,Cancelled]\` (unquoted; commas inside items unsupported).
 
   ${genericFilterDescription}
@@ -185,14 +211,33 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     },
     callback: async ({ filter, sort, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validated = filter ? parseAndValidateFlowRunsFilterString(filter) : undefined;
-      const serverFilter = validated?.serverFilter ?? '';
-      const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+      const statusFilterSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
+      const statusSortSupported = statusFilterSupported;
+      let validated: ValidatedFlowRunsFilter | undefined;
 
       return await listFlowRunsTool.logAndExecute<ListFlowRunsResult>({
         extra,
         args: { filter, sort, limit },
         callback: async () => {
+          const filterResult = filter
+            ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
+            : undefined;
+          if (filterResult) {
+            if (filterResult.isErr()) {
+              return filterResult.error.toErr();
+            }
+            validated = filterResult.value;
+          }
+
+          if (getStatusSort(sort) !== undefined && !statusSortSupported) {
+            return new ArgsValidationError(
+              `Sorting flow runs by status requires Tableau REST API version ${STATUS_FILTER_SORT_MIN_REST_VERSION} or later. Use startedAt, completedAt, or progress sorting on older servers.`,
+            ).toErr();
+          }
+
+          const serverFilter = validated?.serverFilter ?? '';
+          const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
+
           return new Ok(
             await useRestApi({
               ...extra,
@@ -216,6 +261,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     : limit
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
 
+                const sortForApi = sort ?? 'completedAt:desc';
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };
                 try {
                   collected = await collectFlowRuns({
@@ -238,7 +284,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                       restApi.flowsMethods.getFlowRuns({
                         siteId: restApi.siteId,
                         filter: serverFilter,
-                        sort: sort ?? 'completedAt:desc',
+                        sort: sortForApi,
                         pageSize: FLOW_RUNS_PAGE_SIZE,
                         pageNumber,
                       }),
@@ -277,15 +323,24 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                 // The shared helper only knows 'admin-cap' / 'requested-limit'. When
                 // our backstop (not a caller limit or admin cap) was the binding
                 // constraint, label it 'default-cap' so the distinction is clear.
-                const finalTruncationReason: ListFlowRunsTruncationReason | undefined =
-                  truncated && usedDefaultBackstop ? 'default-cap' : truncationReason;
+                let finalTruncationReason: ListFlowRunsTruncationReason | undefined =
+                  truncationReason;
+                if (truncated && usedDefaultBackstop) {
+                  finalTruncationReason = 'default-cap';
+                }
 
-                // If the window holds any Failed runs, resolve a UI run-history
-                // link for one of them (the API can't tell the caller WHY a run
-                // failed). Computed unconditionally here; constrainFlowRuns drops
-                // it on the empty / bounded-context paths so the gate stays in one
-                // place. Best-effort — see buildFailureInsight.
-                const failureInsight = await buildFailureInsight({ flowRuns, extra });
+                // Group the window's failure causes, when the runs carry any.
+                const failureSummary = summarizeFlowRunFailures(flowRuns);
+
+                // Only fall back to a UI run-history link when the runs cannot
+                // explain themselves — no `failureReason` at all, or none with
+                // `available: true`. This gate is what keeps the extra Query Flow
+                // call off the common path. constrainFlowRuns still drops the
+                // field on the empty / bounded-context paths so that gate stays
+                // in one place. Best-effort — see buildFailureInsight.
+                const failureInsight = needsUiFallback(flowRuns)
+                  ? await buildFailureInsight({ flowRuns, extra })
+                  : undefined;
 
                 return {
                   flowRuns,
@@ -295,6 +350,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                       truncated,
                       ...(finalTruncationReason && { truncationReason: finalTruncationReason }),
                     },
+                    ...(failureSummary && { failureSummary }),
                     ...(failureInsight && { failureInsight }),
                   },
                 } satisfies ListFlowRunsResult;
@@ -343,15 +399,17 @@ function compareByRecencyDesc(a: FlowRun, b: FlowRun): number {
 }
 
 /**
- * When the returned window contains one or more `Failed` runs, build a pointer
- * the caller can use to investigate WHY in the Tableau UI — the Get Flow Runs
- * endpoint never returns an error message. We resolve ONE example failed flow's
- * `webpageUrl` (via the Query Flow endpoint) and turn it into a run-history deep
- * link (`webpageUrl + "/runHistory"`); that page lists the flow's runs and lets
- * the user expand a failed run to read its error. Only one flow is resolved (the
- * most-recent failure in the window) to keep this to a single extra REST call —
- * `failedFlowCount` tells the caller how many other flows failed so it can offer
- * to fetch their links (via get-flow) on request.
+ * Build a pointer the caller can use to investigate WHY in the Tableau UI, for
+ * windows whose `Failed` runs cannot explain themselves. Callers must gate this
+ * on needsUiFallback — when a resolved `failureReason` is present the summary
+ * answers the question and this extra REST call is unnecessary.
+ *
+ * We resolve ONE example failed flow's `webpageUrl` (via the Query Flow endpoint)
+ * and turn it into a run-history deep link; that page lists the flow's runs and
+ * lets the user expand a failed run to read its error. Only one flow is resolved
+ * (the most-recent failure in the window) to keep this to a single extra REST
+ * call — `failedFlowCount` tells the caller how many other flows failed so it can
+ * offer to fetch their links (via get-flow) on request.
  *
  * Returns `undefined` when the window has no failures. Best-effort otherwise: any
  * failure to resolve the example link is swallowed (the runs are the primary
@@ -365,14 +423,10 @@ async function buildFailureInsight({
   flowRuns: FlowRun[];
   extra: TableauWebRequestHandlerExtra;
 }): Promise<ListFlowRunsFailureInsight | undefined> {
-  const failedRuns = flowRuns.filter((run) => run.status === 'Failed');
+  const failedRuns = getFailedRuns(flowRuns);
   if (failedRuns.length === 0) {
     return undefined;
   }
-
-  const failedFlowIds = new Set(
-    failedRuns.map((run) => run.flowId).filter((id): id is string => id !== undefined),
-  );
 
   // The window is ordered newest-first (default sort), so the first failed run
   // with a flowId is the most-recent failure — the best single example.
@@ -394,10 +448,7 @@ async function buildFailureInsight({
       if (flow.webpageUrl) {
         example = {
           flowId: exampleFlowId,
-          // `webpageUrl` is the flow's UI page in numeric-id form
-          // (e.g. .../#/site/<site>/flows/<id>); its run-history tab is that
-          // page + "/runHistory" (matches what the Tableau UI links to).
-          runHistoryUrl: `${flow.webpageUrl.replace(/\/+$/, '')}/runHistory`,
+          runHistoryUrl: buildRunHistoryUrl(flow.webpageUrl),
         };
       }
     } catch {
@@ -407,7 +458,7 @@ async function buildFailureInsight({
 
   return {
     failedRunCount: failedRuns.length,
-    failedFlowCount: failedFlowIds.size,
+    failedFlowCount: countDistinctFlows(failedRuns),
     ...(example && { example }),
   };
 }
@@ -436,7 +487,7 @@ async function collectFlowRuns({
   pageSize: number;
   sortByRecency: boolean;
 }): Promise<{ items: FlowRun[]; truncatedByLimit: boolean }> {
-  const probeTarget = effectiveLimit === UNBOUNDED ? UNBOUNDED : effectiveLimit + 1;
+  const probeTarget = effectiveLimit + 1;
   const matched: FlowRun[] = [];
   // De-duplicate across pages by run id. The Get Flow Runs endpoint paginates
   // with an UNSTABLE order whenever the sort key is empty or tied — many runs
@@ -480,8 +531,13 @@ async function collectFlowRuns({
   }
 
   const truncatedByLimit = matched.length > effectiveLimit;
-  const items = effectiveLimit === UNBOUNDED ? matched : matched.slice(0, effectiveLimit);
+  const items = matched.slice(0, effectiveLimit);
   return { items, truncatedByLimit };
+}
+
+function getStatusSort(sort: string | undefined): 'asc' | 'desc' | undefined {
+  const match = sort?.match(/^status:(asc|desc)$/);
+  return match?.[1] as 'asc' | 'desc' | undefined;
 }
 
 export function constrainFlowRuns({
@@ -493,7 +549,11 @@ export function constrainFlowRuns({
   // can pass a bare `{ flowRuns }`.
   result: {
     flowRuns: FlowRun[];
-    mcp?: { resultInfo?: ListFlowRunsResultInfo; failureInsight?: ListFlowRunsFailureInsight };
+    mcp?: {
+      resultInfo?: ListFlowRunsResultInfo;
+      failureSummary?: FlowRunFailureSummary;
+      failureInsight?: ListFlowRunsFailureInsight;
+    };
   };
   boundedContext: BoundedContext;
   validatedFilter?: string;
@@ -524,6 +584,7 @@ export function constrainFlowRuns({
 
   const truncated = result.mcp?.resultInfo?.truncated ?? false;
   const truncationReason = result.mcp?.resultInfo?.truncationReason;
+  const failureSummary = result.mcp?.failureSummary;
   const failureInsight = result.mcp?.failureInsight;
 
   return {
@@ -536,6 +597,7 @@ export function constrainFlowRuns({
           truncated,
           ...(truncationReason && { truncationReason }),
         },
+        ...(failureSummary && { failureSummary }),
         ...(failureInsight && { failureInsight }),
       },
     },

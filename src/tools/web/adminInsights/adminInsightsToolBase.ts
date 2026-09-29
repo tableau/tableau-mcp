@@ -5,6 +5,7 @@ import {
   AdminOnlyError,
   FeatureDisabledError,
   McpToolError,
+  WorkbookDatasourceNotEnabledError,
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -155,6 +156,12 @@ export async function executeAdminInsightsQuery({
       }
       if (vdsError.type === 'zodios-error') {
         return new ZodiosValidationError(vdsError.error).toErr();
+      }
+      // Admin Insights datasources are published system datasources, not embedded workbook
+      // datasources, so this is not expected to fire here — but VdsQueryError is shared, so handle
+      // it explicitly rather than mislabeling it as a generic api-error.
+      if (vdsError.type === 'workbook-datasource-not-enabled') {
+        return new WorkbookDatasourceNotEnabledError().toErr();
       }
 
       lastErrorMessage = vdsError.message;

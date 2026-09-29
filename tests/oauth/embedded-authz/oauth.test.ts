@@ -68,10 +68,16 @@ describe('OAuth', () => {
     expect(response.headers['www-authenticate']).toMatch(
       /Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:(\d+)\/.well-known\/oauth-protected-resource"/,
     );
-    expect(response.body).toEqual({
+    // The `error` code is the stable contract; the human-readable description was enriched with
+    // shared multi-server auth guidance (W-23757363), so match the stable substrings rather than
+    // pinning the full string byte-for-byte.
+    expect(response.body).toMatchObject({
       error: 'unauthorized',
-      error_description: 'Authorization required. Use OAuth 2.1 flow.',
     });
+    expect(response.body.error_description).toContain('Authorization required');
+    expect(response.body.error_description).toContain(
+      'A 401 is an authentication problem, not a missing feature.',
+    );
   });
 
   it('should use OAUTH_RESOURCE_URI in 401 resource_metadata when set', async () => {
@@ -758,10 +764,16 @@ describe('OAuth', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
+    // The `error` code is the stable contract; the human-readable description was enriched with
+    // shared multi-server auth guidance (W-23757363), so match the stable substrings rather than
+    // pinning the full string byte-for-byte.
+    expect(response.body).toMatchObject({
       error: 'invalid_token',
-      error_description: 'Invalid or expired access token',
     });
+    expect(response.body.error_description).toContain('Invalid or expired access token');
+    expect(response.body.error_description).toContain(
+      'A 401 is an authentication problem, not a missing feature.',
+    );
   });
 
   // -------------------------------------------------------------------------

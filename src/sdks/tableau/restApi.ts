@@ -16,8 +16,10 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import FlowDocumentMethods from './methods/flowDocumentMethods.js';
 import FlowsMethods from './methods/flowsMethods.js';
 import JobsMethods from './methods/jobsMethods.js';
+import KnowledgeMethods from './methods/knowledgeMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
@@ -183,6 +185,18 @@ export class RestApi {
     return flowsMethods;
   }
 
+  get flowDocumentMethods(): FlowDocumentMethods {
+    // Experimental endpoint lives under `/api/exp`, not the versioned `/api/3.x`
+    // path used by the other flow methods.
+    const baseUrl = `${RestApi.host}/api/exp`;
+    const flowDocumentMethods = new FlowDocumentMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, flowDocumentMethods.interceptors);
+    return flowDocumentMethods;
+  }
+
   get metadataMethods(): MetadataMethods {
     const baseUrl = `${RestApi.host}/api/metadata`;
     const metadataMethods = new MetadataMethods(baseUrl, this.creds, {
@@ -254,6 +268,16 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, jobsMethods.interceptors);
     return jobsMethods;
+  }
+
+  get knowledgeMethods(): KnowledgeMethods {
+    const baseUrl = `${RestApi.host}/api/v1/knowledge`;
+    const knowledgeMethods = new KnowledgeMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, knowledgeMethods.interceptors);
+    return knowledgeMethods;
   }
 
   get usersMethods(): UsersMethods {

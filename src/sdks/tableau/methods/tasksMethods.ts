@@ -15,6 +15,7 @@ import {
   UpdateCloudExtractRefreshSchedule,
 } from '../types/extractRefreshTask.js';
 import { FlowRunTask } from '../types/flowRunTask.js';
+import { RunFlowJob } from '../types/job.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -154,5 +155,33 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     });
     const response = parseGetFlowRunTasksResponse(raw);
     return response.tasks.task.map((t) => t.flowRun);
+  };
+
+  getFlowRunTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<FlowRunTask> => {
+    const raw = await this._apiClient.getFlowRunTask({
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.task.flowRun;
+  };
+
+  runFlowTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<RunFlowJob> => {
+    const raw = await this._apiClient.runFlowTask(undefined, {
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.job;
   };
 }

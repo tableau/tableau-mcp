@@ -16,9 +16,33 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { buildWebInstructions, WebMcpServer } from './server.web.js';
+import {
+  connectSessionStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+} from './sessionStore/init.js';
 
 const serverName = 'tableau-combined-mcp';
 const serverVersion = pkg.version;
+
+function registerSessionStoreShutdown(): void {
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, async () => {
+      try {
+        await disconnectSessionStore();
+        process.exit(0);
+      } catch (error) {
+        log({
+          message: 'Error closing session store during shutdown',
+          level: 'error',
+          logger: 'shutdown',
+          data: error,
+        });
+        process.exit(1);
+      }
+    });
+  }
+}
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -31,6 +55,9 @@ async function startServer(): Promise<void> {
   RestApi.host = config.server;
 
   initializeFeatureGate();
+  initializeSessionStore();
+  await connectSessionStore();
+  registerSessionStoreShutdown();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.

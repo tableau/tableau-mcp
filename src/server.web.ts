@@ -23,17 +23,20 @@ import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
-import { siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
+import { roleRequiresEnforcement, siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
-import {
-  ClientCapabilitiesWithUiExtension,
-  clientSupportsMcpApps,
-} from './server/mcpUiCapability.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
+import {
+  checkRegistrationConditions,
+  getUnmetConditionInstructions,
+  RegistrationCondition,
+  RegistrationContext,
+} from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
@@ -80,15 +83,23 @@ const BASE_INSTRUCTIONS =
 // so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
 // (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
 const ADMIN_INSTRUCTIONS =
-  'This server also has site-administration capabilities. For general admin/site-health, governance, ' +
-  'cleanup, or cost/license questions, proactively consider the admin prompts (stale-content cleanup, ' +
-  'job/extract optimization, user-license reclamation) and the query-admin-insights tool ' +
-  '(e.g. stale-content, job-performance, ts-users) for supporting data — even when the user asks broadly ' +
-  'rather than naming a specific tool. ' +
-  'Do not require the user to state or re-confirm admin status before using these tools — invoke them ' +
-  'whenever the task warrants; the server authorizes each call and cleanly rejects non-admins. ' +
-  'When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack surface, present ' +
-  'them as Markdown tables.';
+  'This server also has site-administration capabilities, exposed as named MCP prompts (retrieve them ' +
+  'by name via prompts/get) that package multi-step admin workflows with their built-in safety ' +
+  'scaffolding. For general admin/site-health, governance, cleanup, or cost/license questions, invoke ' +
+  'the matching prompt by name rather than reconstructing the workflow from raw tool calls. Each ' +
+  'concern has an "-inform" prompt (read-only report) and, where changes can be applied, an "-apply" ' +
+  'prompt (destructive: dry-run by default, requires explicit human-in-the-loop confirmation before ' +
+  'any write or delete). The exact prompt names are: stale-content-cleanup-inform and ' +
+  'stale-content-cleanup-apply (stale workbooks/datasources); job-optimization-inform (job & ' +
+  'extract-refresh performance) and extract-optimization-apply (reschedule or delete extract-refresh ' +
+  'tasks); user-license-reclamation-inform and user-license-reclamation-apply (downgrade inactive ' +
+  'licensed users to Unlicensed). Use the query-admin-insights tool (e.g. stale-content, ' +
+  'job-performance, ts-users) for supporting data — even when the user asks broadly rather than ' +
+  'naming a specific tool. ' +
+  'Do not require the user to state or re-confirm admin status before using these prompts or tools — ' +
+  'invoke them whenever the task warrants; the server authorizes each call and cleanly rejects ' +
+  'non-admins. When rendering admin/list results (users, admin-insights, etc.) to a chat or Slack ' +
+  'surface, present them as Markdown tables.';
 
 // Appended to the initialize instructions when the caller's site role could not be fetched (after
 // retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
@@ -119,10 +130,6 @@ export function buildWebInstructions(): string {
   const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
   return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
 }
-
-type RegistrationContext = {
-  siteRole?: string;
-};
 
 export class WebMcpServer extends Server {
   private readonly _loadedLazyWebToolGroups = new Set<WebToolGroupName>();
@@ -170,6 +177,7 @@ export class WebMcpServer extends Server {
     }
 
     registerPrompts(this);
+    await this.enableSkillsCapability();
   };
 
   /**
@@ -266,7 +274,6 @@ export class WebMcpServer extends Server {
   private _registerWebTool = async (tool: WebTool<any>): Promise<boolean> => {
     const config = getConfig();
     const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
-    const supportsMcpApps = clientSupportsMcpApps(this.capabilities);
     const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
@@ -318,7 +325,7 @@ export class WebMcpServer extends Server {
       return tableauToolCallback(args, tableauRequestHandlerExtra);
     };
 
-    if (mcpAppsEnabled && tool.app && supportsMcpApps && !isKnownIncompatibleClient) {
+    if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {
       await this._registerAppTool(tool, toolCallback);
     } else if (tool.app?.hideWhenUnsupported) {
       return false;
@@ -359,6 +366,11 @@ export class WebMcpServer extends Server {
       'enforce-role-requirements',
     );
 
+    // When this feature is off, no conditions are checked before registering a tool.
+    const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
+      'enforce-registration-conditions',
+    );
+
     // Stores context that is used for determining if registration conditions have been met.
     // Registration context is uninitialized, but then gets populated with each condition checked.
     const registrationContext: RegistrationContext = {};
@@ -371,13 +383,14 @@ export class WebMcpServer extends Server {
     // Names of role-gated tools hidden specifically because the role fetch FAILED
     // rather than because the caller's role was genuinely too low.
     const toolsOmittedForRoleFetchFailure: string[] = [];
+    const toolsOmittedFromUnmetConditions = new Map<RegistrationCondition, string[]>();
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
-      if (enforceRoleRequirements && tool.minRequiredRole) {
+      if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
           // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
@@ -389,12 +402,25 @@ export class WebMcpServer extends Server {
           continue;
         }
       }
+      if (enforceRegistrationConditions && tool.registrationConditions.length > 0) {
+        const conditionCheckResult = await checkRegistrationConditions(
+          tool.registrationConditions,
+          registrationContext,
+          restApiArgs,
+        );
+        if (!conditionCheckResult.registrationConditionsMet) {
+          // Appends this tool to list of tools that failed under a particular condition
+          const toolList =
+            toolsOmittedFromUnmetConditions.get(conditionCheckResult.failingCondition) || [];
+          toolList.push(tool.name);
+          toolsOmittedFromUnmetConditions.set(conditionCheckResult.failingCondition, toolList);
+          continue;
+        }
+      }
       toolsToRegister.push(tool);
     }
 
     if (toolsOmittedForRoleFetchFailure.length > 0) {
-      // Telemetry: registration runs before the transport connects, so client notifications aren't
-      // available — the process logger (stderr/file, honors LOG_LEVEL) is the only sink here.
       log({
         level: 'warning',
         logger: 'server',
@@ -407,6 +433,30 @@ export class WebMcpServer extends Server {
       // Client-facing counterpart: surface the omission in the initialize instructions so the user
       // knows the tool set is incomplete due to a fetch failure (not their permissions).
       this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
+    }
+
+    if (toolsOmittedFromUnmetConditions.size > 0) {
+      const omittedByCondition = [...toolsOmittedFromUnmetConditions.entries()]
+        .map(([condition, toolNames]) => `${condition}: ${toolNames.join(', ')}`)
+        .join('; ');
+      const omittedCount = [...toolsOmittedFromUnmetConditions.values()].reduce(
+        (total, toolNames) => total + toolNames.length,
+        0,
+      );
+
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          `${omittedCount} tool(s) were omitted from this session because their registration ` +
+          `conditions were not met — ${omittedByCondition}.`,
+      });
+
+      // Appending one explanation per distinct unmet condition to initialization message, so a client has
+      // context on why some tools were not registered.
+      for (const condition of toolsOmittedFromUnmetConditions.keys()) {
+        this.appendInstructions(getUnmetConditionInstructions(condition));
+      }
     }
 
     return toolsToRegister;

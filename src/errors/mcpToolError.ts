@@ -141,9 +141,71 @@ export class FeatureDisabledError extends McpToolError {
   }
 }
 
+// Thrown when query-datasource targets an embedded (workbook) datasource on a site where
+// workbook-datasource querying isn't enabled. This is the EXPECTED response on non-enabled sites
+// (opt-in per site), not a rare edge case, so the message names the site-admin opt-in. statusCode
+// 403: an opt-in/permission gate, not a missing feature/endpoint.
+export class WorkbookDatasourceNotEnabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'workbook-datasource-not-enabled',
+      message: 'Querying workbook data sources is not enabled on this Tableau site',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'This data source is embedded in a workbook, and querying workbook (embedded) data sources is not enabled on this Tableau site. This capability is opt-in per site: a site administrator must enable it before this data source can be queried.';
+  }
+}
+
 export class FlowNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'flow-not-allowed', message, statusCode: 403 });
+  }
+}
+
+/**
+ * The experimental flow-document REST API is not enabled on this server.
+ *
+ * The endpoint returns 403 with Tableau error code `403200` when its
+ * `GetFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * specific code into this clearer, actionable error — any other 403 (insufficient
+ * download permission, insufficient token scope, generic forbidden) is surfaced
+ * as a {@link FlowDocumentForbiddenError} so a permission problem is never
+ * misreported as a disabled API.
+ */
+export class FlowDocumentApiDisabledError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-api-disabled', message, statusCode: 403 });
+  }
+}
+
+/**
+ * The caller is not authorized to download the requested flow's document.
+ *
+ * The flow-document endpoint also returns 403 for ordinary authorization
+ * failures — the caller lacks permission to download the flow (the same
+ * permission as downloading its `.tfl`/`.tflx` file in Tableau) or the token
+ * lacks the `tableau:flows:download` scope. These are distinct from the
+ * feature-flag-off case (Tableau error code `403200`), which maps to
+ * {@link FlowDocumentApiDisabledError}.
+ */
+export class FlowDocumentForbiddenError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-forbidden', message, statusCode: 403 });
+  }
+}
+
+/**
+ * No flow document could be downloaded for the requested flow.
+ *
+ * The endpoint returns 404 when the flow does not exist, is not visible to the
+ * caller, or has no stored file on the FileServer (e.g. a metadata-only seeded flow).
+ */
+export class FlowDocumentNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-not-found', message, statusCode: 404 });
   }
 }
 
@@ -475,5 +537,11 @@ export class XmlValidationError extends McpToolError {
       message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
       statusCode: 422,
     });
+  }
+}
+
+export class DataAppTemplateUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }

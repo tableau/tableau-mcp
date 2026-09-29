@@ -22,6 +22,11 @@ export const webToolNames = [
   'get-flow',
   'list-flow-runs',
   'list-flow-tasks',
+  'describe-flow',
+  'get-flow-task',
+  'run-flow',
+  'run-flow-task',
+  'cancel-flow-run',
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
@@ -42,6 +47,10 @@ export const webToolNames = [
   'delete-content',
   'confirm-delete-content',
   'render-interactive-viz',
+  'query-knowledge-context',
+  'inspect-knowledge-context',
+  'manage-knowledge-context',
+  'scaffold-data-app',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -62,6 +71,8 @@ export const webToolGroupNames = [
   'mcp-apps',
   'admin-insights',
   'content',
+  'knowledge',
+  'data-apps',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -79,7 +90,17 @@ export const webToolGroups = {
     'get-custom-view-data',
     'get-custom-view-image',
   ],
-  flow: ['list-flows', 'get-flow', 'list-flow-runs', 'list-flow-tasks'],
+  flow: [
+    'list-flows',
+    'get-flow',
+    'list-flow-runs',
+    'list-flow-tasks',
+    'describe-flow',
+    'get-flow-task',
+    'run-flow',
+    'run-flow-task',
+    'cancel-flow-run',
+  ],
   pulse: [
     'list-all-pulse-metric-definitions',
     'list-pulse-metric-definitions-from-definition-ids',
@@ -102,6 +123,8 @@ export const webToolGroups = {
   'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
+  knowledge: ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+  'data-apps': ['scaffold-data-app'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

@@ -1,6 +1,11 @@
 const startupState = vi.hoisted(() => ({
   activeFeatureGateProvider: 'server',
   providerAtWebToolRegistration: undefined as string | undefined,
+  sessionStoreInitialized: false,
+  sessionStoreConnected: false,
+  sessionStoreConnectedAtWebToolRegistration: undefined as boolean | undefined,
+  sessionStoreDisconnected: false,
+  shutdownHandlers: new Map<string, () => Promise<void>>(),
   resourcesRegistered: false,
   resourcesAvailableAtConnect: undefined as boolean | undefined,
 }));
@@ -81,12 +86,26 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
   RestApi: { host: '' },
 }));
 
+vi.mock('./sessionStore/init.js', () => ({
+  initializeSessionStore: vi.fn(() => {
+    startupState.sessionStoreInitialized = true;
+  }),
+  connectSessionStore: vi.fn(async () => {
+    startupState.sessionStoreConnected = true;
+  }),
+  disconnectSessionStore: vi.fn(async () => {
+    startupState.sessionStoreDisconnected = true;
+  }),
+}));
+
 vi.mock('./server.web.js', () => ({
   buildWebInstructions: vi.fn(() => 'web instructions'),
   WebMcpServer: vi.fn(function () {
     return {
       registerTools: vi.fn(async () => {
         startupState.providerAtWebToolRegistration = startupState.activeFeatureGateProvider;
+        startupState.sessionStoreConnectedAtWebToolRegistration =
+          startupState.sessionStoreConnected;
       }),
     };
   }),
@@ -106,18 +125,47 @@ vi.mock('./server.desktop.js', () => ({
 }));
 
 describe('combined entrypoint startup', () => {
+  let processOnceSpy: { mockRestore(): void };
+
   beforeAll(async () => {
+    processOnceSpy = vi.spyOn(process, 'once').mockImplementation(((signal, listener) => {
+      startupState.shutdownHandlers.set(String(signal), listener as () => Promise<void>);
+      return process;
+    }) as typeof process.once);
     await import('./index.combined.js');
     await vi.waitFor(() => {
       expect(startupState.resourcesAvailableAtConnect).not.toBeUndefined();
     });
   });
 
+  afterAll(() => {
+    processOnceSpy.mockRestore();
+  });
+
   it('initializes the configured feature gate before registering web tools', () => {
     expect(startupState.providerAtWebToolRegistration).toBe('custom');
   });
 
+  it('connects the configured session store before registering web tools', () => {
+    expect(startupState.sessionStoreInitialized).toBe(true);
+    expect(startupState.sessionStoreConnectedAtWebToolRegistration).toBe(true);
+  });
+
   it('makes Desktop resources available before connecting the shared server', () => {
     expect(startupState.resourcesAvailableAtConnect).toBe(true);
+  });
+
+  it('disconnects the session store on shutdown', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    try {
+      const shutdown = startupState.shutdownHandlers.get('SIGTERM');
+      expect(shutdown).toBeDefined();
+      await shutdown!();
+
+      expect(startupState.sessionStoreDisconnected).toBe(true);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      exitSpy.mockRestore();
+    }
   });
 });

@@ -10,6 +10,9 @@ import { McpClient } from './mcpClient.js';
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
+const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const tableauDataAppsEnabled = Boolean(features['data-apps']);
+const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
   beforeAll(setEnv);
@@ -56,12 +59,15 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag
+      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
+        'get-flow-task',
+        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -70,6 +76,14 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      // data-app tools are gated off by default (data-apps feature flag)
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -93,8 +107,23 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
+      if (!tableauDataAppsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Filter out content-mutating flow tools unless explicitly enabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -116,7 +145,7 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });
@@ -148,8 +177,14 @@ describe('server', () => {
       // ...and the admin capability menu + generic-intent tie-in is appended.
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
-      expect(instructions).toContain('user-license reclamation');
       expect(instructions).toContain('query-admin-insights');
+      // Each packaged admin prompt is named by its exact invokable identifier (W-23757369).
+      expect(instructions).toContain('stale-content-cleanup-inform');
+      expect(instructions).toContain('stale-content-cleanup-apply');
+      expect(instructions).toContain('job-optimization-inform');
+      expect(instructions).toContain('extract-optimization-apply');
+      expect(instructions).toContain('user-license-reclamation-inform');
+      expect(instructions).toContain('user-license-reclamation-apply');
     });
   });
 
@@ -225,12 +260,15 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
+        'get-flow-task',
+        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -239,6 +277,14 @@ describe('server', () => {
         'request-workbook-upload',
         'publish-workbook',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      // data-app tools are gated off by default (data-apps feature flag)
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -266,9 +312,28 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
+        );
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !knowledgeTools.includes(name),
+        );
+      }
+
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
+      if (!tableauDataAppsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Filter out content-mutating flow tools unless explicitly enabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !flowWriteTools.includes(name),
         );
       }
 
@@ -300,7 +365,7 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });

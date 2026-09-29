@@ -26,6 +26,10 @@ Passthrough auth.
 
 Related tools: [Publish Workbook](publish-workbook.md)
 
+## Required permissions
+
+- **Site Role**: Requires Explorer (Can Publish) role or higher
+
 ## Required arguments
 
 ### `fileName`

@@ -26,6 +26,8 @@ tableau-mcp.mcpb
 # MCP Apps
 src/web/apps/dist/
 
+src/templates/data-app-template.zip
+
 # Playwright
 /test-results/
 /playwright-report/

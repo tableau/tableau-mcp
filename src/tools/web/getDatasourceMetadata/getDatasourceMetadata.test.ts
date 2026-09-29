@@ -283,7 +283,7 @@ describe('getDatasourceMetadataTool', () => {
       testProductVersion,
     );
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');
-    expect(getDatasourceMetadataTool.description).toEqual(expect.any(String));
+    expect(getDatasourceMetadataTool.description).toBeInstanceOf(Provider);
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
       datasourceLuid: expect.any(Object),
     });

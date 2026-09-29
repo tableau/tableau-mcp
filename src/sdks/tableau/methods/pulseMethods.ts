@@ -17,6 +17,7 @@ import { PulsePagination } from '../types/pagination.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
+  PulseEntitlement,
   pulseInsightBriefRequestSchema,
   PulseInsightBriefResponse,
   PulseInsightBundleType,
@@ -38,6 +39,28 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(new Zodios(baseUrl, pulseApis, { axiosConfig }), creds);
   }
+
+  /**
+   * Returns the Pulse feature entitlements for the caller's site, used to decide whether Pulse
+   * premium features (AI-powered insights) are available.
+   *
+   * The service returns every known entitlement type with a boolean, and substitutes an all-false
+   * response when its own upstream lookup fails, so a missing type is equivalent to disabled.
+   *
+   * Required scopes: `tableau:entitlements:read`
+   *
+   * Tableau Cloud only; on Tableau Server this surfaces as {@link PulseNotAvailableError}.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_GetEntitlements
+   */
+  getPulseEntitlements = async (): Promise<PulseResult<PulseEntitlement[]>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.getPulseEntitlements({
+        ...this.authHeader,
+      });
+      return response.entitlements ?? [];
+    });
+  };
 
   /**
    * Returns a list of all published Pulse Metric Definitions.

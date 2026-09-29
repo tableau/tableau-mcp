@@ -89,9 +89,20 @@ const argsSchema = {
 } as const;
 
 // Field captions verified against live TS Events VDS schema (2026-07-19).
-// `Actor User Name` is a STRING matching the user's Tableau username (email).
+// `Actor User Name` is a STRING matching the user's Tableau username (== email on Tableau Cloud).
 // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
 const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
+
+// Scope TS Events to the Step-1 candidates via a SET filter on `Actor User Name`.
+// `Actor User Name` matches the candidate's Tableau username (== email on Tableau Cloud),
+// so this bounds the response to the candidate set. An UNfiltered query on a large tenant
+// (e.g. 27k users) returns site-wide Access events that VDS silently truncates to an
+// arbitrary 10000-row slice, dropping an active candidate's events → "no Access event" →
+// false-positive downgrade. The `values` array is a render-time placeholder the model must
+// replace with the actual candidate names from Step 1 before issuing the call.
+const TS_EVENTS_ACTOR_PLACEHOLDER =
+  '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username ' +
+  '(equals the email on Tableau Cloud); one string per candidate>';
 
 // TS Users captions verified against the official Admin Insights TS Users data dictionary
 // (help.tableau.com adminview_insights_users). TS Users uses PLAIN, unprefixed user captions
@@ -116,6 +127,12 @@ const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   query: {
     fields: TS_EVENTS_FIELDS.map((fieldCaption) => ({ fieldCaption })),
     filters: [
+      {
+        field: { fieldCaption: 'Actor User Name' },
+        filterType: 'SET',
+        values: [TS_EVENTS_ACTOR_PLACEHOLDER],
+        exclude: false,
+      },
       {
         field: { fieldCaption: 'Event Type' },
         filterType: 'SET',
@@ -283,7 +300,13 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       `**Step 2 — Activity signals (read-only).** Make TWO \`${ADMIN_INSIGHTS_TOOL}\` calls.`,
       '',
       `**2a — Content-access events.** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
-        `to retrieve access events within the ${activityLookbackDays}-day lookback window.`,
+        `to retrieve access events by the Step-1 candidates within the ${activityLookbackDays}-day lookback window.`,
+      '',
+      '**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `Actor User Name` ' +
+        "filter's `values` placeholder below with the exact list of candidate `name` values from Step 1 (the " +
+        'Tableau username, which equals the `email` on Tableau Cloud — one string per candidate). This SET ' +
+        'filter bounds the response to the candidate set, so the 10000-row cap cannot silently drop an active ' +
+        "candidate's Access events and turn them into a false-positive downgrade. Do NOT fetch site-wide events.",
       '',
       '```json',
       JSON.stringify(buildActivityQuery(inactiveDays), null, 2),
@@ -340,7 +363,13 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '',
       `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Events results were truncated at the ` +
         `${10000}-row limit. Some active users may not appear in the result — candidates are not exhaustive. ` +
-        'Consider narrowing the scope with `userIds` or reducing `inactiveDays`."',
+        'Consider narrowing the scope with `userIds` or reducing `inactiveDays`." (With the `Actor User Name` ' +
+        'scoping in 2a this should not occur unless the candidate set itself has more than 10000 Access events in the window.)',
+      'Unlike the TS Users query (2b), 0 rows in the TS Events result (2a) is a VALID outcome — it means none ' +
+        'of the scoped candidates had an Access event in the lookback window, so they are correctly retained as ' +
+        'candidates. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder ' +
+        'unsubstituted (the literal placeholder matches no actor): if you did not replace it with the exact ' +
+        'Step-1 candidate names, do so and re-run, since an unsubstituted filter fails to rescue genuinely-active users.',
       '',
       `Note: TS Events caps at ${TS_EVENTS_LOOKBACK_MAX_DAYS} days lookback on standard Tableau Cloud ` +
         '(365 days with Advanced Management). Users inactive longer than the lookback window may have ' +
