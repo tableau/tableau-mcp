@@ -1135,6 +1135,31 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const dashboardRefreshNowMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+):refreshNow$/);
+    if (method === 'POST' && dashboardRefreshNowMatch) {
+      const dashboardId = decodeURIComponent(dashboardRefreshNowMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'dashboard-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        id: 'op-refresh-dashboard-now-1',
+        kind: 'dashboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [
+            { worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' },
+            { worksheetId: 'sheet-profit', worksheetName: 'Profit by Category' },
+          ],
+          failed: [],
+        },
+      });
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
       let parsed: { filePath?: unknown };
       try {

@@ -41,7 +41,12 @@ export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> =
 } & WithAbortSignal;
 
 export type ExecuteCommandError =
-  | { type: 'command-failed'; error: ExecuteCommandResponseError }
+  | {
+      type: 'command-failed';
+      error: ExecuteCommandResponseError;
+      /** Typed command output retained by the API when a mapped aggregate failure is terminal. */
+      result?: Record<string, unknown>;
+    }
   | { type: 'command-timed-out'; error: string }
   | { type: 'invalid-response'; error: unknown }
   | { type: 'unknown'; error: unknown };

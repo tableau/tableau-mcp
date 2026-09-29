@@ -18,6 +18,13 @@ describe('ToolName', () => {
     }
   });
 
+  it('registers the dashboard refresh tool name exactly once', () => {
+    expect(
+      desktopToolNames.filter((name) => name === 'refresh-dashboard-auto-updates'),
+    ).toHaveLength(1);
+    expect(isDesktopToolName('refresh-dashboard-auto-updates')).toBe(true);
+  });
+
   it('should verify all tool names are unique and accounted for', () => {
     const variants = {
       desktop: {
