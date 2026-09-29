@@ -153,6 +153,7 @@ describe('Tool', () => {
       throw new Error(errorMessage);
     });
 
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -168,6 +169,36 @@ describe('Tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
+
+    // The error log must identify which tool failed and the request id as structured fields,
+    // since the debug-level invocation log that carries them may be gated off in prod.
+    const logLines = stderrSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(call[0] as string);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null);
+
+    const errorLogCall = logLines.find(
+      (entry) => entry.logger === 'tool' && entry.message === 'Tool execution failed',
+    );
+
+    expect(errorLogCall).toBeDefined();
+    expect(errorLogCall).toMatchObject({
+      level: 'error',
+      logger: 'tool',
+      data: {
+        tool_name: 'get-datasource-metadata',
+        request_id: 2,
+        // The serialized error info is preserved alongside the new structured fields.
+        error: expect.objectContaining({ message: errorMessage }),
+      },
+    });
+
+    stderrSpy.mockRestore();
   });
 
   it('should constrain the success result', async () => {
