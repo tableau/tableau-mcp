@@ -305,6 +305,37 @@ export async function authorCalculationsWithValidation({
   // Tracks only genuinely new writes this call (not idempotent reuse), so a rollback below
   // never touches calcs that already existed before this call started.
   const createdThisRun: Array<{ calcName: string; caption: string }> = [];
+
+  // Reverts every calc created so far this call. A batch applies layer by layer as it
+  // validates, so any exit below this point — not just the final "some calc failed" check —
+  // can follow a prior layer's genuinely-written calc. Every such exit must roll back through
+  // here first, or the caller's "every calc created or nothing changed" guarantee is false.
+  const rollbackCreatedThisRun = async (): Promise<Result<void, AuthorCalcError>> => {
+    if (createdThisRun.length === 0) {
+      return new Ok(undefined);
+    }
+    const rollback = await applyAndVerify({
+      xml: workbookXml,
+      baselineXml: liveXml,
+      settled: (xml) =>
+        createdThisRun.every(
+          (calc) =>
+            !hasColumnNameAndCaptionInDatasource(xml, datasourceName, calc.calcName, calc.caption),
+        ),
+      executor,
+      signal,
+    });
+    if (rollback.status === 'failed') {
+      return rollback.error.toErr();
+    }
+    if (rollback.status === 'not-applied') {
+      return new XmlModificationError(
+        'a calc in this batch failed, and the calc(s) already written could not be rolled back — the datasource may now contain a partial batch',
+      ).toErr();
+    }
+    return new Ok(undefined);
+  };
+
   for (const layer of layering.layers) {
     const pending: number[] = [];
     for (const index of layer) {
@@ -364,6 +395,10 @@ export async function authorCalculationsWithValidation({
         // failure, not a verdict on this formula. Abort with the typed execution error rather than
         // reporting invalid-formula, so the agent is never told to "fix" a correct formula. Matches
         // the set-active-datasource activation abort above.
+        const rollbackResult = await rollbackCreatedThisRun();
+        if (rollbackResult.isErr()) {
+          return rollbackResult;
+        }
         return validation.error.toErr();
       }
       if (validation.status === 'invalid') {
@@ -389,6 +424,10 @@ export async function authorCalculationsWithValidation({
       const calc = specs[item.index];
       const target = selectTargetDatasource(editedXml, datasourceName);
       if (target.isErr()) {
+        const rollbackResult = await rollbackCreatedThisRun();
+        if (rollbackResult.isErr()) {
+          return rollbackResult;
+        }
         return target.error.toErr();
       }
       const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml, editedXml);
@@ -407,6 +446,10 @@ export async function authorCalculationsWithValidation({
 
     const guard = validateWorkbookDocumentApply(editedXml, liveXml);
     if (!guard.ok) {
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return new ArgsValidationError(guard.message).toErr();
     }
 
@@ -421,9 +464,17 @@ export async function authorCalculationsWithValidation({
       signal,
     });
     if (applied.status === 'failed') {
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return applied.error.toErr();
     }
     if (applied.status === 'not-applied') {
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return new XmlModificationError(
         'load completed but did not apply: readback did not contain the new column name and caption',
       ).toErr();
@@ -464,24 +515,9 @@ export async function authorCalculationsWithValidation({
   // caller are "every calc created" or "nothing changed."
   const hasFailure = finalized.some((outcome) => outcome.status === 'failed');
   if (hasFailure && createdThisRun.length > 0) {
-    const rollback = await applyAndVerify({
-      xml: workbookXml,
-      baselineXml: liveXml,
-      settled: (xml) =>
-        createdThisRun.every(
-          (calc) =>
-            !hasColumnNameAndCaptionInDatasource(xml, datasourceName, calc.calcName, calc.caption),
-        ),
-      executor,
-      signal,
-    });
-    if (rollback.status === 'failed') {
-      return rollback.error.toErr();
-    }
-    if (rollback.status === 'not-applied') {
-      return new XmlModificationError(
-        'a calc in this batch failed validation, and the calc(s) already written could not be rolled back — the datasource may now contain a partial batch',
-      ).toErr();
+    const rollbackResult = await rollbackCreatedThisRun();
+    if (rollbackResult.isErr()) {
+      return rollbackResult;
     }
     const failedOutcome = finalized.find((outcome) => outcome.status === 'failed');
     invariant(failedOutcome?.status === 'failed');

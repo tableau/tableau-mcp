@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import {
@@ -1227,6 +1227,64 @@ describe('authorCalculationsWithValidation', () => {
     expect(result.error.message).toContain('rolled back');
     // One apply to create "Good Calc", one more to roll it back — the live document ends up
     // exactly where it started.
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(currentXml).toBe(BASE_XML);
+  });
+
+  // A dependent calc in a later layer can only be validated after its dependency is already
+  // live, so the earlier layer's write happens before the later layer's validation call ever
+  // runs. If that validation call itself fails (transport error, not an invalid formula), the
+  // function must still roll back the earlier layer's write — an early return out of the loop
+  // must not bypass the same rollback the end-of-batch failure path uses.
+  it("rolls back an earlier layer when a later layer's validation call errors", async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    let currentXml = BASE_XML;
+    const applyWorkbookDocument = vi.fn(async (xml: string) => {
+      currentXml = xml;
+      return new Ok({
+        command_id: 'apply-1',
+        status: 'completed' as const,
+        submitted_at: '',
+        result: {},
+      });
+    });
+    const getWorkbookDocument = vi.fn(
+      async () =>
+        new Ok({ xml: currentXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+    );
+    const executor = makeExecutorMock({
+      executeCommand: vi.fn().mockImplementation(async ({ command, args }: ExecuteCommandArgs) => {
+        if (command === 'get-calc-details-pres-model-for-formula') {
+          const caption = (args as Record<string, unknown>)['calculation-caption'];
+          if (caption === 'A') {
+            return new Ok({
+              command_id: 'validate-1',
+              status: 'completed',
+              result: validValidatorEnvelope.result,
+            });
+          }
+          // "B" depends on "A", so its validation only runs in the second layer, after "A" is
+          // already live. Simulate a transport-level failure here (not an invalid formula).
+          return new Err({ type: 'command-timed-out', error: 'transport failure' });
+        }
+        return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+      }),
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    });
+
+    const result = await authorCalculationsWithValidation({
+      workbookXml: BASE_XML,
+      calcs: [spec('A', '[Sales] + 1'), spec('B', '[A] + 1')],
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('a validation infra failure must abort the batch');
+    // One apply to create "A", one more to roll it back — the live document ends up exactly
+    // where it started, even though the failure came from a later layer's validation call, not
+    // from the end-of-batch failure check.
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
     expect(currentXml).toBe(BASE_XML);
   });
