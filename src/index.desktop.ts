@@ -6,41 +6,15 @@ import dotenv from 'dotenv';
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
-import { initializeFeatureGate } from './features/init.js';
-import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
-import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { startExpressServer } from './server/express.js';
-import {
-  connectSessionStore,
-  disconnectSessionStore,
-  initializeSessionStore,
-} from './sessionStore/init.js';
+import { initializeWebRuntime } from './server/webRuntime.js';
 import { resolveTransportProfile } from './transportProfile.js';
 
 const serverVersion = pkg.version;
-
-function registerSessionStoreShutdown(): void {
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(signal, async () => {
-      try {
-        await disconnectSessionStore();
-        process.exit(0);
-      } catch (error) {
-        log({
-          message: 'Error closing session store during shutdown',
-          level: 'error',
-          logger: 'shutdown',
-          data: error,
-        });
-        process.exit(1);
-      }
-    });
-  }
-}
 
 // The shipped tableau-mcp-desktop binary now serves BOTH profiles from one artifact,
 // selected purely by TRANSPORT — so tab-agent-south can spawn the web/insights profile
@@ -88,28 +62,7 @@ async function startDesktopProfile(): Promise<void> {
 
 async function startWebProfile(): Promise<void> {
   const config = getConfig();
-
-  RestApi.host = config.server;
-
-  // Initialize feature gate provider
-  initializeFeatureGate();
-
-  initializeSessionStore();
-  await connectSessionStore();
-  registerSessionStoreShutdown();
-
-  // Start fetching server info immediately but don't block the port from opening.
-  // Any failure here is fatal and logged explicitly -- no silent failures. The port
-  // opens first so health checks can succeed, then we await this before declaring ready.
-  const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
-    log({
-      message: 'Fatal error initializing server info',
-      level: 'error',
-      logger: 'startup',
-      data: error,
-    });
-    process.exit(1);
-  });
+  const { serverInfoReady } = await initializeWebRuntime(config);
 
   const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
     ? config.defaultNotificationLevel
