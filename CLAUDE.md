@@ -266,6 +266,10 @@ Check in code:
 if (getFeatureGate().isFeatureEnabled('my-feature')) { ... }
 ```
 
+## Code Style
+
+- Keep code comments concise: explain the non-obvious WHY only. Never restate what the code already makes obvious.
+
 ## Versioning & Releases
 
 `package.json`'s version is bumped automatically — do NOT manually edit the `version` field or run `npm run version:*` in a PR. `.github/workflows/auto-version-bump.yml` bumps it after merge to `main`, commits, and tags (`vX.Y.Z`).
