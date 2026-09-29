@@ -355,6 +355,61 @@ describe('authorCalcTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      caption: '売上 2 倍',
+      formula: '[売上] * 2',
+      role: 'measure' as const,
+      datatype: 'real' as const,
+      encodedCaption: '&#22770;&#19978; 2 &#20493;',
+    },
+    {
+      caption: '顧客名 敬称',
+      formula: "[顧客名] + ' 様'",
+      role: 'dimension' as const,
+      datatype: 'string' as const,
+      encodedCaption: '&#39015;&#23458;&#21517; &#25964;&#31216;',
+    },
+  ])(
+    'authors $caption when the bundled Japanese Superstore fields use numeric character references without captions',
+    async ({ caption, formula, role, datatype, encodedCaption }) => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+      const japaneseXml = [
+        "<?xml version='1.0' encoding='utf-8'?>",
+        "<workbook version='18.1'><datasources>",
+        "<datasource caption='&#12469;&#12531;&#12503;&#12523; - &#12473;&#12540;&#12497;&#12540;&#12473;&#12488;&#12450;' name='federated.10nnk8d1vgmw8q17yu76u06pnbcj'>",
+        "<column datatype='real' name='[&#22770;&#19978;]' role='measure' type='quantitative' />",
+        "<column datatype='string' name='[&#39015;&#23458;&#21517;]' role='dimension' type='nominal' />",
+        '</datasource></datasources>',
+        "<worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+      ].join('');
+      const calcXml =
+        `<column caption='${encodedCaption}' datatype='${datatype}' name='[Calculation_1700000000000]' role='${role}' type='${role === 'measure' ? 'quantitative' : 'nominal'}'>` +
+        `<calculation class='tableau' formula='${formula.replaceAll("'", '&apos;')}' /></column>`;
+      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
+        args: { caption, formula, role, datatype },
+        initialXml: japaneseXml,
+        readbackXml: withColumn(japaneseXml, calcXml),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'get-calc-details-pres-model-for-formula',
+          args: {
+            'calculation-formula': formula,
+            'calculation-caption': caption,
+          },
+        }),
+      );
+      const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+      expect(appliedXml).toContain(`caption='${caption}'`);
+      expect(appliedXml).toContain(`formula='${formula.replaceAll("'", '&apos;')}'`);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({ caption });
+    },
+  );
+
   it('resolves sibling-calc caption references to internal names (live 2026-07-19: 5 of 6 layered calcs broken)', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const priorCalc =
@@ -640,6 +695,7 @@ async function getToolResult({
 }): Promise<{
   result: CallToolResult;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
+  executeCommand: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, initialXml, readbackXml ?? withColumn(initialXml, '')];
   let readCount = 0;
@@ -712,7 +768,7 @@ async function getToolResult({
     extra,
   );
 
-  return { result, applyWorkbookDocument };
+  return { result, applyWorkbookDocument, executeCommand };
 }
 
 function withColumn(xml: string, column: string): string {
