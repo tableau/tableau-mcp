@@ -1,13 +1,66 @@
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getAttr, getAuthorActionTool } from './authorAction.js';
+import { getAttr, getAuthorActionTool, parseAuthorActionArgs } from './authorAction.js';
 import {
   appliedDocumentXml,
   BASE_XML,
   getToolResult,
   withActions,
 } from './authorActionTestFixtures.js';
+
+function rawArgs(overrides: Record<string, unknown>): Parameters<typeof parseAuthorActionArgs>[0] {
+  return {
+    mode: 'parameter',
+    caption: 'A',
+    sourceWorksheet: 'Profit',
+    setMembership: 'assign',
+    clearSelection: 'do-nothing',
+    activation: 'on-select',
+    ...overrides,
+  } as Parameters<typeof parseAuthorActionArgs>[0];
+}
+
+describe('parseAuthorActionArgs', () => {
+  it('narrows a valid parameter input to the parameter branch', () => {
+    const parsed = parseAuthorActionArgs(
+      rawArgs({
+        mode: 'parameter',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      }),
+    );
+
+    expect(parsed.isOk()).toBe(true);
+    invariant(parsed.isOk());
+    const input = parsed.value;
+    expect(input.mode).toBe('parameter');
+    invariant(input.mode === 'parameter');
+    expect(input.sourceField).toBe('[Profit]');
+    expect(input.targetParameter).toBe('[Parameters].[Parameter 1]');
+    expect('targetSet' in input).toBe(false);
+    expect('url' in input).toBe(false);
+    expect('targetSheet' in input).toBe(false);
+  });
+
+  it('rejects a set target in parameter mode', () => {
+    const parsed = parseAuthorActionArgs(rawArgs({ mode: 'parameter', targetSet: 'Category Set' }));
+
+    expect(parsed.isErr()).toBe(true);
+    invariant(parsed.isErr());
+    expect(parsed.error.getErrorText()).toContain('targetSet is not allowed in parameter mode');
+  });
+
+  it('rejects a parameter target in set mode', () => {
+    const parsed = parseAuthorActionArgs(
+      rawArgs({ mode: 'set', targetSet: 'Category Set', targetParameter: '[Parameters].[X]' }),
+    );
+
+    expect(parsed.isErr()).toBe(true);
+    invariant(parsed.isErr());
+    expect(parsed.error.getErrorText()).toContain('targetParameter is not allowed in set mode');
+  });
+});
 
 describe('getAttr', () => {
   it('reads the requested attribute', () => {
