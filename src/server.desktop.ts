@@ -113,7 +113,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Seventy-five tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
+ * Seventy-six tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
  * first-class workbook/data reads/navigation, scoped datasource/dashboard/story cached-XML
  * fallbacks, dialog inspection and action handling, and a narrow whole-workbook cached-XML
  * fallback. Standalone validation and unrelated info/site tools stay out. This is the
@@ -172,6 +172,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'publish-workbook',
     'pause-auto-updates',
     'refresh-auto-updates',
+    'refresh-dashboard-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
@@ -317,8 +318,11 @@ export class DesktopMcpServer extends Server {
     if (!this.knowledgeCorpusChecked) {
       this.knowledgeCorpusChecked = true;
       if (getKnowledgeCorpusEntryCount() === 0) {
+        const configuredDir = getConfiguredKnowledgeDir();
         log({
-          message: `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+          message: configuredDir
+            ? `Knowledge corpus is empty; expected assets under ${configuredDir}`
+            : 'Knowledge corpus is empty; set TABLEAU_KNOWLEDGE_DIR to a knowledge root to serve one',
           level: 'warning',
           logger: 'DesktopMcpServer',
         });
@@ -445,7 +449,8 @@ export class DesktopMcpServer extends Server {
     this.registerResource({
       name: 'tableau-expertise-knowledge',
       title: 'Tableau authoring knowledge',
-      description: 'Expertise modules scanned from resources/desktop/knowledge',
+      description:
+        'Expertise modules scanned from the configured knowledge root (TABLEAU_KNOWLEDGE_DIR)',
       template,
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];

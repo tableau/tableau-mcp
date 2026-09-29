@@ -1,6 +1,3 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-
 import * as loggerModule from './logging/logger.js';
 
 const knowledgeMocks = vi.hoisted(() => ({
@@ -35,26 +32,27 @@ describe('DesktopMcpServer knowledge startup check', () => {
     });
   });
 
-  it('real knowledge resource listing throws a loud asset-root error for an empty root', async () => {
-    const emptyRoot = mkdtempSync(join(process.cwd(), '.tmp-empty-knowledge-root-'));
-    const resourcesRoot = join(emptyRoot, 'resources', 'desktop');
-    mkdirSync(resourcesRoot, { recursive: true });
+  it('real knowledge resource listing returns [] when no external root is configured', async () => {
+    const originalKnowledgeDir = process.env.TABLEAU_KNOWLEDGE_DIR;
+    delete process.env.TABLEAU_KNOWLEDGE_DIR;
 
     try {
       vi.resetModules();
-      vi.doMock('./utils/getDirname.js', () => ({ getDirname: () => emptyRoot }));
       vi.doUnmock('./desktop/knowledge/index.js');
       vi.doUnmock('./desktop/assets.js');
       const realKnowledge = await import('./desktop/knowledge/index.js');
       realKnowledge.clearKnowledgeCache();
       realKnowledge._resetKnowledgeSearchCache();
 
-      expect(() => realKnowledge.listKnowledgeResources()).toThrow(
-        `Knowledge corpus is empty; expected assets under ${join(resourcesRoot, 'knowledge')}`,
-      );
+      // Knowledge is served only from external roots; with none configured the corpus is
+      // empty rather than an error, so the desktop server degrades gracefully.
+      expect(realKnowledge.listKnowledgeResources()).toEqual([]);
     } finally {
-      rmSync(emptyRoot, { recursive: true, force: true });
-      vi.doUnmock('./utils/getDirname.js');
+      if (originalKnowledgeDir === undefined) {
+        delete process.env.TABLEAU_KNOWLEDGE_DIR;
+      } else {
+        process.env.TABLEAU_KNOWLEDGE_DIR = originalKnowledgeDir;
+      }
       vi.resetModules();
     }
   });

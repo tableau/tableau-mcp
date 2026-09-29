@@ -9,6 +9,7 @@ import {
   ExternalApiInstance,
   startPageVisibilitySchema,
   summaryDataSchema,
+  worksheetDocumentRoute,
   worksheetListSchema,
   worksheetSummaryDataRoute,
 } from './types.js';
@@ -360,7 +361,31 @@ describe('ExternalApiHttp async dispatch (0.2.0)', () => {
       const result = await http.getXml(EXTERNAL_API_ROUTES.workbookDocument);
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+      expect(result.unwrap().xsdPayloadVersion).toBeUndefined();
       expect(server.requests.some((r) => r.path === '/v0/operations/op-read-1')).toBe(true);
+    });
+
+    it('preserves the served payload version on a polled sheet-document read', async () => {
+      const route = worksheetDocumentRoute('sheet-sales');
+      server.setOverride(`GET ${route}`, accepted202('op-sheet-read'));
+      server.setOperation('op-sheet-read', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-sheet-read',
+            kind: 'sheet.getDocument',
+            state: 'SUCCEEDED',
+            result: { document: '<worksheet name="Sales" />', payloadVersion: '2026.3' },
+          },
+        ],
+      });
+
+      const result = await http.getXml(route);
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        xml: '<worksheet name="Sales" />',
+        xsdPayloadVersion: '2026.3',
+      });
     });
 
     // JSON reads DO poll: the terminal operation's `result` carries the body the 200 would have.

@@ -1408,6 +1408,212 @@ describe('ExternalApiToolExecutor', () => {
       }
     });
 
+    it('refreshes a dashboard now and validates the typed aggregate outcome', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshDashboardNow('dash-exec', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().parsedResult).toEqual({
+        outcome: 'COMPLETE',
+        refreshed: [
+          { worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' },
+          { worksheetId: 'sheet-profit', worksheetName: 'Profit by Category' },
+        ],
+        failed: [],
+      });
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook/dashboards/dash-exec:refreshNow',
+        body: '',
+      });
+    });
+
+    it('percent-encodes the dashboard id on refresh-now dispatch', async () => {
+      const path = '/v0/workbook/dashboards/dash%2Fexec%20now:refreshNow';
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-dashboard-encoded',
+          kind: 'dashboard.refreshNow',
+          state: 'SUCCEEDED',
+          result: { outcome: 'COMPLETE', refreshed: [], failed: [] },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshDashboardNow('dash/exec now', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)?.path).toBe(path);
+    });
+
+    it('retains a validated partial outcome and the mapped API error on immediate failure', async () => {
+      const path = '/v0/workbook/dashboards/dash-exec:refreshNow';
+      const partial = {
+        outcome: 'PARTIAL',
+        refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+        failed: [
+          {
+            worksheetId: 'sheet-profit',
+            worksheetName: 'Profit by Category',
+            code: 'model-invalid-after-refresh',
+            message: 'The visual model remained invalid.',
+          },
+        ],
+      };
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-dashboard-partial',
+          kind: 'dashboard.refreshNow',
+          state: 'FAILED',
+          error: {
+            code: 'dashboard-refresh-now-failed',
+            message: 'One or more targets failed.',
+            tableauErrorCode: 'B1234567',
+          },
+          result: partial,
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshDashboardNow('dash-exec', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toEqual({
+        type: 'command-failed',
+        error: {
+          code: 'dashboard-refresh-now-failed',
+          message: 'One or more targets failed.',
+          recoverable: false,
+          'tableau-error-code': 'B1234567',
+        },
+        result: partial,
+      });
+    });
+
+    it('retains the same structured failure after 202 polling', async () => {
+      const path = '/v0/workbook/dashboards/dash-exec:refreshNow';
+      const failedOutcome = {
+        outcome: 'FAILED',
+        refreshed: [],
+        failed: [
+          {
+            worksheetId: 'sheet-sales',
+            worksheetName: 'Sales by Region',
+            code: 'refresh-attempt-failed',
+            message: 'The refresh attempt failed.',
+          },
+        ],
+      };
+      server.setOverride(`POST ${path}`, {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/op-dashboard-polled' },
+        body: JSON.stringify({
+          id: 'op-dashboard-polled',
+          kind: 'dashboard.refreshNow',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('op-dashboard-polled', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-dashboard-polled',
+            kind: 'dashboard.refreshNow',
+            state: 'FAILED',
+            error: {
+              code: 'dashboard-refresh-now-failed',
+              message: 'Every target failed.',
+            },
+            result: failedOutcome,
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshDashboardNow('dash-exec', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr()).toMatchObject({
+        type: 'command-failed',
+        error: { code: 'dashboard-refresh-now-failed', message: 'Every target failed.' },
+        result: failedOutcome,
+      });
+      expect(server.requests.map((request) => `${request.method} ${request.path}`)).toContain(
+        'GET /v0/operations/op-dashboard-polled',
+      );
+    });
+
+    it('rejects malformed retained dashboard outcomes without exposing them as typed results', async () => {
+      const path = '/v0/workbook/dashboards/dash-exec:refreshNow';
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-dashboard-malformed',
+          kind: 'dashboard.refreshNow',
+          state: 'FAILED',
+          error: { code: 'dashboard-refresh-now-failed', message: 'Refresh failed.' },
+          result: { outcome: 'PARTIAL', refreshed: [] },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshDashboardNow('dash-exec', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('invalid-response');
+    });
+
+    it('leaves unrelated failed operations without retained results unchanged', async () => {
+      const path = '/v0/workbook/worksheets/sheet-sales:refreshNow';
+      server.setOverride(`POST ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-worksheet-failed',
+          kind: 'sheet.refreshNow',
+          state: 'FAILED',
+          error: { code: 'operation-failed', message: 'Worksheet refresh failed.' },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+      });
+      await executor.start();
+
+      const result = await executor.refreshWorksheetNow('sheet-sales', signal);
+
+      expect(result.unwrapErr()).toEqual({
+        type: 'command-failed',
+        error: {
+          code: 'operation-failed',
+          message: 'Worksheet refresh failed.',
+          recoverable: false,
+        },
+      });
+    });
+
     it('dispatches auto-update pause without an id-existence guard (matches the live command)', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.2.16",
+    "version": "0.2.19",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -785,6 +785,62 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:refreshNow": {
+      "post": {
+        "summary": "Refresh a dashboard now",
+        "description": "Runs pending automatic updates for a dashboard immediately.",
+        "operationId": "refreshDashboardNow",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs pending automatic updates for a dashboard immediately.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/Operation" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "$ref": "#/components/schemas/DashboardRefreshOutcome"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
           "421": { "$ref": "#/components/responses/MisdirectedRequest" },
           "500": { "$ref": "#/components/responses/ServerError" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
@@ -2944,6 +3000,40 @@
           "dashboards": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/DashboardItem" }
+          }
+        }
+      },
+      "DashboardRefreshOutcome": {
+        "type": "object",
+        "required": ["outcome", "refreshed", "failed"],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": ["COMPLETE", "PARTIAL", "FAILED"]
+          },
+          "refreshed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["worksheetId", "worksheetName"],
+              "properties": {
+                "worksheetId": { "type": "string" },
+                "worksheetName": { "type": "string" }
+              }
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["worksheetId", "worksheetName", "code", "message"],
+              "properties": {
+                "worksheetId": { "type": "string" },
+                "worksheetName": { "type": "string" },
+                "code": { "type": "string" },
+                "message": { "type": "string" }
+              }
+            }
           }
         }
       },

@@ -379,6 +379,140 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(applyDashboardDocument).toHaveBeenCalledOnce();
     });
 
+    it('keeps workbook namespace context while guarding an unchanged per-sheet dashboard apply', async () => {
+      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Namespaced' /></zones></dashboard>`;
+      const workbookXml = `<?xml version='1.0'?><workbook>
+        <worksheets xmlns:user='urn:tableau:user' xmlns:mid='urn:intermediate'>
+          <worksheet name='Namespaced'><table><view>
+            <groupfilter function='level-members' level='[none:Category:nk]' user:ui-domain='relevant' user:ui-enumeration='inclusive' />
+            <mid:metadata-record />
+            <pane xmlns:user='urn:local'><groupfilter function='level-members' level='[none:Category:nk]' user:ui-domain='database' user:ui-enumeration='all' /></pane>
+          </view><rows>[none:Category:nk]</rows><cols /></table></worksheet>
+        </worksheets>
+        <dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
+        <windows><window class='worksheet' name='Namespaced' /></windows>
+      </workbook>`;
+      const applyDashboardDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          ),
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ dashboards: [{ id: 'dash-1', name: dashboardName, hidden: false }] }),
+          ),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: dashboardXml })),
+        applyDashboardDocument,
+      });
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(applyDashboardDocument).toHaveBeenCalledOnce();
+      expect(applyDashboardDocument.mock.calls[0]?.[1]).toBe(dashboardXml);
+    });
+
+    it.each([false, true])(
+      'blocks a blank namespaced worksheet before dispatch when requireExistingSheet is %s',
+      async (requireExistingSheet) => {
+        const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Namespaced Blank' /></zones></dashboard>`;
+        const workbookXml = `<?xml version='1.0'?><workbook xmlns:user='urn:tableau:user'>
+          <worksheets xmlns:mid='urn:intermediate'>
+            <worksheet name='Namespaced Blank'><table><view>
+              <groupfilter function='level-members' level='Category' user:ui-domain='relevant' user:ui-enumeration='inclusive' />
+              <mid:metadata-record />
+              <pane xmlns:user='urn:local'><groupfilter function='level-members' level='Category' user:ui-domain='database' user:ui-enumeration='all' /></pane>
+            </view><rows /><cols /></table></worksheet>
+          </worksheets>
+          <dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
+          <windows><window class='worksheet' name='Namespaced Blank' /></windows>
+        </workbook>`;
+        const applyDashboardDocument = vi.fn();
+        const applyWorkbookDocument = vi.fn();
+        const executor = makeExecutorMock({
+          getWorkbookDocument: vi
+            .fn()
+            .mockResolvedValue(
+              Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+            ),
+          listDashboards: vi
+            .fn()
+            .mockResolvedValue(
+              Ok({ dashboards: [{ id: 'dash-1', name: dashboardName, hidden: false }] }),
+            ),
+          getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: dashboardXml })),
+          applyDashboardDocument,
+          applyWorkbookDocument,
+        });
+
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml: dashboardXml,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet,
+        });
+
+        expect(result.isErr()).toBe(true);
+        if (result.isErr()) {
+          invariant(result.error.type === 'load-dashboard-xml-error');
+          invariant(result.error.error.type === 'sheet-not-rendered');
+          expect(result.error.error.worksheetNames).toEqual(['Namespaced Blank']);
+        }
+        expect(applyDashboardDocument).not.toHaveBeenCalled();
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not collapse entity-distinct worksheet names when guarding a dashboard apply', async () => {
+      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='A &amp;amp; B' /></zones></dashboard>`;
+      const workbookXml = `<workbook><worksheets>
+        <worksheet name='A &amp; B'><table><rows>[none:First:nk]</rows><cols /></table></worksheet>
+        <worksheet name='A &amp;amp; B'><table><rows /><cols /></table></worksheet>
+      </worksheets><dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
+      <windows><window class='worksheet' name='A &amp; B' /><window class='worksheet' name='A &amp;amp; B' /></windows></workbook>`;
+      const applyWorkbookDocument = vi.fn();
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          ),
+        applyWorkbookDocument,
+      });
+
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: dashboardXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-dashboard-xml-error');
+        invariant(result.error.error.type === 'sheet-not-rendered');
+        expect(result.error.error.worksheetNames).toEqual(['A &amp; B']);
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
     // ── Worksheet-zone semantics: type-v2='visual' + nested/container zones (PR #918 review) ──
     // The guard must use the same worksheet-zone predicate as the authoritative
     // target-dashboard-invariant: a <zone> at ANY depth whose @name is set and whose @type-v2 is

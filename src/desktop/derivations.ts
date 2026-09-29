@@ -18,10 +18,13 @@
  * echoing an unusable string onward.
  *
  * AUTHORITY, in precedence order:
- *  1. `resources/desktop/knowledge/tactics/tree/column-instance-prefixes.md` —
+ *  1. The `tactics/tree/column-instance-prefixes` knowledge module — now owned and
+ *     shipped by tab-agent-south and served to this build via TABLEAU_KNOWLEDGE_DIR
+ *     (formerly bundled here at
+ *     `resources/desktop/knowledge/tactics/tree/column-instance-prefixes.md`).
  *     "Empirically Confirmed", field-tested by XML injection + round-trip inspection
  *     against live Desktop (2026-06-25). It states outright that it supersedes
- *     `tactics/tree/enums.md` for derivation strings and CI prefixes.
+ *     the `tactics/tree/enums` module for derivation strings and CI prefixes.
  *  2. Real Tableau-authored XML captured in `src/desktop/data/twb-example-index.json`
  *     and `src/desktop/data/corpus.json` — e.g. `[attr:i_item_desc:nk]` with
  *     `derivation="Attribute"`, `[cnt:id:qk]` with `Count`, `[ctd:O_ORDERKEY:qk]`
@@ -29,7 +32,7 @@
  *  3. This repo's own preflight allowlist, previously inlined in
  *     `validation/rules/invalidDerivationString.ts` and now hosted below.
  *
- * `tactics/tree/enums.md` is NOT authority here: its derivation line still lists the
+ * The `tactics/tree/enums` module is NOT authority here: its derivation line still lists the
  * look-alikes `Attr`, `TruncYear`, `TruncMonth`, `TruncDay`, all four of which the
  * preflight rejects and none of which appear in real Tableau output.
  */
