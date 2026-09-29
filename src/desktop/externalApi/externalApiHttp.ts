@@ -49,9 +49,11 @@ const HEADER_LOCATION = 'location';
 const HEADER_RETRY_AFTER = 'retry-after';
 const HEADER_OPERATION_ID = 'x-tableau-operation-id';
 
-// A document read polled to terminal carries its XML under `result.document` (a JSON string),
-// since the poll endpoint always returns the JSON Operation envelope, never a raw-XML body.
-const documentResultSchema = z.object({ document: z.string() }).passthrough();
+// A polled document read carries XML in `result.document` and, on newer Desktop builds,
+// the served payload version in `result.payloadVersion` inside the JSON Operation envelope.
+const documentResultSchema = z
+  .object({ document: z.string(), payloadVersion: z.string().optional() })
+  .passthrough();
 
 // A polled read can settle FAILED (e.g. a Desktop-side serialization error), which carries no
 // `result`. Surface the operation's own error so callers see Desktop's message instead of a
@@ -161,8 +163,7 @@ export class ExternalApiHttp {
       return Ok({
         xml: parsed.data.document,
         applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
-        // The XSD-payload-version header is sync-only; the poll response does not carry it.
-        xsdPayloadVersion: undefined,
+        xsdPayloadVersion: parsed.data.payloadVersion,
       });
     }
     const pending = await pendingOverflowError(res);

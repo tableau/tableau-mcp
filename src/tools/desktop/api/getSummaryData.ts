@@ -7,7 +7,11 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { fetchWorksheetSummaryData, type SummaryRowOrder } from './summaryDataCore.js';
+import {
+  fetchWorksheetSummaryData,
+  type SummaryDataReadScope,
+  type SummaryRowOrder,
+} from './summaryDataCore.js';
 
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
@@ -28,6 +32,7 @@ type SummaryDataResult = {
   maxRows: number;
   shape: string;
   rowOrder: SummaryRowOrder;
+  readScope: SummaryDataReadScope;
   summaryData: { columns: unknown[]; rows: unknown[] };
 };
 
@@ -38,7 +43,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'get-summary-data',
     title,
     description:
-      'Read the aggregated summary rows on a populated worksheet (only the fields on the view).',
+      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -85,6 +90,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                 maxRows: resolvedMaxRows,
                 shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
                 rowOrder: summaryResult.value.rowOrder,
+                readScope: summaryResult.value.readScope,
                 summaryData: { columns: dataColumns, rows: dataRows },
               });
             },

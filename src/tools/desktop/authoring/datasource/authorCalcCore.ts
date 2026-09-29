@@ -1168,6 +1168,46 @@ function findColumnTags(xml: string): string[] {
   return [...xml.matchAll(/<column\b[\s\S]*?(?:<\/column>|\/>)/g)].map((match) => match[0]);
 }
 
+/** One parameter defined in the workbook's Parameters datasource. */
+export type WorkbookParameter = {
+  /** Bracketed internal name, e.g. "[Parameter 1]". */
+  name: string;
+  /** Display caption when present, e.g. "p.Period". */
+  caption?: string;
+};
+
+/**
+ * The parameters already defined in the workbook, read from the Parameters datasource. A
+ * parameter is a `<column param-domain-type=...>` there; the field/schema summary excludes the
+ * Parameters datasource, so callers that need parameters (author-action's parameter mode, its
+ * recovery guidance) read them here. Uses the shared opaque-range-aware datasource parser rather
+ * than a bespoke regex. Empty when the workbook has no Parameters datasource or no parameters.
+ */
+export function findWorkbookParameters(xml: string): WorkbookParameter[] {
+  const parametersDatasource = findDatasourceElements(xml).find(
+    (datasource) => datasource.name === 'Parameters',
+  );
+  if (parametersDatasource === undefined) {
+    return [];
+  }
+  const parameters: WorkbookParameter[] = [];
+  for (const tag of findColumnTags(parametersDatasource.xml)) {
+    if (getAttr(tag, 'param-domain-type') === undefined) {
+      continue;
+    }
+    const name = getAttr(tag, 'name');
+    if (name === undefined) {
+      continue;
+    }
+    const caption = getAttr(tag, 'caption');
+    parameters.push({
+      name: unescapeXml(name),
+      ...(caption === undefined ? {} : { caption: unescapeXml(caption) }),
+    });
+  }
+  return parameters;
+}
+
 export { resolveCaptionReferences as resolveCaptionReferencesForTest };
 
 function resolveCaptionReferences(

@@ -1,10 +1,12 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
@@ -138,6 +140,122 @@ describe('DesktopTool episode telemetry', () => {
       ]);
     });
   });
+
+  it('keeps Result.Err telemetry to one start, one error, and one failed end', async () => {
+    const dir = tmpDir();
+    const tool = makeTool();
+    const base = getMockRequestHandlerExtra();
+    const extra = {
+      ...base,
+      config: {
+        ...base.config,
+        episodeEventsEnabled: true,
+        episodeEventsDirectory: dir,
+      },
+    };
+
+    const result = await tool.logAndExecute({
+      extra,
+      args: { session: 'S1' },
+      callback: async () =>
+        new Err(
+          new McpToolError({
+            type: 'invalid-args',
+            message: 'invalid request',
+            statusCode: 400,
+          }),
+        ),
+    });
+
+    expect(result.isError).toBe(true);
+    await vi.waitFor(() => {
+      expect(readEvents(dir).map((event) => event.type)).toEqual([
+        'tool_start',
+        'tool_error',
+        'tool_end',
+      ]);
+      expect(readEvents(dir).at(-1)).toMatchObject({
+        tool: 'ask-user',
+        success: false,
+        outcome: 'failed',
+      });
+    });
+  });
+
+  it.each([
+    ['true', true, false, 'failed', true],
+    ['false', false, true, 'succeeded', false],
+    ['omitted', undefined, true, 'succeeded', false],
+  ] as const)(
+    'classifies a mapped result with isError %s without logging its payload',
+    async (_label, isError, success, outcome, emitsError) => {
+      const dir = tmpDir();
+      const tool = makeTool();
+      const base = getMockRequestHandlerExtra();
+      const extra = {
+        ...base,
+        config: {
+          ...base.config,
+          episodeEventsEnabled: true,
+          episodeEventsDirectory: dir,
+        },
+      };
+      const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
+      const privateSentinel = 'PRIVATE_RESULT_SENTINEL';
+      const mappedResult: CallToolResult = {
+        ...(isError === undefined ? {} : { isError }),
+        content: [{ type: 'text', text: privateSentinel }],
+        structuredContent: { privateSentinel },
+      };
+
+      const result = await tool.logAndExecute({
+        extra,
+        args: { session: 'S1' },
+        callback: async () => new Ok({ ok: true }),
+        getSuccessResult: () => mappedResult,
+      });
+
+      expect(result).toBe(mappedResult);
+      await vi.waitFor(() => {
+        const events = readEvents(dir);
+        expect(events.map((event) => event.type)).toEqual(
+          emitsError
+            ? ['episode_begin', 'tool_start', 'tool_error', 'tool_end']
+            : ['episode_begin', 'tool_start', 'tool_end'],
+        );
+        expect(events[0]).toMatchObject({
+          type: 'episode_begin',
+          session_id: 'S1',
+          episode_id: begin.episode_id,
+        });
+        for (const event of events.slice(1)) {
+          expect(event).toMatchObject({
+            session_id: 'S1',
+            episode_id: begin.episode_id,
+            tool: 'ask-user',
+          });
+        }
+        expect(events.filter((event) => event.type === 'tool_error')).toHaveLength(
+          emitsError ? 1 : 0,
+        );
+        if (emitsError) {
+          expect(events.find((event) => event.type === 'tool_error')).toMatchObject({
+            error: expect.stringContaining('Tool returned an error result.'),
+          });
+        }
+        expect(events.at(-1)).toMatchObject({
+          type: 'tool_end',
+          session_id: 'S1',
+          tool: 'ask-user',
+          success,
+          outcome,
+          request_id_hash: expect.stringMatching(/^[a-f0-9]{16}$/),
+          result_size_chars: JSON.stringify(mappedResult).length,
+        });
+        expect(JSON.stringify(events)).not.toContain(privateSentinel);
+      });
+    },
+  );
 });
 
 describe('DesktopTool worksheet orientation', () => {

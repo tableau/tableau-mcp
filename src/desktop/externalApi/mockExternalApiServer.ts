@@ -714,6 +714,33 @@ export async function startMockExternalApiServer(
       }
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDiagnostics) {
+      sendJson(res, 200, {
+        worksheets: DEFAULT_WORKSHEETS.map((worksheet) => ({
+          worksheetId: worksheet.id,
+          status: 'complete',
+          invalidFields: [],
+        })),
+      });
+      return;
+    }
+
+    const worksheetDiagnosticsMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/diagnostics$/,
+    );
+    if (method === 'GET' && worksheetDiagnosticsMatch) {
+      const worksheetId = decodeURIComponent(worksheetDiagnosticsMatch[1]);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (!known) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }],
+      });
+      return;
+    }
+
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
     if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);
@@ -1118,6 +1145,31 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'refresh-storyboard-now');
+      return;
+    }
+
+    const dashboardRefreshNowMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+):refreshNow$/);
+    if (method === 'POST' && dashboardRefreshNowMatch) {
+      const dashboardId = decodeURIComponent(dashboardRefreshNowMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'dashboard-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        id: 'op-refresh-dashboard-now-1',
+        kind: 'dashboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [
+            { worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' },
+            { worksheetId: 'sheet-profit', worksheetName: 'Profit by Category' },
+          ],
+          failed: [],
+        },
+      });
       return;
     }
 

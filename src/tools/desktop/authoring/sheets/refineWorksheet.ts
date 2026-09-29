@@ -35,6 +35,10 @@ import {
 } from '../../../../desktop/refine/roundStackedBar.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
+import type {
+  ReadbackVerificationResult,
+  VerificationFinding,
+} from '../../../../desktop/validation/readback-verify.js';
 import {
   blockingValidationIssues,
   runValidation,
@@ -80,9 +84,19 @@ type RefineWorksheetToolResult =
       operation: RefineOperation;
       worksheetName: string;
       message: string;
-      verification?: ProgrammaticRoundedBarVerification;
+      applied?: true;
+      retrySafe?: false;
+      verification?: ProgrammaticRoundedBarVerification | ReadbackVerificationResult;
     }
-  | { refined: false; operation: RefineOperation; worksheetName: string; reason: string };
+  | {
+      refined: false;
+      operation: RefineOperation;
+      worksheetName: string;
+      reason: string;
+      applied?: true;
+      retrySafe?: false;
+      verification?: ReadbackVerificationResult;
+    };
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -99,6 +113,37 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
     .filter((issue) => issue.severity === 'error')
     .map((issue) => `${issue.ruleId}: ${issue.message}`)
     .join('; ');
+}
+
+function appliedButUnconfirmed(
+  operation: RefineOperation,
+  worksheetName: string,
+  reason: string,
+  verification: ReadbackVerificationResult | undefined,
+  confirmationStatus: 'failed' | 'skipped',
+): Ok<RefineWorksheetToolResult> {
+  const confirmationFinding: VerificationFinding = {
+    severity: confirmationStatus === 'failed' ? 'error' : 'warning',
+    source: 'readback',
+    message: reason,
+  };
+  const status =
+    verification?.status === 'failed' || confirmationStatus === 'failed' ? 'failed' : 'skipped';
+  const verificationReport: ReadbackVerificationResult = {
+    ok: status !== 'failed',
+    status,
+    message: verification?.message ? `${verification.message} ${reason}` : reason,
+    findings: [...(verification?.findings ?? []), confirmationFinding],
+  };
+  return new Ok({
+    refined: false,
+    applied: true,
+    retrySafe: false,
+    operation,
+    worksheetName,
+    reason: `${reason} The write already completed; do not automatically retry.`,
+    verification: verificationReport,
+  });
 }
 
 const paramsSchema = {
@@ -407,8 +452,7 @@ export const getRefineWorksheetTool = (
               const landed = appliedSortByFieldDirection(rb, col, using);
               return landed !== null && landed !== dir
                 ? `applied, but the sort direction is ${landed}, not the requested ${dir} — ` +
-                    'Desktop did not honor the direction change. Not retrying; fall back to ' +
-                    'the standard path.'
+                    'Desktop did not honor the direction change.'
                 : null;
             };
             nodeLabel = `<computed-sort direction="${dir}" column="${col}" using="${using}">`;
@@ -459,6 +503,8 @@ export const getRefineWorksheetTool = (
             }
           }
 
+          const verification = applied.value.readbackVerification;
+
           // 6. Read back and confirm the expected node landed durably. The apply is async
           // after SUCCEEDED, so poll rather than trusting one immediate readback — the
           // first read can race the settle and still show pre-apply XML.
@@ -476,9 +522,21 @@ export const getRefineWorksheetTool = (
             const { type, error } = readback.error;
             switch (type) {
               case 'get-worksheet-xml-error':
-                return new GetWorksheetXmlFailedError(error).toErr();
+                return appliedButUnconfirmed(
+                  operation,
+                  canonicalWorksheetName,
+                  `The ${nodeLabel} node could not be confirmed because readback failed: ${error.message}`,
+                  verification,
+                  'skipped',
+                );
               case 'execute-command-error':
-                return new DesktopCommandExecutionError(error).toErr();
+                return appliedButUnconfirmed(
+                  operation,
+                  canonicalWorksheetName,
+                  `The ${nodeLabel} node could not be confirmed because readback failed: ${new DesktopCommandExecutionError(error).message}`,
+                  verification,
+                  'skipped',
+                );
               default: {
                 const _: never = type;
                 return new UnknownError(error).toErr();
@@ -486,11 +544,22 @@ export const getRefineWorksheetTool = (
             }
           }
           if (readback.settled) {
+            const verificationCaveat =
+              verification?.status === 'failed'
+                ? ' The requested node was confirmed, but worksheet verification failed; diagnose the listed findings and do not retry automatically.'
+                : verification?.status === 'skipped'
+                  ? ' The requested node was confirmed, but worksheet verification was incomplete; inspect the listed findings and do not retry automatically.'
+                  : verification?.status === 'warning'
+                    ? ' The requested node was confirmed, but worksheet verification reported warnings; inspect the listed findings before continuing.'
+                    : '';
             return new Ok({
               refined: true,
+              applied: true,
+              retrySafe: false,
               operation,
               worksheetName: canonicalWorksheetName,
-              message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
+              message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.${verificationCaveat}`,
+              verification,
             });
           }
           const lastReadback = readback.value.xml;
@@ -501,16 +570,23 @@ export const getRefineWorksheetTool = (
           // chance to settle, so a mismatch now is durable, not a race.
           const mismatchReason = readbackMiss?.(lastReadback);
           if (mismatchReason) {
-            return refusal(operation, canonicalWorksheetName, mismatchReason);
+            return appliedButUnconfirmed(
+              operation,
+              canonicalWorksheetName,
+              mismatchReason,
+              verification,
+              'failed',
+            );
           }
 
-          return refusal(
+          return appliedButUnconfirmed(
             operation,
             canonicalWorksheetName,
-            `applied, but the readback did not contain the expected ${nodeLabel} after ` +
+            `The ${nodeLabel} node was not confirmed because the readback did not contain it after ` +
               `${READBACK_POLL_MAX_ATTEMPTS} polls (${READBACK_POLL_INTERVAL_MS}ms apart) — ` +
-              'the refinement was not durable, or this is an async-settle miss. Not retrying ' +
-              'further; fall back to the standard path.',
+              'the refinement was not durable, or this is an async-settle miss.',
+            verification,
+            'failed',
           );
         },
       });

@@ -69,6 +69,61 @@ describe('targetDashboardInvariantIssues', () => {
     ).toEqual([]);
   });
 
+  it('preserves parsed worksheet names that differ by a literal entity sequence', () => {
+    expect(
+      targetDashboardInvariantIssues(
+        `<workbook>
+          <worksheets>
+            <worksheet name='A &amp; B' />
+            <worksheet name='A &amp;amp; B' />
+          </worksheets>
+          <dashboards><dashboard name='Executive'><zones>
+            <zone name='A &amp; B' /><zone name='A &amp;amp; B' />
+          </zones></dashboard></dashboards>
+          <windows>
+            <window class='worksheet' name='A &amp; B' />
+            <window class='worksheet' name='A &amp;amp; B' />
+            <window class='dashboard' name='Executive'><viewpoints>
+              <viewpoint name='A &amp; B' /><viewpoint name='A &amp;amp; B' />
+            </viewpoints></window>
+          </windows>
+        </workbook>`,
+        'Executive',
+        ['A & B', 'A &amp; B'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports substituted entity-distinct worksheet identities as duplicate and missing', () => {
+    const issues = targetDashboardInvariantIssues(
+      `<workbook>
+        <worksheets>
+          <worksheet name='A &amp; B' />
+          <worksheet name='A &amp;amp; B' />
+        </worksheets>
+        <dashboards><dashboard name='Executive'><zones>
+          <zone name='A &amp; B' /><zone name='A &amp; B' />
+        </zones></dashboard></dashboards>
+        <windows>
+          <window class='worksheet' name='A &amp; B' />
+          <window class='worksheet' name='A &amp;amp; B' />
+          <window class='dashboard' name='Executive'><viewpoints>
+            <viewpoint name='A &amp; B' /><viewpoint name='A &amp; B' />
+          </viewpoints></window>
+        </windows>
+      </workbook>`,
+      'Executive',
+      ['A & B', 'A &amp; B'],
+    );
+
+    expect(issues.map((issue) => issue.code).sort()).toEqual([
+      'direct-viewpoint-duplicate',
+      'direct-viewpoint-missing',
+      'worksheet-zone-duplicate',
+      'worksheet-zone-missing',
+    ]);
+  });
+
   it('rejects target viewpoints placed after Tableau metadata children', () => {
     const issues = targetDashboardInvariantIssues(
       `<workbook>

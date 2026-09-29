@@ -119,6 +119,54 @@ describe('inferFromBookmark — canonical Desktop derivations', () => {
       )?.instance_role,
     ).toBe(instanceRole);
   });
+
+  it('types count results as quantitative without changing the raw field slot kind', () => {
+    const raw =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<datasources><datasource name='ds'>" +
+      "<column name='[String]' datatype='string' role='dimension' type='nominal'/>" +
+      "<column name='[Boolean]' datatype='boolean' role='dimension' type='nominal'/>" +
+      "<column name='[Number]' datatype='integer' role='dimension' type='ordinal'/>" +
+      "<column name='[Date]' datatype='date' role='dimension' type='ordinal'/>" +
+      "<column name='[State]' datatype='string' role='dimension' type='nominal' semantic-role='[State].[Name]'/>" +
+      '</datasource></datasources><table>' +
+      '<rows>' +
+      '[ds].[none:String:nk] [ds].[ctd:String:qk] ' +
+      '[ds].[none:Boolean:nk] [ds].[cnt:Boolean:qk] ' +
+      '[ds].[none:Number:ok] [ds].[ctd:Number:qk] ' +
+      '[ds].[none:Date:ok] [ds].[cnt:Date:qk] ' +
+      '[ds].[none:State:nk] [ds].[ctd:State:qk]' +
+      '</rows></table></bookmark>';
+
+    const inference = inferFromBookmark(raw);
+    const kind = (field: string, derivation: string): string | undefined =>
+      inference.slots.find((slot) => slot.sourceField === field && slot.derivation === derivation)
+        ?.kind;
+
+    for (const [field, derivation] of [
+      ['String', 'ctd'],
+      ['Boolean', 'cnt'],
+      ['Number', 'ctd'],
+      ['Date', 'cnt'],
+      ['State', 'ctd'],
+    ]) {
+      expect(kind(field, derivation)).toBe('quantitative');
+    }
+    expect(kind('String', 'none')).toBe('categorical');
+    expect(kind('Boolean', 'none')).toBe('categorical');
+    expect(kind('Number', 'none')).toBe('categorical');
+    expect(kind('Date', 'none')).toBe('temporal');
+    expect(kind('State', 'none')).toBe('geo');
+
+    const descriptor = inferBindingDescriptor('count-result-kinds', inference);
+    for (const slot of descriptor.slots.filter(
+      (candidate) => candidate.derivation === 'cnt' || candidate.derivation === 'ctd',
+    )) {
+      expect(slot.kind).toBe('quantitative');
+      expect(slot.communicative_role).toBe('measure-value');
+      expect(slot.purpose).toContain('Continuous measure');
+    }
+  });
 });
 
 describe('inferFromBookmark — calculated-field dependency graph', () => {
@@ -366,11 +414,13 @@ describe('inferFromBookmark — unknown kinds are counted, never guessed', () =>
       "<column name='[Sales]' datatype='real' role='measure'/>" +
       "<column name='[Mystery]' datatype='' role='measure'/>" +
       '</datasource></datasources>' +
-      '<table><cols>[ds1].[sum:Sales:qk]</cols><rows>[ds1].[none:Mystery:nk]</rows></table>' +
+      '<table><cols>[ds1].[sum:Sales:qk]</cols>' +
+      '<rows>[ds1].[none:Mystery:nk] [ds1].[cnt:Mystery:qk] [ds1].[ctd:Mystery:qk]</rows>' +
+      '</table>' +
       '</bookmark>';
     const inf = inferFromBookmark(raw);
     expect(inf.slots.map((s) => s.sourceField)).toEqual(['Sales']);
-    expect(inf.unknownCount).toBe(1);
+    expect(inf.unknownCount).toBe(3);
   });
 });
 

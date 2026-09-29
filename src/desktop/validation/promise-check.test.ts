@@ -132,6 +132,30 @@ describe('promise check receipt (W-23447506)', () => {
     expect(text).not.toContain('promised sort NOT verified');
   });
 
+  it.each(['unsupported-api', 'validation-read-failed'])(
+    'keeps known promised sort loss failed when native validation is unavailable: %s',
+    (reason) => {
+      expect(
+        classifyWorksheetPromiseOutcome({
+          validationWarnings: [],
+          readback: {
+            ok: true,
+            status: 'skipped',
+            findings: [
+              {
+                severity: 'warning',
+                source: 'used-field-validity',
+                message: 'Native validation unavailable.',
+                reason,
+              },
+            ],
+          },
+          readbackFindings: [sortWarning('computed-sort')],
+        }),
+      ).toBe('failed');
+    },
+  );
+
   it('formats workbook applies as honestly unverified', () => {
     const text = formatWorkbookPromiseCheck([]);
     expect(text).toContain('HOST VERIFICATION — unverified');

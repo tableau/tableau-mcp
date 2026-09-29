@@ -23,6 +23,7 @@ export const EXTERNAL_API_ROUTES = {
   appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDiagnostics: '/v0/workbook/diagnostics',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
@@ -46,6 +47,7 @@ export const EXTERNAL_API_ROUTES = {
   dashboardDelete: '/v0/workbook/dashboards/{id}:delete',
   dashboardRename: '/v0/workbook/dashboards/{id}:rename',
   dashboardPauseAutoUpdates: '/v0/workbook/dashboards/{id}:pauseAutoUpdates',
+  dashboardRefreshNow: '/v0/workbook/dashboards/{id}:refreshNow',
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
@@ -56,6 +58,7 @@ export const EXTERNAL_API_ROUTES = {
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetDiagnostics: '/v0/workbook/worksheets/{id}/diagnostics',
   worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
@@ -222,6 +225,10 @@ export function worksheetRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
 }
 
+export function worksheetDiagnosticsRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/diagnostics`;
+}
+
 export function dashboardRoute(dashboardId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
 }
@@ -357,6 +364,10 @@ export function storyboardRefreshNowRoute(storyboardId: string): string {
 
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:pauseAutoUpdates`;
+}
+
+export function dashboardRefreshNowRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:refreshNow`;
 }
 
 export function dashboardResumeAutoUpdatesRoute(dashboardId: string): string {
@@ -512,7 +523,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.15). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.16). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -721,8 +732,8 @@ export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSc
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
  * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
  * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
- * envelope must still parse rather than error. `result` rides only a SUCCEEDED envelope with
- * non-null command output.
+ * envelope must still parse rather than error. `result` normally rides a SUCCEEDED envelope;
+ * a route that explicitly opts into strict aggregate reporting may also retain it on FAILED.
  */
 export const operationEnvelopeSchema = z
   .object({
@@ -732,6 +743,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
@@ -814,6 +826,30 @@ export const dashboardListSchema = z
   })
   .passthrough();
 export type DashboardList = z.infer<typeof dashboardListSchema>;
+
+/** One worksheet controller that successfully refreshed as part of a dashboard refresh. */
+export const dashboardRefreshTargetSchema = z
+  .object({
+    worksheetId: z.string(),
+    worksheetName: z.string(),
+  })
+  .passthrough();
+
+/** One worksheet controller that failed while the remaining dashboard targets continued. */
+export const dashboardRefreshFailureSchema = dashboardRefreshTargetSchema.extend({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** Strict aggregate outcome returned by dashboard `:refreshNow`. */
+export const dashboardRefreshOutcomeSchema = z
+  .object({
+    outcome: z.enum(['COMPLETE', 'PARTIAL', 'FAILED']),
+    refreshed: z.array(dashboardRefreshTargetSchema),
+    failed: z.array(dashboardRefreshFailureSchema),
+  })
+  .passthrough();
+export type DashboardRefreshOutcome = z.infer<typeof dashboardRefreshOutcomeSchema>;
 
 /** Storyboard item returned in workbook inventory reads. */
 export const storyboardItemSchema = z
@@ -959,6 +995,47 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** One invalid field currently used by a worksheet shelf or marks encoding. */
+export const worksheetInvalidFieldSchema = z
+  .object({
+    fieldName: z.string(),
+    fieldCaption: z.string().optional(),
+    shelf: z.string(),
+    marksSpecificationId: z.string(),
+    encodingType: z.string(),
+    reason: z.string(),
+  })
+  .passthrough();
+export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
+
+/** Diagnostics reported by Desktop for one worksheet. */
+export const worksheetDiagnosticsSchema = z
+  .object({
+    worksheetId: z.string(),
+    status: z.enum(['complete', 'partial', 'unavailable']),
+    invalidFields: z.array(worksheetInvalidFieldSchema).optional(),
+    message: z.string().optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.status === 'complete' && value.invalidFields === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invalidFields'],
+        message: 'Complete worksheet diagnostics must include invalidFields.',
+      });
+    }
+  });
+export type WorksheetDiagnostics = z.infer<typeof worksheetDiagnosticsSchema>;
+
+/** Aggregate diagnostics returned by workbook and worksheet diagnostic reads and completed writes. */
+export const workbookDiagnosticsSchema = z
+  .object({
+    worksheets: z.array(worksheetDiagnosticsSchema),
+  })
+  .passthrough();
+export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and

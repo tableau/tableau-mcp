@@ -93,6 +93,77 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(validXml, mockSignal, applyOptions);
   });
 
+  it('retains native document warnings and aggregate diagnostics from a completed workbook apply', async () => {
+    const diagnostics = {
+      worksheets: [
+        { worksheetId: 'sheet-1', status: 'complete' as const, invalidFields: [] },
+        {
+          worksheetId: 'sheet-2',
+          status: 'partial' as const,
+          invalidFields: [],
+          message: 'Some fields could not be checked.',
+        },
+      ],
+    };
+    const documentWarnings = [
+      { code: 'document-warning', message: 'Dropped unsupported formatting.' },
+    ];
+    const executor = makeExecutorMock({
+      applyWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'apply-1',
+          status: 'completed',
+          submitted_at: '',
+          documentWarnings,
+          warnings: documentWarnings,
+          diagnostics,
+        }),
+      ),
+    });
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      validationWarnings: [],
+      documentWarnings,
+      diagnostics,
+    });
+  });
+
+  it('keeps malformed optional diagnostics separate from document warnings', async () => {
+    const executor = makeExecutorMock({
+      applyWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'apply-malformed-diagnostics',
+          status: 'completed',
+          submitted_at: '',
+          diagnosticsInvalid: true,
+        }),
+      ),
+    });
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      validationWarnings: [],
+      documentWarnings: [],
+      diagnosticsInvalid: true,
+    });
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
   it('accepts a guarded apply when the live workbook still matches the expected workbook', async () => {
     const { executor, appliedXml } = dispatchingExecutor();
 

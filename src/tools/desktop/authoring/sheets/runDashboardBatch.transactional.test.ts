@@ -22,10 +22,14 @@ import { getRunDashboardBatchTool } from './runDashboardBatch.js';
 
 vi.mock('../../../../desktop/session/sessionResolution.js');
 
+// `<rows>` text (any non-empty text, here just the field name) is enough for
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
+// blank; see composeDashboardCore.test.ts's PRISTINE fixture for the same pattern. "Existing" is
+// referenced via existingWorksheetNames and must resolve as a genuinely rendered worksheet.
 const BASELINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
-    <worksheet name="Existing"><table/></worksheet>
+    <worksheet name="Existing"><table><rows>Existing</rows></table></worksheet>
   </worksheets>
   <dashboards>
     <dashboard name="Executive Overview"><zones><zone name="Existing"/></zones></dashboard>

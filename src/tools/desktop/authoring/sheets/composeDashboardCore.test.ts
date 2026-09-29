@@ -8,16 +8,20 @@ import {
   composeDashboardCore,
   type ComposeDashboardCoreArgs,
   dashboardCandidateReadbackIssues,
+  resolveRenderedWorksheetNames,
 } from './composeDashboardCore.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
+// `<rows>`/`<cols>` text (any non-empty text, here just the field name) is enough for
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered; see the
+// `resolveRenderedWorksheetNames` describe block below for the blank-vs-populated distinction.
 const PRISTINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
-    <worksheet name="Sales"><table/></worksheet>
-    <worksheet name="Profit"><table/></worksheet>
+    <worksheet name="Sales"><table><rows>Sales</rows></table></worksheet>
+    <worksheet name="Profit"><table><rows>Profit</rows></table></worksheet>
   </worksheets>
   <dashboards><dashboard name="Keep"><zones><zone name="Sales"/></zones></dashboard></dashboards>
   <windows>
@@ -39,6 +43,27 @@ const WITH_ORDERS = PRISTINE.replace(
   '</worksheets>',
   '<worksheet name="Orders"><table/></worksheet></worksheets>',
 ).replace('</windows>', '<window class="worksheet" name="Orders"/></windows>');
+
+const WITH_INHERITED_NAMESPACES = `<?xml version="1.0"?>
+<workbook>
+  <worksheets xmlns:user="urn:tableau:user" xmlns:mid="urn:intermediate">
+    <worksheet name="Namespaced"><table><view>
+      <groupfilter function="level-members" level="[none:Category:nk]" user:ui-domain="relevant" user:ui-enumeration="inclusive"/>
+      <mid:metadata-record/>
+      <pane xmlns:user="urn:local"><groupfilter function="level-members" level="[none:Category:nk]" user:ui-domain="database" user:ui-enumeration="all"/></pane>
+    </view><rows>[none:Category:nk]</rows><cols/></table></worksheet>
+  </worksheets>
+  <dashboards/>
+  <windows><window class="worksheet" name="Namespaced"/></windows>
+</workbook>`;
+
+const WITH_ENTITY_DISTINCT_NAMES = `<workbook><worksheets>
+  <worksheet name="A &amp; B"><table><rows>[none:First:nk]</rows><cols/></table></worksheet>
+  <worksheet name="A &amp;amp; B"><table><rows>[none:Second:nk]</rows><cols/></table></worksheet>
+</worksheets><dashboards/><windows>
+  <window class="worksheet" name="A &amp; B"/>
+  <window class="worksheet" name="A &amp;amp; B"/>
+</windows></workbook>`;
 
 describe('buildDashboardCandidateXml', () => {
   it('builds an escaped dashboard with layout zones and viewpoints into the baseline workbook', () => {
@@ -181,6 +206,107 @@ describe('dashboardCandidateReadbackIssues', () => {
   });
 });
 
+describe('resolveRenderedWorksheetNames', () => {
+  it('does not resolve a named worksheet with a matching window whose table is blank', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="Blank"><table><rows></rows><cols></cols></table></worksheet>
+  </worksheets>
+  <windows>
+    <window class="worksheet" name="Blank"/>
+  </windows>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Blank'])).toEqual([undefined]);
+  });
+
+  it('resolves a worksheet that has a placed field reference even with empty rows/cols text', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="Rendered"><table><view>
+      <datasource-dependencies datasource="Sample - Superstore">
+        <column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>
+      </datasource-dependencies>
+    </view><rows></rows><cols>[Sample - Superstore].[sum:Sales:qk]</cols></table></worksheet>
+  </worksheets>
+  <windows>
+    <window class="worksheet" name="Rendered"/>
+  </windows>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Rendered'])).toEqual(['Rendered']);
+  });
+
+  it('still refuses names that lack a matching window, and names that do not exist at all', () => {
+    const workbookXml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="NoWindow"><table><rows>Sales</rows></table></worksheet>
+  </worksheets>
+  <windows/>
+</workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['NoWindow', 'Nonexistent'])).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('resolves a genuinely rendered worksheet with a matching window', () => {
+    expect(resolveRenderedWorksheetNames(PRISTINE, ['Sales', 'Profit'])).toEqual([
+      'Sales',
+      'Profit',
+    ]);
+  });
+
+  it('resolves a populated worksheet with workbook, intermediate, and locally rebound namespaces', () => {
+    expect(resolveRenderedWorksheetNames(WITH_INHERITED_NAMESPACES, ['Namespaced'])).toEqual([
+      'Namespaced',
+    ]);
+  });
+
+  it('does not resolve a blank worksheet that depends on ancestor namespace declarations', () => {
+    const workbookXml = `<workbook xmlns:user="urn:workbook">
+      <worksheets><worksheet name="Namespaced Blank"><table><view><groupfilter function="level-members" level="Category" user:ui-domain="relevant" user:ui-enumeration="inclusive"/></view><rows/><cols/></table></worksheet></worksheets>
+      <windows><window class="worksheet" name="Namespaced Blank"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Namespaced Blank'])).toEqual([undefined]);
+  });
+
+  it('does not let an extension worksheet make the canonical blank worksheet renderable', () => {
+    const workbookXml = `<workbook>
+      <extension><worksheets>
+        <worksheet name="Canonical"><table><rows>[none:Extension:nk]</rows><cols/></table></worksheet>
+      </worksheets></extension>
+      <worksheets><worksheet name="Canonical"><table><rows/><cols/></table></worksheet></worksheets>
+      <windows><window class="worksheet" name="Canonical"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+  });
+
+  it('does not let an extension window satisfy the canonical worksheet window check', () => {
+    const workbookXml = `<workbook>
+      <extension><windows><window class="worksheet" name="Canonical"/></windows></extension>
+      <worksheets>
+        <worksheet name="Canonical"><table><rows>[none:Category:nk]</rows><cols/></table></worksheet>
+      </worksheets>
+      <windows><window class="dashboard" name="Canonical"/></windows>
+    </workbook>`;
+
+    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+  });
+
+  it('resolves worksheet names that differ only by one level of entity escaping independently', () => {
+    expect(
+      resolveRenderedWorksheetNames(WITH_ENTITY_DISTINCT_NAMES, ['A & B', 'A &amp; B']),
+    ).toEqual(['A & B', 'A &amp; B']);
+  });
+});
+
 describe('composeDashboardCore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -208,6 +334,60 @@ describe('composeDashboardCore', () => {
         focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
       }),
     );
+  });
+
+  it('preserves inherited worksheet namespaces through candidate apply and readback', async () => {
+    const harness = setupHarness({ pristineXml: WITH_INHERITED_NAMESPACES });
+
+    const outcome = await composeDashboardCore({
+      dashboardName: 'Namespaced Dashboard',
+      worksheetNames: ['Namespaced'],
+      layout: { layoutType: 'columns' },
+      executor: harness.executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(outcome).toMatchObject({
+      state: 'applied',
+      receipt: { worksheets: ['Namespaced'], verification: { status: 'passed' } },
+    });
+    expect(harness.postedXml).toHaveLength(1);
+    expect(harness.postedXml[0]).toContain('xmlns:user="urn:tableau:user"');
+    expect(harness.postedXml[0]).toContain('<mid:metadata-record/>');
+    expect(harness.postedXml[0]).toContain('<zone h="100000" id="10" name="Namespaced"');
+    expect(harness.postedXml[0]).toContain('<viewpoint name="Namespaced">');
+  });
+
+  it('keeps entity-distinct worksheet identities through KPI selection and readback', async () => {
+    const harness = setupHarness({ pristineXml: WITH_ENTITY_DISTINCT_NAMES });
+
+    const outcome = await composeDashboardCore({
+      dashboardName: 'Entity Dashboard',
+      worksheetNames: ['A & B', 'A &amp; B'],
+      layout: {
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['A &amp; B'],
+      },
+      executor: harness.executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(outcome).toMatchObject({
+      state: 'applied',
+      receipt: {
+        worksheets: ['A & B', 'A &amp; B'],
+        verification: { status: 'passed' },
+      },
+    });
+    expect(harness.postedXml).toHaveLength(1);
+    expect(harness.postedXml[0]).toContain(
+      'h="12000" id="10" name="A &amp;amp; B" w="100000" x="0" y="0"',
+    );
+    expect(harness.postedXml[0]).toContain(
+      'h="88000" id="11" name="A &amp; B" w="100000" x="0" y="12000"',
+    );
+    expect(harness.postedXml[0]).toContain('<viewpoint name="A &amp; B">');
+    expect(harness.postedXml[0]).toContain('<viewpoint name="A &amp;amp; B">');
   });
 
   it('reports a guarded stale workbook as failed before dispatch', async () => {
@@ -348,7 +528,7 @@ function setupHarness({
     .mockImplementation(async () => readbackResults.shift() ?? Ok(postedXml.at(-1) ?? pristineXml));
   vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockImplementation(async ({ xml }) => {
     postedXml.push(xml);
-    return applyResults.shift() ?? Ok({ validationWarnings: [] });
+    return applyResults.shift() ?? Ok({ validationWarnings: [], documentWarnings: [] });
   });
   return {
     executor: {} as ExternalApiToolExecutor,

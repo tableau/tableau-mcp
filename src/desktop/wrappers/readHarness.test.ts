@@ -82,11 +82,12 @@ describe('runExternalApiReadTool', () => {
       },
     };
 
+    const errorContext = 'Operation: parent read attempted a widget lookup.';
     const result = await runExternalApiReadTool({
       session: undefined,
       extra,
       callback: async (_executor, _signal, read) =>
-        await read('widget list', async () => Err(routeMissing)),
+        await read('widget list', async () => Err(routeMissing), { errorContext }),
     });
 
     expect(result.isErr()).toBe(true);
@@ -95,6 +96,7 @@ describe('runExternalApiReadTool', () => {
       expect(result.error.statusCode).toBe(404);
       expect(result.error.message).toContain('widget list endpoint');
       expect(result.error.message).toContain('Do not retry');
+      expect(result.error.message).not.toContain(errorContext);
     }
   });
 
@@ -218,6 +220,40 @@ describe('runExternalApiReadTool', () => {
     if (result.isErr()) {
       expect(result.error.type).toBe('desktop-command-execution-error');
       expect(result.error.message).toBe(JSON.stringify(commandError));
+    }
+  });
+
+  it('appends caller context to non-route errors without changing their classification', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [] });
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    };
+    const commandError: ExecuteCommandError = {
+      type: 'command-failed',
+      error: {
+        code: 'awaiting-user',
+        message: 'The operation is blocked on a Tableau Desktop dialog.',
+        recoverable: false,
+      },
+    };
+    const errorContext = 'Operation: parent read attempted a child request.';
+
+    const result = await runExternalApiReadTool({
+      session: undefined,
+      extra,
+      callback: async (_executor, _signal, read) =>
+        await read('child request', async () => Err(commandError), { errorContext }),
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toMatchObject({
+        type: 'desktop-command-execution-error',
+        statusCode: 500,
+        blockedByDesktopDialog: true,
+      });
+      expect(result.error.message).toBe(`${commandError.error?.message}\n${errorContext}`);
     }
   });
 

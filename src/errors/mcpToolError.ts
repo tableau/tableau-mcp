@@ -354,10 +354,11 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
 }
 
 export class WorksheetXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadWorksheetXmlError) {
+  constructor(error: LoadWorksheetXmlError, fix?: string) {
+    const message = xmlLoadErrorMessage(error);
     super({
       type: 'load-worksheet-xml-error',
-      message: xmlLoadErrorMessage(error),
+      message: fix ? `${message}\n${fix}` : message,
       statusCode: 500,
     });
   }
