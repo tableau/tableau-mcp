@@ -81,7 +81,7 @@ describe('getWorkbookTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getWorkbookTool = getGetWorkbookTool(new WebMcpServer());
+    const getWorkbookTool = getGetWorkbookTool(new WebMcpServer(), STUB_PRODUCT_VERSION, '3.31');
     expect(getWorkbookTool.name).toBe('get-workbook');
     expect(getWorkbookTool.description).toContain(
       'Retrieves information about the specified workbook',
@@ -814,6 +814,66 @@ describe('getWorkbookTool', () => {
         { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
       ]);
     });
+
+    it('leaves embedded queryability unset without probing on REST API < 3.30', async () => {
+      // On 3.29 the embedded HBI query isn't supported, so the probe is version-gated off: the
+      // embedded data source's queryability is left unset and no VDS call is issued for it. The
+      // published data source is still probed (the gate does not affect published), so exactly one
+      // call is made — for pub-luid-1.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        Ok({ hasQueryPermission: datasource.datasourceLuid === 'pub-luid-1' }),
+      );
+
+      const response = await getResponseData({ workbookId }, '3.29');
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledTimes(1);
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledWith({
+        datasource: { datasourceLuid: 'pub-luid-1' },
+      });
+      expect(mocks.mockUserHasQueryPermissions).not.toHaveBeenCalledWith({
+        datasource: { datasourceLuid: 'emb-luid-1' },
+      });
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          queryability: { isQueryable: true },
+        },
+        { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+      ]);
+    });
+
+    it('probes embedded queryability on REST API >= 3.30', async () => {
+      // On 3.31 the gate is open, so the embedded data source is probed exactly as it is today and its
+      // queryability reflects the endpoint result.
+      mocks.mockUserHasQueryPermissions.mockImplementation(async ({ datasource }) =>
+        Ok({ hasQueryPermission: datasource.datasourceLuid === 'emb-luid-1' }),
+      );
+
+      const response = await getResponseData({ workbookId }, '3.31');
+
+      expect(mocks.mockUserHasQueryPermissions).toHaveBeenCalledWith({
+        datasource: { datasourceLuid: 'emb-luid-1' },
+      });
+      expect(response.data.upstreamDatasources).toEqual([
+        {
+          luid: 'pub-luid-1',
+          name: 'Published DS',
+          datasourceType: 'published',
+          queryability: {
+            isQueryable: false,
+            reason: 'The user does not have permission to query this data source.',
+          },
+        },
+        {
+          luid: 'emb-luid-1',
+          name: 'Embedded DS',
+          datasourceType: 'embedded',
+          queryability: { isQueryable: true },
+        },
+      ]);
+    });
   });
 
   describe('buildQueryabilityReason', () => {
@@ -1107,14 +1167,29 @@ describe('getWorkbookTool', () => {
   });
 });
 
-async function getToolResult(params: { workbookId: string }): Promise<CallToolResult> {
-  const getWorkbookTool = getGetWorkbookTool(new WebMcpServer());
+// Default to a REST API version >= 3.30 so embedded queryability is probed as it is today; tests
+// that exercise the version gate pass an older version explicitly.
+const DEFAULT_REST_API_VERSION = '3.31';
+const STUB_PRODUCT_VERSION = { value: '2025.3.0', build: '' };
+
+async function getToolResult(
+  params: { workbookId: string },
+  restApiVersion: string = DEFAULT_REST_API_VERSION,
+): Promise<CallToolResult> {
+  const getWorkbookTool = getGetWorkbookTool(
+    new WebMcpServer(),
+    STUB_PRODUCT_VERSION,
+    restApiVersion,
+  );
   const callback = await Provider.from(getWorkbookTool.callback);
   return await callback(params, getMockRequestHandlerExtra());
 }
 
-async function getResponseData(params: { workbookId: string }): Promise<any> {
-  const result = await getToolResult(params);
+async function getResponseData(
+  params: { workbookId: string },
+  restApiVersion: string = DEFAULT_REST_API_VERSION,
+): Promise<any> {
+  const result = await getToolResult(params, restApiVersion);
   expect(result.isError).toBe(false);
   invariant(result.content[0].type === 'text');
   return JSON.parse(result.content[0].text);

@@ -228,7 +228,9 @@ export class WebMcpServer extends Server {
     const { includeTools, excludeTools } = configOverrides;
 
     const allTools = await Promise.all(
-      webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
+      webToolFactories.map((toolFactory) =>
+        toolFactory(this, tableauServerInfo.productVersion, tableauServerInfo.restApiVersion),
+      ),
     );
 
     // The registration-time role check is gated behind `enforce-role-requirements`. When it's off

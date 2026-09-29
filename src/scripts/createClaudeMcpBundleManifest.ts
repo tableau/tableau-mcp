@@ -782,7 +782,7 @@ async function getEnabledTools(): Promise<Array<string>> {
     // like Tableau Server version. This script should fail if there was ever the case.
     const tools = await Promise.all(
       webToolFactories.map((toolFactory) =>
-        toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+        toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }, '0.0'),
       ),
     );
 

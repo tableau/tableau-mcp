@@ -1,3 +1,5 @@
+import type { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
+import type { WebMcpServer } from '../../server.web.js';
 import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
@@ -36,6 +38,7 @@ import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderIntera
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
+import type { WebTool } from './tool.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -51,7 +54,17 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
-export const webToolFactories = [
+// Shared factory signature. All factories accept `server`; `productVersion` and `restApiVersion` are
+// positional extras that individual factories may ignore (fewer params are assignable to more), so a
+// factory needing only a later arg (e.g. get-workbook uses restApiVersion but not productVersion)
+// still matches. server.web.ts invokes every factory with all three.
+export type WebToolFactory = (
+  server: WebMcpServer,
+  productVersion: ProductVersion,
+  restApiVersion: string,
+) => WebTool<any> | Promise<WebTool<any>>;
+
+export const webToolFactories: Array<WebToolFactory> = [
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,

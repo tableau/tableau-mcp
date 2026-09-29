@@ -10,6 +10,8 @@ export const testProductVersion2025_3 = {
   build: '20253.25.0903.0012',
 } satisfies ProductVersion;
 
+export const testRestApiVersion = '3.31';
+
 export function stubDefaultEnvVars(): void {
   vi.stubEnv('SERVER', 'https://my-tableau-server.com');
   vi.stubEnv('SITE_NAME', 'tc25');

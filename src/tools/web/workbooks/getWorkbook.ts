@@ -19,10 +19,15 @@ import {
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
+import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import {
+  isRestApiVersionAtLeast,
+  MIN_REST_API_VERSION_FOR_EMBEDDED_QUERY,
+} from '../../../utils/isRestApiVersionAtLeast.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
@@ -36,7 +41,13 @@ const paramsSchema = {
 // sources, so a workbook with many data sources can't burst an unbounded number of VDS requests.
 const VDS_QUERYABILITY_CONCURRENCY = 5;
 
-export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getGetWorkbookTool = (
+  server: WebMcpServer,
+  // get-workbook doesn't use productVersion; it's present only for positional consistency with the
+  // shared factory map (server.web.ts invokes every factory with the same positional args).
+  _productVersion: ProductVersion,
+  restApiVersion: string,
+): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
     server,
     name: 'get-workbook',
@@ -175,6 +186,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 return await enrichUpstreamDatasourceQueryability({
                   workbook: ownerEnriched,
                   vizqlDataServiceMethods: restApi.vizqlDataServiceMethods,
+                  restApiVersion,
                   extra,
                 });
               } catch (error) {
@@ -267,10 +279,12 @@ function buildQueryabilityReason(
 export async function enrichUpstreamDatasourceQueryability({
   workbook,
   vizqlDataServiceMethods,
+  restApiVersion,
   extra,
 }: {
   workbook: Workbook;
   vizqlDataServiceMethods: VizqlDataServiceMethods;
+  restApiVersion: string;
   extra: TableauWebRequestHandlerExtra;
 }): Promise<Workbook> {
   const upstreamDatasources = workbook.upstreamDatasources;
@@ -278,9 +292,23 @@ export async function enrichUpstreamDatasourceQueryability({
     return workbook;
   }
 
+  // The embedded-datasource HBI query is only supported on REST API >= 3.30. On older servers the
+  // probe is skipped for embedded data sources (their queryability is undeterminable).
+  const canQueryEmbedded = isRestApiVersionAtLeast(
+    restApiVersion,
+    MIN_REST_API_VERSION_FOR_EMBEDDED_QUERY,
+  );
+
   const checkDatasourceQueryability = async (
     ds: LineageContent,
   ): Promise<{ datasource: LineageContent; systemic: boolean }> => {
+    if (ds.datasourceType === 'embedded' && !canQueryEmbedded) {
+      // REST API < 3.30 doesn't support the embedded HBI query, so queryability is undeterminable.
+      // Leave isQueryable unset without probing (avoids a doomed VDS call and the ambiguous 404950).
+      // Non-systemic so published data sources in the same workbook are still probed normally.
+      return { datasource: ds, systemic: false };
+    }
+
     let detail: string;
     try {
       const result = await vizqlDataServiceMethods.userHasQueryPermissions({

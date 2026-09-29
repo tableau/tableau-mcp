@@ -7,7 +7,7 @@ import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
-import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
+import { stubDefaultEnvVars, testProductVersion, testRestApiVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getInspectKnowledgeContextTool } from './tools/web/knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './tools/web/knowledge/manageKnowledgeContext.js';
@@ -144,7 +144,9 @@ describe('server', () => {
     await server.registerTools();
 
     const allTools = await Promise.all(
-      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+      webToolFactories.map((toolFactory) =>
+        toolFactory(server, testProductVersion, testRestApiVersion),
+      ),
     );
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
@@ -170,7 +172,9 @@ describe('server', () => {
   it('should keep toolScopeMap conditionApiScopes in sync with each tool instance registrationConditions', async () => {
     const server = getServer();
     const allTools = await Promise.all(
-      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+      webToolFactories.map((toolFactory) =>
+        toolFactory(server, testProductVersion, testRestApiVersion),
+      ),
     );
 
     for (const tool of allTools) {
@@ -304,7 +308,9 @@ describe('server', () => {
     await server.registerTools();
 
     const allDisabledTools = await Promise.all(
-      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+      webToolFactories.map((toolFactory) =>
+        toolFactory(server, testProductVersion, testRestApiVersion),
+      ),
     );
     const disabledToolFlags = await Promise.all(
       allDisabledTools.map((tool) => Provider.from(tool.disabled)),
@@ -486,7 +492,9 @@ describe('server', () => {
     await server.registerTools();
 
     const tools = await Promise.all(
-      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+      webToolFactories.map((toolFactory) =>
+        toolFactory(server, testProductVersion, testRestApiVersion),
+      ),
     );
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
