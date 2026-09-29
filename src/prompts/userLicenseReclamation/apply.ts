@@ -334,7 +334,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
               'is no page offset, try narrowing the `filter` (a tighter `siteRole:in` subset or a smaller ' +
               'inactivity window) and re-running per slice, combining results. But narrowing does NOT always ' +
               'converge: a never-signed-in user has a null `lastLogin`, which matches every `lastLogin:lt` window ' +
-              'no matter how small, so an overflow concentrated in one role\'s never-signed-in population cannot ' +
+              "no matter how small, so an overflow concentrated in one role's never-signed-in population cannot " +
               'be shrunk below the ceiling this way. If after narrowing as far as the criteria allow the result is ' +
               'still truncated, STOP retrying — report the candidate set as PARTIAL in the final output (state ' +
               'the `truncationReason`) rather than looping indefinitely or presenting it as complete.',
