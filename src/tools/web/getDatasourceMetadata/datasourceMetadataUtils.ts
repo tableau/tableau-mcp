@@ -93,6 +93,11 @@ export const datasourceModelSchema = z.object({
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
+  // Published vs embedded (workbook) data source. Optional and inferred from whether the published-
+  // only Metadata-API enrichment matched (see combineFields); left undefined when the Metadata API
+  // is disabled or its request failed, since type can't be determined then. Mirrors the
+  // datasourceType discriminator on lineageContentSchema.
+  datasourceType: z.enum(['published', 'embedded']).optional(),
   datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
@@ -185,6 +190,9 @@ export function combineFields(
   const publishedDatasource = listFieldsResult.data.publishedDatasources?.[0];
   const combinedFields: FieldsResult = {
     datasourceDescription: publishedDatasource?.description ?? '',
+    // The GraphQL enrichment queries publishedDatasources only, so a match means the LUID is a
+    // published data source; a miss (with VDS metadata still present) means it's embedded.
+    datasourceType: publishedDatasource ? 'published' : 'embedded',
     ...(datasourceModelResult
       ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
       : {}),

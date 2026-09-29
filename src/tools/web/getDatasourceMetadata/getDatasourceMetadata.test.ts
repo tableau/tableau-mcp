@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
@@ -305,6 +306,8 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.datasourceDescription).toBe('Test Description');
+    // Metadata-API enrichment matched, so the LUID is labeled a published data source.
+    expect(responseData.datasourceType).toBe('published');
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
     expect(flattenResponseFields(responseData)).toMatchObject([
       {
@@ -440,6 +443,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       datasourceDescription: 'Test Description',
+      datasourceType: 'published',
       datasourceModel: mockDatasourceModelResponses.success,
       fieldGroups: [],
       parameters: [],
@@ -521,6 +525,8 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle empty listFields response and return basic metadata only', async () => {
+    // This is the embedded (workbook) datasource path: the published-only Metadata-API enrichment
+    // returns no match, so the tool falls back to VDS-sourced metadata and labels the type embedded.
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
 
@@ -529,6 +535,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should have basic fields from readMetadata without enrichment
@@ -766,6 +773,8 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
+    // Type can't be inferred without the Metadata-API enrichment, so it's left unset.
+    expect(responseData).not.toHaveProperty('datasourceType');
 
     // Should only have basic fields from readMetadata without enrichment
     expect(flattenResponseFields(responseData)).toMatchObject([
@@ -849,6 +858,19 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should show the workbook-datasource-not-enabled gate error when readMetadata is gated', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(Err('workbook-datasource-not-enabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new WorkbookDatasourceNotEnabledError().getErrorText());
+    expect(result.content[0].text).toContain('not enabled on this Tableau site');
+    // Gate short-circuits before model and enrichment calls.
     expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });

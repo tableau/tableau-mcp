@@ -6,6 +6,7 @@ import {
   ArgsValidationError,
   DatasourceNotAllowedError,
   FeatureDisabledError,
+  WorkbookDatasourceNotEnabledError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
@@ -171,6 +172,11 @@ export const getGetDatasourceMetadataTool = (
               });
 
               if (readMetadataResult.isErr()) {
+                // Embedded (workbook) data sources are gated behind a per-site opt-in; surface the
+                // actionable gate error rather than the generic VizQL-disabled message.
+                if (readMetadataResult.error === 'workbook-datasource-not-enabled') {
+                  return new WorkbookDatasourceNotEnabledError().toErr();
+                }
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
