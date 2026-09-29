@@ -22,7 +22,7 @@ export function parseLogLevel(value: string | undefined): LogLevel {
  * Custom JSON.stringify replacer that serializes Error objects properly.
  * Removes the config field from AxiosError to avoid logging sensitive headers.
  */
-export function errorReplacer(data: unknown): unknown {
+function errorReplacer(data: unknown): unknown {
   if (data instanceof Error) {
     return {
       name: data.name,

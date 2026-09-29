@@ -2,7 +2,7 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
-import { errorReplacer, log } from '../../logging/logger.js';
+import { log } from '../../logging/logger.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
@@ -181,6 +181,8 @@ export class WebTool<
         message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
         level: 'debug',
         logger: 'tool',
+        tool_name: this.name,
+        request_id: requestId.toString(),
       },
       extra,
     );
@@ -249,8 +251,9 @@ export class WebTool<
           message: 'Tool execution failed',
           level: 'error',
           logger: 'tool',
-          // data isn't a bare Error, so emit()'s top-level errorReplacer won't reach it — call it here to preserve serialization.
-          data: { error: errorReplacer(error), tool_name: this.name, request_id: requestId },
+          tool_name: this.name,
+          request_id: requestId.toString(),
+          data: error,
         },
         extra,
       );
