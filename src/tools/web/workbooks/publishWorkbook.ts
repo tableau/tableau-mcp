@@ -1,11 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'fs/promises';
 import { basename } from 'path';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
   ArgsValidationError,
+  FeatureDisabledError,
+  McpToolError,
   ProjectNotAllowedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
@@ -13,11 +15,19 @@ import { getFeatureGate } from '../../../features/init.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
+import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
+import {
+  PUBLISH_WORKBOOK_BASE_API_SCOPES,
+  PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE,
+  TableauApiScope,
+} from '../../../server/oauth/scopes.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
@@ -47,8 +57,9 @@ const paramsSchema = {
   projectId: z
     .string()
     .min(1)
+    .optional()
     .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
+      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs. If omitted, the workbook is published to your Personal Space when the site supports it; an explicit value always takes precedence.',
     ),
   overwrite: z
     .boolean()
@@ -85,7 +96,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to the specified Tableau project. Use list-projects to discover project IDs. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to a Tableau project. Provide projectId to choose the target project (use list-projects to discover IDs); omit it to publish to your Personal Space when the site supports it, otherwise projectId is required. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
     paramsSchema,
     annotations: {
       title: 'Publish Workbook',
@@ -115,12 +126,38 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
         callback: async () => {
           assertMinimumRestApiVersionSupported();
           const configWithOverrides = await extra.getConfigWithOverrides();
-          assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
+          // Only an explicit projectId is gated by the bounded-context allow-list. The
+          // auto-default path resolves the caller's own Personal Space, which an operator's
+          // "publish only into these shared projects" allow-list is not meant to block
+          // (intentional, confirmed asymmetry — do not make symmetric).
+          if (projectId !== undefined) {
+            assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
+          }
 
-          const result = await useRestApi<PublishWorkbookResult>({
+          // Compute the JWT scopes actually needed for THIS call. The tool's static max set
+          // advertises the personal-space scope for the MCP-layer gate, but Connected Apps reject
+          // a JWT requesting an un-granted scope, so an explicit-projectId call (which never
+          // touches Personal Space) must not request it.
+          const tableauApiScopes: TableauApiScope[] = [...PUBLISH_WORKBOOK_BASE_API_SCOPES];
+          if (!projectId) {
+            tableauApiScopes.push(PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE);
+          }
+
+          const result = await useRestApi<Result<PublishWorkbookResult, McpToolError>>({
             ...extra,
-            jwtScopes: tool.requiredApiScopes,
+            jwtScopes: tableauApiScopes,
             callback: async (restApi) => {
+              // Resolve Personal Space up front on the auto-default path so a read-only or
+              // unresolvable space fails before uploading anything.
+              let personalSpace: PersonalSpace | undefined;
+              if (projectId === undefined) {
+                const resolvedPersonalSpace = await resolvePersonalSpace(restApi);
+                if (resolvedPersonalSpace.isErr()) {
+                  return resolvedPersonalSpace;
+                }
+                personalSpace = resolvedPersonalSpace.value;
+              }
+
               const resolvedWorkbookFile = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
@@ -139,37 +176,69 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
                   : await uploadTwbx({ restApi, resolvedWorkbookFile });
 
               if (outcome.status === 'invalid') {
-                return {
+                return new Ok({
                   status: 'invalid' as const,
                   errors: outcome.errors,
                   warnings: outcome.warnings,
-                };
+                });
               }
 
-              const publishedWorkbook = await restApi.workbooksMethods.publishWorkbook({
-                siteId: restApi.siteId,
-                uploadSessionId: outcome.uploadSessionId,
-                name,
-                workbookType: fileType,
-                projectId,
-                overwrite,
-              });
+              const destination =
+                personalSpace !== undefined
+                  ? { location: { id: personalSpace.luid, type: 'PersonalSpace' as const } }
+                  : { projectId };
+
+              let publishedWorkbook: Workbook;
+              try {
+                publishedWorkbook = await restApi.workbooksMethods.publishWorkbook({
+                  siteId: restApi.siteId,
+                  uploadSessionId: outcome.uploadSessionId,
+                  name,
+                  workbookType: fileType,
+                  ...destination,
+                  overwrite,
+                });
+              } catch (error) {
+                const mapped =
+                  personalSpace !== undefined ? mapPersonalSpacePublishError(error) : null;
+                if (mapped) {
+                  return mapped.toErr();
+                }
+                throw error;
+              }
+
+              // Some servers accept the <location> element but silently land the workbook in a
+              // default project instead. Treat a personal-space publish that didn't come back as
+              // PersonalSpace as a failure, not a silent success.
+              if (
+                personalSpace !== undefined &&
+                publishedWorkbook.location?.type !== 'PersonalSpace'
+              ) {
+                const landed = publishedWorkbook.project?.name ?? publishedWorkbook.location?.name;
+                return new UnknownError(
+                  'This Tableau site published the workbook to ' +
+                    (landed ? `the "${landed}" project` : 'a project') +
+                    ' instead of your personal space — its REST API does not support ' +
+                    'personal-space publishing. Delete it there if unwanted, or publish to a ' +
+                    'project explicitly by passing projectId.',
+                ).toErr();
+              }
 
               const url =
                 getDefaultViewWebUrl(publishedWorkbook, extra.config.server, extra.getSiteName()) ??
                 publishedWorkbook.webpageUrl ??
                 '';
 
-              return {
+              return new Ok({
                 status: 'published' as const,
                 data: publishedWorkbook,
                 url,
                 warnings: outcome.warnings,
-              };
+              });
             },
           });
 
-          return new Ok(result);
+          return result;
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({
@@ -296,6 +365,48 @@ function assertMinimumRestApiVersionSupported(): void {
       `publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
     );
   }
+}
+
+async function resolvePersonalSpace(
+  restApi: RestApi,
+): Promise<Result<PersonalSpace, McpToolError>> {
+  let personalSpace: PersonalSpace;
+  try {
+    personalSpace = await restApi.personalSpaceMethods.getPersonalSpace({
+      siteId: restApi.siteId,
+    });
+  } catch (error) {
+    return new ArgsValidationError(
+      `projectId is required: could not resolve your Personal Space to use as a default publish target (${getExceptionMessage(error)}).`,
+    ).toErr();
+  }
+
+  if (personalSpace.readOnly) {
+    return new ArgsValidationError(
+      'projectId is required: your Personal Space is read-only and cannot be used as a publish target.',
+    ).toErr();
+  }
+
+  return new Ok(personalSpace);
+}
+
+// Map the server's "personal-space publish is disabled for this site" gate (code 400000 with a
+// detail mentioning personal space) to a clean tool error, or null so the caller rethrows to the
+// generic handler.
+function mapPersonalSpacePublishError(error: unknown): FeatureDisabledError | null {
+  const parsed = parseTableauApiError(error);
+  if (
+    parsed?.status === 400 &&
+    parsed.code === '400000' &&
+    parsed.detail?.toLowerCase().includes('personal space')
+  ) {
+    return new FeatureDisabledError(
+      'Publishing directly to a personal space is not enabled for this Tableau site. Publish to a ' +
+        'project instead by passing projectId, or ask a site administrator to enable ' +
+        'personal-space publishing.',
+    );
+  }
+  return null;
 }
 
 function assertProjectAllowedByBoundedContext(

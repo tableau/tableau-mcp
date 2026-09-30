@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockGetPersonalSpace: vi.fn(),
+  useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
 }));
 
 vi.mock('fs/promises', () => ({
@@ -23,8 +26,9 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
-    callback({
+  useRestApi: vi.fn().mockImplementation(async (opts) => {
+    mocks.useRestApiCalls.push({ jwtScopes: opts.jwtScopes });
+    return opts.callback({
       workbooksMethods: {
         validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
         publishWorkbook: mocks.mockPublishWorkbook,
@@ -32,9 +36,12 @@ vi.mock('../../../restApiInstance.js', () => ({
       publishingMethods: {
         uploadFileInChunks: mocks.mockUploadFileInChunks,
       },
+      personalSpaceMethods: {
+        getPersonalSpace: mocks.mockGetPersonalSpace,
+      },
       siteId: 'test-site-id',
-    }),
-  ),
+    });
+  }),
 }));
 
 vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
@@ -70,6 +77,8 @@ describe('publishWorkbookTool', () => {
     mocks.mockResolveStagedWorkbookUpload.mockReset();
     mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
+    mocks.mockGetPersonalSpace.mockReset();
+    mocks.useRestApiCalls.length = 0;
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
@@ -102,7 +111,7 @@ describe('publishWorkbookTool', () => {
     });
     expect(annotations.destructiveHint).toBe(true);
     expect(paramsSchema.name.safeParse('').success).toBe(false);
-    expect(tool.description).toContain('specified Tableau project');
+    expect(tool.description).toContain('Personal Space');
   });
 
   it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
@@ -503,6 +512,209 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
+  it('defaults to the caller Personal Space when projectId is omitted and it is writable', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: undefined,
+      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+    });
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.data.location).toEqual({ id: 'personal-space-luid', type: 'PersonalSpace' });
+
+    expect(mocks.mockGetPersonalSpace).toHaveBeenCalledWith({ siteId: 'test-site-id' });
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      uploadSessionId: 'validated-upload-id',
+      name: 'My New Workbook',
+      workbookType: 'twb',
+      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+      overwrite: false,
+    });
+    // Auto-default path must not pass projectId to the SDK.
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('projectId');
+  });
+
+  it('does not run the bounded-context check on the auto-default Personal Space path', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: undefined,
+      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+    });
+
+    // A bounded context that would reject the personal-space luid if it were checked.
+    const result = await getToolResult(
+      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name },
+      { boundedProjectIds: new Set(['only-this-project']) },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalled();
+  });
+
+  it('errors without publishing when Personal Space is read-only', async () => {
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: true,
+    });
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('read-only');
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
+  it('errors without publishing when Personal Space cannot be resolved', async () => {
+    mocks.mockGetPersonalSpace.mockRejectedValue(new Error('404 personalSpace not found'));
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('projectId is required');
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('never resolves Personal Space when an explicit projectId is provided', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+
+    await getToolResult(validArgs);
+
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
+  });
+
+  it('requests the content:read scope only when projectId is omitted', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: undefined,
+      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+    });
+
+    await getToolResult({ workbookUploadId: validArgs.workbookUploadId, name: validArgs.name });
+    expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
+      'tableau:workbooks:create',
+      'tableau:file_uploads:create',
+      'tableau:content:read',
+    ]);
+
+    mocks.useRestApiCalls.length = 0;
+    await getToolResult(validArgs);
+    expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
+      'tableau:workbooks:create',
+      'tableau:file_uploads:create',
+    ]);
+  });
+
+  it('errors when a Personal Space publish silently lands in a project instead', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'default-project-id', name: 'Default' },
+      location: { id: 'default-project-id', type: 'Project' },
+    });
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('personal space');
+  });
+
+  it('maps the site-disabled personal-space publish error to a clean message', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    const axiosError = new AxiosError('Request failed with status code 400');
+    axiosError.response = {
+      status: 400,
+      data: {
+        error: {
+          code: '400000',
+          detail:
+            'Payload is either malformed or incomplete. (0x5CE10192 : Publishing a workbook directly to personal space is not enabled for this site.)',
+        },
+      },
+    } as AxiosError['response'];
+    mocks.mockPublishWorkbook.mockRejectedValue(axiosError);
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not enabled for this Tableau site');
+  });
+
   it('returns an error and does not publish when Tableau does not return an upload id', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
@@ -570,7 +782,7 @@ async function getToolResult(
     workbookUploadId?: string;
     workbookFilePath?: string;
     name: string;
-    projectId: string;
+    projectId?: string;
     overwrite?: boolean;
   },
   options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
