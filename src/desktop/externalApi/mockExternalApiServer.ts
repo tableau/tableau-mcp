@@ -1135,6 +1135,30 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardRefreshNowMatch = path.match(
+      /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
+    );
+    if (method === 'POST' && storyboardRefreshNowMatch) {
+      const storyboardId = decodeURIComponent(storyboardRefreshNowMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        id: 'op-refresh-storyboard-now-1',
+        kind: 'storyboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+          failed: [],
+        },
+      });
+      return;
+    }
+
     const dashboardRefreshNowMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+):refreshNow$/);
     if (method === 'POST' && dashboardRefreshNowMatch) {
       const dashboardId = decodeURIComponent(dashboardRefreshNowMatch[1]);
