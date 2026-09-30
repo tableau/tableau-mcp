@@ -42,6 +42,18 @@ const queryDatasourceEndpoint = makeEndpoint({
   response: z.object({
     datasource: dataSourceSchema,
   }),
+  // Declared so isErrorFromAlias can narrow the caught error; a 404 (no such published data source)
+  // is used by tryQueryDatasource to classify a LUID as embedded.
+  errors: [
+    {
+      status: 'default',
+      schema: z.any(),
+    },
+    {
+      status: 404,
+      schema: z.any(),
+    },
+  ],
 });
 
 const deleteDatasourceEndpoint = makeEndpoint({
