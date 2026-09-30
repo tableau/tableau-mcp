@@ -6,9 +6,10 @@ import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../../error
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { paginate } from '../../../utils/paginate.js';
+import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -17,14 +18,14 @@ import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtil
 const paramsSchema = {
   workbookId: z.string().min(1),
   filter: z.string().optional(),
-  pageSize: z.number().gt(0).optional(),
-  limit: z.number().gt(0).optional(),
+  limit: z.number().int().gt(0).max(MAX_PAGE_SIZE).optional(),
 };
 
 export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listCustomViewsTool = new WebTool({
     server,
     name: 'list-custom-views',
+    minRequiredRole: SiteRole.VIEWER,
     // workbookId intentionally omitted from the filter field table since it originates from the workbookId parameter
     description: `
   Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., viewId:eq:<view_id>) for precise and flexible custom view discovery. The tool always includes the workbookId in the final filter expression based on the required workbookId argument. Including the workbookId field in the filter will be ignored. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
@@ -54,7 +55,7 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ workbookId, filter, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
       if (filter?.includes('workbookId:')) {
@@ -114,27 +115,23 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
                 listCustomViewsTool.name,
               );
 
-              const customViews = await paginate({
-                pageConfig: {
-                  pageSize,
-                  limit: maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                    : limit,
-                },
-                getDataFn: async (pageConfig) => {
+              const page = await getPage({
+                limit,
+                maxResultLimit,
+                getDataFn: async ({ pageSize, pageNumber }) => {
                   const { pagination, customViews: data } =
                     await restApi.viewsMethods.listCustomViews({
                       siteId: restApi.siteId,
                       filter: validatedFilter ?? '',
-                      pageSize: pageConfig.pageSize,
-                      pageNumber: pageConfig.pageNumber,
+                      pageSize,
+                      pageNumber,
                     });
 
                   return { pagination, data };
                 },
               });
 
-              return Ok(customViews);
+              return Ok(page.data);
             },
           });
         },

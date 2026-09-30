@@ -27,13 +27,28 @@ import {
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
+import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
+const mocks = vi.hoisted(() => ({
+  mockFeatureGate: {
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
+  },
+}));
+
+vi.mock('./features/init.js', () => ({
+  getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
+}));
+
 describe('DesktopMcpServer', () => {
+  beforeEach(() => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+  });
+
   it('should register tools', async () => {
     // Pin the full surface: this test is about registration mechanics (every tool
     // registered with its title/schema/annotations), independent of the profile
@@ -113,7 +128,19 @@ describe('DesktopMcpServer', () => {
   it('does not override tools/list on a shared McpServer (combined variant)', async () => {
     // The combined variant registers the web half on the same McpServer; a desktop
     // tools/list override there hides every web tool (caught live by the e2e suite).
-    const sharedMcpServer = new McpServer({ name: 'shared', version: '0.0.0' });
+    const config = configModule.getDesktopConfig();
+    const desktopInstructions = buildDesktopInstructions({
+      sessionPinned: config.desktopSessionId !== undefined,
+      profile: config.toolProfile,
+    });
+    const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
+    const sharedMcpServer = new McpServer(
+      { name: 'shared', version: '0.0.0' },
+      { instructions: combinedInstructions },
+    );
+    // The global McpServer mock records constructor arguments but does not mirror this SDK field.
+    (sharedMcpServer.server as unknown as { _instructions?: string })._instructions =
+      combinedInstructions;
     const server = new DesktopMcpServer({ mcpServer: sharedMcpServer });
     await server.registerTools();
 
@@ -276,7 +303,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 2031], // raised 2026-09-22: the schema skeleton alone already filled the 1521 cap with empty describes, and those empty describes drove ~426 failed calls (missing mode/target guidance). The +510 buys the mode-routing summary and required-field describes that fund the fix; routing prose is concentrated in `mode` (one place, all four modes) to keep it minimal. Earlier: ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
+    ['author-action', 2416], // ratcheted down 2026-09-24: clearValue describe now says "string only" (the tool rejects clearValue on non-string params — it only knows the s:LROOT: string encoding), and the wording was tightened to absorb it — net −1. Earlier same-day: corrected the sourceField and clearValue describes (sourceField now shows the exact shelf ref that binds, not the misleading [Profit]; clearValue drops the wrong "keeps nothing") and tightened both — net −12. Earlier raise 2026-09-24: sourceFieldAggregation became a closed enum (17 ActionList-Agg-ST tokens) instead of a free string, after live testing showed 'none' can't survive readback (Desktop backfills agg-type='attr') — the enum serializes every token into tools/list (+139 over the trimmed describe), which is the cost of a validated dropdown that rejects bad tokens up front. Earlier raise 2026-09-23: parameter mode exposes the source-field aggregation and the on-clear value (W-24270664, sign-off on the record). Earlier raise 2026-09-22: the schema skeleton alone already filled the 1521 cap with empty describes, and those empty describes drove ~426 failed calls (missing mode/target guidance). The +510 buys the mode-routing summary and required-field describes that fund the fix; routing prose is concentrated in `mode` (one place, all four modes) to keep it minimal. Earlier: ratcheted down 2026-09-18 after trimming url/datasource describes for the source/target exclude split
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -439,11 +466,11 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 77-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 76-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(77);
+      expect(selected).toHaveLength(76);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -501,7 +528,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
         'set-start-page-visibility',
         'save-workbook',
         'workbook-export-as',
-        'publish-workbook',
         'refresh-auto-updates',
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
@@ -795,7 +821,6 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
@@ -1030,6 +1055,44 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
     expect(registeredNames.length).toBe(desktopToolFactories.length);
+  });
+
+  it('keeps published-site content operations out of the Desktop server even with TOOL_PROFILE=full', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    for (const webOwnedOperation of [
+      'list-site-datasources',
+      'list-site-workbooks',
+      'open-publish-workbook-dialog',
+      'publish-workbook',
+    ]) {
+      expect(registeredNames).not.toContain(webOwnedOperation);
+    }
+  });
+
+  it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'skills-over-mcp',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+  });
+
+  it('does not advertise the skills extension capability when skills-over-mcp is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 });
 

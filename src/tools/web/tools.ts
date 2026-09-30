@@ -6,11 +6,21 @@ import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
+import { getCancelFlowRunTool } from './flows/cancelFlowRun/cancelFlowRun.js';
+import { getDescribeFlowTool } from './flows/describeFlow/describeFlow.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
+import { getGetFlowTaskTool } from './flows/getFlowTask/getFlowTask.js';
+import { getListFlowRunsTool } from './flows/listFlowRuns/listFlowRuns.js';
 import { getListFlowsTool } from './flows/listFlows/listFlows.js';
+import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
+import { getRunFlowTool } from './flows/runFlow/runFlow.js';
+import { getRunFlowTaskTool } from './flows/runFlowTask/runFlowTask.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
+import { getInspectKnowledgeContextTool } from './knowledge/inspectKnowledgeContext.js';
+import { getManageKnowledgeContextTool } from './knowledge/manageKnowledgeContext.js';
+import { getQueryKnowledgeContextTool } from './knowledge/queryKnowledgeContext.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -21,8 +31,11 @@ import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetri
 import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMetricIds/listPulseMetricsFromMetricIds.js';
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
+import { getRecordEventTool } from './recordEvent/recordEvent.js';
+import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderInteractiveViz.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
+import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -32,22 +45,37 @@ import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
+import { getDownloadWorkbookTool } from './workbooks/downloadWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
+import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
+  getRecordEventTool,
+  getRenderInteractiveVizTool,
   getListDatasourcesTool,
   getListExtractRefreshTasksTool,
   getUpdateCloudExtractRefreshTaskTool,
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
+  getQueryKnowledgeContextTool,
+  getInspectKnowledgeContextTool,
+  getManageKnowledgeContextTool,
   getListUsersTool,
   getUpdateUserTool,
   getQueryDatasourceTool,
   getListFlowsTool,
   getGetFlowTool,
+  getListFlowRunsTool,
+  getListFlowTasksTool,
+  getDescribeFlowTool,
+  getGetFlowTaskTool,
+  getRunFlowTool,
+  getRunFlowTaskTool,
+  getCancelFlowRunTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
   getListPulseMetricsFromMetricDefinitionIdTool,
@@ -56,7 +84,10 @@ export const webToolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGenerateInsightCardsTool,
+  getDownloadWorkbookTool,
   getGetWorkbookTool,
+  getRequestWorkbookUploadTool,
+  getPublishWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
@@ -72,4 +103,5 @@ export const webToolFactories = [
   getQueryAdminInsightsTool,
   getDeleteContentTool,
   getConfirmDeleteContentTool,
+  getScaffoldDataAppTool,
 ];

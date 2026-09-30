@@ -1,0 +1,102 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<workbook version='18.1' xml:base='https://localhost' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <AnimationOnByDefault />
+    <MarkAnimation />
+    <SheetIdentifierTracking />
+    <WindowsPersistSimpleIdentifiers />
+    <_.fcp.WorkbookFingerprinting.true...WorkbookFingerprinting />
+  </document-format-change-manifest>
+  <repository-location id='template' path='/workbooks' revision='1.0' />
+  <preferences />
+  <datasources />
+  <worksheets>
+    <worksheet name='Sheet 1'>
+      <repository-location id='Sheet1' path='/workbooks/template' revision='' />
+      <table>
+        <view>
+          <datasources />
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='VizExtension' />
+            <add-in add-in-id='TODO-MANIFEST-ID' extension-url='tableaulocalext:///TODO-MANIFEST-ID/content/index.html' extension-version='1.0.0' instance-id='A1B2C3D4E5F60718293A4B5C6D7E8F90'>
+              <instance-settings />
+              <type-settings>
+                <worksheet />
+              </type-settings>
+            </add-in>
+          </pane>
+        </panes>
+        <rows />
+        <cols />
+      </table>
+      <simple-id uuid='{D846E350-EFE9-46AE-88D6-906A4DB75930}' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='Sheet 1'>
+      <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='31'>
+            <card type='columns' />
+          </strip>
+          <strip size='31'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+      <simple-id uuid='{5CCC5EFE-BD3C-4B06-B427-3A22F445F324}' />
+    </window>
+  </windows>
+  <referenced-extensions>
+    <referenced-extension>
+      <manifest manifest-version='0.1'>
+        <worksheet-extension extension-version='1.0.0' id='TODO-MANIFEST-ID'>
+          <default-locale>en_US</default-locale>
+          <name>TODO App Name</name>
+          <description>Embedded workbook extension.</description>
+          <author email='noreply@tableau.com' name='Claude' organization='Tableau' website='https://www.tableau.com' />
+          <min-api-version>1.11</min-api-version>
+          <source-location>
+            <url>tableaulocalext:///TODO-MANIFEST-ID/content/index.html</url>
+          </source-location>
+          <icon>iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=</icon>
+          <permissions>
+            <permission>full data</permission>
+          </permissions>
+          <encoding id='field'>
+            <display-name>Data</display-name>
+            <role-spec>
+              <role-type>discrete-dimension</role-type>
+              <role-type>discrete-measure</role-type>
+              <role-type>continuous-dimension</role-type>
+              <role-type>continuous-measure</role-type>
+            </role-spec>
+            <fields max-count='50' />
+            <encoding-icon token='level' />
+          </encoding>
+        </worksheet-extension>
+      </manifest>
+      <referenced-views>
+        <referenced-view instances='1' viewId='Sheet 1' />
+      </referenced-views>
+    </referenced-extension>
+  </referenced-extensions>
+</workbook>

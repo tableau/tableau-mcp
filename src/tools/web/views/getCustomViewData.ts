@@ -4,9 +4,15 @@ import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import {
+  buildDataToolResult,
+  DataToolResult,
+  dataToolResultToCallToolResult,
+} from './dataToolResult.js';
 
 const paramsSchema = {
   customViewId: z.string(),
@@ -25,6 +31,7 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
   const getCustomViewDataTool = new WebTool({
     server,
     name: 'get-custom-view-data',
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       "Retrieves comma-separated value (CSV) data for a Tableau Custom View (saved/personalized view state), including the user's filters.",
       'Requires the custom view LUID from the content URL (not the published view id).',
@@ -39,7 +46,7 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
       openWorldHint: false,
     },
     callback: async ({ customViewId, viewFilters }, extra): Promise<CallToolResult> => {
-      return await getCustomViewDataTool.logAndExecute({
+      return await getCustomViewDataTool.logAndExecute<DataToolResult>({
         extra,
         args: { customViewId, viewFilters },
         callback: async () => {
@@ -52,26 +59,38 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
             return new CustomViewNotAllowedError(isAllowedResult.message).toErr();
           }
 
+          const csv = await useRestApi({
+            ...extra,
+            jwtScopes: getCustomViewDataTool.requiredApiScopes,
+            callback: async (restApi) => {
+              return await restApi.viewsMethods.getCustomViewData({
+                customViewId,
+                siteId: restApi.siteId,
+                viewFilters,
+              });
+            },
+          });
+
+          // Offload to S3 (returning a presigned URL) when configured, otherwise
+          // carry the raw CSV for an inline text result. Falls back to inline on
+          // any S3 failure.
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getCustomViewDataTool.requiredApiScopes,
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.getCustomViewData({
-                  customViewId,
-                  siteId: restApi.siteId,
-                  viewFilters,
-                });
-              },
+            await buildDataToolResult({
+              csv,
+              resourceId: customViewId,
+              config: extra.config,
+              toolName: getCustomViewDataTool.name,
+              keyPrefixSegment: 'custom-view-data/',
             }),
           );
         },
-        constrainSuccessResult: (viewData) => {
+        constrainSuccessResult: (dataToolResult) => {
           return {
             type: 'success',
-            result: viewData,
+            result: dataToolResult,
           };
         },
+        getSuccessResult: (dataToolResult) => dataToolResultToCallToolResult(dataToolResult),
       });
     },
   });

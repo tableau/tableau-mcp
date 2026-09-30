@@ -9,11 +9,16 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { getImageFormatForVersion } from './getImageFormatForVersion.js';
+import {
+  buildImageToolResult,
+  ImageToolResult,
+  imageToolResultToCallToolResult,
+} from './imageToolResult.js';
 
 const paramsSchema = {
   customViewId: z.string(),
@@ -43,6 +48,7 @@ export const getGetCustomViewImageTool = (
   const getCustomViewImageTool = new WebTool({
     server,
     name: 'get-custom-view-image',
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       'Retrieves an image of the specified custom view in a published viz.',
       'A custom view is a shortcut to a specific state of interaction, such as filter selections and sorting, for a published viz.',
@@ -63,7 +69,7 @@ export const getGetCustomViewImageTool = (
       { customViewId, width, height, format, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getCustomViewImageTool.logAndExecute<string>({
+      return await getCustomViewImageTool.logAndExecute<ImageToolResult>({
         extra,
         args: { customViewId, width, height, format, viewFilters },
         callback: async () => {
@@ -81,7 +87,7 @@ export const getGetCustomViewImageTool = (
             return new CustomViewNotAllowedError(isAllowedResult.message).toErr();
           }
 
-          const result = await useRestApi({
+          const imageResult = await useRestApi({
             ...extra,
             jwtScopes: getCustomViewImageTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -97,24 +103,36 @@ export const getGetCustomViewImageTool = (
             },
           });
 
-          if (result.isErr()) {
-            if (result.error.type === 'feature-disabled') {
+          if (imageResult.isErr()) {
+            if (imageResult.error.type === 'feature-disabled') {
               return new FeatureDisabledError(
                 'The image format feature is disabled on this Tableau Server.',
               ).toErr();
             }
-            return new UnknownError(result.error.message, 400).toErr();
+            return new UnknownError(imageResult.error.message, 400).toErr();
           }
 
-          return new Ok(result.value);
+          // Offload to S3 (returning a presigned URL) when configured, otherwise
+          // carry the raw bytes for inline base64. Falls back to inline on any
+          // S3 failure.
+          return new Ok(
+            await buildImageToolResult({
+              imageData: imageResult.value,
+              format,
+              resourceId: customViewId,
+              config: extra.config,
+              toolName: getCustomViewImageTool.name,
+              keyPrefixSegment: 'custom-view-images/',
+            }),
+          );
         },
-        constrainSuccessResult: (imageData) => {
+        constrainSuccessResult: (imageToolResult) => {
           return {
             type: 'success',
-            result: imageData,
+            result: imageToolResult,
           };
         },
-        getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, format),
+        getSuccessResult: (imageToolResult) => imageToolResultToCallToolResult(imageToolResult),
       });
     },
   });

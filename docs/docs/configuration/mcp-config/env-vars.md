@@ -389,7 +389,7 @@ The feature gate provider to use for feature flag management.
   - `server` - File-based feature gate using `features.json` (default, for on-premise Tableau Server)
   - `custom` - Load a custom feature gate provider from a user-specified module
 
-:::tip Custom Provider
+:::tip[Custom Provider]
 
 To use a custom feature gate provider, set `FEATURE_GATE_PROVIDER=custom` and provide the module path via `FEATURE_GATE_PROVIDER_CONFIG`:
 
@@ -460,14 +460,25 @@ Enables product telemetry for tool usage tracking.
 
 ## `FLOW_TOOLS_ENABLED`
 
-Controls whether the Tableau Prep flow tools are registered.
+Controls the base gate for the Tableau Prep flow tool family. It controls read-only tool registration directly and is also required for the mutating tools.
 
 - Default: `false`
-- Set to `true` to enable the Tableau Prep flow tools:
+- Set to `true` to enable:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
+  - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
+  - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
+  - [`describe-flow`](../../tools/flows/describe-flow.md)
+  - [`get-flow-task`](../../tools/flows/get-flow-task.md)
 - Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
   disabled.
+- Setting this to `true` is necessary but not sufficient. The flow tools also require the
+  `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
+  without a redeploy. Both switches must be on for the tools to register; either one turns them
+  off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
+- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled); all flow tools remain subject to the `flow-tools` feature flag.
+- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
+  `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via
   [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
 
@@ -494,13 +505,35 @@ Enables admin-only tools that require site administrator permissions.
 
 <hr />
 
+## `FLOW_WRITE_TOOLS_ENABLED`
+
+Provides the second opt-in for the content-**mutating** Tableau Prep flow run tools. These tools change site state for other users because a run consumes Tableau Prep Conductor capacity and can overwrite outputs, so they are opt-in.
+
+- Default: `false`
+- The base `FLOW_TOOLS_ENABLED=true` gate is also required. If `FLOW_TOOLS_ENABLED=false`, the write tools remain disabled even when this flag is `true`
+- When both flags are `true`, enables:
+  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
+  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
+  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
+- When either flag is `false`, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run` for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not advertised
+- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
+- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
+
+| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
+| --- | --- | --- |
+| `false` | `false` or `true` | none |
+| `true` | `false` | read-only flow tools |
+| `true` | `true` | read-only and mutating flow tools |
+
+<hr />
+
 ## `ADMIN_GATE_CACHE_TTL_MINUTES`
 
 TTL (in minutes) for caches used by admin-only tools. Affects:
 
 - Admin role lookups (`assertAdmin`)
 - Admin Insights dataset LUID resolution
-- Project ID → name resolution used by `get-stale-content-report`
+- Project ID → name resolution used by `query-admin-insights` (`kind: "stale-content"`)
 
 - Default: `5`
 - Minimum: `1`
@@ -624,3 +657,84 @@ CSP_ALLOWED_DOMAINS=https://*.mycompany.tableau.com,https://*.online.tableau.com
 ```
 
 This allows embedding Tableau visualizations from custom Tableau Server domains in addition to the default Tableau Cloud domains.
+
+<hr />
+
+## `MCP_S3_BUCKET`
+
+Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
+`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
+presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
+client fetches the image bytes directly from S3, so the image never streams back through the MCP
+server on read.
+
+- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
+  disabled, this variable has no effect and the tools return inline base64.
+- Default: unset (feature disabled — tools return inline base64, the original behavior).
+- When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
+- AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
+  profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
+- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
+  retrieval never hard-fails.
+
+**Example:**
+
+```bash
+MCP_S3_BUCKET=tableau-images
+```
+
+<hr />
+
+## `AWS_DEFAULT_REGION`
+
+The AWS region of the S3 bucket used for image offload.
+
+- Default: unset. If not set, the AWS SDK resolves the region from the environment via its standard
+  credential/region chain.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+AWS_DEFAULT_REGION=us-east-1
+```
+
+<hr />
+
+## `MCP_IMAGE_PREFIX`
+
+The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
+view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
+normalized automatically.
+
+- Default: unset (empty). When unset, each tool uses only its own segment.
+- Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
+  `custom-view-images/`.
+- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
+  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
+  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
+  and `custom-view-images/...` respectively.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+MCP_IMAGE_PREFIX=tableau/
+```
+
+<hr />
+
+## `FILE_TTL`
+
+The lifetime of the presigned GET URL that is returned to the client. The value is in seconds. The link
+should be fetched promptly rather than stored.
+
+- Default: `30` (30 seconds).
+- Clamped to the range `5`–`900` (5 seconds–15 minutes).
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+FILE_TTL=30
+```

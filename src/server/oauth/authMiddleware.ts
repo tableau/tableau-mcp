@@ -3,6 +3,7 @@ import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -68,7 +69,10 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         )
         .json({
           error: 'unauthorized',
-          error_description: 'Authorization required. Use OAuth 2.1 flow.',
+          // Keep the WWW-Authenticate challenge (above) intact so the re-auth flow still works, but
+          // enrich the human-readable description with the shared multi-server guidance so a missing
+          // or expired token is not misread as a missing feature (W-23757363).
+          error_description: `Authorization required. Use the OAuth 2.1 flow to authenticate. ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
         });
       return;
     }
@@ -98,15 +102,21 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       });
       res.status(401).json({
         error: 'invalid_token',
-        error_description: result.error,
+        // Same shared guidance for an invalid/expired token so it is not misread as a missing
+        // feature (W-23757363). The underlying validation detail is preserved first.
+        error_description: `${result.error}. ${OAUTH_AUTH_CHALLENGE_GUIDANCE}`,
       });
       return;
     }
     const authInfo = result.value;
     const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
     if (enforceScopes) {
-      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body);
-      const requiredApiScopes = await getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body, authInfo.clientId);
+      const requiredApiScopes = await getRequiredApiScopesForRequest(
+        req.body,
+        advertiseApiScopes,
+        authInfo.clientId,
+      );
       const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
@@ -160,14 +170,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
   };
 }
 
-async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> {
+async function getRequiredMcpScopesForRequest(body: unknown, clientId?: string): Promise<string[]> {
   if (isInitializeRequest(body)) {
-    return getSupportedMcpScopes();
+    return getSupportedMcpScopes(clientId);
   }
 
   const toolName = getToolNameFromRequestBody(body);
   if (toolName === undefined) {
-    return getSupportedMcpScopes();
+    return getSupportedMcpScopes(clientId);
   }
 
   const scopes = new Set<string>();
@@ -181,13 +191,14 @@ async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> 
 async function getRequiredApiScopesForRequest(
   body: unknown,
   includeApiScopes: boolean,
+  clientId?: string,
 ): Promise<string[]> {
   if (!includeApiScopes) {
     return [];
   }
 
   if (isInitializeRequest(body)) {
-    return getSupportedApiScopes();
+    return getSupportedApiScopes(clientId);
   }
 
   const toolName = getToolNameFromRequestBody(body);

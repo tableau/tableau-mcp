@@ -68,6 +68,23 @@ export default [
     },
   },
   {
+    // Standalone Node CLI scripts (plain JS): the TS return-type rule is
+    // inapplicable to .mjs, and a CLI legitimately writes to stdout.
+    files: ['docs/scripts/**/*.mjs'],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
+    // Custom-provider test fixtures loaded via require(): plain JS, so the
+    // TS return-type rule is inapplicable.
+    files: ['src/sessionStore/__fixtures__/**/*.cjs'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -85,6 +102,9 @@ export default [
       // Migration snapshot workspace (local-only, git-excluded) — reference material
       // only, never built or shipped.
       '.a2td-snapshot/**',
+      '.claude/**',
+      '.worktrees/**',
+      'src/templates/**',
     ],
   },
   {

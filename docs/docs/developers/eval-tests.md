@@ -82,6 +82,26 @@ The base URL for the OpenAI-compatible gateway.
 
 The model to use for the Eval tests. If not set, the default model is used.
 
+<hr />
+
+### `ALLOW_MUTATING_FLOW_EVALS`
+
+When `true`, enables evals that can invoke the content-mutating Tableau Prep flow tools. These evals
+are skipped by default because the eval harness executes real MCP tool calls against the configured
+Tableau site. Only enable them on a disposable site.
+
+This is a test-safety gate, separate from the product feature gates. Mutating flow evals also require
+`FLOW_WRITE_TOOLS_ENABLED=true`; the eval harness sets `FLOW_TOOLS_ENABLED=true` because the write
+tools are subordinate to the base flow tool gate.
+
+<hr />
+
+### `FLOW_WRITE_TOOLS_ENABLED`
+
+Required, together with `ALLOW_MUTATING_FLOW_EVALS=true`, to expose the mutating flow tools during
+the mutating flow evals. The harness also enables `FLOW_TOOLS_ENABLED` for this isolated server.
+Leave unset for the default eval run.
+
 ## Running the Eval tests against a different site
 
 To run the Eval tests locally against a different site, you need to:

@@ -91,6 +91,112 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('"Event Date"');
   });
 
+  it('scopes the ts-events query to the Step-1 candidate names to avoid the 10000-row truncation blind spot', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    // The ts-events query carries an `Actor User Name` SET filter with a replace-me placeholder.
+    expect(text).toContain(
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username (equals the email on Tableau Cloud); one string per candidate>',
+    );
+    // The Step 2 instruction tells the model to scope, not to fetch site-wide events.
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do not fetch site-wide events.');
+  });
+
+  it('warns when the ts-events query hits the 10000-row truncation limit', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('If the TS Events query returns exactly 10000 rows');
+    expect(text).toContain('wrongly kept as a candidate');
+  });
+
+  it('explains ts-events 0 rows is valid but flags an unsubstituted placeholder', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('0 rows here is a VALID result');
+    expect(text).toContain('fails to rescue genuinely-active users');
+  });
+
+  it('includes the ts-users Desktop/Prep cross-reference query block', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('"kind": "ts-users"');
+    expect(text).toContain('"fieldCaption": "Tableau Desktop - Last Access Date"');
+    expect(text).toContain('"fieldCaption": "Tableau Prep - Last Access Date"');
+    // TS Users uses plain user captions, NOT the TS-Events-specific `Actor User Name`.
+    expect(text).toContain('"fieldCaption": "User Email"');
+    expect(text).toContain('"fieldCaption": "User Name"');
+    // A recent non-null Desktop/Prep date makes a user active → excluded.
+    expect(text).toContain('active');
+    expect(text).toContain('excluded from the final');
+  });
+
+  it('scopes the ts-users query to the Step-1 candidate emails to avoid the 10000-row truncation blind spot', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('"filterType": "SET"');
+    expect(text).toContain(
+      '<REPLACE with the candidate User Emails from Step 1 — one string per candidate>',
+    );
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do not fetch all site users.');
+  });
+
+  it('warns when the ts-users query hits the 10000-row truncation limit', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('truncated at the 10000-row limit');
+    expect(text).toContain('could be falsely listed as inactive');
+  });
+
+  it('fails loud when the ts-users query returns 0 rows (scoping likely not applied)', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('returns 0 rows');
+    expect(text).toContain('could not be confirmed for any candidate');
+    expect(text).toContain('may contain false positives');
+  });
+
+  it('states null Desktop/Prep dates are NOT treated as activity and adds the availability caveat', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('null is NOT activity');
+    expect(text).toContain('REMAINS a candidate');
+    expect(text).toContain('Desktop/Prep activity data may be unavailable on this tenant');
+  });
+
   it('instructs cross-referencing to exclude active users', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
@@ -105,15 +211,22 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('ETL lag');
   });
 
-  it('includes instruction to fetch null-lastLogin users', async () => {
+  it('covers never-signed-in users in the single list-users call without a second fetch', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
       throw new Error('expected text content');
     }
     const { text } = result.messages[0].content;
+    // Never-signed-in users are still surfaced as candidates...
     expect(text).toContain('never signed in');
     expect(text).toContain('Never');
+    // ...but only ONE list-users call is made. The `lastLogin:lt` filter already
+    // matches null-lastLogin users, so a second call would double-count them.
+    expect(text).not.toContain('a second time');
+    expect(text).toContain('Do not issue a second `list-users` call');
+    const listUsersCalls = text.match(/`list-users`/g) ?? [];
+    expect(listUsersCalls.length).toBe(2); // one in the Step 1 instruction, one in the "do not" note
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env when no arg provided', async () => {

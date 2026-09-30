@@ -10,6 +10,7 @@ coverage/
 test-logs/
 config.json
 env.list
+*.env.list
 manifest.json
 sea-prep.blob
 tableau-mcp
@@ -25,6 +26,8 @@ tableau-mcp.mcpb
 # MCP Apps
 src/web/apps/dist/
 
+src/templates/data-app-template.zip
+
 # Playwright
 /test-results/
 /playwright-report/
@@ -39,3 +42,10 @@ src/web/apps/dist/
 .work/reports/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
+
+.worktrees/
+
+# Loose local report / probe artifacts (never commit)
+*.tsv
+stale-*.md
+/logs/

@@ -28,6 +28,31 @@ const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
 
+// The aggregations a parameter action can apply to its source field before pushing it to the
+// parameter (twb_2026.2.0.xsd, ActionList-Agg-ST). 'attr' is Tableau's default for a click-to-set
+// action and its floor: omitting <agg-type> does not stick — Desktop backfills 'attr' on the
+// document round-trip (field-observed), so there is no "no aggregation" value to offer.
+const sourceFieldAggregationSchema = z.enum([
+  'attr',
+  'sum',
+  'average',
+  'min',
+  'max',
+  'median',
+  'collect',
+  'union',
+  'count',
+  'count-d',
+  'std-dev',
+  'std-dev-p',
+  'var',
+  'var-p',
+  'concatenate',
+  'quart1',
+  'quart3',
+]);
+export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema>;
+
 // Primitives in, action XML server-side, readback out. An action wires a mark
 // interaction on a source sheet to a target parameter, set, URL, or filter.
 // PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
@@ -46,7 +71,7 @@ const paramsSchema = {
   sourceField: z
     .string()
     .optional()
-    .describe('parameter, required: source field pushed, e.g. [Profit].'),
+    .describe('parameter, required: exact shelf ref, e.g. [federated.<id>].[sum:Sales].'),
   targetParameter: z
     .string()
     .optional()
@@ -60,6 +85,10 @@ const paramsSchema = {
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
   clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
+  sourceFieldAggregation: sourceFieldAggregationSchema
+    .optional()
+    .describe('parameter: how to aggregate the source field. Default attr.'),
+  clearValue: z.string().optional().describe('parameter: reset value on clear; string only.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
@@ -83,6 +112,10 @@ type AuthorActionResult = AuthorActionResultBase &
     | {
         mode: 'parameter';
         targetParameter: string;
+        // The aggregation applied to the source field ('attr' by default) and the value kept on
+        // clear-selection, if any — both echoed back from the applied XML.
+        sourceFieldAggregation: string;
+        clearValue?: string;
       }
     | {
         mode: 'set';
@@ -115,6 +148,247 @@ type SetCandidate = {
   caption?: string;
 };
 
+// paramsSchema is registered as a ZodRawShape; infer the object type without constructing one.
+export type AuthorActionRawArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
+
+type AuthorActionInputBase = {
+  session?: string;
+  caption: string;
+  sourceWorksheet: string;
+  activation: z.infer<typeof activationSchema>;
+};
+
+type AuthorActionInput = AuthorActionInputBase &
+  (
+    | {
+        mode: 'parameter';
+        sourceField?: string;
+        targetParameter?: string;
+        sourceFieldAggregation?: SourceFieldAggregation;
+        clearValue?: string;
+      }
+    | {
+        mode: 'set';
+        targetSet?: string;
+        datasource?: string;
+        setMembership: z.infer<typeof setMembershipSchema>;
+        clearSelection: z.infer<typeof clearSelectionSchema>;
+        singleSelect?: boolean;
+      }
+    | {
+        mode: 'url';
+        sourceDashboard: string;
+        url: string;
+        urlTarget?: z.infer<typeof urlTargetSchema>;
+        zoneId?: string;
+        urlEncode?: boolean;
+        excludeSourceSheets: string[];
+      }
+    | {
+        mode: 'filter';
+        sourceDashboard: string;
+        targetSheet: string;
+        filterFields?: string[];
+        datasource?: string;
+        clearSelection: z.infer<typeof clearSelectionSchema>;
+        singleSelect?: boolean;
+        excludeSourceSheets: string[];
+        excludeTargetSheets: string[];
+      }
+  );
+
+// Owns the input-only guards (required fields, forbidden mode/field combos); XML-dependent
+// enumerated recovery checks stay in the callback, which needs the live workbook.
+export function parseAuthorActionArgs(
+  args: AuthorActionRawArgs,
+): Result<AuthorActionInput, ArgsValidationError> {
+  const {
+    session,
+    mode,
+    caption,
+    sourceWorksheet,
+    sourceField,
+    targetParameter,
+    targetSet,
+    targetSheet,
+    filterFields,
+    datasource,
+    setMembership,
+    clearSelection,
+    sourceFieldAggregation,
+    clearValue,
+    singleSelect,
+    activation,
+    url,
+    sourceDashboard,
+    excludeSourceSheets,
+    excludeTargetSheets,
+    urlTarget,
+    zoneId,
+    urlEncode,
+  } = args;
+
+  const effectiveSourceSheet = sourceWorksheet.trim();
+  const effectiveSourceDashboard = sourceDashboard?.trim() ?? '';
+  const hasSourceWorksheet = effectiveSourceSheet.length > 0;
+  const hasSourceDashboard = effectiveSourceDashboard.length > 0;
+  const effectiveExcludedSourceSheets = (excludeSourceSheets ?? [])
+    .map((sheet) => sheet.trim())
+    .filter((sheet) => sheet.length > 0);
+  const effectiveExcludedTargetSheets = (excludeTargetSheets ?? [])
+    .map((sheet) => sheet.trim())
+    .filter((sheet) => sheet.length > 0);
+  const hasTargetParameter = (targetParameter?.trim().length ?? 0) > 0;
+  const hasTargetSet = (targetSet?.trim().length ?? 0) > 0;
+  const hasUrl = (url?.trim().length ?? 0) > 0;
+
+  if (caption.trim().length === 0) {
+    return new ArgsValidationError('caption empty').toErr();
+  }
+  if (mode !== 'url' && mode !== 'filter' && effectiveSourceSheet.length === 0) {
+    return new ArgsValidationError('sourceWorksheet empty').toErr();
+  }
+  if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter') {
+    return new ArgsValidationError('excludeTargetSheets is only allowed in filter mode').toErr();
+  }
+  if (effectiveExcludedSourceSheets.length > 0) {
+    if (mode !== 'url' && mode !== 'filter') {
+      return new ArgsValidationError(
+        'excludeSourceSheets is only allowed in url or filter mode',
+      ).toErr();
+    }
+    if (hasSourceWorksheet || !hasSourceDashboard) {
+      return new ArgsValidationError(
+        'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
+      ).toErr();
+    }
+  }
+
+  const base: AuthorActionInputBase = { session, caption, sourceWorksheet, activation };
+
+  if (mode === 'url') {
+    if (url === undefined || url.trim().length === 0) {
+      return new ArgsValidationError('url is required in url mode').toErr();
+    }
+    if (/^tsl:/i.test(url.trim())) {
+      return new ArgsValidationError(
+        "url must not start with 'tsl:' — that prefix classifies the action as a sheet-link filter, not a URL action",
+      ).toErr();
+    }
+    // The url is XML-escaped once on the way out. A pre-escaped input (&lt;, &amp;,
+    // …) would be escaped again into &amp;lt; and render as a literal string, so the
+    // field reference silently dies. Reject it and tell the caller to pass raw chars.
+    if (/&(?:lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/.test(url)) {
+      return new ArgsValidationError(
+        'url must be passed unescaped: it contains an XML entity such as &lt; or &amp;. Use literal characters — for field substitution write <[Field Name]>, e.g. https://www.google.com/search?q=<[City]>.',
+      ).toErr();
+    }
+    if (hasTargetParameter || hasTargetSet) {
+      return new ArgsValidationError(
+        'targetParameter/targetSet are not allowed in url mode',
+      ).toErr();
+    }
+    if (!hasSourceWorksheet && !hasSourceDashboard) {
+      return new ArgsValidationError(
+        'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
+      ).toErr();
+    }
+    if (urlTarget === 'specific-zone') {
+      const trimmedZoneId = zoneId?.trim() ?? '';
+      if (trimmedZoneId.length === 0) {
+        return new ArgsValidationError(
+          'zoneId is required when urlTarget is specific-zone',
+        ).toErr();
+      }
+      // Tableau parses <url-action-target> as an integer and treats zone 0 as
+      // "no specific zone", so a non-numeric or zero zoneId would silently
+      // degrade to the default target while readback still reports success.
+      // Reject anything but a positive integer up front.
+      if (!/^[1-9][0-9]*$/.test(trimmedZoneId)) {
+        return new ArgsValidationError('zoneId must be a positive integer zone id').toErr();
+      }
+    }
+    if (urlTarget !== 'specific-zone' && (zoneId?.trim().length ?? 0) > 0) {
+      return new ArgsValidationError(
+        'zoneId is only allowed when urlTarget is specific-zone',
+      ).toErr();
+    }
+    return new Ok({
+      ...base,
+      mode,
+      sourceDashboard: sourceDashboard ?? '',
+      url,
+      urlTarget,
+      zoneId,
+      urlEncode,
+      excludeSourceSheets: effectiveExcludedSourceSheets,
+    });
+  }
+
+  if (mode === 'set') {
+    if (hasTargetParameter) {
+      return new ArgsValidationError(
+        'targetParameter is not allowed in set mode; use targetSet',
+      ).toErr();
+    }
+    return new Ok({
+      ...base,
+      mode,
+      targetSet,
+      datasource,
+      setMembership,
+      clearSelection,
+      singleSelect,
+    });
+  }
+
+  if (mode === 'filter') {
+    if (hasTargetParameter || hasTargetSet) {
+      return new ArgsValidationError(
+        'targetParameter/targetSet are not allowed in filter mode; use targetSheet',
+      ).toErr();
+    }
+    if (hasUrl) {
+      return new ArgsValidationError('url is not allowed in filter mode').toErr();
+    }
+    if (targetSheet === undefined || targetSheet.trim().length === 0) {
+      return new ArgsValidationError('targetSheet is required in filter mode').toErr();
+    }
+    if (!hasSourceWorksheet && !hasSourceDashboard) {
+      return new ArgsValidationError(
+        'filter mode requires a source: set sourceWorksheet, sourceDashboard, or both',
+      ).toErr();
+    }
+    return new Ok({
+      ...base,
+      mode,
+      sourceDashboard: sourceDashboard ?? '',
+      targetSheet,
+      filterFields,
+      datasource,
+      clearSelection,
+      singleSelect,
+      excludeSourceSheets: effectiveExcludedSourceSheets,
+      excludeTargetSheets: effectiveExcludedTargetSheets,
+    });
+  }
+
+  // parameter mode
+  if (hasTargetSet) {
+    return new ArgsValidationError(
+      'targetSet is not allowed in parameter mode; use targetParameter',
+    ).toErr();
+  }
+  return new Ok({
+    ...base,
+    mode,
+    sourceField,
+    targetParameter,
+    sourceFieldAggregation,
+    clearValue,
+  });
+}
+
 const title = 'Author Action';
 export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const tool = new DesktopTool({
@@ -129,171 +403,30 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
       destructiveHint: false,
       idempotentHint: false,
     },
-    callback: async (
-      {
-        session,
-        mode = 'parameter',
-        caption,
-        sourceWorksheet,
-        sourceField,
-        targetParameter,
-        targetSet,
-        targetSheet,
-        filterFields,
-        datasource,
-        setMembership = 'assign',
-        clearSelection = 'do-nothing',
-        singleSelect,
-        activation = 'on-select',
-        url,
-        sourceDashboard,
-        excludeSourceSheets,
-        excludeTargetSheets,
-        urlTarget,
-        zoneId,
-        urlEncode,
-      },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async (args, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorActionResult>({
         extra,
-        args: {
-          session,
-          mode,
-          caption,
-          sourceWorksheet,
-          sourceField,
-          targetParameter,
-          targetSet,
-          targetSheet,
-          filterFields,
-          datasource,
-          setMembership,
-          clearSelection,
-          singleSelect,
-          activation,
-          url,
-          sourceDashboard,
-          excludeSourceSheets,
-          excludeTargetSheets,
-          urlTarget,
-          zoneId,
-          urlEncode,
-        },
+        args,
         callback: async () => {
+          const parsed = parseAuthorActionArgs(args);
+          if (parsed.isErr()) {
+            return parsed.error.toErr();
+          }
+          const input = parsed.value;
+
+          const { caption, sourceWorksheet, activation } = input;
           const effectiveSourceSheet = sourceWorksheet.trim();
-          const effectiveSourceDashboard = sourceDashboard?.trim() ?? '';
+          const effectiveSourceDashboard =
+            input.mode === 'url' || input.mode === 'filter' ? input.sourceDashboard.trim() : '';
           const hasSourceWorksheet = effectiveSourceSheet.length > 0;
           const hasSourceDashboard = effectiveSourceDashboard.length > 0;
-          const effectiveTargetSheet = targetSheet?.trim() ?? '';
-          const effectiveExcludedSourceSheets = (excludeSourceSheets ?? [])
-            .map((sheet) => sheet.trim())
-            .filter((sheet) => sheet.length > 0);
-          const effectiveExcludedTargetSheets = (excludeTargetSheets ?? [])
-            .map((sheet) => sheet.trim())
-            .filter((sheet) => sheet.length > 0);
+          const effectiveTargetSheet = input.mode === 'filter' ? input.targetSheet.trim() : '';
+          const effectiveExcludedSourceSheets =
+            input.mode === 'url' || input.mode === 'filter' ? input.excludeSourceSheets : [];
+          const effectiveExcludedTargetSheets =
+            input.mode === 'filter' ? input.excludeTargetSheets : [];
 
-          if (caption.trim().length === 0) {
-            return new ArgsValidationError('caption empty').toErr();
-          }
-          if (mode !== 'url' && mode !== 'filter' && effectiveSourceSheet.length === 0) {
-            return new ArgsValidationError('sourceWorksheet empty').toErr();
-          }
-          if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter') {
-            return new ArgsValidationError(
-              'excludeTargetSheets is only allowed in filter mode',
-            ).toErr();
-          }
-          if (effectiveExcludedSourceSheets.length > 0) {
-            if (mode !== 'url' && mode !== 'filter') {
-              return new ArgsValidationError(
-                'excludeSourceSheets is only allowed in url or filter mode',
-              ).toErr();
-            }
-            if (hasSourceWorksheet || !hasSourceDashboard) {
-              return new ArgsValidationError(
-                'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
-              ).toErr();
-            }
-          }
-          if (mode === 'url') {
-            if (url === undefined || url.trim().length === 0) {
-              return new ArgsValidationError('url is required in url mode').toErr();
-            }
-            if (/^tsl:/i.test(url.trim())) {
-              return new ArgsValidationError(
-                "url must not start with 'tsl:' — that prefix classifies the action as a sheet-link filter, not a URL action",
-              ).toErr();
-            }
-            // The url is XML-escaped once on the way out. A pre-escaped input (&lt;, &amp;,
-            // …) would be escaped again into &amp;lt; and render as a literal string, so the
-            // field reference silently dies. Reject it and tell the caller to pass raw chars.
-            if (/&(?:lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/.test(url)) {
-              return new ArgsValidationError(
-                'url must be passed unescaped: it contains an XML entity such as &lt; or &amp;. Use literal characters — for field substitution write <[Field Name]>, e.g. https://www.google.com/search?q=<[City]>.',
-              ).toErr();
-            }
-            if ((targetParameter?.trim().length ?? 0) > 0 || (targetSet?.trim().length ?? 0) > 0) {
-              return new ArgsValidationError(
-                'targetParameter/targetSet are not allowed in url mode',
-              ).toErr();
-            }
-            if (!hasSourceWorksheet && !hasSourceDashboard) {
-              return new ArgsValidationError(
-                'url mode requires a source: set sourceWorksheet, sourceDashboard, or both',
-              ).toErr();
-            }
-            if (urlTarget === 'specific-zone') {
-              const trimmedZoneId = zoneId?.trim() ?? '';
-              if (trimmedZoneId.length === 0) {
-                return new ArgsValidationError(
-                  'zoneId is required when urlTarget is specific-zone',
-                ).toErr();
-              }
-              // Tableau parses <url-action-target> as an integer and treats zone 0 as
-              // "no specific zone", so a non-numeric or zero zoneId would silently
-              // degrade to the default target while readback still reports success.
-              // Reject anything but a positive integer up front.
-              if (!/^[1-9][0-9]*$/.test(trimmedZoneId)) {
-                return new ArgsValidationError('zoneId must be a positive integer zone id').toErr();
-              }
-            }
-            if (urlTarget !== 'specific-zone' && (zoneId?.trim().length ?? 0) > 0) {
-              return new ArgsValidationError(
-                'zoneId is only allowed when urlTarget is specific-zone',
-              ).toErr();
-            }
-          }
-          if (mode === 'set' && (targetParameter?.trim().length ?? 0) > 0) {
-            return new ArgsValidationError(
-              'targetParameter is not allowed in set mode; use targetSet',
-            ).toErr();
-          }
-          if (mode === 'parameter' && (targetSet?.trim().length ?? 0) > 0) {
-            return new ArgsValidationError(
-              'targetSet is not allowed in parameter mode; use targetParameter',
-            ).toErr();
-          }
-          if (mode === 'filter') {
-            if ((targetParameter?.trim().length ?? 0) > 0 || (targetSet?.trim().length ?? 0) > 0) {
-              return new ArgsValidationError(
-                'targetParameter/targetSet are not allowed in filter mode; use targetSheet',
-              ).toErr();
-            }
-            if ((url?.trim().length ?? 0) > 0) {
-              return new ArgsValidationError('url is not allowed in filter mode').toErr();
-            }
-            if (targetSheet === undefined || targetSheet.trim().length === 0) {
-              return new ArgsValidationError('targetSheet is required in filter mode').toErr();
-            }
-            if (!hasSourceWorksheet && !hasSourceDashboard) {
-              return new ArgsValidationError(
-                'filter mode requires a source: set sourceWorksheet, sourceDashboard, or both',
-              ).toErr();
-            }
-          }
-
-          const sessionResult = resolveSession(session);
+          const sessionResult = resolveSession(input.session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -314,7 +447,19 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // parameter mode needs a source field and an existing target parameter. Both errors
           // enumerate what the workbook offers, mirroring set mode's "Available sets".
           let resolvedTargetParameter = '';
-          if (mode === 'parameter') {
+          // The source-field aggregation (a validated enum token, default 'attr') and the value kept
+          // on clear-selection (undefined leaves the parameter unchanged). Both are parameter-mode-
+          // only; they thread into renderParameterAction and the readback.
+          let effectiveAggregation = 'attr';
+          let effectiveClearValue: string | undefined;
+          if (input.mode === 'parameter') {
+            const { sourceField, targetParameter } = input;
+            effectiveAggregation = input.sourceFieldAggregation ?? 'attr';
+            // Preserve clearValue verbatim: only an omitted (undefined) value means "leave the
+            // parameter unchanged on clear". An explicit "" or a padded " Month " is a real reset
+            // value, so trimming or empty-coercing it would apply — and report — a different reset
+            // behavior than the caller requested.
+            effectiveClearValue = input.clearValue;
             // Reject empty/whitespace as well as undefined: renderParameterAction omits the
             // source-field param when it is blank and readback only checks the target survived,
             // so a blank sourceField would apply a no-op action and report success.
@@ -356,6 +501,20 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 `targetParameter "${targetParameter.trim()}" was not found. Available parameters: ${formatAvailableParameters(liveXml)}`,
               ).toErr();
             }
+            // clearValue is always encoded with the string prefix (s:LROOT:), so on a non-string
+            // parameter it writes a malformed clear-option that Desktop silently rewrites — and
+            // readback can't catch it (hasParameterActionSettings checks the clear-option type, not
+            // its value). Reject rather than apply a value that won't survive. Per-datatype
+            // encoding is tracked as a follow-up.
+            if (
+              effectiveClearValue !== undefined &&
+              matchedParameter.datatype !== undefined &&
+              matchedParameter.datatype !== 'string'
+            ) {
+              return new ArgsValidationError(
+                `clearValue is only supported for string parameters; "${matchedParameter.caption ?? matchedParameter.name}" is ${matchedParameter.datatype}. Omit clearValue to leave the parameter unchanged on clear.`,
+              ).toErr();
+            }
             resolvedTargetParameter = `[Parameters].${bracketToken(matchedParameter.name)}`;
           }
 
@@ -364,14 +523,14 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // parameter and set modes drive off a single required source worksheet. A name that
           // isn't a real worksheet persists as a source the action can never fire from, so reject
           // it and enumerate the worksheets.
-          if (mode === 'parameter' || mode === 'set') {
+          if (input.mode === 'parameter' || input.mode === 'set') {
             if (!worksheetNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
                 `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
               ).toErr();
             }
           }
-          if (mode === 'url' || mode === 'filter') {
+          if (input.mode === 'url' || input.mode === 'filter') {
             // Worksheet, dashboard, and story names share one namespace, so a source name
             // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
             // dashboard name in the worksheet slot) persists cleanly but makes Tableau raise
@@ -392,7 +551,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
           }
-          if (mode === 'filter') {
+          if (input.mode === 'filter') {
             if (effectiveSourceSheet.length > 0 && !worksheetNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
                 `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
@@ -425,7 +584,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               }
             }
 
-            const trimmedTarget = targetSheet!.trim();
+            const trimmedTarget = effectiveTargetSheet;
             if (!worksheetNames.has(trimmedTarget) && !dashboardNames.has(trimmedTarget)) {
               const available = [...worksheetNames, ...dashboardNames];
               return new ArgsValidationError(
@@ -463,8 +622,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           let resolvedFields: ResolvedFilterField[] | undefined;
           let filterLinkExpression: string | undefined;
           let filterAction: FilterAction | undefined;
-          if (mode === 'filter' && (filterFields ?? []).some((field) => field.trim().length > 0)) {
-            const datasourceResult = selectTargetDatasource(liveXml, datasource);
+          if (
+            input.mode === 'filter' &&
+            (input.filterFields ?? []).some((field) => field.trim().length > 0)
+          ) {
+            const datasourceResult = selectTargetDatasource(liveXml, input.datasource);
             if (datasourceResult.isErr()) {
               return datasourceResult.error.toErr();
             }
@@ -472,7 +634,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             const fieldsResult = resolveFilterFields(
               liveXml,
               targetDatasource.name,
-              filterFields ?? [],
+              input.filterFields ?? [],
             );
             if (fieldsResult.isErr()) {
               return fieldsResult.error.toErr();
@@ -489,29 +651,29 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               columnsXml: resolvedFields.map((field) => renderDependencyColumn(field)),
             };
           }
-          if (mode === 'filter') {
+          if (input.mode === 'filter') {
             filterAction = {
               target: effectiveTargetSheet,
               sourceWorksheet: effectiveSourceSheet,
               sourceDashboard: effectiveSourceDashboard,
               sourceExcludeSheets: effectiveExcludedSourceSheets,
               activation,
-              autoClear: clearSelection !== 'do-nothing',
+              autoClear: input.clearSelection !== 'do-nothing',
               targetExcludeSheets:
                 effectiveExcludedTargetSheets.length > 0
                   ? effectiveExcludedTargetSheets.join(',')
                   : undefined,
-              onEmpty: clearSelection === 'exclude-all',
-              singleSelect: singleSelect === true,
+              onEmpty: input.clearSelection === 'exclude-all',
+              singleSelect: input.singleSelect === true,
               linkExpression: filterLinkExpression,
             };
           }
 
           if (
-            mode === 'url' &&
+            input.mode === 'url' &&
             hasUrlActionDuplicate(
               liveXml,
-              url!.trim(),
+              input.url.trim(),
               effectiveSourceSheet,
               effectiveSourceDashboard,
             )
@@ -520,7 +682,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               'an identical URL action (same url and same source) already exists',
             ).toErr();
           }
-          if (mode === 'filter' && hasFilterActionDuplicate(liveXml, filterAction!)) {
+          if (input.mode === 'filter' && hasFilterActionDuplicate(liveXml, filterAction!)) {
             return new ArgsValidationError(
               'an identical filter action (same source, target, fields, and behavior) already exists',
             ).toErr();
@@ -529,8 +691,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           const actionName = nextActionName(liveXml);
           let target: string;
           let actionXml: string;
-          if (mode === 'set') {
-            const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
+          if (input.mode === 'set') {
+            const targetResult = resolveTargetSet(liveXml, input.targetSet, input.datasource);
             if (targetResult.isErr()) {
               return targetResult.error.toErr();
             }
@@ -540,13 +702,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               actionName,
               sourceWorksheet,
               targetSet: target,
-              setMembership,
-              clearSelection,
-              singleSelect,
+              setMembership: input.setMembership,
+              clearSelection: input.clearSelection,
+              singleSelect: input.singleSelect,
               activation,
             });
-          } else if (mode === 'url') {
-            target = url!.trim();
+          } else if (input.mode === 'url') {
+            target = input.url.trim();
             actionXml = renderUrlAction({
               caption,
               actionName,
@@ -554,12 +716,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               sourceDashboard: effectiveSourceDashboard,
               excludeSourceSheets: effectiveExcludedSourceSheets,
               url: target,
-              urlTarget: urlTarget ?? 'default-zone-or-browser',
-              zoneId: zoneId?.trim() ?? '',
-              urlEncode: urlEncode ?? false,
+              urlTarget: input.urlTarget ?? 'default-zone-or-browser',
+              zoneId: input.zoneId?.trim() ?? '',
+              urlEncode: input.urlEncode ?? false,
               activation,
             });
-          } else if (mode === 'filter') {
+          } else if (input.mode === 'filter') {
             target = filterAction!.target;
             actionXml = renderFilterAction(caption, actionName, filterAction!);
           } else {
@@ -571,9 +733,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               caption,
               actionName,
               sourceWorksheet,
-              sourceField: sourceField ?? '',
+              sourceField: input.sourceField ?? '',
               targetParameter: target,
               activation,
+              aggregation: effectiveAggregation,
+              clearValue: effectiveClearValue,
             });
           }
           const editResult = spliceActionIntoWorkbook(liveXml, actionXml, filterDependencies);
@@ -588,7 +752,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const targetParamLanded = (xml: string): boolean => {
-            if (mode === 'set') {
+            if (input.mode === 'set') {
               return hasActionWithTargetParam(
                 xml,
                 'edit-group-action',
@@ -597,10 +761,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 target,
               );
             }
-            if (mode === 'url') {
+            if (input.mode === 'url') {
               return hasUrlActionWithLink(xml, caption, target);
             }
-            if (mode === 'filter') {
+            if (input.mode === 'filter') {
               // Verify every semantic renderFilterAction serialized, not just the target, so the
               // receipt does not report a dropped setting as applied. Same object we authored from.
               // For a specific-field filter also confirm the sibling <datasources>/
@@ -610,12 +774,17 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 hasFilterDependencies(xml, filterDependencies)
               );
             }
-            return hasActionWithTargetParam(
-              xml,
-              'edit-parameter-action',
-              caption,
-              'target-parameter',
-              target,
+            // Verify the target survived AND that the aggregation and clear behavior we authored
+            // round-tripped intact — a dropped <agg-type>/<clear-option> must fail readback.
+            return (
+              hasActionWithTargetParam(
+                xml,
+                'edit-parameter-action',
+                caption,
+                'target-parameter',
+                target,
+              ) &&
+              hasParameterActionSettings(xml, caption, effectiveAggregation, effectiveClearValue)
             );
           };
           const outcome = await applyAndVerify({
@@ -630,37 +799,37 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           if (outcome.status === 'not-applied') {
             return new XmlModificationError(
-              mode === 'set'
+              input.mode === 'set'
                 ? 'action applied but the target-group param did not survive readback'
-                : mode === 'url'
+                : input.mode === 'url'
                   ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
-                  : mode === 'filter'
+                  : input.mode === 'filter'
                     ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, single-select, or the field datasource/dependency declarations may have been dropped or rewritten)'
                     : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 
-          if (mode === 'set') {
+          if (input.mode === 'set') {
             return new Ok({
               actionName,
               caption,
-              mode,
+              mode: input.mode,
               target,
               targetSet: target,
               hint: 'readback verified the qualified target set; the source sheet must expose marks that can drive the action',
             });
           }
-          if (mode === 'url') {
+          if (input.mode === 'url') {
             return new Ok({
               actionName,
               caption,
-              mode,
+              mode: input.mode,
               target,
               url: target,
               hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
             });
           }
-          if (mode === 'filter') {
+          if (input.mode === 'filter') {
             const hint = `readback verified the tsl-filter action targeting '${target}'; source scoped to ${[
               hasSourceWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
               hasSourceDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
@@ -672,7 +841,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok({
               actionName,
               caption,
-              mode,
+              mode: input.mode,
               sourceWorksheet: effectiveSourceSheet,
               sourceDashboard: effectiveSourceDashboard,
               target: target,
@@ -683,8 +852,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               },
               excludeSourceSheets: effectiveExcludedSourceSheets,
               excludeTargetSheets: effectiveExcludedTargetSheets,
-              clearSelection,
-              singleSelect: singleSelect === true,
+              clearSelection: input.clearSelection,
+              singleSelect: input.singleSelect === true,
               activation,
               hint,
             });
@@ -692,9 +861,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           return new Ok({
             actionName,
             caption,
-            mode,
+            mode: input.mode,
             target,
             targetParameter: target,
+            sourceFieldAggregation: effectiveAggregation,
+            clearValue: effectiveClearValue,
             hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
           });
         },
@@ -772,6 +943,39 @@ function hasActionWithTargetParam(
   });
 }
 
+// Confirm the parameter action carrying `caption` kept the source-field aggregation and
+// clear-selection behavior the tool authored. Tableau can silently drop or rewrite either child
+// on the document round-trip, so the receipt must not report a dropped setting as applied.
+function hasParameterActionSettings(
+  xml: string,
+  caption: string,
+  aggregation: string,
+  clearValue: string | undefined,
+): boolean {
+  const actionPattern = /<edit-parameter-action\b[^>]*>[\s\S]*?<\/edit-parameter-action>/g;
+  return [...xml.matchAll(actionPattern)].some((actionMatch) => {
+    const actionXml = actionMatch[0];
+    const openingTag = actionXml.match(/^<edit-parameter-action\b[^>]*>/)?.[0];
+    if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
+      return false;
+    }
+    const aggTag = actionXml.match(/<agg-type\b[^>]*>/)?.[0];
+    const aggMatches = aggTag !== undefined && getAttr(aggTag, 'type') === aggregation;
+    const clearTag = actionXml.match(/<clear-option\b[^>]*>/)?.[0];
+    if (clearTag === undefined) {
+      return false;
+    }
+    // Assert only the clear-option TYPE, never its value. The type is author-controlled
+    // (do-nothing vs assign-fixed-value); the value is Desktop-owned. Field-observed: for
+    // type='do-nothing' Desktop discards the emitted value='s:LROOT:' and stamps the target
+    // parameter's own default in the param's datatype encoding (e.g. 'i:1' for an integer param),
+    // so demanding the emitted value round-trip made every default apply falsely fail readback.
+    const expectedClearType = clearValue === undefined ? 'do-nothing' : 'assign-fixed-value';
+    const clearMatches = getAttr(clearTag, 'type') === expectedClearType;
+    return aggMatches && clearMatches;
+  });
+}
+
 function nextActionName(xml: string): string {
   const used = new Set(
     [...xml.matchAll(/\bname=(['"])\[Action(\d+)[^\]]*\]\1/g)].map((match) => Number(match[2])),
@@ -826,6 +1030,8 @@ function renderParameterAction({
   sourceField,
   targetParameter,
   activation,
+  aggregation,
+  clearValue,
 }: {
   caption: string;
   actionName: string;
@@ -833,18 +1039,27 @@ function renderParameterAction({
   sourceField: string;
   targetParameter: string;
   activation: z.infer<typeof activationSchema>;
+  aggregation: string;
+  clearValue: string | undefined;
 }): string {
   const params: string[] = [];
   if (sourceField.trim().length > 0) {
     params.push(`<param name='source-field' value='${escapeXml(sourceField.trim())}' />`);
   }
   params.push(`<param name='target-parameter' value='${escapeXml(targetParameter.trim())}' />`);
+  const aggTypeXml = `<agg-type type='${escapeXml(aggregation)}' />`;
+  // Absent clearValue keeps the parameter unchanged on clear (do-nothing). A clearValue resets it
+  // to that fixed value; the s:LROOT: prefix is the encoding Tableau writes for the kept value.
+  const clearOptionXml =
+    clearValue === undefined
+      ? "<clear-option type='do-nothing' value='s:LROOT:' />"
+      : `<clear-option type='assign-fixed-value' value='s:LROOT:${escapeXml(clearValue)}' />`;
   return (
     `<edit-parameter-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
     renderActivation(activation) +
     `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
-    "<agg-type type='attr' />" +
-    "<clear-option type='do-nothing' value='s:LROOT:' />" +
+    aggTypeXml +
+    clearOptionXml +
     `<params>${params.join('')}</params>` +
     '</edit-parameter-action>'
   );

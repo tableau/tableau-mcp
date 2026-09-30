@@ -1,0 +1,8 @@
+{
+  "label": "Tableau Knowledge",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for querying, inspecting, and curating governed Tableau Knowledge context."
+  }
+}

@@ -9,7 +9,7 @@ sidebar_position: 2
 A guided, **destructive** Tableau Cloud admin workflow that identifies stale workbooks and published data sources, reports their owners to notify, and — only after explicit human approval — tags the approved items and deletes them to the recycle bin.
 
 :::warning[Admin Only · Destructive]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting. It drives destructive delete tools. The report, LUID-resolution, and notify steps are **read-only**: no content is written (tagged or deleted) until the user approves a specific item set at the required human-in-the-loop confirmation break.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable. It drives destructive delete tools. The report, LUID-resolution, and notify steps are **read-only**: no content is written (tagged or deleted) until the user approves a specific item set at the required human-in-the-loop confirmation break.
 :::
 
 ## Workflow
@@ -42,6 +42,10 @@ The prompt is parameterized over a content-type registry mapping each `itemType`
 
 ```bash
 ADMIN_TOOLS_ENABLED=true
+
+# Optional overrides (env vars)
+STALE_CONTENT_MIN_AGE_DAYS=90   # 1-3650; default 90
+STALE_CONTENT_MAX_ROWS=100      # 1-10000; default 100
 ```
 
 See also: [Environment Variables](../configuration/mcp-config/env-vars.md)

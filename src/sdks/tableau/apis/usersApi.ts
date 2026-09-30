@@ -58,6 +58,17 @@ const listUsersEndpoint = makeEndpoint({
       schema: z.boolean().optional(),
     },
     {
+      // Comma-separated list of user attributes to return, e.g.
+      // `id,name,fullName,siteRole,email,lastLogin`. Callers should name every
+      // field explicitly rather than relying on Tableau's default set, which on
+      // some sites silently omits lastLogin. Also accepts the special value
+      // `_all_`, though that pulls the more expensive SSO/authSetting path.
+      // @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_fields.htm
+      name: 'fields',
+      type: 'Query',
+      schema: z.string().optional(),
+    },
+    {
       name: 'includeUserCount',
       type: 'Query',
       schema: z.boolean().optional(),

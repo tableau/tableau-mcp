@@ -14,9 +14,33 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { startExpressServer } from './server/express.js';
+import {
+  connectSessionStore,
+  disconnectSessionStore,
+  initializeSessionStore,
+} from './sessionStore/init.js';
 import { resolveTransportProfile } from './transportProfile.js';
 
 const serverVersion = pkg.version;
+
+function registerSessionStoreShutdown(): void {
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, async () => {
+      try {
+        await disconnectSessionStore();
+        process.exit(0);
+      } catch (error) {
+        log({
+          message: 'Error closing session store during shutdown',
+          level: 'error',
+          logger: 'shutdown',
+          data: error,
+        });
+        process.exit(1);
+      }
+    });
+  }
+}
 
 // The shipped tableau-mcp-desktop binary now serves BOTH profiles from one artifact,
 // selected purely by TRANSPORT — so tab-agent-south can spawn the web/insights profile
@@ -69,6 +93,10 @@ async function startWebProfile(): Promise<void> {
 
   // Initialize feature gate provider
   initializeFeatureGate();
+
+  initializeSessionStore();
+  await connectSessionStore();
+  registerSessionStoreShutdown();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures. The port

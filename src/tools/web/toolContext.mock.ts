@@ -4,20 +4,20 @@ import { WebMcpServer } from '../../server.web.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
-  return {
+  const extra: any = {
     config: getConfig(),
     server: new WebMcpServer(),
     tableauAuthInfo: undefined,
     _siteLuid: 'test-site-luid',
     _userLuid: 'test-user-luid',
     getSiteLuid() {
-      return this._siteLuid ?? '';
+      return extra._siteLuid ?? '';
     },
     getSiteName() {
       return 'tc25';
     },
     getUserLuid() {
-      return this._userLuid ?? '';
+      return extra._userLuid ?? '';
     },
     setSiteLuid: vi.fn(),
     setUserLuid: vi.fn(),
@@ -27,4 +27,6 @@ export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
     sendNotification: vi.fn(),
     sendRequest: vi.fn(),
   };
+
+  return extra;
 }

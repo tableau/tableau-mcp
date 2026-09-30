@@ -67,11 +67,30 @@ automatically when building the view filter query.
 
 Example: `{ "year": "2017" }`
 
-## Example result
+## Response behavior
 
-- When `format` is `PNG`, the MCP result will contain the PNG image content (MCP result with
-  `type=image` and `mimeType=image/png`).
-- When `format` is `SVG`, the MCP result will contain both the SVG XML (`type=text`) and the SVG
-  image content (`type=image` and `mimeType=image/svg+xml`)
+The tool returns one of two result shapes:
+
+- **`MCP_S3_BUCKET` unset (default):** returns the rendered image inline, base64-encoded.
+  - When `format` is `PNG`, the MCP result will contain the PNG image content (MCP result with
+    `type=image` and `mimeType=image/png`).
+  - When `format` is `SVG`, the MCP result will contain both the SVG XML (`type=text`) and the SVG
+    image content (`type=image` and `mimeType=image/svg+xml`)
+- **`MCP_S3_BUCKET` set:** returns a `resource_link` with a short-lived presigned URL to the
+  rendered image in S3 (with `mimeType` matching `format`), instead of inlining the image data.
+
+## Example result (default)
 
 ![Superstore View Image](./superstore.png)
+
+## Example result (S3 mode)
+
+```json
+{
+  "type": "resource_link",
+  "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "name": "view-image.png",
+  "mimeType": "image/png",
+  "description": "Rendered view image stored in S3. This is a short-lived presigned URL."
+}
+```

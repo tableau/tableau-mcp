@@ -56,23 +56,38 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
 };
 
 export const maskResponse = (response: ResponseInterceptorConfig): MaskedResponse => {
+  if (!shouldNotifyWhenLevelIsAtLeast('debug')) {
+    const { data: _data, headers: _headers, ...maskedResponse } = response;
+    return maskedResponse;
+  }
+
+  if (isBinaryLike(response.data)) {
+    return {
+      ...response,
+      data: {
+        redacted: true,
+        reason: 'binary-payload',
+        byteLength: response.data.byteLength,
+      },
+    };
+  }
+
   const result = clone<MaskedResponse>(response);
   if (result.isErr()) {
     return response;
   }
 
   const maskedData = result.value;
-  if (shouldNotifyWhenLevelIsAtLeast('debug')) {
-    if (maskedData.data?.credentials) {
-      maskedData.data.credentials = '<redacted>';
-    }
-  } else {
-    delete maskedData.data;
-    delete maskedData.headers;
+  if (maskedData.data?.credentials) {
+    maskedData.data.credentials = '<redacted>';
   }
 
   return maskedData;
 };
+
+function isBinaryLike(value: unknown): value is ArrayBuffer | ArrayBufferView {
+  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+}
 
 function clone<T>(obj: T): Result<T, Error> {
   try {

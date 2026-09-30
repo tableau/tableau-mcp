@@ -32,6 +32,7 @@ contents hosting service.
 To run a link checker locally, this is one way to do it using the Python [linkchecker](https://github.com/linkchecker/linkchecker) project:
 
 ```bash
+cd docs
 npm install
 npm run build
 npm run serve

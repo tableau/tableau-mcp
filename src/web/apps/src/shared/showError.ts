@@ -1,7 +1,10 @@
+import type { App } from '@modelcontextprotocol/ext-apps';
+
 import DISCONNECTED_SVG from './assets/disconnected.svg?raw';
+import { type McpAppEventType, recordEvent, toMessage } from './recordEventClient.js';
 import { TABLEAU_VIZ_CONTAINER_ID } from './vizContainer.js';
 
-export type Scenario = 'TOOL_ERROR' | 'PARSE_ERROR' | 'AUTH_ERROR' | 'EMBED_LOAD_ERROR';
+export type Scenario = Exclude<McpAppEventType, 'OPEN_IN_TABLEAU_CLICKED' | 'FULLSCREEN_CLICKED'>;
 
 const ERROR_HEADING = 'Unable to load this Tableau view';
 
@@ -28,14 +31,20 @@ const ERROR_UI: Record<Scenario, { detail: string; logCode: string }> = {
  * Shows an error message in the tableau viz container
  * @param scenario - The error scenario to display
  * @param cause - Optional error that caused this scenario
+ * @param app - Optional MCP App instance for telemetry reporting
  */
-export function showError(scenario: Scenario, cause?: unknown): void {
+export function showError(scenario: Scenario, cause?: unknown, app?: App): void {
+  // Report telemetry first (best-effort), so errors are recorded even when the
+  // container is missing and the error UI cannot be rendered. The cause is passed
+  // as the event detail (populates the telemetry `message` field).
+  if (app) {
+    recordEvent(app, scenario, cause);
+  }
+
   const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
   if (!container) {
     return;
   }
-
-  console.error(ERROR_UI[scenario].logCode, cause);
 
   const errorElement = document.createElement('div');
   errorElement.className = 'mcp-app-error';
@@ -61,6 +70,20 @@ export function showError(scenario: Scenario, cause?: unknown): void {
   messageElement.textContent = ERROR_UI[scenario].detail;
 
   textWrapper.append(headingElement, messageElement);
+
+  // Show the cause as an additional, secondary line when present. toMessage()
+  // safely stringifies unknown causes (Error -> .message, else String(cause));
+  // a blank/whitespace-only result is treated as "no cause" to keep the card clean.
+  const causeText = toMessage(cause)?.trim();
+  if (causeText) {
+    const causeElement = document.createElement('p');
+    causeElement.className = 'mcp-app-error-cause';
+    // Safe to use textContent here: cause may contain arbitrary/server-provided
+    // text and must never be interpreted as HTML.
+    causeElement.textContent = causeText;
+    textWrapper.append(causeElement);
+  }
+
   errorElement.append(iconWrapper, textWrapper);
   container.replaceChildren(errorElement);
 }

@@ -13,6 +13,9 @@ agent-to-Tableau communication, enabling users to bring their Tableau data into 
 
 Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `https://mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
 
+> Running more than one Tableau MCP server, or seeing a confusing "not configured"/`401` error?
+> See [Running Multiple Servers & Diagnosing Auth Errors](configuration/mcp-config/multiple-servers.md).
+
 Follow along and share ideas with the Tableau MCP team by creating issues or discussions on the
 repository. You can also join the [Tableau Developer Platform](https://www.tableau.com/developer)
 and reach out in the [#tableau-ai-solutions](https://tableau-datadev.slack.com/archives/C07LMAVG4N6)
@@ -43,11 +46,19 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-flows](tools/flows/list-flows.md)                                                                               | Retrieves a list of Tableau Prep flows from a specified Tableau site ([REST API][list-flows])                       | All SKUs     |
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches datasource metadata including table relationships, datasource and field descriptions, field roles and types, calculation strings, and parameters for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         | All SKUs\*   |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        | All SKUs     |
+| [download-workbook](tools/workbooks/download-workbook.md)                                                             | Downloads workbook content as TWB (XML) or TWBX (packaged) and returns a file link ([REST API][download-workbook])                 | All SKUs     |
 | [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
+| [list-flow-runs](tools/flows/list-flow-runs.md)                                                                       | Retrieves the run history (executions) of Tableau Prep flows on a site ([REST API][list-flow-runs])                                 | All SKUs     |
+| [list-flow-tasks](tools/flows/list-flow-tasks.md)                                                                     | Retrieves the scheduled flow run tasks (schedules) for Tableau Prep flows on a site ([REST API][list-flow-tasks])                   | All SKUs     |
+| [describe-flow](tools/flows/describe-flow.md)                                                                         | Summarizes a Tableau Prep flow's design — inputs, outputs, steps, lineage, and connections ([REST API][describe-flow])               | All SKUs     |
+| [get-flow-task](tools/flows/get-flow-task.md)                                                                         | Retrieves a single scheduled flow run task by id ([REST API][get-flow-task])                                        | All SKUs     |
+| [run-flow](tools/flows/run-flow.md)                                                                                   | Opt-in mutating tool. Runs a Tableau Prep flow on demand, returning the async job ([REST API][run-flow-now])        | All SKUs     |
+| [run-flow-task](tools/flows/run-flow-task.md)                                                                         | Opt-in mutating tool. Runs an existing scheduled flow run task now, returning the async job ([REST API][run-flow-task]) | All SKUs     |
+| [cancel-flow-run](tools/flows/cancel-flow-run.md)                                                                     | Opt-in mutating tool. Requests cancellation of a queued or in-progress flow run by flow run id; poll for the final status ([REST API][cancel-flow-run]) | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
-| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed in the 26.3 fall release.* ([REST API][get-view-data])               | All SKUs     |
+| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data for the specified view in a Tableau workbook. Tableau REST API 3.30 and later returns all server-exported sheet parts; earlier versions return CSV for the requested worksheet, or the first worksheet of a dashboard. ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
-| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves data in CSV format for the specified custom view in a Tableau workbook. *Note: the same limitation of get-view-data exists for this tool.* ([REST API][get-custom-view-data]) | All SKUs     |
+| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves CSV data for the specified custom view in a Tableau workbook. A dashboard-based custom view returns its first worksheet. ([REST API][get-custom-view-data]) | All SKUs     |
 | [get-custom-view-image](tools/views/get-custom-view-image.md)                                                         | Retrieves an image for a saved custom view ([REST API][get-custom-view-image])                                      | All SKUs     |
 | [query-datasource](tools/data-qna/query-datasource.md)                                                                | Retrieves json formatted data from a published data source by executing VizQL Data Service requests ([VDS API][vds]) | All SKUs     |
 | [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | Lists all Pulse metric definitions on a specific Tableau Cloud site. ([Pulse API][pulse])                           | All SKUs     |
@@ -62,8 +73,12 @@ Slack channel in the Tableau #DataDev workspace.
 | [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Confirm-gated update of an extract refresh task schedule on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) | All SKUs     |
 | [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      | All SKUs     |
 | [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
-| [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
+| [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, TS Users, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
+| [query-knowledge-context](tools/knowledge/query-knowledge-context.md)                                                | Queries governed definitions, relationships, lineage, impact, and graph sources through one read-only tool | Tableau+ only |
+| [inspect-knowledge-context](tools/knowledge/inspect-knowledge-context.md)                                            | Inspects graph status, semantic context, health, and improvement suggestions without changing the graph | Tableau+ only |
+| [manage-knowledge-context](tools/knowledge/manage-knowledge-context.md)                                              | Creates, updates, or deletes customer-governed semantic context | Tableau+ only |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
+| [scaffold-data-app](tools/data-apps/scaffold-data-app.md)                                                             | Disabled by default (`data-apps` feature flag). Scaffolds a starter Tableau data app (viz extension) workspace from a template — no REST API                                                      | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
 
@@ -81,12 +96,27 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flows_for_site
 [get-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+[download-workbook]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
 [get-flow]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flow
+[list-flow-runs]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_runs
+[list-flow-tasks]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_tasks
+[describe-flow]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm
 [delete-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_data_source
+[get-flow-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
+[run-flow-now]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_now
+[run-flow-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_task
+[cancel-flow-run]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#cancel_flow_run
 [get-view-data]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data
 [get-view-image]:
@@ -117,7 +147,7 @@ Prompts orchestrate multiple tools into a guided admin workflow. They are gated 
 
 | **Prompt**                                                                    | **Description**                                                                                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| [stale-content-cleanup-inform](prompts/stale-content-cleanup-inform.md)       | Admin-only. Read-only. Generates a stale-content report by calling `get-stale-content-report`.                          |
+| [stale-content-cleanup-inform](prompts/stale-content-cleanup-inform.md)       | Admin-only. Read-only. Generates a stale-content report by calling `query-admin-insights` with `kind: "stale-content"`. |
 | [stale-content-cleanup-apply](prompts/stale-content-cleanup-apply.md)         | Admin-only. Destructive. Tags stale content, reports owners to notify, and — after a required human-confirmation break — deletes approved items to the recycle bin. |
 | [job-optimization-inform](prompts/job-optimization-inform.md)                 | Admin-only. Read-only. Analyzes Admin Insights job performance and surfaces optimization signals.                       |
 | [extract-optimization-apply](prompts/extract-optimization-apply.md)           | Admin-only. Destructive. Applies schedule downgrades and deletions to extract refresh tasks after a required human-confirmation break; defaults to a dry-run report. |

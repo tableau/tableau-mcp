@@ -5,6 +5,8 @@ import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { getAgent, getMcpServer, getModel, getToolExecutions } from './base.js';
 
+dotenv.config({ path: 'tests/eval/.env' });
+
 /**
  * Description-quality evals for the flows tools.
  *
@@ -24,6 +26,8 @@ import { getAgent, getMcpServer, getModel, getToolExecutions } from './base.js';
 const agentSystemPrompt = `
   You are an assistant responsible for evaluating the results of calling various tools.
   Given the user's query, use the tools available to you to answer the question.`;
+
+const mutatingFlowEvalIt = process.env.ALLOW_MUTATING_FLOW_EVALS === 'true' ? it : it.skip;
 
 async function runAgentWithTools(
   mcpServer: MCPServerStdio,
@@ -49,13 +53,17 @@ describe('flows tool descriptions (eval)', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  beforeAll(async () => {
-    dotenv.config({ path: 'tests/eval/.env' });
-  });
-
   beforeEach(async () => {
-    // Flow tools are gated off by default (FLOW_TOOLS_ENABLED); opt in for this eval.
-    mcpServer = await getMcpServer({ ...getDefaultEnv(), FLOW_TOOLS_ENABLED: 'true' });
+    // Flow tools are gated off by default behind both FLOW_TOOLS_ENABLED and the flow-tools
+    // feature flag; opt in to both for this eval.
+    mcpServer = await getMcpServer({
+      ...getDefaultEnv(),
+      FLOW_TOOLS_ENABLED: 'true',
+      FEATURE_GATE_PROVIDER: 'custom',
+      FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+        module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',
+      }),
+    });
   });
 
   afterEach(async () => {
@@ -99,4 +107,114 @@ describe('flows tool descriptions (eval)', () => {
     expect(getFlow.arguments.includeFlowRuns).not.toBe(false);
     expect(Number(getFlow.arguments.flowRunLimit ?? 10)).toBeLessThanOrEqual(3);
   });
+
+  it('list-flow-runs: derives a status=Failed filter for a cross-flow failure question', async () => {
+    const prompt =
+      'Across all my Tableau Prep flows, which runs have failed? Just list the failed runs; no analysis.';
+
+    const stream = await runAgentWithTools(mcpServer, getModel(), prompt);
+    const toolExecutions = await getToolExecutions(stream);
+
+    const listFlowRuns = toolExecutions.find(
+      (toolExecution) => toolExecution.name === 'list_flow_runs',
+    );
+    invariant(listFlowRuns, 'list_flow_runs tool execution not found');
+
+    // A cross-flow "which runs failed" question is the dedicated run-history
+    // tool's job (not get-flow, which targets one flow), and `status` is the
+    // discriminating filter. It is client-side, but the model should still pass
+    // it so the tool can apply it.
+    const filter = String(listFlowRuns.arguments.filter ?? '');
+    expect(filter).toContain('status:');
+    expect(filter).toContain('Failed');
+  });
+
+  it('list-flow-tasks: selects the schedule tool for a "how often / next run" question', async () => {
+    const prompt =
+      'How often is each of my Tableau Prep flows scheduled to run, and when do they run next? Just list the schedules.';
+
+    const stream = await runAgentWithTools(mcpServer, getModel(), prompt);
+    const toolExecutions = await getToolExecutions(stream);
+
+    // "Scheduled to run / next run" is the flow-tasks (schedule) tool, NOT
+    // list-flow-runs (past executions) or get-flow (single-flow metadata).
+    const listFlowTasks = toolExecutions.find(
+      (toolExecution) => toolExecution.name === 'list_flow_tasks',
+    );
+    invariant(listFlowTasks, 'list_flow_tasks tool execution not found');
+  });
+
+  // Mutating flow tool evals are skipped by default because they invoke real tools against
+  // the configured site. Set ALLOW_MUTATING_FLOW_EVALS=true and FLOW_WRITE_TOOLS_ENABLED=true to run.
+  async function getToolExecutionsWithWriteTools(
+    prompt: string,
+  ): Promise<Awaited<ReturnType<typeof getToolExecutions>>> {
+    if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      throw new Error(
+        'Mutating flow evals require FLOW_WRITE_TOOLS_ENABLED=true in addition to ALLOW_MUTATING_FLOW_EVALS=true.',
+      );
+    }
+
+    const writeServer = await getMcpServer({
+      ...getDefaultEnv(),
+      FLOW_TOOLS_ENABLED: 'true',
+      FLOW_WRITE_TOOLS_ENABLED: process.env.FLOW_WRITE_TOOLS_ENABLED,
+      FEATURE_GATE_PROVIDER: 'custom',
+      FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+        module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',
+      }),
+    });
+    try {
+      const stream = await runAgentWithTools(writeServer, getModel(), prompt);
+      return await getToolExecutions(stream);
+    } finally {
+      await writeServer.close();
+    }
+  }
+
+  mutatingFlowEvalIt(
+    'run-flow: selects run-flow (by flow id) for an ad-hoc "run this flow now" request',
+    async () => {
+      const flowId = 'd00700fe-28a0-4ece-a7af-5543ddf38a82';
+      const prompt = `Run the Tableau Prep flow with id ${flowId} right now. Just trigger it.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      const runFlow = toolExecutions.find(
+        (toolExecution) =>
+          toolExecution.name === 'run_flow' && toolExecution.arguments.flowId === flowId,
+      );
+      invariant(runFlow, 'run_flow tool execution not found');
+    },
+  );
+
+  mutatingFlowEvalIt(
+    'run-flow-task: selects run-flow-task (by task id) when asked to trigger an existing schedule',
+    async () => {
+      const taskId = '1bff10bb-57ae-43df-8774-a86d14aef432';
+      const prompt = `Trigger the existing scheduled flow task ${taskId} now.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      const runFlowTask = toolExecutions.find(
+        (toolExecution) => toolExecution.name === 'run_flow_task',
+      );
+      invariant(runFlowTask, 'run_flow_task tool execution not found');
+    },
+  );
+
+  mutatingFlowEvalIt(
+    'cancel-flow-run: selects cancel-flow-run for a request to stop an active run',
+    async () => {
+      const flowRunId = '1bff10bb-57ae-43df-8774-a86d14aef432';
+      const prompt = `Cancel the active Tableau Prep flow run ${flowRunId}.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      const cancelFlowRun = toolExecutions.find(
+        (toolExecution) => toolExecution.name === 'cancel_flow_run',
+      );
+      invariant(cancelFlowRun, 'cancel_flow_run tool execution not found');
+    },
+  );
 });

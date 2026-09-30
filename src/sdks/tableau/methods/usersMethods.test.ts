@@ -136,6 +136,30 @@ describe('UsersMethods', () => {
       });
     });
 
+    it('should forward the fields query param to the API client', async () => {
+      const mockApiClient = {
+        listUsers: vi.fn().mockResolvedValue({
+          users: { user: [] },
+        }),
+      };
+
+      const usersMethods = new UsersMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      usersMethods._apiClient = mockApiClient;
+
+      await usersMethods.listUsers({
+        siteId: 'site-1',
+        fields: 'id,name,fullName,siteRole,email,lastLogin',
+      });
+
+      expect(mockApiClient.listUsers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: { siteId: 'site-1' },
+          queries: expect.objectContaining({ fields: 'id,name,fullName,siteRole,email,lastLogin' }),
+        }),
+      );
+    });
+
     it('should handle users with different site roles', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({

@@ -11,9 +11,9 @@ Permanently deletes a workbook, published data source, or extract refresh task. 
 - `datasource` — deletes a published data source (recoverable via recycle bin; warns on downstream dependents)
 - `extract-refresh-task` — deletes an extract refresh task schedule (permanent, not recoverable)
 
-The tool is **admin-only** — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at
-request time it verifies the caller's site role and rejects anything below
-`SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
+:::warning[Admin Only]
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
+:::
 
 
 ## Two-phase safety
@@ -36,7 +36,7 @@ The tool is **two-phase** to keep the destructive action safe:
      preview.
    - Performs the deletion.
 
-:::warning Human confirmation required
+:::warning[Human confirmation required]
 Between the preview and the confirm, the calling agent is instructed to surface the resource
 identity to the user and obtain explicit approval. This is a prompt-level expectation; the
 tag/nonce gate proves a preview ran but cannot observe whether a human actually approved.

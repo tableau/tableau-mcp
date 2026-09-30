@@ -7,6 +7,11 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import {
+  isSessionStoreProvider,
+  providerConfigSchema as sessionStoreProviderConfigSchema,
+  SessionStoreConfig,
+} from './sessionStore/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
@@ -73,11 +78,21 @@ export class Config extends BaseConfig {
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
   featureGate: FeatureGateConfig;
+  sessionStore: SessionStoreConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
+  flowWriteToolsEnabled: boolean;
+  bucketS3: {
+    enabled: boolean;
+    bucket: string;
+    region: string;
+    keyPrefix: string;
+    presignTtlSeconds: number;
+  };
 
   constructor() {
     super();
@@ -136,6 +151,8 @@ export class Config extends BaseConfig {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
+      SESSION_STORE_PROVIDER: sessionStoreProvider,
+      SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
@@ -145,6 +162,11 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
+      MCP_S3_BUCKET: bucketS3Bucket,
+      AWS_DEFAULT_REGION: awsDefaultRegion,
+      MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
+      FILE_TTL: bucketS3PresignTtlSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -301,15 +323,60 @@ export class Config extends BaseConfig {
       };
     }
 
+    // Session store provider configuration (similar to feature gate provider)
+    if (isSessionStoreProvider(sessionStoreProvider) && sessionStoreProvider === 'custom') {
+      if (!sessionStoreProviderConfig) {
+        throw new Error(
+          'SESSION_STORE_PROVIDER_CONFIG is required when SESSION_STORE_PROVIDER is "custom"',
+        );
+      }
+      this.sessionStore = {
+        provider: 'custom',
+        providerConfig: sessionStoreProviderConfigSchema.parse(
+          JSON.parse(sessionStoreProviderConfig),
+        ),
+      };
+    } else {
+      this.sessionStore = {
+        provider: 'memory',
+      };
+    }
+
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
-    // Flow tools are gated off by default while flow rollouts are staged into
-    // production; set FLOW_TOOLS_ENABLED=true to register them.
+    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
+    // while flow rollouts are staged into production. Registering them requires both
+    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
+
+    // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
+    // upload the payload (rendered image or CSV) to S3 and return a short-lived
+    // presigned URL instead of inlining base64/text. AWS credentials are
+    // resolved via the default AWS SDK credential chain (IAM role / instance
+    // profile / standard AWS_* env vars), so no credentials are read here. When
+    // unset, the tools fall back to returning the payload inline (unchanged
+    // behavior).
+    //
+    // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each tool
+    // appends its own segment (e.g. `view-images/`, `view-data/`), so an unset
+    // base falls back to the per-tool default rather than a global one.
+    const bucketS3BucketValue = bucketS3Bucket?.trim() ?? '';
+    this.bucketS3 = {
+      enabled: !!bucketS3BucketValue,
+      bucket: bucketS3BucketValue,
+      region: awsDefaultRegion?.trim() || '',
+      keyPrefix: bucketS3KeyPrefix?.trim() || '',
+      presignTtlSeconds: parseNumber(bucketS3PresignTtlSeconds, {
+        defaultValue: 60,
+        minValue: 5,
+        maxValue: 900,
+      }),
+    };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

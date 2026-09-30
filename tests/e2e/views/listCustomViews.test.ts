@@ -70,13 +70,13 @@ describe('list-custom-views', () => {
     });
   });
 
-  it('should list custom views with pageSize and limit', async () => {
+  it('should list custom views with limit', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
     const customViews = await client.callTool('list-custom-views', {
       schema: z.array(customViewSchema),
-      toolArgs: { workbookId: superstore.id, pageSize: 5, limit: 10 },
+      toolArgs: { workbookId: superstore.id, limit: 10 },
     });
 
     expect(customViews).toHaveLength(1);

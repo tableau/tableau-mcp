@@ -6,9 +6,15 @@ import {
   updateCloudExtractRefreshTaskRequestSchema,
   updateCloudExtractRefreshTaskResponseSchema,
 } from '../types/extractRefreshTask.js';
+import { flowRunTaskSchema } from '../types/flowRunTask.js';
+import { runFlowJobResponseSchema } from '../types/job.js';
 
 const taskEntrySchema = z.object({
   extractRefresh: extractRefreshTaskSchema,
+});
+
+const flowRunTaskEntrySchema = z.object({
+  flowRun: flowRunTaskSchema,
 });
 
 /**
@@ -56,6 +62,58 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
     },
   ],
   response: listExtractRefreshTasksBodySchema,
+});
+
+/**
+ * Tableau API response schema for "Get Flow Run Tasks", normalized the same way
+ * as {@link listExtractRefreshTasksBodySchema}:
+ * - `{ tasks: { task: [...] } }` → as-is
+ * - `{ tasks: { task: {...} } }` → wrapped in an array
+ * - `{ tasks: [...] }` → normalized to `{ tasks: { task: [...] } }`
+ * - `{ tasks: {} }` → normalized to `{ tasks: { task: [] } }`
+ */
+const getFlowRunTasksBodySchema = z.object({
+  tasks: z.union([
+    z.object({
+      task: z.union([
+        z.array(flowRunTaskEntrySchema),
+        flowRunTaskEntrySchema.transform((task) => [task]),
+      ]),
+    }),
+    z.array(flowRunTaskEntrySchema).transform((tasks) => ({ task: tasks })),
+    z.object({}).transform(() => ({ task: [] })),
+  ]),
+});
+
+export type GetFlowRunTasksBody = z.infer<typeof getFlowRunTasksBodySchema>;
+
+/** Parse response using Zod schema with built-in transforms for normalization. */
+export function parseGetFlowRunTasksResponse(raw: unknown): GetFlowRunTasksBody {
+  return getFlowRunTasksBodySchema.parse(raw);
+}
+
+/**
+ * Get Flow Run Tasks
+ * GET /api/api-version/sites/site-id/tasks/runFlow
+ * Returns the list of scheduled flow run tasks for the site. Each task describes
+ * the schedule for a flow (frequency, next run time) plus the flow it targets.
+ * Tableau Cloud scope: tableau:flow_tasks:read
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_tasks
+ */
+const getFlowRunTasksEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/tasks/runFlow',
+  alias: 'getFlowRunTasks',
+  description:
+    'Returns the list of scheduled flow run tasks for the site. Each task includes the flow it targets and schedule information (frequency, next run time).',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: getFlowRunTasksBodySchema,
 });
 
 /**
@@ -119,9 +177,57 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
   response: updateCloudExtractRefreshTaskResponseSchema,
 });
 
+const getFlowRunTaskEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/tasks/runFlow/:taskId',
+  alias: 'getFlowRunTask',
+  description: 'Returns a single scheduled flow run task by id.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.object({
+    task: z.object({
+      flowRun: flowRunTaskSchema,
+    }),
+  }),
+});
+
+const runFlowTaskEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/tasks/runFlow/:taskId/runNow',
+  alias: 'runFlowTask',
+  description:
+    'Runs an existing scheduled flow run task immediately and returns the async background job.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: runFlowJobResponseSchema,
+});
+
 const tasksApi = makeApi([
   listExtractRefreshTasksEndpoint,
+  getFlowRunTasksEndpoint,
   deleteExtractRefreshTaskEndpoint,
   updateCloudExtractRefreshTaskEndpoint,
+  getFlowRunTaskEndpoint,
+  runFlowTaskEndpoint,
 ]);
 export const tasksApis = [...tasksApi] as const satisfies ZodiosEndpointDefinitions;

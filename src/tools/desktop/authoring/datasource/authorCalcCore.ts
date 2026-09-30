@@ -1174,6 +1174,8 @@ export type WorkbookParameter = {
   name: string;
   /** Display caption when present, e.g. "p.Period". */
   caption?: string;
+  /** Datatype from the `<column datatype=...>` tag, e.g. "string", "integer", "real". */
+  datatype?: string;
 };
 
 /**
@@ -1200,9 +1202,11 @@ export function findWorkbookParameters(xml: string): WorkbookParameter[] {
       continue;
     }
     const caption = getAttr(tag, 'caption');
+    const datatype = getAttr(tag, 'datatype');
     parameters.push({
       name: unescapeXml(name),
       ...(caption === undefined ? {} : { caption: unescapeXml(caption) }),
+      ...(datatype === undefined ? {} : { datatype: unescapeXml(datatype) }),
     });
   }
   return parameters;

@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import {
+  applyClientSideFilters,
+  matchesClientSideFilter,
+} from '../../../utils/clientSideFilter.js';
+import {
   FilterOperator,
   FilterOperatorSchema,
   parseAndValidateFilterString,
@@ -68,26 +72,11 @@ export function applyTaskFilters(
   tasks: ExtractRefreshTask[],
   filterString: string | undefined,
 ): ExtractRefreshTask[] {
-  if (!filterString) {
-    return tasks;
-  }
-
-  // Parse and validate the filter string
-  const validatedFilter = parseAndValidateExtractRefreshTasksFilterString(filterString);
-  const filters = validatedFilter.split(',').map((f) => {
-    const [field, operator, ...valueParts] = f.split(':');
-    return {
-      field: field as FilterField,
-      operator: operator as FilterOperator,
-      value: valueParts.join(':'),
-    };
-  });
-
-  return tasks.filter((task) => {
-    return filters.every(({ field, operator, value }) => {
-      const fieldValue = getFieldValue(task, field);
-      return matchesFilter(fieldValue, operator, value);
-    });
+  return applyClientSideFilters({
+    items: tasks,
+    filterString,
+    validateFilterString: parseAndValidateExtractRefreshTasksFilterString,
+    getFieldValue,
   });
 }
 
@@ -124,46 +113,9 @@ function getFieldValue(task: ExtractRefreshTask, field: FilterField): string | n
   }
 }
 
-function matchesFilter(
-  fieldValue: string | number | undefined,
-  operator: FilterOperator,
-  filterValue: string,
-): boolean {
-  if (fieldValue === undefined || fieldValue === null) {
-    return false;
-  }
-
-  const fieldStr = String(fieldValue);
-
-  switch (operator) {
-    case 'eq':
-      return fieldStr === filterValue;
-    case 'in':
-      return filterValue.split('|').includes(fieldStr);
-    case 'gt':
-      return typeof fieldValue === 'number'
-        ? fieldValue > Number(filterValue)
-        : fieldStr > filterValue;
-    case 'gte':
-      return typeof fieldValue === 'number'
-        ? fieldValue >= Number(filterValue)
-        : fieldStr >= filterValue;
-    case 'lt':
-      return typeof fieldValue === 'number'
-        ? fieldValue < Number(filterValue)
-        : fieldStr < filterValue;
-    case 'lte':
-      return typeof fieldValue === 'number'
-        ? fieldValue <= Number(filterValue)
-        : fieldStr <= filterValue;
-    default:
-      return false;
-  }
-}
-
 export const exportedForTesting = {
   FilterFieldSchema,
   applyTaskFilters,
   getFieldValue,
-  matchesFilter,
+  matchesFilter: matchesClientSideFilter,
 };

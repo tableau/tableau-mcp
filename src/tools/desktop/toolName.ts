@@ -82,8 +82,6 @@ export const desktopToolNames = [
   'get-datasource-info',
   'get-datasource-xml',
   'apply-datasource',
-  'list-site-datasources',
-  'list-site-workbooks',
   'get-app-info',
   'validate-worksheet-xml',
   'validate-workbook-xml',
@@ -102,7 +100,6 @@ export const desktopToolNames = [
   'add-dashboard',
   'add-storyboard',
   'compose-story',
-  'publish-workbook',
   'refresh-datasource-data',
   'refresh-datasource-extract',
 ] as const;

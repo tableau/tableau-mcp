@@ -12,6 +12,10 @@ suspicious activity, or performing clean session teardown from an MCP client or 
 For full OAuth cleanup, call [`reset-consent`](reset-consent.md) before `revoke-access-token`.
 Revocation invalidates the token required to authenticate the consent reset request.
 
+## Availability
+
+This tool is only registered when `AUTH=oauth`. It is unavailable for other authentication types (`pat`, `uat`, `direct-trust`).
+
 ## Arguments
 
 This tool requires no input. It operates on the authentication context already associated with the

@@ -5,8 +5,8 @@ import { expect, test } from './base.js';
 
 test.describe('list-datasources', () => {
   test('list datasources', async ({ client }) => {
-    const datasources = await client.callTool('list-datasources', {
-      schema: z.array(dataSourceSchema),
+    const { data: datasources } = await client.callTool('list-datasources', {
+      schema: z.object({ data: z.array(dataSourceSchema), totalAvailable: z.number() }),
     });
 
     expect(datasources.length).toBeGreaterThan(0);

@@ -3,8 +3,14 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import {
+  AdminOnlyError,
+  DatasourceNotAllowedError,
+  ServiceUnavailableError,
+  ZodiosValidationError,
+} from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
+import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import invariant from '../../utils/invariant.js';
@@ -35,6 +41,7 @@ describe('Tool', () => {
   const mockParams = {
     server: new WebMcpServer(),
     name: 'get-datasource-metadata',
+    minRequiredRole: SiteRole.VIEWER,
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),
@@ -79,6 +86,8 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
+    vi.stubEnv('LOG_LEVEL', 'debug'); // Enable debug logs for this test
+
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
@@ -86,6 +95,7 @@ describe('Tool', () => {
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'notifyInvocation');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -108,6 +118,32 @@ describe('Tool', () => {
         param1: 'test',
       },
     });
+
+    // Assert that the invocation log line carries populated LUID fields
+    const logLines = stderrSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(call[0] as string);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null);
+
+    const invocationLogCall = logLines.find(
+      (entry) => entry.logger === 'tool' && entry.message?.includes('invoked'),
+    );
+
+    expect(invocationLogCall).toBeDefined();
+    expect(invocationLogCall).toMatchObject({
+      message: expect.stringContaining('get-datasource-metadata'),
+      level: 'debug',
+      logger: 'tool',
+      site_luid: 'test-site-luid',
+      user_luid: 'test-user-luid',
+    });
+
+    stderrSpy.mockRestore();
   });
 
   it('should return error result when callback throws', async () => {
@@ -203,6 +239,112 @@ describe('Tool', () => {
     expect(result.content[0].text).toBe('An error occurred');
   });
 
+  // W-23757363: a bare "Request failed with status code 401" was being paraphrased by the model
+  // into a misleading "feature not configured" message. A raw REST 401/403 thrown from the callback
+  // must be classified into clear, self-explanatory guidance naming the targeted site + pod.
+  describe('auth error classification (W-23757363)', () => {
+    it('should return clear authentication guidance naming site + pod on a raw 401', async () => {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 401');
+      axiosError.response = { status: 401 } as AxiosError['response'];
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text).toContain('Authentication failed (401)');
+      expect(text).toContain('missing, invalid, or expired');
+      expect(text).toContain('site "tc25"');
+      expect(text).toContain('pod "https://my-tableau-server.com"');
+      expect(text).toContain('verify the request targeted the intended server');
+      // Never leaks the raw axios message the model was misreading.
+      expect(text).not.toBe('requestId: 2, error: Request failed with status code 401');
+    });
+
+    it('should return clear permission guidance on a raw 403', async () => {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 403');
+      axiosError.response = { status: 403 } as AxiosError['response'];
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text).toContain('Permission denied (403)');
+      expect(text).toContain('may lack the required site role or permission');
+      expect(text).toContain('site "tc25"');
+    });
+
+    it('should NOT reclassify a curated McpToolError that carries its own 403 message', async () => {
+      const tool = new WebTool(mockParams);
+      const message =
+        'This tool requires site administrator permissions. Your site role is: Viewer';
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new AdminOnlyError(message);
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(`requestId: 2, error: ${message}`);
+    });
+
+    it('should leave a non-auth McpToolError (503) with its generic result', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new ServiceUnavailableError('Temporarily unavailable');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('requestId: 2, error: Temporarily unavailable');
+    });
+
+    it('should leave a plain Error (no HTTP status) with its generic result', async () => {
+      const tool = new WebTool(mockParams);
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw new Error('Something unexpected happened');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('requestId: 2, error: Something unexpected happened');
+    });
+  });
+
   describe('product telemetry', () => {
     beforeEach(() => {
       mockTelemetrySend.mockClear();
@@ -230,6 +372,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+          error_message: '',
         }),
       );
     });
@@ -252,6 +395,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: false,
           error_code: '500',
+          error_message: 'requestId: 2, error: Callback failed',
         }),
       );
     });
@@ -347,6 +491,7 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: clientId,
           oauth_client_display_name: 'Claude',
+          auth_type: 'tableau-oauth',
         }),
       );
     });
@@ -386,6 +531,8 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: '',
           oauth_client_display_name: '',
+          // mockExtra has no tableauAuthInfo, so auth_type falls through to config.auth ('pat' in tests).
+          auth_type: 'pat',
         }),
       );
     });
@@ -582,6 +729,16 @@ describe('Tool', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Expected string, received object');
+
+      // The passthrough result carries the full API payload but is isError: false, so it must
+      // NOT leak into telemetry's error_message (keyed off isError, not the false `success`).
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_message: '',
+        }),
+      );
     });
 
     it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {

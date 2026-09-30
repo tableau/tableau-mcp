@@ -10,6 +10,15 @@ query.
 ## APIs called
 
 - [Get Content Search Results](https://help.tableau.com/current/api/rest_api/en-us/REST/TAG/index.html#tag/Content-Exploration-Methods/operation/ContentExplorationService_getSearch)
+- [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html) — used to
+  enrich `workbook` and `view` results with `upstreamDatasources` lineage (see below)
+
+## Environment variables
+
+- [`DISABLE_METADATA_API_REQUESTS`](../../configuration/mcp-config/env-vars.md#disable_metadata_api_requests)
+
+  When set, the tool skips the Metadata API lineage-enrichment call and `upstreamDatasources` is
+  omitted from `workbook`/`view` results.
 
 ## Optional arguments
 
@@ -114,6 +123,9 @@ Example:
 
 ## Example result
 
+`workbook` and `view` results may also include an `upstreamDatasources` array (each entry
+`{ "luid": "...", "name": "..." }`) when lineage enrichment succeeds — see [APIs called](#apis-called).
+
 ```json
 [
   {
@@ -128,7 +140,13 @@ Example:
     "favoritesTotal": 1,
     "viewCountLastMonth": 105,
     "hasExtracts": true,
-    "extractCreationPending": false
+    "extractCreationPending": false,
+    "upstreamDatasources": [
+      {
+        "luid": "2d935df8-fe7e-4fd8-bb14-35eb4ba31d45",
+        "name": "Superstore Datasource"
+      }
+    ]
   },
   {
     "modifiedTime": "2025-08-28T20:11:05.699Z",
@@ -144,7 +162,13 @@ Example:
     "totalViewCount": 3991,
     "favoritesTotal": 7,
     "projectName": "2025 Reports",
-    "viewCountLastMonth": 567
+    "viewCountLastMonth": 567,
+    "upstreamDatasources": [
+      {
+        "luid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
+        "name": "eBikes Analytics Datasource"
+      }
+    ]
   },
   {
     "modifiedTime": "2025-09-24T20:10:35.437Z",

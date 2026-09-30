@@ -10,12 +10,12 @@ import {
   getViewLineageQuery,
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { AppToolResult, WebTool } from '../tool.js';
+import { WebTool } from '../tool.js';
 import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
@@ -26,8 +26,9 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
   const getViewTool = new WebTool({
     server,
     name: 'get-view',
+    minRequiredRole: SiteRole.VIEWER,
     description:
-      'Retrieves information about the specified view, including upstream datasources, workbook information, project details, owner, tags, and usage statistics.',
+      'Retrieves information about the specified view, including upstream datasources, workbook information, project details, owner, tags, and usage statistics. Returns facts only, NO visual output: to display the view use render-interactive-viz (interactive) or get-view-image (static image).',
     paramsSchema,
     annotations: {
       title: 'Get View',
@@ -36,11 +37,10 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
       idempotentHint: true,
       openWorldHint: false,
     },
-    app: getAppConfig('get-view'),
     callback: async ({ viewId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getViewTool.logAndExecute<AppToolResult<View>>({
+      return await getViewTool.logAndExecute<{ data: View; url: string }>({
         extra,
         args: { viewId },
         callback: async () => {
@@ -80,12 +80,15 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   configWithOverrides.boundedContext.datasourceIds,
                 )[0];
               } catch (error) {
-                log({
-                  message: `Failed to enrich view ${view.id} with lineage metadata`,
-                  level: 'warning',
-                  logger: 'lineage',
-                  data: getExceptionMessage(error),
-                });
+                log(
+                  {
+                    message: `Failed to enrich view ${view.id} with lineage metadata`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  },
+                  extra,
+                );
                 return view;
               }
             },
