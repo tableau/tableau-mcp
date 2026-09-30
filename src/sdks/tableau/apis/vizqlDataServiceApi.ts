@@ -534,6 +534,13 @@ const readMetadataEndpoint = makeEndpoint({
   ],
   response: metadataOutputSchema,
   errors: [
+    // The workbook opt-in gate (VDSForWorkbookDatasources) arrives as HTTP 403; declare a default
+    // error so isErrorFromAlias recognizes it and readMetadata can classify it (mirrors
+    // queryDatasource). Without this the 403 slips past the alias check and rethrows.
+    {
+      status: 'default',
+      schema: tableauErrorSchema,
+    },
     {
       status: 404,
       schema: z.any(),
