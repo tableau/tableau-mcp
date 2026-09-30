@@ -84,7 +84,7 @@ export const getRefreshStoryboardAutoUpdatesTool = (
                     ...result.error.result,
                     error: result.error.error,
                   },
-                  prefillNextAction('Review failed current-point storyboard refresh targets'),
+                  prefillNextAction('Review failed worksheet updates in the current story point'),
                 ),
               ).toErr();
             }
