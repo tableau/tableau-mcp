@@ -41,8 +41,11 @@ Between the preview and the confirm, the calling agent is instructed to surface 
 identity to the user and obtain explicit approval. This is a prompt-level expectation; the
 tag/nonce gate proves a preview ran but cannot observe whether a human actually approved.
 
-When the `mcp-apps` feature flag is enabled, the model-driven `confirm: true` path is **closed**
-entirely — deletion requires a human gesture in the in-iframe confirm panel.
+When the `mcp-apps` feature flag is enabled **and the client can render the in-iframe confirm
+panel**, the model-driven `confirm: true` path is **closed** entirely — deletion requires a human
+gesture in that panel. A flag-on client that cannot render the panel (registered as a plain tool)
+falls back to the readable text preview flow described above, so it never receives an unrenderable
+app-card payload.
 :::
 
 ## Tool scoping
