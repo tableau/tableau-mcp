@@ -1,4 +1,6 @@
 import { desktopToolNames } from '../tools/desktop/toolName.js';
+import { localToolNames } from '../tools/local/toolName.js';
+import { sharedToolNames } from '../tools/shared/toolName.js';
 import {
   buildDesktopInstructions,
   DESKTOP_ROUTE_TABLE,
@@ -16,7 +18,7 @@ const routes = DESKTOP_ROUTE_TABLE.filter(
 
 // WHY: boundary guards keep 'apply-dashboard' from matching inside 'build-and-apply-dashboard'.
 const toolMentionsInFirstMentionOrder = (text: string): string[] =>
-  desktopToolNames
+  [...desktopToolNames, ...sharedToolNames, ...localToolNames]
     .map((tool) => ({
       tool,
       index: text.search(new RegExp(`(?<![a-z0-9-])${tool}(?![a-z0-9-])`)),

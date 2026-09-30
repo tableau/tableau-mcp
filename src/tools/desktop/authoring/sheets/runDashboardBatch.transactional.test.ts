@@ -6,14 +6,14 @@ import type {
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
 import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
-import { listSheets } from '../../../../desktop/metadata/sheets.js';
-import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import { listSheets } from '../../../../metadata/sheets.js';
+import { captureTargetWorksheetState } from '../../../../metadata/targetWorksheetState.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

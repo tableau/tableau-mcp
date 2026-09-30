@@ -7,7 +7,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
-import { McpToolError } from '../errors/mcpToolError.js';
+import { McpToolError } from '../errors/sharedMcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';

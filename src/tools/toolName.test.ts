@@ -1,4 +1,6 @@
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
+import { localToolNames } from './local/toolName.js';
+import { sharedToolNames } from './shared/toolName.js';
 import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
@@ -31,6 +33,14 @@ describe('ToolName', () => {
         toolNames: desktopToolNames,
         isToolName: isDesktopToolName,
       },
+      shared: {
+        toolNames: sharedToolNames,
+        isToolName: (name: unknown) => sharedToolNames.some((value) => value === name),
+      },
+      local: {
+        toolNames: localToolNames,
+        isToolName: (name: unknown) => localToolNames.some((value) => value === name),
+      },
       web: {
         toolNames: webToolNames,
         isToolName: isWebToolName,
@@ -54,7 +64,12 @@ describe('ToolName', () => {
 
     for (const toolName of toolNames) {
       expect(
-        [isWebToolName, isDesktopToolName].some((isVariantToolName) => isVariantToolName(toolName)),
+        [
+          isWebToolName,
+          isDesktopToolName,
+          (name: unknown) => sharedToolNames.some((value) => value === name),
+          (name: unknown) => localToolNames.some((value) => value === name),
+        ].some((isVariantToolName) => isVariantToolName(toolName)),
         'This test needs updating. Did you add a new variant?',
       ).toBe(true);
     }

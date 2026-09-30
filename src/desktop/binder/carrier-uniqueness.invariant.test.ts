@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 // W60-INVARIANT-TESTS suite 1 — CARRIER-UNIQUENESS.
 //
@@ -12,7 +12,7 @@ import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 // src/binder/manifest.test.ts, the "every classify.ts CHART_NOUN_KEYWORD is carried
 // by <=1 fast_path_eligible manifest" test). The factory read classify.ts from
 // src/lockstep-core/classify.ts; here the frozen table lives in
-// src/desktop/binder/classify.ts.
+// src/metadata/binder/classify.ts.
 //
 // WHY THIS IS THE REGRESSION LOCK: a CHART_NOUN_KEYWORD is a DETERMINISTIC chart-type
 // selector. classifyNoLlm's lone-winner exemption (selectWithinFamily) auto-binds a
@@ -26,7 +26,7 @@ import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 // curated alias while contributing zero eligible carriers; what must never happen is a
 // second automatic owner for the same deterministic chart noun.
 
-const CLASSIFY_TS_PATH = path.join(process.cwd(), 'src', 'desktop', 'binder', 'classify.ts');
+const CLASSIFY_TS_PATH = path.join(process.cwd(), 'src', 'metadata', 'binder', 'classify.ts');
 
 /**
  * Regex-extract the CHART_NOUN_KEYWORDS Set members from classify.ts source (the

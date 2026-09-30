@@ -1,20 +1,20 @@
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveLooseFieldReference } from '../../../../desktop/binder/classify.js';
-import {
-  bareName,
-  type SchemaField,
-  summarizeSchema,
-} from '../../../../desktop/binder/schema-summary.js';
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
-import { resolveUniqueDatasourceName } from '../../../../desktop/metadata/field-resolver.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { resolveLooseFieldReference } from '../../../../metadata/binder/classify.js';
+import {
+  bareName,
+  type SchemaField,
+  summarizeSchema,
+} from '../../../../metadata/binder/schema-summary.js';
+import { resolveUniqueDatasourceName } from '../../../../metadata/field-resolver.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import { prettyPrintFormula } from './prettyPrintFormula.js';
 

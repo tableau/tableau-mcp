@@ -1,7 +1,13 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
-import { escapeXml } from '../binder/escape.js';
+import { escapeXml } from '../../metadata/binder/escape.js';
+import {
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../metadata/validation/registry.js';
+import { type ValidationContext, type ValidationIssue } from '../../metadata/validation/types.js';
+import { parseOuterElement, xmlNamesEqual } from '../../metadata/xmlElement.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
@@ -13,9 +19,6 @@ import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
-import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
-import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
-import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { sourceSha256 } from './cacheFingerprint.js';
 

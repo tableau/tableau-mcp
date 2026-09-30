@@ -6,7 +6,6 @@ import {
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
 import { classifyWorkbookWorksheets } from '../../../../desktop/metadata/worksheetRenderState.js';
-import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.js';
@@ -15,13 +14,14 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { parsedXmlNamesEqual, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
   type McpToolError,
 } from '../../../../errors/mcpToolError.js';
+import { injectTemplate } from '../../../../metadata/templates/injectTemplate.js';
+import { parsedXmlNamesEqual, xmlNamesEqual } from '../../../../metadata/xmlElement.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { buildDashboardXml, computeZones, escapeXml } from './dashboardZones.js';
 

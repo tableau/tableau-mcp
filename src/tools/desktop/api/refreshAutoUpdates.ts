@@ -7,7 +7,7 @@ import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.j
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 

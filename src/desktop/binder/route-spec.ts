@@ -20,8 +20,8 @@
 //                      remain `free` until their typed worksheet adapters exist.
 //   free             — the fail-open default (organic asks, no matched eligible supply).
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { selectEligible } from './ask-router.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 type TemplateManifest = RuntimeTemplateDescriptor;
 

@@ -65,7 +65,6 @@ import { getAuthorSetTool } from './authoring/datasource/authorSet.js';
 import { getFormatLabelsTool } from './authoring/datasource/formatLabels.js';
 import { getAddFieldTool } from './authoring/fields/addField.js';
 import { getListAvailableFieldsTool } from './authoring/fields/listAvailableFields.js';
-import { getListFieldsTool } from './authoring/fields/listFields.js';
 import { getRemoveFieldTool } from './authoring/fields/removeField.js';
 import { getResolveFieldTool } from './authoring/fields/resolveField.js';
 import { getSearchWorkbookFieldsTool } from './authoring/fields/searchWorkbookFields.js';
@@ -85,11 +84,7 @@ import { getFormatDashboardZonesTool } from './authoring/style/formatDashboardZo
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
 import { getInspectCustomThemeTool } from './authoring/style/inspectCustomTheme.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
-import { getInjectTemplateTool } from './authoring/templates/injectTemplate.js';
 import { getAskUserTool } from './local/askUser.js';
-import { getReadCachedXmlTool } from './local/cache/readCachedXml.js';
-import { getValidateWorksheetXmlTool } from './local/cache/validateWorksheetXml.js';
-import { getWriteCachedXmlTool } from './local/cache/writeCachedXml.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './local/episodeTools.js';
 import { getGetDashboardGuideTool } from './local/getDashboardGuide.js';
 import { getListKnowledgeResourcesTool } from './local/knowledge/listKnowledgeResources.js';
@@ -143,7 +138,6 @@ export const desktopToolFactories = [
   getApplyDashboardWithViewpointsTool,
   getBuildAndApplyDashboardTool,
   getListAvailableFieldsTool,
-  getListFieldsTool,
   getAddFieldTool,
   getRemoveFieldTool,
   getResolveFieldTool,
@@ -192,11 +186,7 @@ export const desktopToolFactories = [
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getAppInfoTool,
-  getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
-  getReadCachedXmlTool,
-  getWriteCachedXmlTool,
-  getInjectTemplateTool,
   getGetDashboardGuideTool,
   getListKnowledgeResourcesTool,
   getReadKnowledgeResourceTool,

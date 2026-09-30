@@ -5,7 +5,7 @@ import type { ExecuteCommandError } from '../../../../desktop/externalApi/execut
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 

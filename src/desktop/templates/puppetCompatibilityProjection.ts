@@ -1,10 +1,13 @@
+import { escapeXml } from '../../metadata/binder/escape.js';
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
+import type { SchemaSummary } from '../../metadata/binder/schema-summary.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from '../../metadata/binder/waterfall.js';
+import { templateLiveSupportBlocker } from '../../metadata/templates/templateLiveSupport.js';
 import type { BinderResult } from '../binder/binder.js';
-import { escapeXml } from '../binder/escape.js';
-import type { RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
-import type { SchemaSummary } from '../binder/schema-summary.js';
-import { WATERFALL_ANCHOR_FIELD_RE, WATERFALL_TEMPLATE_NAME } from '../binder/waterfall.js';
 import type { RuntimeTemplateCatalogSnapshot } from './runtimeTemplateCatalog.js';
-import { templateLiveSupportBlocker } from './templateLiveSupport.js';
 
 export interface PuppetCompatibilityProjection {
   allDescriptors: Map<string, RuntimeTemplateDescriptor>;

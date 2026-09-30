@@ -3,15 +3,18 @@ import { join } from 'node:path';
 
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-import { canonicalShortDerivation } from '../derivations.js';
-import { blockingValidationIssues, runValidation } from '../validation/registry.js';
-import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
-import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
-import { inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
+import { canonicalShortDerivation } from '../../metadata/derivations.js';
+import {
+  bookmarkToTemplateWorkbook,
+  deriveTemplatePass1Eligibility,
+} from '../../metadata/templates/bookmarkTemplate.js';
+import { rewriteFieldReferences } from '../../metadata/templates/fieldReferenceRewriter.js';
+import { inferBindingDescriptor, inferFromBookmark } from '../../metadata/templates/inferSlots.js';
 import {
   buildInjectedWorkbookXml,
   stripDonorCurrencyOrLocaleFormats,
-} from './injectTemplateCore.js';
+} from '../../metadata/templates/injectTemplateCore.js';
+import { blockingValidationIssues, runValidation } from '../../metadata/validation/registry.js';
 
 interface RoleAnchoredRef {
   derivation: string;

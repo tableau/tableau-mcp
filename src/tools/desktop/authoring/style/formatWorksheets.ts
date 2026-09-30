@@ -3,21 +3,21 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
-import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { verifyWorksheetReadback } from '../../../../desktop/validation/readback-verify.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { parseCanonicalColumnRef } from '../../../../metadata/field-resolver.js';
+import { decodeXmlEntities } from '../../../../metadata/xmlElement.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { sessionParam } from '../../../params.js';
 import { resolveShelfField } from '../../api/resolveShelfField.js';
-import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 const displayUnitsSchema = z.enum(['none', 'thousands', 'millions', 'billions']);

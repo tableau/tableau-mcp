@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -11,8 +10,9 @@ import {
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { bareName, summarizeSchema } from '../../../../metadata/binder/schema-summary.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import {

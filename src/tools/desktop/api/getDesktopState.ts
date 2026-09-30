@@ -3,7 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { DesktopState } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {

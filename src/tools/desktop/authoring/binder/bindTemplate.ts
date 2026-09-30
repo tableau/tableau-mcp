@@ -20,31 +20,10 @@ import {
   summarizeSchema,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../../desktop/binder/binder.js';
-import {
-  type ExactFilterIntent,
-  type ExactFilterValueConstraint,
-  parseExactFilterIntent,
-} from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
-import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
-import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
-import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
-import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
-import {
-  extractSheetXml,
-  resolveWorksheetRef,
-  upsertSheetIntoWorkbook,
-  worksheetFragmentSimpleId,
-} from '../../../../desktop/metadata/sheets.js';
-import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
-import {
-  planSortByFieldOnCategoricalAxis,
-  planTopN,
-  type SortDirection,
-} from '../../../../desktop/refine/refineWorksheet.js';
 import {
   type AppliedSheetRecord,
   type BindRecoveryCorrectionChange,
@@ -55,15 +34,8 @@ import {
   sessionRouteState,
 } from '../../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import {
-  buildInjectedWorkbookXml,
-  classifyWorksheetReplaceTarget,
-  ensureUserNamespace,
-  workbookHasSheetNamed,
-} from '../../../../desktop/templates/injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
-import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -86,13 +58,41 @@ import {
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
+import {
+  type ExactFilterIntent,
+  type ExactFilterValueConstraint,
+  parseExactFilterIntent,
+} from '../../../../metadata/binder/classify.js';
+import { resolveDerivation } from '../../../../metadata/derivations.js';
+import { parseCanonicalColumnRef } from '../../../../metadata/field-resolver.js';
+import { addFieldToEncoding } from '../../../../metadata/fields.js';
+import { normalizeArray, parseXML } from '../../../../metadata/parser.js';
+import {
+  planSortByFieldOnCategoricalAxis,
+  planTopN,
+  type SortDirection,
+} from '../../../../metadata/refine/refineWorksheet.js';
+import {
+  extractSheetXml,
+  resolveWorksheetRef,
+  upsertSheetIntoWorkbook,
+  worksheetFragmentSimpleId,
+} from '../../../../metadata/sheets.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
+  workbookHasSheetNamed,
+} from '../../../../metadata/templates/injectTemplateCore.js';
+import type { TemplateRuntimeSnapshot } from '../../../../metadata/templates/templateRuntimeSnapshot.js';
+import type { ParsedWorkbook, ParsedWorksheet } from '../../../../metadata/types.js';
+import { decodeXmlEntities } from '../../../../metadata/xmlElement.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import {

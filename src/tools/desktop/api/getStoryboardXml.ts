@@ -1,9 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
-import { parseXML } from '../../../desktop/metadata/parser.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { parseXML } from '../../../metadata/parser.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import {
   artifactNameParam,
@@ -11,7 +11,7 @@ import {
   resolveArtifactNameArg,
   sessionParam,
   xmlModeParam,
-} from '../params.js';
+} from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 

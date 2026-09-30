@@ -18,7 +18,7 @@ import {
   WorkbookXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { artifactFileParam, sessionParam } from '../../params.js';
+import { artifactFileParam, sessionParam } from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { accountDashboardViewpoints, type ViewpointAccounting } from './viewpointAccounting.js';
 

@@ -18,7 +18,7 @@ import {
   deprecatedArtifactAliasParam,
   resolveArtifactNameArg,
   sessionParam,
-} from '../../params.js';
+} from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { workbookLoadToolError } from './workbookLoadToolError.js';
 

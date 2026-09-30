@@ -12,9 +12,12 @@ import {
 } from 'fs';
 import { join, resolve, sep } from 'path';
 
+import {
+  normalizeBookmarkXml,
+  type TemplatePass1Eligibility,
+} from '../../metadata/templates/bookmarkTemplate.js';
+import { createTemplateRuntimeSnapshot } from '../../metadata/templates/templateRuntimeSnapshot.js';
 import { DATA_ROOT, listDataAssetNames, readDataAsset } from '../assets.js';
-import { normalizeBookmarkXml, type TemplatePass1Eligibility } from './bookmarkTemplate.js';
-import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
 export const MAX_EXTERNAL_TEMPLATE_BYTES = 512 * 1024;
 export const MAX_TEMPLATES_PER_ROOT = 512;

@@ -38,6 +38,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import {
   type BinderResult,
   type BindingProposal,
@@ -46,7 +47,6 @@ import {
   type SchemaSummary,
   summarizeSchema,
 } from './binder.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 type TemplateManifest = RuntimeTemplateDescriptor;
 

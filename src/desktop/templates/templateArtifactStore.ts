@@ -1,4 +1,4 @@
-import type { TargetWorksheetState } from '../metadata/targetWorksheetState.js';
+import type { TargetWorksheetState } from '../../metadata/targetWorksheetState.js';
 
 export interface TemplateWorksheetArtifact {
   id: string;

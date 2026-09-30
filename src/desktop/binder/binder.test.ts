@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { Family, RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import {
@@ -13,7 +14,6 @@ import {
   summarizeSchema,
   TITLE_CONTROL_CHAR_RE,
 } from './binder.js';
-import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 
 const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>

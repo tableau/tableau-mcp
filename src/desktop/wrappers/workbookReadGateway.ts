@@ -1,5 +1,6 @@
 import { Err, Ok, type Result } from 'ts-results-es';
 
+import { extractSheetXml, listWorksheetRefs, resolveWorksheetRef } from '../../metadata/sheets.js';
 import {
   type ExecuteCommandError,
   type WithExecutorAndAbortSignal,
@@ -12,7 +13,6 @@ import {
   listDashboardRefs,
   resolveDashboardRef,
 } from '../metadata/dashboards.js';
-import { extractSheetXml, listWorksheetRefs, resolveWorksheetRef } from '../metadata/sheets.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type WorkbookReadMode = 'external-api';

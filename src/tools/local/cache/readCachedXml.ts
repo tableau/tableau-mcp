@@ -1,0 +1,152 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+} from '../../../errors/sharedMcpToolError.js';
+import { findElement, sliceBytes } from '../../../metadata/xmlElement.js';
+import type { Server } from '../../../server.js';
+import {
+  artifactNameParam,
+  deprecatedArtifactAliasParam,
+  resolveArtifactNameArg,
+} from '../../params.js';
+import { SharedTool } from '../../shared/tool.js';
+import { isWithinCacheDir } from './isWithinCacheDir.js';
+
+const paramsSchema = {
+  filePath: z.string(),
+  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheet: deprecatedArtifactAliasParam('worksheet'),
+  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboard: deprecatedArtifactAliasParam('dashboard'),
+  startByte: z.number().int().min(0).optional(),
+  endByte: z.number().int().min(0).optional(),
+};
+
+const toolTitle = 'Reading draft';
+export const getReadCachedXmlTool = (
+  server: Server,
+  getCacheDir: () => string,
+): SharedTool<typeof paramsSchema> => {
+  const tool = new SharedTool({
+    server,
+    name: 'read-cached-xml',
+    title: toolTitle,
+    description: 'Read cached content.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    callback: async (
+      { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await tool.logAndExecute({
+        extra,
+        args: { filePath, worksheetName, worksheet, dashboardName, dashboard, startByte, endByte },
+        callback: async () => {
+          // Both selectors are optional slice keys: both-absent is legal (whole file),
+          // so the resolver only rejects a *Name/alias conflict and coalesces the keys.
+          const worksheetArg = resolveArtifactNameArg('worksheet', worksheetName, worksheet, {
+            allowMissing: true,
+          });
+          if (worksheetArg.isErr()) {
+            return worksheetArg;
+          }
+          const dashboardArg = resolveArtifactNameArg('dashboard', dashboardName, dashboard, {
+            allowMissing: true,
+          });
+          if (dashboardArg.isErr()) {
+            return dashboardArg;
+          }
+          const worksheetSelector = worksheetArg.value;
+          const dashboardSelector = dashboardArg.value;
+
+          const absolutePath = resolve(filePath);
+          const cacheDir = getCacheDir();
+
+          if (!isWithinCacheDir(absolutePath, cacheDir)) {
+            return new ArgsValidationError(
+              `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
+          }
+
+          // Reject ambiguous slice requests instead of silently prioritizing one selector.
+          const selectorsReceived: string[] = [];
+          if (worksheetSelector !== undefined) {
+            selectorsReceived.push(`worksheet="${worksheetSelector}"`);
+          }
+          if (dashboardSelector !== undefined) {
+            selectorsReceived.push(`dashboard="${dashboardSelector}"`);
+          }
+          if (startByte !== undefined || endByte !== undefined) {
+            selectorsReceived.push(
+              `byte range (startByte=${startByte ?? 0}, endByte=${endByte ?? 'end'})`,
+            );
+          }
+          if (selectorsReceived.length > 1) {
+            return new ArgsValidationError(
+              `Multiple selectors provided: ${selectorsReceived.join(', ')}. Pass exactly one of ` +
+                'worksheet, dashboard, or a startByte/endByte byte range so the slice is unambiguous — ' +
+                're-call with a single selector.',
+            ).toErr();
+          }
+
+          if (!existsSync(absolutePath)) {
+            return new FileNotFoundError(filePath).toErr();
+          }
+
+          let fileContent: string;
+          try {
+            fileContent = readFileSync(absolutePath, 'utf-8');
+          } catch (err) {
+            return new FileReadError(err).toErr();
+          }
+
+          // Optional slice selectors keep large cached files out of context.
+          let slice = fileContent;
+          let sliceLabel = '';
+          if (worksheetSelector !== undefined) {
+            const match = findElement(fileContent, 'worksheet', worksheetSelector);
+            if (!match) {
+              return new ArgsValidationError(
+                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}.`,
+              ).toErr();
+            }
+            slice = match.text;
+            sliceLabel = ` (worksheet "${worksheetSelector}")`;
+          } else if (dashboardSelector !== undefined) {
+            const match = findElement(fileContent, 'dashboard', dashboardSelector);
+            if (!match) {
+              return new ArgsValidationError(
+                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}.`,
+              ).toErr();
+            }
+            slice = match.text;
+            sliceLabel = ` (dashboard "${dashboardSelector}")`;
+          } else if (startByte !== undefined || endByte !== undefined) {
+            slice = sliceBytes(fileContent, startByte, endByte);
+            sliceLabel = ` (bytes ${startByte ?? 0}-${endByte ?? 'end'})`;
+          }
+
+          return new Ok({ filePath, bytes: slice.length, xml: slice, sliceLabel });
+        },
+        getSuccessResult: ({ filePath, bytes, xml, sliceLabel }) => ({
+          content: [
+            { type: 'text', text: `Read ${bytes} bytes from ${filePath}${sliceLabel}\n\n${xml}` },
+          ],
+        }),
+      });
+    },
+  });
+  return tool;
+};

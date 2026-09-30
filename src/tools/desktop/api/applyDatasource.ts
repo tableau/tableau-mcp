@@ -7,7 +7,7 @@ import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externa
 import { applyDatasourceXml } from '../../../desktop/wrappers/applyDatasourceXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
+import { artifactFileParam, artifactNameParam, sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';

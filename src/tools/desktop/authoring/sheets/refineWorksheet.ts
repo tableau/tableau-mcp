@@ -13,37 +13,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { worksheetFragmentSimpleId } from '../../../../desktop/metadata/sheets.js';
-import {
-  appliedSortByFieldDirection,
-  confirmMarkTypeApplied,
-  confirmSortByFieldApplied,
-  confirmSortDirectionApplied,
-  confirmTopNApplied,
-  planMarkType,
-  planSortByField,
-  planSortDirection,
-  planTopN,
-  type SortDirection,
-  TABLEAU_MARK_TYPES,
-  type TableauMarkType,
-  type TopNEnd,
-} from '../../../../desktop/refine/refineWorksheet.js';
 import {
   planRoundStackedBar,
   type RoundStackedBarPreset,
 } from '../../../../desktop/refine/roundStackedBar.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { ensureUserNamespace } from '../../../../desktop/templates/injectTemplateCore.js';
 import type {
   ReadbackVerificationResult,
   VerificationFinding,
 } from '../../../../desktop/validation/readback-verify.js';
-import {
-  blockingValidationIssues,
-  runValidation,
-} from '../../../../desktop/validation/registry.js';
-import { ValidationIssue } from '../../../../desktop/validation/types.js';
 import { applyRoundedStackedBar } from '../../../../desktop/wrappers/applyRoundedStackedBar.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
@@ -61,6 +39,28 @@ import {
   UnknownError,
   WorksheetXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.js';
+import {
+  appliedSortByFieldDirection,
+  confirmMarkTypeApplied,
+  confirmSortByFieldApplied,
+  confirmSortDirectionApplied,
+  confirmTopNApplied,
+  planMarkType,
+  planSortByField,
+  planSortDirection,
+  planTopN,
+  type SortDirection,
+  TABLEAU_MARK_TYPES,
+  type TableauMarkType,
+  type TopNEnd,
+} from '../../../../metadata/refine/refineWorksheet.js';
+import { worksheetFragmentSimpleId } from '../../../../metadata/sheets.js';
+import { ensureUserNamespace } from '../../../../metadata/templates/injectTemplateCore.js';
+import {
+  blockingValidationIssues,
+  runValidation,
+} from '../../../../metadata/validation/registry.js';
+import { ValidationIssue } from '../../../../metadata/validation/types.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 

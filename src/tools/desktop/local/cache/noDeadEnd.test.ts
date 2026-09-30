@@ -6,13 +6,13 @@ import * as loadWorkbookXmlCmd from '../../../../desktop/wrappers/loadWorkbookXm
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { getReadCachedXmlTool } from '../../../local/cache/readCachedXml.js';
+import { getWriteCachedXmlTool } from '../../../local/cache/writeCachedXml.js';
 import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorkbookTool } from '../../api/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from '../../api/getWorkbookXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getReadCachedXmlTool } from './readCachedXml.js';
-import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 // In-memory filesystem shared across tools: a cache file one tool writes is visible to the
 // next. This models a client with NO local filesystem access — the whole edit loop runs
@@ -75,7 +75,9 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     expect(store.has(file)).toBe(true);
 
     // 2) SLICE-READ: pull just the Sales worksheet, not the whole file.
-    const readCb = await Provider.from(getReadCachedXmlTool(new DesktopMcpServer()).callback);
+    const readCb = await Provider.from(
+      getReadCachedXmlTool(new DesktopMcpServer(), cachePathModule.getCacheDir).callback,
+    );
     const readResult = await readCb(
       {
         filePath: file,
@@ -96,10 +98,11 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
     // 3) TARGETED WRITE: splice a modified Sales worksheet back into the cached file.
     const modifiedSales =
       "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>";
-    const writeCb = await Provider.from(getWriteCachedXmlTool(new DesktopMcpServer()).callback);
+    const writeCb = await Provider.from(
+      getWriteCachedXmlTool(new DesktopMcpServer(), cachePathModule.getCacheDir).callback,
+    );
     const writeResult = await writeCb(
       {
-        session: 's1',
         filePath: file,
         xmlContent: modifiedSales,
         worksheetName: undefined,

@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
-import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getWorksheetXml, isRouteMissing } from '../../../desktop/wrappers/getWorksheetXml.js';
 import {
@@ -9,9 +8,10 @@ import {
   GetWorksheetXmlFailedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
+import { worksheetFragmentSimpleId } from '../../../metadata/sheets.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { artifactNameParam, sessionParam, xmlModeParam } from '../../params.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
-import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 

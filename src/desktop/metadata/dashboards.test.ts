@@ -1,4 +1,4 @@
-import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import { wellFormedXmlRule } from '../../metadata/validation/rules/wellFormedXml.js';
 import {
   deleteDashboard,
   extractDashboardXml,

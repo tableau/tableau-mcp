@@ -29,14 +29,14 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { hashSchemaSummary, sha256Hex } from '../../../../desktop/binder/memo.js';
+import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
 import {
   bareName,
   type SchemaField,
   summarizeSchema,
-} from '../../../../desktop/binder/schema-summary.js';
-import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+} from '../../../../metadata/binder/schema-summary.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 

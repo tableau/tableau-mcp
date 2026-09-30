@@ -1,18 +1,17 @@
-export { addDashboard, deleteDashboard, listWorkbookDashboards } from './dashboards.js';
-export { listAvailableFields } from './field-builder.js';
+export { listAvailableFields } from '../../metadata/field-builder.js';
 export {
   type FieldCandidate,
   type FieldResolution,
   type FieldResolutionKind,
   type FieldResolveOptions,
   resolveField,
-} from './field-resolver.js';
+} from '../../metadata/field-resolver.js';
 export {
   emitFieldRewrite,
   type FieldRewriteEvent,
   type FieldRewriteListener,
   setFieldRewriteListener,
-} from './field-rewrite-listener.js';
+} from '../../metadata/field-rewrite-listener.js';
 export {
   addFieldToCols,
   addFieldToEncoding,
@@ -25,7 +24,7 @@ export {
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
-} from './fields.js';
+} from '../../metadata/fields.js';
 export {
   findAllWorksheets,
   findWorksheet,
@@ -33,15 +32,8 @@ export {
   normalizeArray,
   parseXML,
   serializeXML,
-} from './parser.js';
-export {
-  type SearchWorkbookFieldMatch,
-  type SearchWorkbookFieldMatchAttribute,
-  type SearchWorkbookFieldPlacement,
-  searchWorkbookFields,
-  type SearchWorkbookFieldsResult,
-} from './searchWorkbookFields.js';
-export { addSheet, deleteSheet, listSheets } from './sheets.js';
+} from '../../metadata/parser.js';
+export { addSheet, deleteSheet, listSheets } from '../../metadata/sheets.js';
 export {
   AggregationType,
   type EncodingType,
@@ -55,4 +47,12 @@ export {
   type ParsedWorkbook,
   type ParsedWorksheet,
   type ParsedZone,
-} from './types.js';
+} from '../../metadata/types.js';
+export { addDashboard, deleteDashboard, listWorkbookDashboards } from './dashboards.js';
+export {
+  type SearchWorkbookFieldMatch,
+  type SearchWorkbookFieldMatchAttribute,
+  type SearchWorkbookFieldPlacement,
+  searchWorkbookFields,
+  type SearchWorkbookFieldsResult,
+} from './searchWorkbookFields.js';

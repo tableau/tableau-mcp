@@ -1,13 +1,13 @@
-import type { Family, RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
+import type { Family, RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
+import {
+  createTemplateRuntimeSnapshot,
+  type TemplateRuntimeSnapshot,
+} from '../../metadata/templates/templateRuntimeSnapshot.js';
 import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
   type TemplateCatalogOptions,
 } from './templatePath.js';
-import {
-  createTemplateRuntimeSnapshot,
-  type TemplateRuntimeSnapshot,
-} from './templateRuntimeSnapshot.js';
 
 const FAMILY_PREFIXES: ReadonlyArray<[string, Family]> = [
   ['change-over-time', 'time-series'],

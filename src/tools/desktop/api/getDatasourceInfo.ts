@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactNameParam, sessionParam } from '../params.js';
+import { artifactNameParam, sessionParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { projectDatasource } from './datasourceResult.js';
 import { resolveDatasourceRef } from './resolveDatasourceRef.js';

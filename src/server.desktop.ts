@@ -3,6 +3,7 @@ import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-comp
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
+  CallToolResult,
   ErrorCode,
   ListToolsRequestSchema,
   McpError,
@@ -10,6 +11,7 @@ import {
   ServerRequest,
   Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
@@ -19,8 +21,20 @@ import {
   readResourceAsset,
   RESOURCES_ROOT,
 } from './desktop/assets.js';
-import { createCallDeadline } from './desktop/callDeadline.js';
-import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
+import { getCacheDir } from './desktop/cachePath.js';
+import {
+  type CallDeadline,
+  createCallDeadline,
+  desktopCallTimeoutMessage,
+  isDesktopCallTimeout,
+} from './desktop/callDeadline.js';
+import {
+  currentEpisodeId,
+  emitEpisodeEvent,
+  emitToolErrorEvent,
+  episodeSessionIdFromArgs,
+  type ToolSchemaProfile,
+} from './desktop/episode-events.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
@@ -31,13 +45,24 @@ import {
   readKnowledgeResource,
 } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
+import { getRuntimeTemplateSnapshot } from './desktop/templates/runtimeTemplateCatalog.js';
+import { listTemplateNames } from './desktop/templates/templatePath.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
+import { LocalToolName } from './tools/local/toolName.js';
+import { localToolFactories } from './tools/local/tools.js';
+import { SharedTool } from './tools/shared/tool.js';
+import { SharedToolName } from './tools/shared/toolName.js';
+import { sharedToolFactories } from './tools/shared/tools.js';
+import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import { Provider } from './utils/provider.js';
+
+type DesktopSurfaceToolName = DesktopToolName | SharedToolName | LocalToolName;
+type DesktopRegisteredTool = DesktopTool<any> | SharedTool<any>;
 
 const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
@@ -54,20 +79,21 @@ const serverVersion = pkg.version;
  * list-worksheets already overlap). Demo retains the legacy binder path because it does not
  * include the modern artifact builder.
  */
-export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
-  'bind-template',
-  'run-dashboard-batch',
-  'list-instances',
-  'list-worksheets',
-  'list-available-fields',
-  'get-worksheet-xml',
-  'apply-workbook',
-  'get-workbook-xml',
-  'inject-template',
-  'apply-worksheet',
-  'batch-create-and-cache-sheets',
-  'build-and-apply-dashboard',
-]);
+export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopSurfaceToolName> =
+  new Set<DesktopSurfaceToolName>([
+    'bind-template',
+    'run-dashboard-batch',
+    'list-instances',
+    'list-worksheets',
+    'list-available-fields',
+    'get-worksheet-xml',
+    'apply-workbook',
+    'get-workbook-xml',
+    'inject-template',
+    'apply-worksheet',
+    'batch-create-and-cache-sheets',
+    'build-and-apply-dashboard',
+  ]);
 
 /**
  * EXPERIMENT (experiment/spec-loop-studio): the ruthless spec-loop-first surface,
@@ -84,14 +110,15 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
  */
-export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
-  'execute-tableau-command',
-  'list-instances',
-  'list-available-fields',
-  'get-worksheet-xml',
-  'list-worksheets',
-  'list-dashboards',
-]);
+export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopSurfaceToolName> =
+  new Set<DesktopSurfaceToolName>([
+    'execute-tableau-command',
+    'list-instances',
+    'list-available-fields',
+    'get-worksheet-xml',
+    'list-worksheets',
+    'list-dashboards',
+  ]);
 
 /**
  * The full SINGABLE surface, selected by TOOL_PROFILE=dynamic-authoring: the spec-loop
@@ -121,8 +148,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
-export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
-  new Set<DesktopToolName>([
+export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopSurfaceToolName> =
+  new Set<DesktopSurfaceToolName>([
     'bind-template',
     'list-templates',
     'build-worksheets-from-templates',
@@ -218,7 +245,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
  * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
  * apart from the warning log, so the selection can be unit-tested without the server or env.
  */
-export function selectToolsForProfile<T extends { name: DesktopToolName }>(
+export function selectToolsForProfile<T extends { name: DesktopSurfaceToolName }>(
   tools: T[],
   profile: string,
 ): T[] {
@@ -342,7 +369,8 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
+    for (const tool of tools) {
+      const { name, title, description, paramsSchema, annotations, callback } = tool;
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -366,6 +394,15 @@ export class DesktopMcpServer extends Server {
             server: this,
           };
 
+          if (tool instanceof SharedTool) {
+            return await runSharedToolOnDesktop({
+              name,
+              args,
+              extra: tableauRequestHandlerExtra,
+              deadline,
+              callback: async () => await tableauToolCallback(args, tableauRequestHandlerExtra),
+            });
+          }
           return await tableauToolCallback(args, tableauRequestHandlerExtra);
         } finally {
           deadline.dispose();
@@ -409,10 +446,12 @@ export class DesktopMcpServer extends Server {
     await this.enableSkillsCapability();
   };
 
-  protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
+  protected _getToolsToRegister = async (): Promise<DesktopRegisteredTool[]> => {
     const config = getDesktopConfig();
     const factories = [
       ...desktopToolFactories,
+      ...sharedToolFactories,
+      ...localToolFactories({ getCacheDir, getRuntimeTemplateSnapshot, listTemplateNames }),
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
     ];
     const allTools = factories.map((toolFactory) => toolFactory(this));
@@ -486,6 +525,74 @@ export class DesktopMcpServer extends Server {
   };
 }
 
+export async function runSharedToolOnDesktop({
+  name,
+  args,
+  extra,
+  deadline,
+  callback,
+}: {
+  name: string;
+  args: unknown;
+  extra: TableauDesktopRequestHandlerExtra;
+  deadline: CallDeadline;
+  callback: () => Promise<CallToolResult>;
+}): Promise<CallToolResult> {
+  const sessionId = episodeSessionIdFromArgs(extra.config, args);
+  const episodeId = currentEpisodeId(sessionId);
+  const startedAt = performance.now();
+  void emitEpisodeEvent(extra.config, {
+    type: 'tool_start',
+    session_id: sessionId,
+    episode_id: episodeId,
+    tool: name,
+  });
+
+  let result: CallToolResult;
+  try {
+    const work = callback();
+    void work.catch(() => undefined);
+    result = await Promise.race([work, deadline.whenExpired()]);
+  } catch (error) {
+    const message = isDesktopCallTimeout(error)
+      ? desktopCallTimeoutMessage({ budgetMs: error.budgetMs, tool: name, session: sessionId })
+      : getExceptionMessage(error);
+    log({
+      message: 'Shared tool execution failed on Desktop',
+      level: 'error',
+      logger: 'tool',
+      data: error,
+    });
+    result = { isError: true, content: [{ type: 'text', text: message }] };
+  }
+
+  if (result.isError) {
+    void emitToolErrorEvent({
+      config: extra.config,
+      sessionId,
+      tool: name,
+      error:
+        result.content.find((item) => item.type === 'text')?.text ??
+        'Tool returned an error result.',
+    });
+  }
+  void emitEpisodeEvent(extra.config, {
+    type: 'tool_end',
+    session_id: sessionId,
+    episode_id: episodeId,
+    tool: name,
+    duration_ms: performance.now() - startedAt,
+    success: !result.isError,
+    outcome: result.isError ? 'failed' : 'succeeded',
+    request_id_hash: createHash('sha256')
+      .update(String(extra.requestId))
+      .digest('hex')
+      .slice(0, 16),
+    result_size_chars: JSON.stringify(result).length,
+  });
+  return result;
+}
+
 function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
   if (profile === '' || profile === 'dynamic-authoring') return 'dynamic-authoring';
   if (
@@ -499,7 +606,7 @@ function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
   return 'unknown';
 }
 
-export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
+export async function getDesktopToolListEntry(tool: DesktopRegisteredTool): Promise<McpTool> {
   const paramsSchema = await Provider.from(tool.paramsSchema);
   const objectSchema = normalizeObjectSchema(paramsSchema as any);
   const inputSchema = (

@@ -6,9 +6,9 @@ import {
   extractDashboardXml,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
-import * as injectTemplateModule from '../../../../desktop/templates/injectTemplate.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import * as injectTemplateModule from '../../../../metadata/templates/injectTemplate.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

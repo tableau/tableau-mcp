@@ -13,12 +13,6 @@ import {
   deleteDashboard,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
-import { findAllWorksheets, parseXML } from '../../../../desktop/metadata/parser.js';
-import {
-  extractSheetXml,
-  upsertWorksheetAndWindowIntoWorkbook,
-} from '../../../../desktop/metadata/sheets.js';
-import { compareTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   getTemplateArtifactStore,
@@ -31,11 +25,6 @@ import {
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
-import {
-  blockingValidationIssues,
-  introducedBlockingValidationIssues,
-  runValidation,
-} from '../../../../desktop/validation/registry.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -46,16 +35,27 @@ import {
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { resolveCanonicalWorksheetName } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
   type McpToolError,
 } from '../../../../errors/mcpToolError.js';
+import { findAllWorksheets, parseXML } from '../../../../metadata/parser.js';
+import {
+  extractSheetXml,
+  upsertWorksheetAndWindowIntoWorkbook,
+} from '../../../../metadata/sheets.js';
+import { compareTargetWorksheetState } from '../../../../metadata/targetWorksheetState.js';
+import {
+  blockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../../../metadata/validation/registry.js';
+import { xmlNamesEqual } from '../../../../metadata/xmlElement.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { sessionParam } from '../../../params.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
-import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import {

@@ -2,22 +2,22 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
-import { TEMPLATE_VISIBLE_CHANNELS } from '../../../../desktop/templates/bookmarkTemplate.js';
-import type { TemplateFitFacts } from '../../../../desktop/templates/inferSlots.js';
 import { preferredAutomaticTemplateForNoun } from '../../../../desktop/templates/puppetCompatibilityProjection.js';
-import { withTemplateLiveSupport } from '../../../../desktop/templates/templateLiveSupport.js';
 import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
   type TemplateCatalogEntry,
   type TemplateDiscoveryIssue,
 } from '../../../../desktop/templates/templatePath.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
+import type { SlotSpec } from '../../../../metadata/binder/manifest-types.js';
+import { TEMPLATE_VISIBLE_CHANNELS } from '../../../../metadata/templates/bookmarkTemplate.js';
+import type { TemplateFitFacts } from '../../../../metadata/templates/inferSlots.js';
+import { withTemplateLiveSupport } from '../../../../metadata/templates/templateLiveSupport.js';
 import {
   createTemplateRuntimeSnapshot,
   type TemplateRuntimeSnapshot,
-} from '../../../../desktop/templates/templateRuntimeSnapshot.js';
-import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
+} from '../../../../metadata/templates/templateRuntimeSnapshot.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';

@@ -1,8 +1,8 @@
-import { listAvailableFields } from './field-builder.js';
-import { parseCanonicalColumnRef } from './field-resolver.js';
-import { parseShelfValue } from './fields.js';
-import { normalizeArray, parseXML } from './parser.js';
-import type { ParsedWorksheet } from './types.js';
+import { listAvailableFields } from '../../metadata/field-builder.js';
+import { parseCanonicalColumnRef } from '../../metadata/field-resolver.js';
+import { parseShelfValue } from '../../metadata/fields.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type { ParsedWorksheet } from '../../metadata/types.js';
 
 export type SearchWorkbookFieldMatchAttribute =
   | 'caption'

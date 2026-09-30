@@ -1,4 +1,4 @@
-import { listAvailableFields } from '../../../../desktop/metadata/field-builder.js';
+import { listAvailableFields } from '../../../../metadata/field-builder.js';
 import {
   filterListAvailableFieldsSlimByLuid,
   projectListAvailableFieldsSlim,

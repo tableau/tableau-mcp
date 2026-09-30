@@ -1,7 +1,7 @@
 import { log } from '../../logging/logger.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type { ParsedWindow, ParsedWorkbook } from '../../metadata/types.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
-import type { ParsedWindow, ParsedWorkbook } from '../metadata/types.js';
 import { activateSheetValidated } from './activateSheet.js';
 
 /**

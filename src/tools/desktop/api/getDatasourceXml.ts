@@ -3,7 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
+import { artifactNameParam, sessionParam, xmlModeParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { resolveDatasourceRef } from './resolveDatasourceRef.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';

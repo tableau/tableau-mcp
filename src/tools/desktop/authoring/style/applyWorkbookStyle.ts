@@ -10,8 +10,8 @@ import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { IncompleteOperationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { sessionParam } from '../../../params.js';
 import { workbookTargetFingerprint } from '../../api/workbookTargetFingerprint.js';
-import { sessionParam } from '../../params.js';
 import {
   attachNextAction,
   doneNextAction,

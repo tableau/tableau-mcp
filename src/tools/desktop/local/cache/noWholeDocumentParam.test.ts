@@ -10,14 +10,14 @@ import {
 } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { getReadCachedXmlTool } from '../../../local/cache/readCachedXml.js';
+import { getWriteCachedXmlTool } from '../../../local/cache/writeCachedXml.js';
 import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
 import { getGetWorksheetXmlTool } from '../../api/getWorksheetXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { desktopToolFactories } from '../../tools.js';
-import { getReadCachedXmlTool } from './readCachedXml.js';
-import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('fs');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
@@ -117,7 +117,9 @@ describe('the served profile still has a working edit path with no document para
     invariant(file, 'get-worksheet-xml must mint a cache file the agent can address');
     expect(getResult.content[0].text).toContain(file);
 
-    const readCb = await Provider.from(getReadCachedXmlTool(new DesktopMcpServer()).callback);
+    const readCb = await Provider.from(
+      getReadCachedXmlTool(new DesktopMcpServer(), cachePathModule.getCacheDir).callback,
+    );
     const readResult = await readCb(
       {
         filePath: file,
@@ -133,10 +135,11 @@ describe('the served profile still has a working edit path with no document para
     invariant(readResult.content[0].type === 'text');
     expect(readResult.content[0].text).toContain('[Sales]');
 
-    const writeCb = await Provider.from(getWriteCachedXmlTool(new DesktopMcpServer()).callback);
+    const writeCb = await Provider.from(
+      getWriteCachedXmlTool(new DesktopMcpServer(), cachePathModule.getCacheDir).callback,
+    );
     const writeResult = await writeCb(
       {
-        session: 's1',
         filePath: file,
         xmlContent:
           "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>",

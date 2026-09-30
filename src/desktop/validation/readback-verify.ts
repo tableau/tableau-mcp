@@ -6,8 +6,8 @@
  * structures that must survive for the rendered chart to match the authored
  * XML, while tolerating readback-only formatting/style noise.
  */
-import { parseShelfValue } from '../metadata/fields.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { parseShelfValue } from '../../metadata/fields.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
 
 export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort';
 export type ReadbackFindingSeverity = 'error' | 'warning';

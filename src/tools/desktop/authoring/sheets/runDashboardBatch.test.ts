@@ -7,12 +7,12 @@ import type {
   ApplyWorkbookDocumentOptions,
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
-import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
+import { captureTargetWorksheetState } from '../../../../metadata/targetWorksheetState.js';
 import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

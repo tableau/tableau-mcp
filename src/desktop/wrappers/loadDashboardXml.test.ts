@@ -1,12 +1,12 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type { ParsedWindow } from '../../metadata/types.js';
+import * as validationRegistry from '../../metadata/validation/registry.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
-import type { ParsedWindow } from '../metadata/types.js';
-import * as validationRegistry from '../validation/registry.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about

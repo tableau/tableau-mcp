@@ -1,12 +1,12 @@
-import { xmlNamesEqual } from '../xmlElement.js';
 import {
   carryNamespaceDeclarations,
   generateUUID,
   normalizeArray,
   parseXML,
   serializeXML,
-} from './parser.js';
-import type { ParsedDashboard, ParsedWindow, ParsedWorkbook } from './types.js';
+} from '../../metadata/parser.js';
+import type { ParsedDashboard, ParsedWindow, ParsedWorkbook } from '../../metadata/types.js';
+import { xmlNamesEqual } from '../../metadata/xmlElement.js';
 
 type SizingMode =
   | 'auto'

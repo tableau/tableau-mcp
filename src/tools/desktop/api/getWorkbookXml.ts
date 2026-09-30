@@ -4,7 +4,7 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam, xmlModeParam } from '../params.js';
+import { sessionParam, xmlModeParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 

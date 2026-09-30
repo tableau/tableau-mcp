@@ -1,7 +1,10 @@
-import { runValidation } from '../validation/registry.js';
-import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
-import { inferFromBookmark } from './inferSlots.js';
-import { ensureUserNamespace } from './injectTemplateCore.js';
+import {
+  bookmarkToTemplateWorkbook,
+  deriveTemplatePass1Eligibility,
+} from '../../metadata/templates/bookmarkTemplate.js';
+import { inferFromBookmark } from '../../metadata/templates/inferSlots.js';
+import { ensureUserNamespace } from '../../metadata/templates/injectTemplateCore.js';
+import { runValidation } from '../../metadata/validation/registry.js';
 import { listBookmarkNames, readBookmark } from './templatePath.js';
 
 const EXPECTED_EXCLUDED = [

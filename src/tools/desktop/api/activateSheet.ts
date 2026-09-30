@@ -11,7 +11,7 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { sessionParam } from '../../params.js';
 import {
   prefillNextAction,
   type WireStructuredContent,

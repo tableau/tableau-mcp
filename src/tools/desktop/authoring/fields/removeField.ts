@@ -9,7 +9,6 @@ import {
   removeFieldFromRows,
 } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
 import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
@@ -17,8 +16,9 @@ import {
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
+import { wellFormedXmlRule } from '../../../../metadata/validation/rules/wellFormedXml.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';

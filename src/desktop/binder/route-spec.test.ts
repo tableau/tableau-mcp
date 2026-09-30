@@ -7,9 +7,9 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { selectEligible } from './ask-router.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 import {
   classifyAskRoute,
   detectCalcFirst,

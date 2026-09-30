@@ -5,28 +5,10 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  bindExplicitTemplate,
-  formatExplicitBindErrors,
-  schemaSummaryFromAvailableFields,
-} from '../../../../desktop/binder/explicit-bind.js';
-import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
-import {
-  parseColumnInstanceRef,
-  parseDatasourceQualifiedColumnRef,
-} from '../../../../desktop/metadata/field-resolver.js';
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { spliceBoundFacet } from '../../../../desktop/templates/facetSplice.js';
-import { rewriteFieldReferencesWithDiagnostics } from '../../../../desktop/templates/fieldReferenceRewriter.js';
-import { spliceBoundCalcDefinitions } from '../../../../desktop/templates/groupDefinitionSplice.js';
-import {
-  ensureUserNamespace,
-  stripDonorCurrencyOrLocaleFormats,
-} from '../../../../desktop/templates/injectTemplateCore.js';
-import { pruneUnboundOptionalFields } from '../../../../desktop/templates/optionalFieldPrune.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
 import {
@@ -43,6 +25,24 @@ import {
   FileNotFoundError,
   WorksheetXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.js';
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+  schemaSummaryFromAvailableFields,
+} from '../../../../metadata/binder/explicit-bind.js';
+import type { SlotSpec } from '../../../../metadata/binder/manifest-types.js';
+import {
+  parseColumnInstanceRef,
+  parseDatasourceQualifiedColumnRef,
+} from '../../../../metadata/field-resolver.js';
+import { spliceBoundFacet } from '../../../../metadata/templates/facetSplice.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../../metadata/templates/fieldReferenceRewriter.js';
+import { spliceBoundCalcDefinitions } from '../../../../metadata/templates/groupDefinitionSplice.js';
+import {
+  ensureUserNamespace,
+  stripDonorCurrencyOrLocaleFormats,
+} from '../../../../metadata/templates/injectTemplateCore.js';
+import { pruneUnboundOptionalFields } from '../../../../metadata/templates/optionalFieldPrune.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 

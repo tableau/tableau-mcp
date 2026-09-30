@@ -6,7 +6,7 @@ import {
   listTemplateCatalog,
   readBookmarkFromCatalogEntry,
 } from '../../../../desktop/templates/templatePath.js';
-import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
+import { createTemplateRuntimeSnapshot } from '../../../../metadata/templates/templateRuntimeSnapshot.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

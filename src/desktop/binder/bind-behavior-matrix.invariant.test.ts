@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate } from './binder.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 // W60-INVARIANT-TESTS suite 3 — BIND BEHAVIOR MATRIX (the ww-ou-arrow regression lock).
 //

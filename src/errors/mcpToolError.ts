@@ -1,6 +1,23 @@
 import { ZodiosError } from '@zodios/core';
-import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
+
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+  McpToolError,
+  XmlModificationError,
+  XmlValidationError,
+} from './sharedMcpToolError.js';
+
+export {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+  McpToolError,
+  XmlModificationError,
+  XmlValidationError,
+};
 
 import { BLOCKING_DIALOG_GUIDANCE } from '../desktop/callDeadline.js';
 import { ExecuteCommandError } from '../desktop/externalApi/executorTypes.js';
@@ -18,7 +35,6 @@ import {
   type WireStructuredContent,
   wireStructuredContent,
 } from '../tools/desktop/structuredContent.js';
-import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 // Load XML errors preserve Desktop's message when present; otherwise serialize structural errors.
 function xmlLoadErrorMessage(
@@ -27,46 +43,6 @@ function xmlLoadErrorMessage(
   return 'message' in error && typeof error.message === 'string'
     ? error.message
     : JSON.stringify(error);
-}
-
-export class McpToolError extends Error {
-  readonly type: string;
-  readonly statusCode: number;
-  readonly internalStatusCode?: number;
-  readonly internalError?: string;
-  readonly internalErrorDetails?: string;
-
-  constructor({
-    type,
-    message,
-    statusCode,
-    // internal error is any underlying error caused by dependencies
-    internalStatusCode,
-    internalError,
-    internalErrorDetails,
-  }: {
-    type: string;
-    message: string;
-    statusCode: number;
-    internalStatusCode?: number;
-    internalError?: string;
-    internalErrorDetails?: string;
-  }) {
-    super(message);
-    this.type = type;
-    this.statusCode = statusCode;
-    this.internalStatusCode = internalStatusCode;
-    this.internalError = internalError;
-    this.internalErrorDetails = internalErrorDetails;
-  }
-
-  getErrorText(): string {
-    return this.message;
-  }
-
-  toErr(): Err<this> {
-    return new Err(this);
-  }
 }
 
 /**
@@ -96,12 +72,6 @@ export class IncompleteOperationError<T extends object> extends McpToolError {
   override getErrorText(): string {
     const { structuredContent: _, ...body } = this.recoveryPayload;
     return JSON.stringify(body);
-  }
-}
-
-export class ArgsValidationError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'args-validation', message, statusCode: 400 });
   }
 }
 
@@ -493,32 +463,6 @@ export class StoryboardXmlLoadFailedError extends McpToolError {
   }
 }
 
-export class FileReadError extends McpToolError {
-  constructor(error: unknown) {
-    super({
-      type: 'file-read-error',
-      message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
-      statusCode: 500,
-    });
-  }
-}
-
-export class FileNotFoundError extends McpToolError {
-  constructor(filePath: string) {
-    super({
-      type: 'file-not-found',
-      message: `File not found: ${filePath}. Make sure the path was returned from the appropriate get-*-xml tool.`,
-      statusCode: 404,
-    });
-  }
-}
-
-export class XmlModificationError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'xml-modification-error', message, statusCode: 422 });
-  }
-}
-
 /**
  * Refuse to apply a cache file whose instance fingerprint does not match the current
  * Desktop session (cross-instance cache bleed, W9). `message` carries the recovery recipe.
@@ -526,17 +470,6 @@ export class XmlModificationError extends McpToolError {
 export class CacheSessionMismatchError extends McpToolError {
   constructor(message: string) {
     super({ type: 'cache-session-mismatch', message, statusCode: 409 });
-  }
-}
-
-export class XmlValidationError extends McpToolError {
-  constructor(errors: string[]) {
-    const errorList = errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
-    super({
-      type: 'xml-validation-error',
-      message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
-      statusCode: 422,
-    });
   }
 }
 

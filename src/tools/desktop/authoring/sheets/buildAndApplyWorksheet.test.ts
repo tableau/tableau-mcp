@@ -9,14 +9,14 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
-vi.mock('../../../../desktop/binder/explicit-bind.js', async () => {
+vi.mock('../../../../metadata/binder/explicit-bind.js', async () => {
   const actual = await vi.importActual<
-    typeof import('../../../../desktop/binder/explicit-bind.js')
-  >('../../../../desktop/binder/explicit-bind.js');
+    typeof import('../../../../metadata/binder/explicit-bind.js')
+  >('../../../../metadata/binder/explicit-bind.js');
   return { ...actual, bindExplicitTemplate: vi.fn(actual.bindExplicitTemplate) };
 });
 vi.mock('../../../../desktop/metadata/index.js');
-vi.mock('../../../../desktop/templates/fieldReferenceRewriter.js');
+vi.mock('../../../../metadata/templates/fieldReferenceRewriter.js');
 vi.mock('../../../../desktop/templates/templateColumnRequirements.js');
 vi.mock('../../../../desktop/templates/templatePath.js');
 vi.mock('../../../../desktop/templates/runtimeTemplateCatalog.js');
@@ -24,17 +24,17 @@ vi.mock('fs');
 
 import { existsSync, readFileSync } from 'fs';
 
-import { bindExplicitTemplate } from '../../../../desktop/binder/explicit-bind.js';
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
-import { rewriteFieldReferencesWithDiagnostics as rewriteFieldReferences } from '../../../../desktop/templates/fieldReferenceRewriter.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { getTemplateColumnRequirements } from '../../../../desktop/templates/templateColumnRequirements.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
-import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import type { ReadbackFinding } from '../../../../desktop/validation/readback-verify.js';
-import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { bindExplicitTemplate } from '../../../../metadata/binder/explicit-bind.js';
+import { rewriteFieldReferencesWithDiagnostics as rewriteFieldReferences } from '../../../../metadata/templates/fieldReferenceRewriter.js';
+import { createTemplateRuntimeSnapshot } from '../../../../metadata/templates/templateRuntimeSnapshot.js';
+import { wellFormedXmlRule } from '../../../../metadata/validation/rules/wellFormedXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
 const SESSION = 'session-1';
@@ -253,8 +253,8 @@ describe('buildAndApplyWorksheetTool', () => {
 
   it('builds the TBM-derived waterfall without a legacy synthetic anchor slot', async () => {
     const actualRewriter = await vi.importActual<
-      typeof import('../../../../desktop/templates/fieldReferenceRewriter.js')
-    >('../../../../desktop/templates/fieldReferenceRewriter.js');
+      typeof import('../../../../metadata/templates/fieldReferenceRewriter.js')
+    >('../../../../metadata/templates/fieldReferenceRewriter.js');
     const actualFs = await vi.importActual<typeof import('fs')>('fs');
     const waterfallBookmark = actualFs.readFileSync(
       `${process.cwd()}/src/desktop/data/templates/part-to-whole-waterfall.tbm`,
