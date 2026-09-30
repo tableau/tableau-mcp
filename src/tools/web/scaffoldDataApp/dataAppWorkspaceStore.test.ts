@@ -98,7 +98,9 @@ describe('createDataAppWorkspace', () => {
           finalizedTwb = finalizedTwb.split(find).join(replace);
         }
         expect(finalizedTwb).toContain("<worksheet name='Sales Demo'>");
-        expect(finalizedTwb).toContain("<window class='worksheet' maximized='true' name='Sales Demo'>");
+        expect(finalizedTwb).toContain(
+          "<window class='worksheet' maximized='true' name='Sales Demo'>",
+        );
         expect(finalizedTwb).toContain("<referenced-view instances='1' viewId='Sales Demo' />");
         expect(finalizedTwb).not.toContain('Sheet 1');
         expect(finalizedTwb).not.toContain('TODO Sheet Name');
