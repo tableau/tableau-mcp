@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import { queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import {
@@ -13,7 +14,10 @@ import {
 } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import {
+  getEmbeddedDatasourceVersionHint,
+  getVizqlDataServiceDisabledError,
+} from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
@@ -68,16 +72,23 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 describe('queryDatasourceTool', () => {
+  const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetDatasourceCredentials();
     resetResourceAccessCheckerSingleton();
+    // Default to a version that supports embedded queries so existing tests see the base messages;
+    // the version-hint tests override this per-test. (RestApi is globally mocked in testSetup, so
+    // versionIsAtLeast is stubbed rather than derived from RestApi.version — see getViewData.test.)
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    RestApi.versionIsAtLeast = originalVersionIsAtLeast;
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -556,13 +567,31 @@ describe('queryDatasourceTool', () => {
     });
   });
 
-  it('should show feature-disabled error when VDS is disabled', async () => {
+  it('should show feature-disabled error when VDS is disabled (REST API >= 3.30, no version hint)', async () => {
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
     mocks.mockQueryDatasource.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
+    // On >= 3.30 the message is the plain VDS-disabled text, with no embedded-version hint appended.
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(result.content[0].text).not.toContain(getEmbeddedDatasourceVersionHint());
+  });
+
+  it('should append the embedded-datasource version hint to the feature-disabled error on REST API < 3.30', async () => {
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
+    mocks.mockQueryDatasource.mockResolvedValue(Err({ type: 'feature-disabled' }));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    // The base "enable VDS via TSM" guidance is preserved and the hedged hint is appended.
+    expect(result.content[0].text).toContain(getVizqlDataServiceDisabledError());
+    expect(result.content[0].text).toContain(getEmbeddedDatasourceVersionHint());
+    expect(result.content[0].text).toBe(
+      `${getVizqlDataServiceDisabledError()} ${getEmbeddedDatasourceVersionHint()}`,
+    );
   });
 
   it('should surface an actionable message when workbook-datasource querying is not enabled', async () => {
