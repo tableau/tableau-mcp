@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../params.js';
+import { deprecatedArtifactAliasParam, resolveArtifactNameArg } from '../../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import {

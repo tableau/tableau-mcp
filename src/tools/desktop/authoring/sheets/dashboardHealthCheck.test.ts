@@ -4,9 +4,9 @@ import path from 'path';
 import { Err, Ok } from 'ts-results-es';
 
 import { hashSchemaSummary, sha256Hex } from '../../../../desktop/binder/memo.js';
-import * as schemaSummaryModule from '../../../../desktop/binder/schema-summary.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+import * as schemaSummaryModule from '../../../../metadata/binder/schema-summary.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -23,9 +23,9 @@ import {
 // wrapped (real behavior, spyable) so the raw-hash short-circuit test can assert it
 // is never even consulted when the workbook is byte-identical.
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
-vi.mock('../../../../desktop/binder/schema-summary.js', async (importOriginal) => {
+vi.mock('../../../../metadata/binder/schema-summary.js', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../desktop/binder/schema-summary.js')>();
+    await importOriginal<typeof import('../../../../metadata/binder/schema-summary.js')>();
   return { ...actual, summarizeSchema: vi.fn(actual.summarizeSchema) };
 });
 
@@ -245,7 +245,7 @@ describe('dashboardHealthCheck read-only proof (import audit)', () => {
       'ts-results-es',
       'zod',
       '../../../../desktop/binder/memo.js',
-      '../../../../desktop/binder/schema-summary.js',
+      '../../../../metadata/binder/schema-summary.js',
       '../../../../desktop/wrappers/getWorkbookXml.js',
       '../../../../desktop/session/sessionResolution.js',
       '../../../../errors/mcpToolError.js',

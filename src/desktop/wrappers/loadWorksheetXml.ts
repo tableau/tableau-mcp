@@ -2,24 +2,31 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import {
+  extractSheetXml,
+  upsertSheetIntoWorkbook,
+  upsertWorksheetAndWindowIntoWorkbook,
+  worksheetFragmentSimpleId,
+} from '../../metadata/sheets.js';
+import {
+  compareTargetWorksheetState,
+  type TargetWorksheetState,
+} from '../../metadata/targetWorksheetState.js';
+import type { ParsedWorksheet } from '../../metadata/types.js';
+import {
+  blockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../metadata/validation/registry.js';
+import { ValidationIssue } from '../../metadata/validation/types.js';
+import { xmlNamesEqual } from '../../metadata/xmlElement.js';
 import {
   ExecuteCommandError,
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
-import {
-  extractSheetXml,
-  upsertSheetIntoWorkbook,
-  upsertWorksheetAndWindowIntoWorkbook,
-  worksheetFragmentSimpleId,
-} from '../metadata/sheets.js';
-import {
-  compareTargetWorksheetState,
-  type TargetWorksheetState,
-} from '../metadata/targetWorksheetState.js';
-import type { ParsedWorksheet } from '../metadata/types.js';
 import {
   isPromisedSortLossWarning,
   type ReadbackFinding,
@@ -28,16 +35,9 @@ import {
   verifyWorksheetReadback,
 } from '../validation/readback-verify.js';
 import {
-  blockingValidationIssues,
-  introducedBlockingValidationIssues,
-  runValidation,
-} from '../validation/registry.js';
-import { ValidationIssue } from '../validation/types.js';
-import {
   checkUsedFieldValidity,
   mergeUsedFieldValidityVerification,
 } from '../validation/usedFieldValidity.js';
-import { xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';

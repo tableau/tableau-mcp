@@ -1,6 +1,6 @@
 import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 
-import { xmlNamesEqual } from '../xmlElement.js';
+import { xmlNamesEqual } from '../../metadata/xmlElement.js';
 
 /**
  * Injects viewpoint elements into the dashboard window inside workbook XML.

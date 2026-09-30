@@ -2,17 +2,22 @@ import { readdirSync, readFileSync } from 'fs';
 import { join, relative } from 'path';
 import ts from 'typescript';
 
+import { localToolNames } from '../local/toolName.js';
+import { sharedToolNames } from '../shared/toolName.js';
 import { desktopToolNames } from './toolName.js';
 
 const REPO_ROOT = join(__dirname, '../../..');
-const DESKTOP_TOOLS_ROOT = join(REPO_ROOT, 'src/tools/desktop');
+const DESKTOP_TOOL_ROOTS = ['src/tools/desktop', 'src/tools/shared', 'src/tools/local'].map(
+  (root) => join(REPO_ROOT, root),
+);
+const desktopSurfaceToolNames = [...desktopToolNames, ...sharedToolNames, ...localToolNames];
 
 // Files outside the walked root whose string literals still reach the model verbatim.
 // Keep this list minimal: widen it only when an out-of-root file emits guidance prose.
 const EXTRA_FILES = [
   // Binder blocker codes and bind explanations are built here and surfaced unchanged
   // through bind-template results.
-  'src/desktop/binder/explicit-bind.ts',
+  'src/metadata/binder/explicit-bind.ts',
 ] as const;
 
 const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard'] as const;
@@ -280,17 +285,18 @@ type Candidate = {
   literal: string;
 };
 
-// Every non-test-support .ts file under src/tools/desktop, plus EXTRA_FILES: a new tool's
+// Every non-test-support .ts file in the Desktop-served tool roots, plus EXTRA_FILES: a new tool's
 // guidance prose is covered the moment its file lands, with no list to remember to update.
 // Test-support modules (unit tests, mocks, shared fixtures) are scaffolding, not guidance the
 // model ever sees, so skip them all
 const TEST_SUPPORT_RE = /(\.test|\.mock|\.testutils|testfixtures)\.ts$/i;
 function sourceFiles(): string[] {
-  return readdirSync(DESKTOP_TOOLS_ROOT, { recursive: true })
-    .map(String)
-    .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT_RE.test(file))
-    .map((file) => join(DESKTOP_TOOLS_ROOT, file))
-    .concat(EXTRA_FILES.map((file) => join(REPO_ROOT, file)));
+  return DESKTOP_TOOL_ROOTS.flatMap((root) =>
+    readdirSync(root, { recursive: true })
+      .map(String)
+      .filter((file) => file.endsWith('.ts') && !TEST_SUPPORT_RE.test(file))
+      .map((file) => join(root, file)),
+  ).concat(EXTRA_FILES.map((file) => join(REPO_ROOT, file)));
 }
 
 function stringLiterals(source: string): string[] {
@@ -341,13 +347,13 @@ const scannedCandidates = sourceFiles().flatMap((fullPath) => {
 
 describe('Desktop emitted tool references', () => {
   it('does not register retired template wrappers', () => {
-    expect(desktopToolNames).not.toEqual(
+    expect(desktopSurfaceToolNames).not.toEqual(
       expect.arrayContaining(['propose-template', 'validate-proposal', 'list-xml-templates']),
     );
   });
 
   it('keeps guidance tool-name tokens aligned with the Desktop registry', () => {
-    const registered = new Set<string>(desktopToolNames);
+    const registered = new Set<string>(desktopSurfaceToolNames);
     const conditional = new Set<string>(CONDITIONAL_TOOLS);
     const nonToolVocabulary = new Set<string>(NON_TOOL_VOCABULARY);
 

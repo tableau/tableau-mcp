@@ -8,7 +8,6 @@ import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   buildTemplateWorksheetArtifact,
   type BuiltTemplateWorksheetArtifact,
-  type WorksheetTemplatePlan,
 } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   getTemplateArtifactStore,
@@ -33,10 +32,11 @@ import {
   McpToolError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
+import type { WorksheetTemplatePlan } from '../../../metadata/templates/buildWorksheetXml.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { artifactFileParam, artifactNameParam, sessionParam } from '../../params.js';
 import { resolveWorksheetSimpleId } from '../authoring/fields/worksheetCache.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
-import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import {
   doneNextAction,
   jsonToolResult,

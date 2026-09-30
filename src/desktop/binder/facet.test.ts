@@ -18,9 +18,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { classifyNoLlm } from './classify.js';
-import type { Family, RuntimeTemplateDescriptor, SlotKind, SlotSpec } from './manifest-types.js';
-import type { SchemaField, SchemaSummary } from './schema-summary.js';
+import { classifyNoLlm } from '../../metadata/binder/classify.js';
+import type {
+  Family,
+  RuntimeTemplateDescriptor,
+  SlotKind,
+  SlotSpec,
+} from '../../metadata/binder/manifest-types.js';
+import type { SchemaField, SchemaSummary } from '../../metadata/binder/schema-summary.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 function field(

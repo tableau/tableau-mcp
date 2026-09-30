@@ -1,17 +1,17 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
+import * as validationRegistry from '../../metadata/validation/registry.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
-import * as validationRegistry from '../validation/registry.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
-vi.mock('../validation/registry.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../validation/registry.js')>();
+vi.mock('../../metadata/validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../metadata/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
 });
 

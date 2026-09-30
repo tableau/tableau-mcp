@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
-import type { WorksheetTemplatePlan } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
@@ -23,6 +22,7 @@ import {
   FileReadError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
+import type { WorksheetTemplatePlan } from '../../../metadata/templates/buildWorksheetXml.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -443,7 +443,7 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      `Datasource "${datasource}" is not a unique live datasource name or caption.`,
+      `Datasource "${datasource}" is not a unique workbook datasource name or caption.`,
     );
     expect(loadWorksheetXmlModule.loadWorksheetXml).not.toHaveBeenCalled();
   });

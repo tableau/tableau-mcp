@@ -1,4 +1,7 @@
-import { rewriteFieldReferences, type TemplateSlotReference } from './fieldReferenceRewriter.js';
+import {
+  rewriteFieldReferences,
+  type TemplateSlotReference,
+} from '../../metadata/templates/fieldReferenceRewriter.js';
 
 // W14-CM1 removed the thin `replaceFieldReferences` wrapper; both consumers now call
 // the shared core (`rewriteFieldReferences`) directly. The wrapper was a pure

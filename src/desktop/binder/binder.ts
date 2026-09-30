@@ -18,9 +18,6 @@
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
-import { CANONICAL_DERIVATION_SHORT_FORMS } from '../derivations.js';
-import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
-import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
@@ -31,10 +28,14 @@ import {
   MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
   resolveLooseFieldReference,
-} from './classify.js';
-import { escapeXml } from './escape.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
-import { type SchemaField, type SchemaSummary, summarizeSchema } from './schema-summary.js';
+} from '../../metadata/binder/classify.js';
+import { escapeXml } from '../../metadata/binder/escape.js';
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
+import {
+  type SchemaField,
+  type SchemaSummary,
+  summarizeSchema,
+} from '../../metadata/binder/schema-summary.js';
 import {
   type BindingProposal,
   type Blocker,
@@ -42,8 +43,14 @@ import {
   type FilterSpec,
   resolveInSummary,
   validateBinding,
-} from './validate.js';
-import { WATERFALL_ORDER_FIELD_RE, WATERFALL_TEMPLATE_NAME } from './waterfall.js';
+} from '../../metadata/binder/validate.js';
+import {
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from '../../metadata/binder/waterfall.js';
+import { CANONICAL_DERIVATION_SHORT_FORMS } from '../../metadata/derivations.js';
+import type { DateparseAxisSpec } from '../../metadata/templates/dateparseTemporalAxis.js';
+import type { OptionalFieldPruneSpec } from '../../metadata/templates/optionalFieldPrune.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the

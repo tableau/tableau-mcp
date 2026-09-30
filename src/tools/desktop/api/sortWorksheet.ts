@@ -13,7 +13,7 @@ import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { resolveShelfField } from './resolveShelfField.js';
 

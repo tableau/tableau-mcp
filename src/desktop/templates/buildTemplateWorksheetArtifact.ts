@@ -6,57 +6,30 @@ import {
   McpToolError,
   XmlValidationError,
 } from '../../errors/mcpToolError.js';
-import { bindExplicitTemplate, formatExplicitBindErrors } from '../binder/explicit-bind.js';
-import type { Derivation } from '../binder/manifest-types.js';
-import { summarizeSchema } from '../binder/schema-summary.js';
-import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
-import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
-import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
-import { planTopN } from '../refine/refineWorksheet.js';
-import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
+import { captureTargetWorksheetState } from '../../metadata/targetWorksheetState.js';
+import {
+  buildWorksheetXml,
+  type BuildWorksheetXmlError,
+  type WorksheetTemplatePlan,
+} from '../../metadata/templates/buildWorksheetXml.js';
 import type { TemplateWorksheetArtifact } from './templateArtifactStore.js';
 import { getTemplateCatalogEntry, readBookmarkFromCatalogEntry } from './templatePath.js';
-import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
-
-export const MAX_TEMPLATE_BINDINGS = 32;
-
-function datasourceNamesAreEquivalent(
-  requested: string,
-  bound: string,
-  liveDatasourceNames: ReadonlySet<string>,
-): boolean {
-  const normalizedRequested = requested.normalize('NFC');
-  const normalizedBound = bound.normalize('NFC');
-  if (normalizedRequested === normalizedBound) return true;
-
-  const [raw, unwrapped] =
-    normalizedRequested.startsWith('[') && normalizedRequested.endsWith(']')
-      ? [normalizedRequested, normalizedRequested.slice(1, -1)]
-      : normalizedBound.startsWith('[') && normalizedBound.endsWith(']')
-        ? [normalizedBound, normalizedBound.slice(1, -1)]
-        : [undefined, undefined];
-  if (raw === undefined || unwrapped === undefined) return false;
-  if (unwrapped !== normalizedRequested && unwrapped !== normalizedBound) return false;
-
-  const normalizedLiveNames = new Set(
-    [...liveDatasourceNames].map((name) => name.normalize('NFC')),
-  );
-  return !(normalizedLiveNames.has(raw) && normalizedLiveNames.has(unwrapped));
-}
-
-export interface WorksheetTemplatePlan {
-  templateName: string;
-  title: string;
-  datasource: string;
-  fieldMapping: Record<string, string>;
-  derivationOverrides?: Record<string, Derivation>;
-  topN?: number;
-}
 
 export interface BuiltTemplateWorksheetArtifact {
   artifact: TemplateWorksheetArtifact;
   provenance: string;
   bindings: Array<{ slotId: string; field: string }>;
+}
+
+function asMcpError(error: BuildWorksheetXmlError): McpToolError {
+  switch (error.kind) {
+    case 'args':
+      return new ArgsValidationError(error.message);
+    case 'xml':
+      return new XmlValidationError(error.issues);
+    case 'generation':
+      return new FileReadError(new Error(error.message));
+  }
 }
 
 export function buildTemplateWorksheetArtifact({
@@ -72,13 +45,6 @@ export function buildTemplateWorksheetArtifact({
   workbookXml: string;
   plan: WorksheetTemplatePlan;
 }): Result<BuiltTemplateWorksheetArtifact, McpToolError> {
-  const bindingEntries = Object.entries(plan.fieldMapping);
-  if (bindingEntries.length === 0 || bindingEntries.length > MAX_TEMPLATE_BINDINGS) {
-    return new ArgsValidationError(
-      `fieldMapping must contain 1-${MAX_TEMPLATE_BINDINGS} template slot bindings.`,
-    ).toErr();
-  }
-
   let entry;
   try {
     entry = getTemplateCatalogEntry(plan.templateName);
@@ -94,104 +60,31 @@ export function buildTemplateWorksheetArtifact({
     return new ArgsValidationError(`Template "${plan.templateName}" could not be read.`).toErr();
   }
 
+  const built = buildWorksheetXml({
+    workbookXml,
+    templateXml: bookmarkXml,
+    plan,
+    nonce: artifactId,
+  });
+  if (built.isErr()) return asMcpError(built.error).toErr();
+
   try {
-    const snapshot = createTemplateRuntimeSnapshot(plan.templateName, bookmarkXml);
-    if (!snapshot.eligibility.pass1_eligible) {
-      return new ArgsValidationError(
-        `Template "${plan.templateName}" is not eligible for worksheet template application.`,
-      ).toErr();
-    }
-
-    const schema = summarizeSchema(workbookXml);
-    const liveDatasourceNames = new Set(schema.fields.map((field) => field.datasource));
-    const resolvedPlanDatasource = resolveUniqueDatasourceName(workbookXml, plan.datasource);
-    if (resolvedPlanDatasource === null) {
-      return new ArgsValidationError(
-        `Datasource "${plan.datasource}" is not a unique live datasource name or caption.`,
-      ).toErr();
-    }
-    const explicitBind = bindExplicitTemplate(plan.templateName, plan.fieldMapping, schema, {
-      contract: snapshot.descriptor,
-      title: plan.title,
-      datasource: resolvedPlanDatasource,
-      derivationOverrides: plan.derivationOverrides,
-    });
-    if (!explicitBind.ok) {
-      return new ArgsValidationError(
-        formatExplicitBindErrors(plan.templateName, explicitBind.errors),
-      ).toErr();
-    }
-    if (
-      !datasourceNamesAreEquivalent(
-        resolvedPlanDatasource,
-        explicitBind.datasource,
-        liveDatasourceNames,
-      )
-    ) {
-      return new ArgsValidationError(
-        `Datasource "${plan.datasource}" does not match the bound datasource "${explicitBind.datasource}".`,
-      ).toErr();
-    }
-
-    const injected = buildInjectedWorkbookXml({
-      workbookXml,
-      templateXml: snapshot.xml,
-      title: plan.title,
-      sheetType: 'worksheet',
-      templateParameters: { DATASOURCE: explicitBind.datasource },
-      fieldMapping: explicitBind.fieldMapping,
-      templateSlots: explicitBind.templateSlots,
-      fieldMetadata: explicitBind.fieldMetadata,
-      applyNonce: artifactId,
-      optionalFieldPrunes: explicitBind.optionalFieldPrunes,
-    });
-    if (!injected.ok) return new XmlValidationError(injected.issues).toErr();
-
-    let worksheetXml = extractSheetXml(injected.xml, plan.title);
-    const windowXml = extractWorksheetWindowXml(injected.xml, plan.title);
-    if (!worksheetXml || !windowXml) {
-      return new ArgsValidationError(
-        `Template "${plan.templateName}" did not produce a complete worksheet artifact.`,
-      ).toErr();
-    }
-    if (plan.topN !== undefined) {
-      const bounded = planTopN(worksheetXml, { n: plan.topN });
-      if (!bounded.ok) {
-        return new ArgsValidationError(
-          `topN could not be applied to template "${plan.templateName}": ${bounded.reason}`,
-        ).toErr();
-      }
-      worksheetXml = bounded.xml;
-    }
-
     return Ok({
       artifact: {
         id: artifactId,
         sessionId,
         instanceId,
         templateName: plan.templateName,
-        templateSourceHash: snapshot.sourceHash,
+        templateSourceHash: built.value.templateSourceHash,
         title: plan.title,
-        datasource: explicitBind.datasource,
-        fieldMapping: explicitBind.fieldMapping,
-        worksheetXml,
-        windowXml,
-        targetState: captureTargetWorksheetState(workbookXml, plan.title, worksheetXml),
+        datasource: built.value.datasource,
+        fieldMapping: built.value.fieldMapping,
+        worksheetXml: built.value.worksheetXml,
+        windowXml: built.value.windowXml,
+        targetState: captureTargetWorksheetState(workbookXml, plan.title, built.value.worksheetXml),
       },
       provenance: entry.provenance,
-      bindings: explicitBind.templateSlots
-        .map((slot) => {
-          const mappingKey = slot.qualified_key_required
-            ? `${slot.template_field}@${slot.derivation}`
-            : slot.template_field;
-          return {
-            slotId: slot.slot_id,
-            field: explicitBind.fieldMapping[mappingKey],
-          };
-        })
-        .filter(
-          (binding): binding is { slotId: string; field: string } => binding.field !== undefined,
-        ),
+      bindings: built.value.bindings,
     });
   } catch (error) {
     return new FileReadError(error).toErr();

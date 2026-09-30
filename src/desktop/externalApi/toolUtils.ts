@@ -1,7 +1,7 @@
 import { Ok, Result } from 'ts-results-es';
 
 import { ArgsValidationError, McpToolError } from '../../errors/mcpToolError.js';
-import { decodeXmlEntities } from '../xmlElement.js';
+import { decodeXmlEntities } from '../../metadata/xmlElement.js';
 
 export type RouteMissingOptions = {
   /** Safe only for endpoints whose contract has no resource-level `not-found` outcome. */

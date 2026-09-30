@@ -1,8 +1,8 @@
 import { Ok } from 'ts-results-es';
 
+import { buildInjectedWorkbookXml } from '../../metadata/templates/injectTemplateCore.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import { buildInjectedWorkbookXml } from '../templates/injectTemplateCore.js';
 import { readTemplate } from '../templates/templatePath.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 

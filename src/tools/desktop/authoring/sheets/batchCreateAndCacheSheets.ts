@@ -20,7 +20,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 function getSuccessResult(result: unknown): CallToolResult {

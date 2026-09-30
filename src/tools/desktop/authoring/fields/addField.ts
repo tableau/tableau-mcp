@@ -5,17 +5,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
-import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
   listAvailableFields,
 } from '../../../../desktop/metadata/index.js';
-import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
 import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
@@ -25,6 +21,10 @@ import {
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../../metadata/field-resolver.js';
+import { parseShelfValue } from '../../../../metadata/fields.js';
+import { normalizeArray, parseXML } from '../../../../metadata/parser.js';
+import { wellFormedXmlRule } from '../../../../metadata/validation/rules/wellFormedXml.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';

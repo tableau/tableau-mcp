@@ -1,18 +1,18 @@
 import type { Result } from 'ts-results-es';
 
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type {
+  ParsedDashboard,
+  ParsedWindow,
+  ParsedWorkbook,
+  ParsedWorksheet,
+} from '../../metadata/types.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import type {
   ExecuteCommandError,
   ExecuteCommandResult,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
-import type {
-  ParsedDashboard,
-  ParsedWindow,
-  ParsedWorkbook,
-  ParsedWorksheet,
-} from '../metadata/types.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 

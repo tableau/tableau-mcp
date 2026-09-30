@@ -5,7 +5,7 @@ import {
   Node as XmlNode,
 } from '@xmldom/xmldom';
 
-import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
+import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../../metadata/xmlElement.js';
 
 export type TargetDashboardInvariantIssueCode =
   | 'target-dashboard-missing'

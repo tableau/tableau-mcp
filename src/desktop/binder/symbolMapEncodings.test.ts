@@ -1,4 +1,4 @@
-import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferences } from '../../metadata/templates/fieldReferenceRewriter.js';
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { readTemplate } from '../templates/templatePath.js';

@@ -2,18 +2,18 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import {
+  blockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../metadata/validation/registry.js';
+import { ValidationIssue } from '../../metadata/validation/types.js';
+import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
-import {
-  blockingValidationIssues,
-  introducedBlockingValidationIssues,
-  runValidation,
-} from '../validation/registry.js';
-import { ValidationIssue } from '../validation/types.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { sourceSha256 } from './cacheFingerprint.js';

@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { buildInjectedWorkbookXml } from '../../metadata/templates/injectTemplateCore.js';
 import { type BindingProposal, bindTemplate, summarizeSchema } from '../binder/binder.js';
-import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
 import { createPuppetCompatibilityProjection } from './puppetCompatibilityProjection.js';
 import {
   getRuntimeTemplateSnapshot,

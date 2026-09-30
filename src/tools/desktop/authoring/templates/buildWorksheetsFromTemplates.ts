@@ -4,10 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import {
-  buildTemplateWorksheetArtifact,
-  type WorksheetTemplatePlan,
-} from '../../../../desktop/templates/buildTemplateWorksheetArtifact.js';
+import { buildTemplateWorksheetArtifact } from '../../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
@@ -16,6 +13,7 @@ import {
   ArgsValidationError,
   DesktopCommandExecutionError,
 } from '../../../../errors/mcpToolError.js';
+import type { WorksheetTemplatePlan } from '../../../../metadata/templates/buildWorksheetXml.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';

@@ -1,6 +1,6 @@
-import { classifyNoLlm, resolveLooseFieldReference } from './classify.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
-import type { SchemaField, SchemaSummary } from './schema-summary.js';
+import { classifyNoLlm, resolveLooseFieldReference } from '../../metadata/binder/classify.js';
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
+import type { SchemaField, SchemaSummary } from '../../metadata/binder/schema-summary.js';
 
 function field({ caption, columnName }: { caption?: string; columnName: string }): SchemaField {
   const bare = columnName.replace(/^\[|\]$/g, '');

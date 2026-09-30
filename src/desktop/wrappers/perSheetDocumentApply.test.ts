@@ -1,8 +1,8 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
+import * as validationRegistry from '../../metadata/validation/registry.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import * as validationRegistry from '../validation/registry.js';
 import { sourceSha256 } from './cacheFingerprint.js';
 import { type PerSheetKind, tryApplyViaPerSheetRoute } from './perSheetDocumentApply.js';
 

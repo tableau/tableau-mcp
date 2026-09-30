@@ -6,7 +6,7 @@ import { WorksheetUnderlyingDataQuery } from '../../../desktop/externalApi/types
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { sessionParam } from '../params.js';
+import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { qualifyColumnFields } from './qualifyColumnField.js';
 

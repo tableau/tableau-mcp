@@ -10,10 +10,10 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { selectEligible } from './ask-router.js';
 import { classifyNoLlm, summarizeSchema } from './binder.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
@@ -90,7 +90,7 @@ describe('selectEligible — reuses the binder matcher, fail-closed on unproven/
 // see the "shared behavioral table" describe block below for that.
 describe('ask-router — cue-list lockstep parity with classify.ts (CHART_NOUN_KEYWORDS)', () => {
   const ASK_ROUTER_SRC = path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts');
-  const CLASSIFY_SRC = path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts');
+  const CLASSIFY_SRC = path.join(repoRoot, 'src', 'metadata', 'binder', 'classify.ts');
 
   // Regex-extract the CHART_NOUN_KEYWORDS Set literal's string members from a source file.
   // ANCHORED on `const CHART_NOUN_KEYWORDS` so the PLURALIZABLE_CHART_NOUNS set (whose doc
@@ -159,7 +159,7 @@ describe('ask-router — spatial-intent family guard (W-23447710)', () => {
       path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'),
     );
     const classifyAliases = extractAliases(
-      path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'),
+      path.join(repoRoot, 'src', 'metadata', 'binder', 'classify.ts'),
     );
     expect([...askRouterAliases].sort()).toEqual([...classifyAliases].sort());
   });
@@ -176,7 +176,7 @@ describe('ask-router — spatial-intent family guard (W-23447710)', () => {
       path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'),
     );
     const classifyCues = extractMarkCues(
-      path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'),
+      path.join(repoRoot, 'src', 'metadata', 'binder', 'classify.ts'),
     );
     expect([...askRouterCues].sort()).toEqual([...classifyCues].sort());
   });

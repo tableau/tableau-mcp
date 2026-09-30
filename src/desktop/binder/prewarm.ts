@@ -13,10 +13,14 @@
 // components the bind memo (memo.ts) keys on, so a caller can correlate a warmed
 // datasource with subsequent warm binds.
 
+import type {
+  Family,
+  RuntimeTemplateDescriptor,
+  SlotKind,
+} from '../../metadata/binder/manifest-types.js';
 import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { listTemplateCatalog } from '../templates/templatePath.js';
 import type { SchemaField, SchemaSummary } from './binder.js';
-import type { Family, RuntimeTemplateDescriptor, SlotKind } from './manifest-types.js';
 import { getDefaultSchemaCache, hashManifests, hashSchemaSummary, SchemaCache } from './memo.js';
 
 type TemplateManifest = RuntimeTemplateDescriptor;

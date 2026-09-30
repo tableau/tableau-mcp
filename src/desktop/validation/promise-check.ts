@@ -11,12 +11,12 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
+import type { ValidationIssue } from '../../metadata/validation/types.js';
 import {
   isPromisedSortLossWarning,
   type ReadbackFinding,
   type ReadbackVerificationResult,
 } from './readback-verify.js';
-import type { ValidationIssue } from './types.js';
 
 export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
 

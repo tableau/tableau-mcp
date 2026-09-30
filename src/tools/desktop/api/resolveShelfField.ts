@@ -1,6 +1,6 @@
-import { parseCanonicalColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { listFields, normalizeArray, parseXML } from '../../../desktop/metadata/index.js';
-import { ParsedWorksheet } from '../../../desktop/metadata/types.js';
+import { parseCanonicalColumnRef } from '../../../metadata/field-resolver.js';
+import { ParsedWorksheet } from '../../../metadata/types.js';
 
 /**
  * Resolve a user-supplied field name to the exact on-shelf column-instance token a worksheet's

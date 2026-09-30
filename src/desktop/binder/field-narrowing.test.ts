@@ -11,9 +11,13 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type {
+  Family,
+  RuntimeTemplateDescriptor,
+  SlotKind,
+} from '../../metadata/binder/manifest-types.js';
+import type { SchemaField, SchemaSummary } from '../../metadata/binder/schema-summary.js';
 import { buildLlmInput } from './binder.js';
-import type { Family, RuntimeTemplateDescriptor, SlotKind } from './manifest-types.js';
-import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
 // ── Budget justification ─────────────────────────────────────────────
 // The small "propose" LLM prompt = system framing + output schema + this

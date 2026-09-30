@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { bindExplicitTemplate, schemaSummaryFromAvailableFields } from '../binder/explicit-bind.js';
-import { bookmarkToTemplateWorkbook, deriveTemplatePass1Eligibility } from './bookmarkTemplate.js';
-import { inferBindingDescriptor, inferFromBookmark } from './inferSlots.js';
-import { buildInjectedWorkbookXml } from './injectTemplateCore.js';
+import {
+  bindExplicitTemplate,
+  schemaSummaryFromAvailableFields,
+} from '../../metadata/binder/explicit-bind.js';
+import {
+  bookmarkToTemplateWorkbook,
+  deriveTemplatePass1Eligibility,
+} from '../../metadata/templates/bookmarkTemplate.js';
+import { inferBindingDescriptor, inferFromBookmark } from '../../metadata/templates/inferSlots.js';
+import { buildInjectedWorkbookXml } from '../../metadata/templates/injectTemplateCore.js';
 
 const PULSE_SHAPED_BOOKMARK =
   "\r\n<?xml version='1.0'?><bookmark version='10.1'>" +

@@ -1,7 +1,10 @@
-import { listAvailableFields } from './field-builder.js';
-import { type FieldRewriteEvent, setFieldRewriteListener } from './field-rewrite-listener.js';
-import { addFieldToCols } from './fields.js';
-import { normalizeArray, parseXML } from './parser.js';
+import { listAvailableFields } from '../../metadata/field-builder.js';
+import {
+  type FieldRewriteEvent,
+  setFieldRewriteListener,
+} from '../../metadata/field-rewrite-listener.js';
+import { addFieldToCols } from '../../metadata/fields.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
 
 // [Order Date] is a plain, never-customized field: Tableau records it only under
 // <connection><metadata-records>, with no <column> element. listAvailableFields

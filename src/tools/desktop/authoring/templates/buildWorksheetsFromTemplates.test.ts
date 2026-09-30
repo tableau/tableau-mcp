@@ -5,9 +5,9 @@ import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
-import { upsertSheetIntoWorkbook } from '../../../../desktop/metadata/sheets.js';
 import { sessionRouteState } from '../../../../desktop/route/route-state.js';
 import { TemplateArtifactStore } from '../../../../desktop/templates/templateArtifactStore.js';
+import { upsertSheetIntoWorkbook } from '../../../../metadata/sheets.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

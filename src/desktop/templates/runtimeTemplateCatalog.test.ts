@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
+import { createTemplateRuntimeSnapshot } from '../../metadata/templates/templateRuntimeSnapshot.js';
 import {
   getRuntimeTemplateSnapshot,
   loadRuntimeTemplateCatalogSnapshots,
@@ -8,7 +9,6 @@ import {
   runtimeTemplateDescriptorFromSnapshot,
 } from './runtimeTemplateCatalog.js';
 import * as templatePath from './templatePath.js';
-import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
 const BOOKMARK =
   "<?xml version='1.0'?><bookmark version='10.1'>" +

@@ -9,7 +9,7 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
+import { artifactNameParam, sessionParam, xmlModeParam } from '../../params.js';
 import { DesktopTool } from '../tool.js';
 import { finishXmlRead, XmlReadFileResult } from './xmlReadResult.js';
 

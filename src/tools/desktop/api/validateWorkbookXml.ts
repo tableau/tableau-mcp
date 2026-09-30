@@ -3,10 +3,10 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ValidationResult } from '../../../desktop/externalApi/types.js';
-import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
-import { ValidationIssue } from '../../../desktop/validation/types.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
+import { wellFormedXmlRule } from '../../../metadata/validation/rules/wellFormedXml.js';
+import { ValidationIssue } from '../../../metadata/validation/types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 

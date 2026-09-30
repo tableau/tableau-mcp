@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ValidationIssue } from '../../metadata/validation/types.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatDashboardPromiseCheck,
@@ -7,7 +8,6 @@ import {
   formatWorksheetPromiseCheck,
 } from './promise-check.js';
 import type { ReadbackFinding } from './readback-verify.js';
-import type { ValidationIssue } from './types.js';
 
 const warning = (): ValidationIssue => ({ ruleId: 'x', severity: 'warning', message: 'w' });
 const sortWarning = (

@@ -1,11 +1,11 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
+import * as validationRegistry from '../../metadata/validation/registry.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import type { WorkbookDocument } from '../externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { planRoundStackedBar, type RoundStackedBarPlan } from '../refine/roundStackedBar.js';
-import * as validationRegistry from '../validation/registry.js';
 import { applyRoundedStackedBar } from './applyRoundedStackedBar.js';
 
 const WORKSHEET_ID = '{B157D4FA-12A0-495E-BEC4-3572B3567648}';

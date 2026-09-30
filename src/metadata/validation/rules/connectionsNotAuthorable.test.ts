@@ -1,0 +1,196 @@
+import fs from 'fs';
+import path from 'path';
+import { describe, expect, it } from 'vitest';
+
+import { loadRuntimeTemplateCatalogSnapshots } from '../../../desktop/templates/runtimeTemplateCatalog.js';
+import { runValidation } from '../registry.js';
+import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
+
+const LIVE_READBACK_FIXTURE = path.join(
+  process.cwd(),
+  'src',
+  'desktop',
+  'binder',
+  'fixtures',
+  'superstore-scratch-ref.xml',
+);
+
+describe('connections-not-authorable rule', () => {
+  it('a bare hand-authored excel-direct connection (copied from a .tds, not federated) is rejected', () => {
+    // The known-bad shape from tableau-oracle-connection-xml.md: a <connection> copied
+    // straight from a .tds, not wrapped in <named-connections>/federated.
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="excel-direct" cleaning="no" compat="no" dataRefreshTime=""
+        filename="/Users/me/Documents/sales.xls" interpretationMode="0" password="" server="" validate="no" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const issues = connectionsNotAuthorableRule.validate(xml);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((i) => i.severity === 'error')).toBe(true);
+    expect(issues[0].message).toContain('connections-not-authorable');
+    expect(issues[0].message).toContain('Do not retry');
+    expect(issues[0].message).not.toMatch(/^FIX/i);
+  });
+
+  it('does not guess from a federated named-connection name without a live baseline', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="federated">
+        <named-connections>
+          <named-connection caption="Sales" name="Sample - Superstoreleaf">
+            <connection class="excel-direct" filename="/Users/me/Documents/sales.xls" />
+          </named-connection>
+        </named-connections>
+      </connection>
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('a federated wrapper with a Desktop-minted named-connection id passes', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="federated">
+        <named-connections>
+          <named-connection caption="Sales" name="excel-direct.0ozsbj20cdelf51evvdk71kugqg0">
+            <connection class="excel-direct" filename="/Users/me/Documents/sales.xls" />
+          </named-connection>
+        </named-connections>
+      </connection>
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('a bare published-datasource (sqlproxy) connection is NOT rejected — it is a genuine Desktop shape', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource caption="GUS-Work" name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s">
+      <connection channel="https" class="sqlproxy" composed-connection-name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s"
+        dbname="GUS-Work" port="443" server="10ax.online.tableau.com" username="user" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('a fragment with no <connection> element at all is never flagged', () => {
+    const xml = `<?xml version="1.0"?>
+<worksheet name="Sheet 1">
+  <table>
+    <view />
+  </table>
+</worksheet>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('ignores connection-shaped metadata below a worksheet view', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="World Cup Countries">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="federated.0mkveh20xfko2115afimd1odnzrh">
+              <connection class="textscan" />
+            </datasource>
+          </datasources>
+          <datasource-dependencies datasource="federated.0mkveh20xfko2115afimd1odnzrh">
+            <named-connection name="worksheet-reference" />
+          </datasource-dependencies>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('the real live-readback fixture (genuine Desktop connection shape) is never rejected', () => {
+    const xml = fs.readFileSync(LIVE_READBACK_FIXTURE, 'utf8');
+    const issues = connectionsNotAuthorableRule.validate(xml);
+    expect(
+      issues,
+      `unexpected rejection of a genuine live-readback fixture: ${JSON.stringify(issues)}`,
+    ).toEqual([]);
+  });
+
+  it('a live-readback round-trip (unmodified connections, re-applied as-is) is never rejected via runValidation', () => {
+    const xml = fs.readFileSync(LIVE_READBACK_FIXTURE, 'utf8');
+    const result = runValidation(xml, 'workbook');
+    const offenders = result.issues.filter((i) => i.ruleId === 'connections-not-authorable');
+    expect(offenders).toEqual([]);
+  });
+
+  it('is registered for the workbook and datasource contexts, not worksheet/dashboard', () => {
+    expect(connectionsNotAuthorableRule.contexts).toEqual(['workbook', 'datasource']);
+  });
+
+  it('fires through runValidation(xml, "workbook") end-to-end, terminally (invalid → not just a warning)', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="excel-direct" filename="/Users/me/Documents/sales.xls" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = runValidation(xml, 'workbook');
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.ruleId === 'connections-not-authorable')).toBe(true);
+  });
+
+  it('does not fire in the worksheet or dashboard contexts (out of scope by design)', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="excel-direct" filename="/Users/me/Documents/sales.xls" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const worksheetResult = runValidation(xml, 'worksheet');
+    const dashboardResult = runValidation(xml, 'dashboard');
+    expect(worksheetResult.issues.some((i) => i.ruleId === 'connections-not-authorable')).toBe(
+      false,
+    );
+    expect(dashboardResult.issues.some((i) => i.ruleId === 'connections-not-authorable')).toBe(
+      false,
+    );
+  });
+});
+
+describe('connections-not-authorable — bundled template corpus never self-rejects', () => {
+  const runtimeTemplates = [...loadRuntimeTemplateCatalogSnapshots()].map(
+    ([template, { snapshot }]) => ({ template, xml: snapshot.xml }),
+  );
+
+  it('loads the shipped TBM corpus into the runtime catalog', () => {
+    expect(runtimeTemplates.length).toBeGreaterThanOrEqual(133);
+  });
+
+  it.each(runtimeTemplates)(
+    'runValidation($template, "workbook") reports zero connections-not-authorable issues',
+    ({ template, xml }) => {
+      const result = runValidation(xml, 'workbook');
+      const offenders = result.issues.filter((i) => i.ruleId === 'connections-not-authorable');
+      expect(
+        offenders,
+        `${template}: template must not self-reject on connections-not-authorable`,
+      ).toEqual([]);
+    },
+  );
+});

@@ -5,36 +5,36 @@ import { z } from 'zod';
 import { listDataAssetNames, readDataAsset } from '../../../../desktop/assets.js';
 import type { BinderResult, BindingProposal } from '../../../../desktop/binder/binder.js';
 import * as binderModule from '../../../../desktop/binder/binder.js';
-import {
-  extractExactFilterFieldNames,
-  MAX_CLASSIFIABLE_FIELDS,
-} from '../../../../desktop/binder/classify.js';
-import type { RuntimeTemplateDescriptor } from '../../../../desktop/binder/manifest-types.js';
 import * as routeSpecModule from '../../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
-import type { SchemaField } from '../../../../desktop/binder/schema-summary.js';
 import * as externalDiscovery from '../../../../desktop/externalApi/discovery.js';
-import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
-import { extractSheetXml, extractWorksheetWindowXml } from '../../../../desktop/metadata/sheets.js';
-import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
 import { serializeRouteReceipt, sessionRouteState } from '../../../../desktop/route/route-state.js';
-import {
-  buildInjectedWorkbookXml,
-  classifyWorksheetReplaceTarget,
-  ensureUserNamespace,
-  workbookHasSheetNamed,
-} from '../../../../desktop/templates/injectTemplateCore.js';
 import type { RuntimeTemplateCatalogSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import * as runtimeTemplateCatalogModule from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { readTemplate } from '../../../../desktop/templates/templatePath.js';
-import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
-import * as validationRegistry from '../../../../desktop/validation/registry.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
   NoDesktopInstancesFoundError,
 } from '../../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../../logging/logger.js';
+import {
+  extractExactFilterFieldNames,
+  MAX_CLASSIFIABLE_FIELDS,
+} from '../../../../metadata/binder/classify.js';
+import type { RuntimeTemplateDescriptor } from '../../../../metadata/binder/manifest-types.js';
+import type { SchemaField } from '../../../../metadata/binder/schema-summary.js';
+import { normalizeArray, parseXML } from '../../../../metadata/parser.js';
+import { extractSheetXml, extractWorksheetWindowXml } from '../../../../metadata/sheets.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+  ensureUserNamespace,
+  workbookHasSheetNamed,
+} from '../../../../metadata/templates/injectTemplateCore.js';
+import { createTemplateRuntimeSnapshot } from '../../../../metadata/templates/templateRuntimeSnapshot.js';
+import type { ParsedWindow } from '../../../../metadata/types.js';
+import * as validationRegistry from '../../../../metadata/validation/registry.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -68,9 +68,9 @@ vi.mock('../../../../desktop/templates/runtimeTemplateCatalog.js', async (import
 // resolution. The shared inject core is stubbed (its transform is proven by
 // injectTemplate's own suite) so these tests own only the bind-template wiring.
 vi.mock('../../../../desktop/externalApi/discovery.js');
-vi.mock('../../../../desktop/templates/injectTemplateCore.js', async (importOriginal) => {
+vi.mock('../../../../metadata/templates/injectTemplateCore.js', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../desktop/templates/injectTemplateCore.js')>();
+    await importOriginal<typeof import('../../../../metadata/templates/injectTemplateCore.js')>();
   return {
     ...actual,
     buildInjectedWorkbookXml: vi.fn(),
@@ -79,9 +79,9 @@ vi.mock('../../../../desktop/templates/injectTemplateCore.js', async (importOrig
   };
 });
 vi.mock('../../../../desktop/templates/templatePath.js');
-vi.mock('../../../../desktop/validation/registry.js', async (importOriginal) => {
+vi.mock('../../../../metadata/validation/registry.js', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../desktop/validation/registry.js')>();
+    await importOriginal<typeof import('../../../../metadata/validation/registry.js')>();
   return { ...actual, runValidation: vi.fn() };
 });
 // Partial fs mock: the bound template is read via the mocked SEA-aware

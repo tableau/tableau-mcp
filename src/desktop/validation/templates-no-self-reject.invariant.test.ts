@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { runValidation } from '../../metadata/validation/registry.js';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
-import { runValidation } from './registry.js';
 
 // W60-INVARIANT-TESTS suite 2 — VALIDATOR NEVER SELF-REJECTS A BUNDLED TEMPLATE.
 //
-// The invalid-derivation-string rule (src/desktop/validation/rules/invalidDerivationString.ts)
+// The invalid-derivation-string rule (src/metadata/validation/rules/invalidDerivationString.ts)
 // is an ERROR-severity preflight: it fires when a <column-instance derivation="..."> uses a
 // non-canonical string that Tableau would silently rewrite to None. Every worksheet-fragment
 // runtime XML derived from each TBM is applied through runValidation(..., 'workbook') on the

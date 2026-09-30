@@ -10,7 +10,7 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
+import { artifactFileParam, artifactNameParam, sessionParam } from '../../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';

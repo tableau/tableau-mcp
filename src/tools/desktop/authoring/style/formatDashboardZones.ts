@@ -8,14 +8,14 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { decodeXmlEntities } from '../../../../metadata/xmlElement.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { artifactNameParam, sessionParam } from '../../params.js';
+import { artifactNameParam, sessionParam } from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 const scopeSchema = z.enum(['all', 'containers', 'zone_ids']);

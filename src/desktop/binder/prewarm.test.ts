@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import type { Family, RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
 import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
 import { summarizeSchema } from './binder.js';
-import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 import { hashManifests, hashSchemaSummary, SchemaCache } from './memo.js';
 import { type FamilyShortlist, prewarmForDatasource, type TemplateShortlist } from './prewarm.js';
 

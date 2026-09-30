@@ -8,6 +8,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
+import { getCacheDir } from './desktop/cachePath.js';
+import { type CallDeadline, DesktopCallTimeoutError } from './desktop/callDeadline.js';
 import * as episodeEvents from './desktop/episode-events.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
 import {
@@ -15,6 +17,8 @@ import {
   SESSION_RESOLUTION_TEXT_PINNED,
   SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './desktop/instructions.js';
+import { getRuntimeTemplateSnapshot } from './desktop/templates/runtimeTemplateCatalog.js';
+import { listTemplateNames } from './desktop/templates/templatePath.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -24,6 +28,7 @@ import {
   filterToolsByApiVersion,
   getDesktopToolListEntry,
   resolveConnectedApiVersion,
+  runSharedToolOnDesktop,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
@@ -32,7 +37,17 @@ import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
+import { localToolFactories } from './tools/local/tools.js';
+import { SharedTool } from './tools/shared/tool.js';
+import { sharedToolFactories } from './tools/shared/tools.js';
+import { toolNames } from './tools/toolName.js';
 import { Provider } from './utils/provider.js';
+
+const desktopSurfaceFactories = [
+  ...desktopToolFactories,
+  ...sharedToolFactories,
+  ...localToolFactories({ getCacheDir, getRuntimeTemplateSnapshot, listTemplateNames }),
+];
 
 const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
@@ -57,7 +72,7 @@ describe('DesktopMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allTools = desktopToolFactories.map((toolFactory) => toolFactory(server));
+    const allTools = desktopSurfaceFactories.map((toolFactory) => toolFactory(server));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((tool, i) => !disabledFlags[i]);
     expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
@@ -72,6 +87,126 @@ describe('DesktopMcpServer', () => {
         },
         expect.any(Function),
       );
+    }
+  });
+
+  it('registers supplied-XML generation once in full standalone and combined Desktop surfaces', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const standalone = getServer();
+    await standalone.registerTools();
+    expect(
+      (
+        vi.mocked(standalone.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+      ).filter(([name]) => name === 'build-worksheet-xml'),
+    ).toHaveLength(1);
+
+    const config = configModule.getDesktopConfig();
+    const instructions = `${buildWebInstructions()} ${buildDesktopInstructions({
+      sessionPinned: config.desktopSessionId !== undefined,
+      profile: config.toolProfile,
+    })}`;
+    const mcpServer = new McpServer({ name: 'combined', version: '0.0.0' }, { instructions });
+    (mcpServer.server as unknown as { _instructions?: string })._instructions = instructions;
+    mcpServer.registerTool = vi.fn();
+    const combined = new DesktopMcpServer({ mcpServer });
+    await combined.registerTools();
+    expect(
+      (vi.mocked(mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>).filter(
+        ([name]) => name === 'build-worksheet-xml',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('keeps supplied whole-document XML outside the default profile', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'dynamic-authoring');
+    const server = getServer();
+    await server.registerTools();
+    expect(
+      (vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>).map(
+        ([name]) => name,
+      ),
+    ).not.toContain('build-worksheet-xml');
+  });
+
+  it('records one Desktop start/end and a failed event for a shared tool callback', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const startEnd = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+    const errorEvent = vi.spyOn(episodeEvents, 'emitToolErrorEvent').mockResolvedValue();
+    try {
+      const server = getServer();
+      await server.registerTools();
+      startEnd.mockClear();
+      const registered = vi.mocked(server.mcpServer.registerTool).mock.calls as unknown as Array<
+        [
+          string,
+          unknown,
+          (
+            args: { xml: string },
+            extra: ReturnType<typeof getMockRequestHandlerExtra>,
+          ) => Promise<CallToolResult>,
+        ]
+      >;
+      const callback = registered.find(([name]) => name === 'validate-worksheet-xml')?.[2];
+      expect(callback).toBeDefined();
+      const good = await callback!(
+        { xml: '<worksheet name="A"><table/></worksheet>' },
+        getMockRequestHandlerExtra(),
+      );
+      const bad = await callback!(
+        { xml: '<worksheet name="A"><table></worksheet>' },
+        getMockRequestHandlerExtra(),
+      );
+      expect(good.isError).toBeFalsy();
+      expect(bad.isError).toBe(true);
+      const events = startEnd.mock.calls
+        .map(([, event]) => event)
+        .filter((event) => 'tool' in event && event.tool === 'validate-worksheet-xml');
+      expect(events.map((event) => event.type)).toEqual([
+        'tool_start',
+        'tool_end',
+        'tool_start',
+        'tool_end',
+      ]);
+      expect(
+        events.filter((event) => event.type === 'tool_end').map((event) => event.success),
+      ).toEqual([true, false]);
+      expect(errorEvent).toHaveBeenCalledTimes(1);
+    } finally {
+      startEnd.mockRestore();
+      errorEvent.mockRestore();
+    }
+  });
+
+  it('records a bounded Desktop failure when a shared callback never settles', async () => {
+    const startEnd = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+    const errorEvent = vi.spyOn(episodeEvents, 'emitToolErrorEvent').mockResolvedValue();
+    try {
+      const extra = getMockRequestHandlerExtra();
+      const deadline = {
+        signal: extra.signal,
+        budgetMs: 40_000,
+        expired: () => true,
+        whenExpired: async () => {
+          throw new DesktopCallTimeoutError(40_000);
+        },
+        dispose: () => undefined,
+      } satisfies CallDeadline;
+      const result = await runSharedToolOnDesktop({
+        name: 'build-worksheet-xml',
+        args: {},
+        extra,
+        deadline,
+        callback: () => new Promise(() => undefined),
+      });
+      expect(result.isError).toBe(true);
+      expect(startEnd.mock.calls.map(([, event]) => event.type)).toEqual([
+        'tool_start',
+        'tool_end',
+      ]);
+      expect(errorEvent).toHaveBeenCalledTimes(1);
+    } finally {
+      startEnd.mockRestore();
+      errorEvent.mockRestore();
     }
   });
 
@@ -223,7 +358,7 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 describe('desktop tools/list serialized surface', () => {
   it('serves the selected dynamic authoring profile with pinned instructions', () => {
     const server = new DesktopMcpServer();
-    const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
+    const tools = desktopSurfaceFactories.map((toolFactory) => toolFactory(server));
     const dynamicAuthoringTools = selectToolsForProfile(tools, 'dynamic-authoring');
     expect(new Set(dynamicAuthoringTools.map((tool) => tool.name))).toEqual(
       DYNAMIC_AUTHORING_TOOL_PROFILE,
@@ -296,7 +431,6 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // measured size; the ratchet is unchanged, so trim rather than raise.
     ['bind-template', 2576], // remeasured after standardizing the calc datasource selector as internal name or unique caption
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
-    ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1143], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
@@ -378,8 +512,8 @@ describe('desktop tools/list per-tool byte accounting', () => {
 });
 
 describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)', () => {
-  const allTools = (): Array<DesktopTool<any>> =>
-    desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
+  const allTools = (): Array<DesktopTool<any> | SharedTool<any>> =>
+    desktopSurfaceFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
   it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
     'keeps field listing and the repair read registered in profile "%s"',
@@ -419,7 +553,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
 
   it('every slim-profile name is a real desktop tool name', () => {
     for (const name of DEMO_TOOL_PROFILE) {
-      expect(desktopToolNames).toContain(name);
+      expect(toolNames).toContain(name);
     }
   });
 
@@ -442,7 +576,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
 
   it('every spec-loop-profile name is a real desktop tool name', () => {
     for (const name of SPEC_LOOP_TOOL_PROFILE) {
-      expect(desktopToolNames).toContain(name);
+      expect(toolNames).toContain(name);
     }
   });
 
@@ -1033,7 +1167,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length);
+    expect(registeredNames.length).toBe(desktopSurfaceFactories.length);
   });
 
   it('keeps published-site content operations out of the Desktop server even with TOOL_PROFILE=full', async () => {

@@ -2,13 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { escapeXml } from '../../../../desktop/binder/escape.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import {
-  introducedBlockingValidationIssues,
-  runValidation,
-} from '../../../../desktop/validation/registry.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
@@ -17,8 +12,13 @@ import {
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import { escapeXml } from '../../../../metadata/binder/escape.js';
+import {
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../../../../metadata/validation/registry.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { DesktopTool } from '../../tool.js';
 
 const pointSchema = z.object({

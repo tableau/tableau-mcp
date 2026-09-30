@@ -19,17 +19,17 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
 vi.mock('../../../../desktop/metadata/index.js');
-vi.mock('../../../../desktop/templates/fieldReferenceRewriter.js');
+vi.mock('../../../../metadata/templates/fieldReferenceRewriter.js');
 vi.mock('../../../../desktop/templates/runtimeTemplateCatalog.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync } from 'fs';
 
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
-import { rewriteFieldReferencesWithDiagnostics } from '../../../../desktop/templates/fieldReferenceRewriter.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
-import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../../metadata/templates/fieldReferenceRewriter.js';
+import type { TemplateRuntimeSnapshot } from '../../../../metadata/templates/templateRuntimeSnapshot.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
 const SESSION = 'session-1';
@@ -338,8 +338,8 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     // the SAME workbook produce DISTINCT `_tpl_<suffix>` calc names — so a repeated
     // apply can't collide with / shadow the earlier apply's template calc.
     const actual = (await vi.importActual(
-      '../../../../desktop/templates/fieldReferenceRewriter.js',
-    )) as typeof import('../../../../desktop/templates/fieldReferenceRewriter.js');
+      '../../../../metadata/templates/fieldReferenceRewriter.js',
+    )) as typeof import('../../../../metadata/templates/fieldReferenceRewriter.js');
 
     const CALC_TEMPLATE =
       '<workbook><worksheets><worksheet name="TEMPLATE"><table><view>' +

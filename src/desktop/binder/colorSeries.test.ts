@@ -1,7 +1,12 @@
-import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
+import type {
+  Family,
+  RuntimeTemplateDescriptor,
+  SlotKind,
+  SlotSpec,
+} from '../../metadata/binder/manifest-types.js';
+import { rewriteFieldReferences } from '../../metadata/templates/fieldReferenceRewriter.js';
 import { getRuntimeTemplateSnapshot } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
-import type { Family, RuntimeTemplateDescriptor, SlotKind, SlotSpec } from './manifest-types.js';
 
 function slot(
   slot_id: string,

@@ -8,7 +8,7 @@ import {
   artifactNameParam,
   deprecatedArtifactAliasParam,
   resolveArtifactNameArg,
-} from '../params.js';
+} from '../../params.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {

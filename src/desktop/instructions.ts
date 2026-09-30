@@ -1,4 +1,8 @@
 import { DesktopToolName } from '../tools/desktop/toolName.js';
+import { LocalToolName } from '../tools/local/toolName.js';
+import { SharedToolName } from '../tools/shared/toolName.js';
+
+type DesktopSurfaceToolName = DesktopToolName | LocalToolName | SharedToolName;
 
 // WHY: product routing used to live as free prose in DESKTOP_INSTRUCTIONS and drifted
 // silently (the A1 dashboard-row incident); routes are data here so tests can pin each
@@ -8,10 +12,10 @@ export type DesktopInstructionRoute = {
   readonly id: string;
   readonly trigger: string;
   readonly action: string;
-  readonly toolSequence: readonly DesktopToolName[];
+  readonly toolSequence: readonly DesktopSurfaceToolName[];
   readonly stopConditions: readonly string[];
   readonly requiredEvidence: readonly string[];
-  readonly forbiddenTools?: readonly DesktopToolName[];
+  readonly forbiddenTools?: readonly DesktopSurfaceToolName[];
 };
 
 export type DesktopInstructionProse = {

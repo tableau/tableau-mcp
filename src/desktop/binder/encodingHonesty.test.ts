@@ -1,11 +1,11 @@
-import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
+import type { RuntimeTemplateDescriptor } from '../../metadata/binder/manifest-types.js';
+import { rewriteFieldReferences } from '../../metadata/templates/fieldReferenceRewriter.js';
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
 import {
   getRuntimeTemplateSnapshot,
   loadRuntimeTemplateCatalogSnapshots,
 } from '../templates/runtimeTemplateCatalog.js';
 import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
-import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 const symbolMap: RuntimeTemplateDescriptor = {
   template: 'spatial-symbol-map',

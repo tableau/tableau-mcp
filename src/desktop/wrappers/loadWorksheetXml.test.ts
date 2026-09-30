@@ -1,13 +1,13 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import { captureTargetWorksheetState } from '../../metadata/targetWorksheetState.js';
+import type { ParsedWindow } from '../../metadata/types.js';
+import * as validationRegistry from '../../metadata/validation/registry.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
-import { normalizeArray, parseXML } from '../metadata/parser.js';
-import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
-import type { ParsedWindow } from '../metadata/types.js';
-import * as validationRegistry from '../validation/registry.js';
 import { loadWorksheetXml, verifyPostApplyWorksheetReadback } from './loadWorksheetXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
@@ -19,8 +19,8 @@ const sheetUpsertMock = vi.hoisted(() => ({
     | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
 }));
 
-vi.mock('../metadata/sheets.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../metadata/sheets.js')>();
+vi.mock('../../metadata/sheets.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../metadata/sheets.js')>();
   return {
     ...actual,
     upsertSheetIntoWorkbook: (

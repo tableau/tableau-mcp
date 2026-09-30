@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
-import { sessionParam } from '../../params.js';
+import { sessionParam } from '../../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import { composeDashboardCore, validateComposeDashboardInput } from './composeDashboardCore.js';

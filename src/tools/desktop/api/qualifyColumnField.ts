@@ -1,4 +1,4 @@
-import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import { normalizeArray, parseXML } from '../../../metadata/parser.js';
 
 /**
  * The underlying-data column filter (`columnsToIncludeByFieldName`) matches only a
