@@ -7,6 +7,7 @@ import {
   StreamedRunResult,
   withTrace,
 } from '@openai/agents';
+import { existsSync } from 'fs';
 import OpenAI from 'openai';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
@@ -47,14 +48,44 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
   return mcpServer;
 }
 
+// Spawns the desktop build (build/index.desktop.js) instead of the web build. Desktop tools are
+// only in that bundle. It boots on stdio with no SERVER/AUTH/discovery env and registers its tools
+// statically, so an agent can list and call them (emitting arguments we grade) without a live
+// Tableau Desktop — the call errors at execution, but the function_call arguments are still recorded.
+export async function getDesktopMcpServer(): Promise<MCPServerStdio> {
+  // DESKTOP_MCP_BUNDLE lets the A/B run point at a base-commit bundle without onClear;
+  // defaults to the current build. Same harness, same prompts — only the schema differs.
+  const bundle = process.env.DESKTOP_MCP_BUNDLE || 'build/index.desktop.js';
+  if (!existsSync(bundle)) {
+    throw new Error(`${bundle} not found. Run \`npm run build:desktop\` before the desktop evals.`);
+  }
+
+  const mcpServer = new MCPServerStdio({
+    command: 'node',
+    args: [bundle],
+    env: { TRANSPORT: 'stdio' },
+    cacheToolsList: true,
+  });
+
+  await mcpServer.connect();
+  return mcpServer;
+}
+
 export async function getAgent({
   systemPrompt,
   model,
   mcpServer,
+  toolAllowList,
 }: {
   systemPrompt: string;
   model: string;
   mcpServer?: MCPServerStdio;
+  // Restrict the agent to these tools, by their recorded (underscored) names — e.g.
+  // ['author_action']. The desktop build exposes ~74 tools; registered both ways (see below)
+  // that is 148, over the model gateway's 128-tool cap. An allow-list also sharpens an arg-only
+  // eval: with one tool and toolChoice:'required', the grade is purely whether the description
+  // steers the arguments, not whether the model found the tool.
+  toolAllowList?: Array<string>;
 }): Promise<Agent> {
   return await withTrace('get_agent', async () => {
     const agentOptions = {
@@ -71,6 +102,15 @@ export async function getAgent({
 
     if (!mcpServer) {
       return new Agent(agentOptions);
+    }
+
+    // Allow-listed: expose only those tools, un-prefixed, and skip mcpServers so the server
+    // doesn't re-add every tool. The tools invoke through the server captured in their closure.
+    if (toolAllowList) {
+      const tools = (await getAllMcpTools([mcpServer])).filter((tool) =>
+        toolAllowList.includes(tool.name),
+      );
+      return new Agent({ ...agentOptions, tools, modelSettings: { toolChoice: 'required' } });
     }
 
     const tools = await getAllMcpTools([mcpServer]);

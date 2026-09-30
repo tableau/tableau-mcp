@@ -107,6 +107,7 @@ export type AuthorActionArgs = {
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
   sourceFieldAggregation?: SourceFieldAggregation;
   clearValue?: string;
+  onClear?: 'keep-current' | 'set-value';
   singleSelect?: boolean;
   activation?: 'on-select' | 'on-hover' | 'on-menu';
   url?: string;
@@ -174,6 +175,7 @@ export async function getToolResult({
       clearSelection: args.clearSelection ?? 'do-nothing',
       sourceFieldAggregation: args.sourceFieldAggregation,
       clearValue: args.clearValue,
+      onClear: args.onClear,
       url: args.url,
       sourceDashboard: args.sourceDashboard,
       excludeSourceSheets: args.excludeSourceSheets,
