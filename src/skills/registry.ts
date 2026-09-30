@@ -33,10 +33,10 @@ function mimeTypeFor(filePath: string): string {
   return lookup(filePath) || 'application/octet-stream';
 }
 
-// TODO W-24281166: Skills currently live under `src/skills` until we can read from
-// the public repository
+// TODO W-24281166: Skills currently live under `src/skills/mockSkills` until we can read from
+// the public repository.
 function getSkillsDir(): string {
-  return resolve(process.cwd(), 'src', 'skills');
+  return resolve(process.cwd(), 'src', 'skills', 'mockSkills');
 }
 
 /**
@@ -103,7 +103,7 @@ function makeRegistry(sortedEntries: SkillData[], fileEntries: SkillFile[]): Ski
 }
 
 /**
- * Build a skill registry by traversing through src/skills.
+ * Build a skill registry by traversing through src/skills/mockSkills.
  * Every file in the directory (including `SKILL.md`) becomes a resource with a SHA-256 digest
  * and byte size. Malformed or incomplete skills are skipped with a warning; a missing skills
  * directory yields an empty registry. Pure/uncached; callers memoize via `getSkillRegistry`.
