@@ -471,6 +471,11 @@ export async function authorCalculationsWithValidation({
       return applied.error.toErr();
     }
     if (applied.status === 'not-applied') {
+      // The POST may have actually landed even though the readback poll timed out before
+      // seeing it. Use the readback's own value as the rollback baseline (truth), not the
+      // stale pre-layer liveXml — otherwise a write that silently succeeded looks like drift
+      // to the rollback's own expected-XML check and the rollback is wrongly rejected.
+      liveXml = applied.workbookXml;
       const rollbackResult = await rollbackCreatedThisRun();
       if (rollbackResult.isErr()) {
         return rollbackResult;

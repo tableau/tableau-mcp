@@ -1289,6 +1289,125 @@ describe('authorCalculationsWithValidation', () => {
     expect(currentXml).toBe(BASE_XML);
   });
 
+  // A layer's apply can report 'not-applied' (readback poll exhausted its budget without ever
+  // seeing the new column) even though the live document has genuinely moved on from what this
+  // run last knew about — some unrelated part of the document drifted in the interim. Rolling
+  // back using the STALE pre-layer snapshot as the expected baseline would make the rollback's
+  // own drift check reject a rollback that is actually safe. The rollback must use the readback's
+  // own last-observed value (truth) as its baseline instead.
+  it("rolls back an earlier layer when a later layer's apply times out against a drifted live document", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    try {
+      const postedXmls: string[] = [];
+      const applyWorkbookDocument = vi.fn(async (xml: string) => {
+        postedXmls.push(xml);
+        return new Ok({
+          command_id: `apply-${postedXmls.length}`,
+          status: 'completed' as const,
+          submitted_at: '',
+          result: {},
+        });
+      });
+      // Some unrelated part of the live document (e.g. an autosave marker) can change without
+      // affecting anything this test cares about — simulated by inserting a harmless comment.
+      const withUnrelatedDrift = (xml: string): string =>
+        xml.replace('<workbook', '<!--autosave--><workbook');
+
+      let getCalls = 0;
+      const getWorkbookDocument = vi.fn(async () => {
+        getCalls++;
+        // 1: layer 1's own drift check, before "A" is created — matches the original document.
+        if (getCalls === 1) {
+          return new Ok({
+            xml: BASE_XML,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          });
+        }
+        // 2: layer 1's poll — settles immediately once "A" is visible.
+        if (getCalls === 2) {
+          return new Ok({
+            xml: postedXmls[0],
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          });
+        }
+        // 3: layer 2's own drift check — the live document still matches liveXml exactly.
+        if (getCalls === 3) {
+          return new Ok({
+            xml: postedXmls[0],
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          });
+        }
+        // 4-11: layer 2's poll (all 8 attempts) — "B" never becomes visible, and the document
+        // has drifted from what liveXml still holds, simulating that this run's own bookkeeping
+        // is now stale relative to the actual live document.
+        if (getCalls <= 11) {
+          return new Ok({
+            xml: withUnrelatedDrift(postedXmls[0]),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          });
+        }
+        // 12: the rollback's own drift check — nothing further changed since the last poll, so
+        // this must match whatever the poll last observed for the rollback to proceed.
+        if (getCalls === 12) {
+          return new Ok({
+            xml: withUnrelatedDrift(postedXmls[0]),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          });
+        }
+        // 13: the rollback's own poll — settles immediately once "A" is gone again.
+        return new Ok({
+          xml: BASE_XML,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        });
+      });
+
+      const executor = makeExecutorMock({
+        executeCommand: vi.fn().mockImplementation(async ({ command }: ExecuteCommandArgs) => {
+          // Both "A" and "B" are valid formulas — this test exercises the apply-timeout/rollback
+          // path, not a validation failure.
+          if (command === 'get-calc-details-pres-model-for-formula') {
+            return new Ok({
+              command_id: 'validate-1',
+              status: 'completed',
+              result: validValidatorEnvelope.result,
+            });
+          }
+          return new Ok({ command_id: 'activate-1', status: 'completed', result: null });
+        }),
+        getWorkbookDocument,
+        applyWorkbookDocument,
+      });
+
+      const resultPromise = authorCalculationsWithValidation({
+        workbookXml: BASE_XML,
+        calcs: [spec('A', '[Sales] + 1'), spec('B', '[A] + 1')],
+        executor,
+        signal: new AbortController().signal,
+      });
+      // Layer 2's poll spends its full 8-attempt, 250ms-interval budget before giving up.
+      await vi.advanceTimersByTimeAsync(8 * 250);
+      const result = await resultPromise;
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('a layer that never settles must abort the batch');
+      expect(result.error.message).toContain('did not apply');
+      // Rollback succeeded rather than being rejected as "drifted": three applies total (create
+      // "A", the "B" attempt that times out, and the rollback), ending back at the original
+      // document.
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(3);
+      expect(postedXmls[2]).toBe(BASE_XML);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Migrated from the retired authorCalculationsInWorkbook suite: resolveLooseFormulaReferences
   // is shared by both authoring paths, so this scoping guard needs coverage here too. A loose
   // reference failure is a per-calc 'failed' outcome (not a batch Err) on this path — unlike
