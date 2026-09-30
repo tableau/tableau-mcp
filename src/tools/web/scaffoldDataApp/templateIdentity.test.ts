@@ -41,6 +41,7 @@ describe('buildTextReplacements', () => {
     expect(replacements[TWB_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
       { find: 'TODO App Name', replace: 'Sales Demo' },
+      { find: 'TODO Sheet Name', replace: 'Sales Demo' },
     ]);
     expect(replacements[TREX_RELPATH]).toEqual([
       { find: 'TODO-MANIFEST-ID', replace: 'com.tableau.mcp.sales-demo' },
@@ -59,6 +60,13 @@ describe('buildTextReplacements', () => {
     };
     expect(replacements[TWB_RELPATH]).toContainEqual(xmlName);
     expect(replacements[TREX_RELPATH]).toContainEqual(xmlName);
+
+    // The worksheet/window/referenced-view name token is derived from the same escaped
+    // displayName, so the sheet tab never shows an unescaped app name either.
+    expect(replacements[TWB_RELPATH]).toContainEqual({
+      find: 'TODO Sheet Name',
+      replace: 'Tom &amp; &quot;Jerry&quot; &lt;Co&gt;',
+    });
   });
 });
 

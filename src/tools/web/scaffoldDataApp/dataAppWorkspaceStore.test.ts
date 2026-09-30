@@ -85,6 +85,23 @@ describe('createDataAppWorkspace', () => {
         const twb = await readFile(join(root, 'Data App Name.twb'), 'utf8');
         expect(twb).toContain('TODO-MANIFEST-ID');
         expect(twb).toContain('TODO App Name');
+        expect(twb).toContain('TODO Sheet Name');
+        // The raw template never hardcodes a literal sheet name - it's always the token above.
+        expect(twb).not.toContain('Sheet 1');
+
+        // Applying the postUnzip plan's .twb edits (as the client does) turns the worksheet tab
+        // into the app's display name, not the placeholder token or a hardcoded "Sheet 1".
+        let finalizedTwb = twb;
+        for (const { find, replace } of value.postUnzip.edits.find(
+          (edit) => edit.file === 'Data App Name/Data App Name.twb',
+        )!.replacements) {
+          finalizedTwb = finalizedTwb.split(find).join(replace);
+        }
+        expect(finalizedTwb).toContain("<worksheet name='Sales Demo'>");
+        expect(finalizedTwb).toContain("<window class='worksheet' maximized='true' name='Sales Demo'>");
+        expect(finalizedTwb).toContain("<referenced-view instances='1' viewId='Sales Demo' />");
+        expect(finalizedTwb).not.toContain('Sheet 1');
+        expect(finalizedTwb).not.toContain('TODO Sheet Name');
 
         const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
         expect(trex).toContain('TODO-MANIFEST-ID');
