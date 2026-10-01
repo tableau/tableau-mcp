@@ -33,6 +33,9 @@ export const SESSION_RESOLUTION_TEXT_UNPINNED =
 export const SESSION_RESOLUTION_TEXT_PINNED =
   'Session defaults to the current Tableau Desktop; use list-instances to see all open Desktops and pass session to target another.';
 
+export const SESSION_RESOLUTION_TEXT_STRICT =
+  'This server is restricted to the current Tableau Desktop session. Omit session or use the pinned session; list-instances returns only that session. Never target another Desktop.';
+
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
@@ -316,31 +319,32 @@ const SPEC_LOOP_PROFILE_INSTRUCTIONS = [
  */
 export function buildDesktopInstructions({
   sessionPinned,
+  sessionScope = 'ordinary',
   profile = '',
 }: {
   sessionPinned: boolean;
+  sessionScope?: 'ordinary' | 'strict';
   profile?: string;
 }): string {
+  const sessionResolutionText =
+    sessionScope === 'strict'
+      ? SESSION_RESOLUTION_TEXT_STRICT
+      : sessionPinned
+        ? SESSION_RESOLUTION_TEXT_PINNED
+        : SESSION_RESOLUTION_TEXT_UNPINNED;
   const normalizedProfile = profile.trim().toLowerCase();
   if (normalizedProfile === 'demo') {
-    return [
-      ...DEMO_PROFILE_INSTRUCTIONS,
-      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
-    ].join('\n\n');
+    return [...DEMO_PROFILE_INSTRUCTIONS, sessionResolutionText].join('\n\n');
   }
   if (normalizedProfile === 'spec-loop') {
-    return [
-      ...SPEC_LOOP_PROFILE_INSTRUCTIONS,
-      sessionPinned ? SESSION_RESOLUTION_TEXT_PINNED : SESSION_RESOLUTION_TEXT_UNPINNED,
-    ].join('\n\n');
+    return [...SPEC_LOOP_PROFILE_INSTRUCTIONS, sessionResolutionText].join('\n\n');
   }
 
-  const table = sessionPinned
-    ? DESKTOP_ROUTE_TABLE.map((entry) =>
-        entry.id === SESSION_RESOLUTION_ID
-          ? { ...entry, text: SESSION_RESOLUTION_TEXT_PINNED }
-          : entry,
-      )
-    : DESKTOP_ROUTE_TABLE;
+  const table =
+    sessionPinned || sessionScope === 'strict'
+      ? DESKTOP_ROUTE_TABLE.map((entry) =>
+          entry.id === SESSION_RESOLUTION_ID ? { ...entry, text: sessionResolutionText } : entry,
+        )
+      : DESKTOP_ROUTE_TABLE;
   return generateDesktopInstructions(table);
 }

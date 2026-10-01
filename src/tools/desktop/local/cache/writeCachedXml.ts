@@ -21,7 +21,12 @@ import {
   sessionParam,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { getCacheDir, isWithinCacheDir } from './cachePath.js';
+import {
+  getCacheDir,
+  guardStrictCachePath,
+  isWithinCacheDir,
+  strictCachePathError,
+} from './cachePath.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -81,6 +86,10 @@ export const getWriteCachedXmlTool = (
           const resolvedSession = sessionResult.value;
 
           const absolutePath = resolve(filePath);
+          const guardedPath = guardStrictCachePath(absolutePath);
+          if (!guardedPath.ok) {
+            return new ArgsValidationError(strictCachePathError(filePath, guardedPath)).toErr();
+          }
           const cacheDir = getCacheDir();
 
           if (!isWithinCacheDir(absolutePath, cacheDir)) {

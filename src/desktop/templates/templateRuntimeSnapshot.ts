@@ -25,8 +25,9 @@ export interface TemplateRuntimeSnapshot {
 export function createTemplateRuntimeSnapshot(
   template: string,
   bookmarkXml: string,
+  options: { plainTemporalLineColorOptional?: boolean } = {},
 ): TemplateRuntimeSnapshot {
-  const inference = inferFromBookmark(bookmarkXml);
+  const inference = inferFromBookmark(bookmarkXml, options);
   const converted = bookmarkToTemplateWorkbook(bookmarkXml, inference);
   const descriptor = inferBindingDescriptor(template, inference);
   return {

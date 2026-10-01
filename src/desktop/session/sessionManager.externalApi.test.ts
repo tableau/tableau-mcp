@@ -35,6 +35,31 @@ describe('SessionManager executor selection', () => {
     expect(executor).toBeInstanceOf(ExternalApiToolExecutor);
   });
 
+  it('rejects a foreign strict-scoped session before discovery or executor caching', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
+    const manager = new SessionManager();
+
+    await expect(manager.getExecutor('999')).rejects.toThrow(
+      "outside this server's strict session scope",
+    );
+    expect(mocks.discoverInstances).not.toHaveBeenCalled();
+
+    mocks.discoverInstances.mockReturnValue([
+      {
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'token',
+        pid: 12345,
+        instanceId: 'inst',
+      },
+    ] as never);
+    await expect(manager.getExecutor('12345')).resolves.toBeInstanceOf(ExternalApiToolExecutor);
+    expect(mocks.discoverInstances).toHaveBeenCalledWith({
+      discoveryDir: undefined,
+      targetPid: 12345,
+    });
+  });
+
   it('wires the configured 90 second timeout into External API requests', async () => {
     vi.stubEnv('TABLEAU_DESKTOP_CALL_TIMEOUT_MS', '90000');
     vi.stubGlobal(

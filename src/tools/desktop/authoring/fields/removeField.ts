@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import {
   removeFieldFromCols,
   removeFieldFromEncoding,
@@ -90,6 +91,12 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             return editFile.error.toErr();
           }
           worksheetFile = editFile.value;
+          const guardedWorksheet = guardStrictCachePath(worksheetFile);
+          if (!guardedWorksheet.ok) {
+            return new ArgsValidationError(
+              strictCachePathError(worksheetFile, guardedWorksheet),
+            ).toErr();
+          }
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.

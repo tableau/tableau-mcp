@@ -5,6 +5,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
@@ -178,6 +179,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return editFile.error.toErr();
           }
           worksheetFile = editFile.value;
+          const guardedWorksheet = guardStrictCachePath(worksheetFile);
+          if (!guardedWorksheet.ok) {
+            return new ArgsValidationError(
+              strictCachePathError(worksheetFile, guardedWorksheet),
+            ).toErr();
+          }
 
           // encodingType is conditionally required — enforced here (not in the JSON Schema) so
           // the schema stays flat and host-portable.
@@ -197,6 +204,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           let workbookXml: string | undefined;
           const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
           if (requestedWorkbookFile) {
+            const guardedWorkbook = guardStrictCachePath(requestedWorkbookFile);
+            if (!guardedWorkbook.ok) {
+              return new ArgsValidationError(
+                strictCachePathError(requestedWorkbookFile, guardedWorkbook),
+              ).toErr();
+            }
             if (!existsSync(requestedWorkbookFile)) {
               return new FileNotFoundError(requestedWorkbookFile).toErr();
             }

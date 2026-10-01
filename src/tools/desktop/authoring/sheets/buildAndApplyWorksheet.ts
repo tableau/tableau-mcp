@@ -11,6 +11,7 @@ import {
   schemaSummaryFromAvailableFields,
 } from '../../../../desktop/binder/explicit-bind.js';
 import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import {
@@ -286,6 +287,12 @@ export const getBuildAndApplyWorksheetTool = (
           let executor: ExternalApiToolExecutor | undefined;
           let workbookXml: string;
           if (workbookFile !== undefined) {
+            const guardedWorkbook = guardStrictCachePath(workbookFile);
+            if (!guardedWorkbook.ok) {
+              return new ArgsValidationError(
+                strictCachePathError(workbookFile, guardedWorkbook),
+              ).toErr();
+            }
             // Cross-instance cache-bleed guard (W9): refuse a cache produced by a different
             // (or restarted) Desktop session — its XML may not match the current workbook.
             const workbookSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');

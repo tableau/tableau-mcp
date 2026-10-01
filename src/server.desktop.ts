@@ -19,6 +19,7 @@ import {
   readResourceAsset,
   RESOURCES_ROOT,
 } from './desktop/assets.js';
+import { COMPLETE_REQUEST_TEMPLATE_IDS } from './desktop/binder/classify.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
 import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
@@ -41,6 +42,15 @@ import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
+
+export const STRICT_SESSION_SCOPE_CAPABILITY_KEY = 'tableauDesktopSessionScope';
+export const STRICT_SESSION_SCOPE_CAPABILITY_VERSION = 1;
+export const BIND_TEMPLATE_COMPLETION_CAPABILITY_KEY = 'tableauDesktopBindTemplateCompletion';
+export const BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION = 1;
+export const WORKSPACE_GUARD_CAPABILITY_KEY = 'tableauDesktopWorkspaceGuard';
+export const WORKSPACE_GUARD_CAPABILITY_VERSION = 1;
+export const COMPLETE_REQUEST_BIND_CAPABILITY_KEY = 'tableauDesktopCompleteRequestBind';
+export const COMPLETE_REQUEST_BIND_CAPABILITY_VERSION = 1;
 
 /**
  * Slim demo tool set (W60 spike lever 1 / preamble-hunt P1): registering ~10 tools instead
@@ -302,16 +312,48 @@ export class DesktopMcpServer extends Server {
   private knowledgeCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+    const config = getDesktopConfig();
     super({
       mcpServer,
       clientInfo,
       serverName,
       serverVersion,
       instructions: buildDesktopInstructions({
-        sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
-        profile: getDesktopConfig().toolProfile,
+        sessionPinned: config.desktopSessionId !== undefined,
+        sessionScope: config.desktopSessionScope,
+        profile: config.toolProfile,
       }),
     });
+
+    if (config.desktopSessionScope === 'strict') {
+      this.mcpServer.server.registerCapabilities({
+        experimental: {
+          [STRICT_SESSION_SCOPE_CAPABILITY_KEY]: {
+            version: STRICT_SESSION_SCOPE_CAPABILITY_VERSION,
+            mode: 'strict',
+            sessionId: config.desktopSessionId!,
+          },
+          [BIND_TEMPLATE_COMPLETION_CAPABILITY_KEY]: {
+            version: BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION,
+            tool: 'bind-template',
+            resultKind: 'single_sheet_apply',
+          },
+          [COMPLETE_REQUEST_BIND_CAPABILITY_KEY]: {
+            version: COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
+            tool: 'bind-template',
+            templates: [...COMPLETE_REQUEST_TEMPLATE_IDS],
+          },
+          ...(config.expectedWorkspaceIdentity
+            ? {
+                [WORKSPACE_GUARD_CAPABILITY_KEY]: {
+                  version: WORKSPACE_GUARD_CAPABILITY_VERSION,
+                  target: config.expectedWorkspaceIdentity,
+                },
+              }
+            : {}),
+        },
+      });
+    }
   }
 
   registerResources = async (): Promise<void> => {
@@ -387,6 +429,7 @@ export class DesktopMcpServer extends Server {
 
     const instructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
+      sessionScope: config.desktopSessionScope,
       profile: config.toolProfile,
     });
     await emitEpisodeEvent(config, {
@@ -419,7 +462,12 @@ export class DesktopMcpServer extends Server {
     const allTools = factories.map((toolFactory) => toolFactory(this));
     const profileTools = selectToolsForProfile(allTools, config.toolProfile);
 
-    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+    const instances = discoverInstances({
+      discoveryDir: config.externalApiDiscoveryDir,
+      ...(config.desktopSessionScope === 'strict'
+        ? { targetPid: Number(config.desktopSessionId) }
+        : {}),
+    });
     const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
     const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
 

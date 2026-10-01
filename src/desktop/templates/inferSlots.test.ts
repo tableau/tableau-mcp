@@ -871,3 +871,335 @@ describe('structural binding descriptor boundary', () => {
     expect(descriptor.slots.every((slot) => !('hint' in slot))).toBe(true);
   });
 });
+
+describe('inferFromBookmark — plain temporal line series optionality', () => {
+  const bookmark = ({
+    mark = "<mark class='Line'/>",
+    axes = '<rows>[ds].[sum:Sales:qk]</rows><cols>[ds].[tmn:Order Date:qk]</cols>',
+    encoding = "<color column='[ds].[none:Category:nk]'/>",
+    extraColumns = '',
+    columnInstances = '',
+  }: {
+    mark?: string;
+    axes?: string;
+    encoding?: string;
+    extraColumns?: string;
+    columnInstances?: string;
+  } = {}): string =>
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Profit]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column name='[Category]' datatype='string' role='dimension' type='nominal'/>" +
+    extraColumns +
+    columnInstances +
+    '</datasource></datasources><table><panes><pane>' +
+    mark +
+    '<encodings>' +
+    encoding +
+    '</encodings></pane></panes>' +
+    axes +
+    '</table></bookmark>';
+
+  const categoryRequired = (raw: string): boolean | undefined =>
+    inferFromBookmark(raw, { plainTemporalLineColorOptional: true }).slots.find(
+      (slot) => slot.sourceField === 'Category',
+    )?.required;
+
+  it('keeps the ordinary color partitioner required', () => {
+    expect(
+      inferFromBookmark(bookmark()).slots.find((slot) => slot.sourceField === 'Category')?.required,
+    ).toBe(true);
+  });
+
+  it('makes the sole color partitioner optional on a structurally plain temporal line', () => {
+    const inference = inferFromBookmark(bookmark(), { plainTemporalLineColorOptional: true });
+    const category = inference.slots.find((slot) => slot.sourceField === 'Category');
+
+    expect(category).toMatchObject({
+      derivation: 'none',
+      instanceRole: 'nk',
+      directShelves: ['color'],
+      required: false,
+    });
+    expect(
+      inferBindingDescriptor('plain-line', inference).slots.find(
+        (slot) => slot.template_field === category?.templateField,
+      )?.required,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['Circle/scatter mark', { mark: "<mark class='Circle'/>" }],
+    [
+      'two-quantitative connected scatter axes',
+      { axes: '<rows>[ds].[sum:Sales:qk]</rows><cols>[ds].[sum:Profit:qk]</cols>' },
+    ],
+    [
+      'both axes on rows',
+      { axes: '<rows>[ds].[sum:Sales:qk] [ds].[tmn:Order Date:qk]</rows><cols/>' },
+    ],
+    ['Bar mark', { mark: "<mark class='Bar'/>" }],
+    ['Area mark', { mark: "<mark class='Area'/>" }],
+    ['mixed marks', { mark: "<mark class='Line'/><mark class='Circle'/>" }],
+    [
+      'color plus text placement',
+      {
+        encoding:
+          "<color column='[ds].[none:Category:nk]'/><text column='[ds].[none:Category:nk]' />",
+      },
+    ],
+    ['detail placement', { encoding: "<detail column='[ds].[none:Category:nk]'/>" }],
+    ['path placement', { encoding: "<path column='[ds].[none:Category:nk]'/>" }],
+    [
+      'table calc carrier',
+      {
+        columnInstances:
+          "<column-instance column='[Sales]' derivation='Sum' name='[cum:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+          "<table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal'/>" +
+          '</column-instance>',
+        axes: '<rows>[ds].[cum:sum:Sales:qk]</rows><cols>[ds].[tmn:Order Date:qk]</cols>',
+      },
+    ],
+  ] as const)('keeps the generic LOD requirement for %s', (_case, options) => {
+    expect(categoryRequired(bookmark(options))).toBe(true);
+  });
+
+  it('does not clear the LOD requirement when a placed calculation carries an axis', () => {
+    const raw = bookmark({
+      extraColumns:
+        "<column name='[Sales Calc]' datatype='real' role='measure' type='quantitative'>" +
+        "<calculation class='tableau' formula='[Sales]'/></column>",
+      axes: '<rows>[ds].[sum:Sales Calc:qk]</rows><cols>[ds].[tmn:Order Date:qk]</cols>',
+    });
+    expect(categoryRequired(raw)).toBe(true);
+  });
+});
+
+// Each slot carries a single communicative role — what it DOES in the chart — derived from
+// kind + derivation + placement, distinct from the structural shelf list and the prose purpose.
+describe('inferFromBookmark — communicative role', () => {
+  const ALL_ROLES =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Amount]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Segment]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Detail]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Label]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[sum:Amount:qk]</rows>' +
+    '<cols>[ds].[none:Segment:nk]</cols>' +
+    "<filter class='categorical' column='[ds].[none:Region:nk]'>" +
+    "<groupfilter function='level-members' level='[none:Region:nk]'/></filter>" +
+    '<panes><pane><encodings>' +
+    "<lod column='[ds].[none:Detail:nk]'/>" +
+    "<tooltip column='[ds].[attr:Label:nk]'/>" +
+    '</encodings></pane></panes>' +
+    '</table></bookmark>';
+  const inf = inferFromBookmark(ALL_ROLES);
+  const byId = new Map(inf.slots.map((s) => [s.slot_id, s]));
+
+  it('labels a measure on an axis as measure-value', () => {
+    expect(byId.get('amount')?.role).toBe('measure-value');
+  });
+
+  it('labels a dimension on an axis as axis-partition', () => {
+    expect(byId.get('segment')?.role).toBe('axis-partition');
+  });
+
+  it('labels a disaggregated dimension on a mark encoding as distribution-breakout', () => {
+    expect(byId.get('detail')?.role).toBe('distribution-breakout');
+  });
+
+  it('labels an aggregated (attr) dimension on a decorative encoding as decoration', () => {
+    expect(byId.get('label')?.role).toBe('decoration');
+  });
+
+  it('labels a filter/slices pill as filter-scope', () => {
+    expect(byId.get('region')?.role).toBe('filter-scope');
+  });
+
+  it('carries the communicative role onto each synthesized SlotSpec', () => {
+    const m = inferBindingDescriptor('all-roles', inf);
+    const byField = new Map(m.slots.map((s) => [s.template_field, s]));
+    expect(byField.get('{{field_base_1}}')?.communicative_role).toBe('measure-value');
+    expect(byField.get('{{field_base_5}}')?.communicative_role).toBe('filter-scope');
+  });
+});
+
+// A table calc lives on a <column-instance> as one or more <table-calc> children; the CI name
+// chains the wrapper prefixes onto the base aggregation (`cum:sum:Sales:qk`). Inference must
+// (a) still resolve the wrapped measure to its base (not drop it as kind: unknown), (b) attach
+// a table-calc fact to that measure, and (c) for ABSOLUTE addressing, upgrade the addressing
+// dimension slots to required with a tablecalc-* role — RELATIVE addressing names no dimension
+// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs knowledge doc.
+describe('inferFromBookmark — table-calc semantics as a first-class slot fact', () => {
+  // Running Total, Compute Using = Table (across) → ordering-type="Rows", positional. Names no
+  // dimension, so the date axis keeps its ordinary axis-partition role.
+  const RELATIVE =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[cum:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal'/>" +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[cum:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[yr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const rel = inferFromBookmark(RELATIVE);
+  const relById = new Map(rel.slots.map((s) => [s.slot_id, s]));
+
+  it('resolves a wrapped measure to its base slot (not dropped as unknown)', () => {
+    expect(relById.get('sales')?.kind).toBe('quantitative');
+    expect(relById.get('sales')?.derivation).toBe('sum');
+    expect(rel.unknownCount).toBe(0);
+  });
+
+  it('attaches a relative-addressing table-calc fact to the measure', () => {
+    const tc = relById.get('sales')?.tableCalc;
+    expect(tc?.types).toContain('CumTotal');
+    expect(tc?.addressing).toBe('relative');
+    expect(tc?.along).toEqual([]);
+    expect(tc?.reset_on).toEqual([]);
+  });
+
+  it('leaves the addressing dimension alone for relative addressing', () => {
+    // Positional Compute Using names no dimension → the date stays an ordinary axis partition.
+    expect(relById.get('order_date')?.role).toBe('axis-partition');
+  });
+
+  // Year over Year Growth Rate: PctDiff pinned to Order Date via ordering-type="Field" +
+  // ordering-field + level-address → ABSOLUTE. The date it runs ALONG is load-bearing.
+  const ABSOLUTE_YOY =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[pcdf:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc diff-options='Relative' level-address='[ds].[yr:Order Date:ok]' " +
+    "ordering-field='[ds].[Order Date]' ordering-type='Field' type='PctDiff'>" +
+    '<address><value>-1</value></address>' +
+    '</table-calc>' +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[pcdf:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[yr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const yoy = inferFromBookmark(ABSOLUTE_YOY);
+  const yoyById = new Map(yoy.slots.map((s) => [s.slot_id, s]));
+
+  it('marks an absolute-addressed measure with the addressing mode and along dimension', () => {
+    const tc = yoyById.get('sales')?.tableCalc;
+    expect(tc?.types).toContain('PctDiff');
+    expect(tc?.addressing).toBe('absolute');
+    expect(tc?.along).toContain('Order Date');
+  });
+
+  it('upgrades the along dimension to required with a tablecalc-addressing role', () => {
+    expect(yoyById.get('order_date')?.role).toBe('tablecalc-addressing');
+    expect(yoyById.get('order_date')?.required).toBe(true);
+  });
+
+  // YTD Total: CumTotal with level-break on Order Date → the date RESETS accumulation.
+  const ABSOLUTE_YTD =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[cum:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc aggregation='Sum' level-break='[ds].[qr:Order Date:ok]' " +
+    "ordering-field='[ds].[Order Date]' ordering-type='Field' type='CumTotal'/>" +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[cum:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[qr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const ytd = inferFromBookmark(ABSOLUTE_YTD);
+  const ytdById = new Map(ytd.slots.map((s) => [s.slot_id, s]));
+
+  it('upgrades a level-break (reset) dimension to a tablecalc-partition role', () => {
+    expect(ytdById.get('sales')?.tableCalc?.reset_on).toContain('Order Date');
+    expect(ytdById.get('order_date')?.role).toBe('tablecalc-partition');
+    expect(ytdById.get('order_date')?.required).toBe(true);
+  });
+
+  it('carries the table-calc fact onto the synthesized SlotSpec', () => {
+    const m = inferBindingDescriptor('yoy', yoy);
+    const sales = m.slots.find((s) => s.table_calc);
+    expect(sales?.table_calc?.addressing).toBe('absolute');
+    expect(sales?.table_calc?.along).toContain('Order Date');
+  });
+});
+
+describe('the zero-donor-name-leakage invariant', () => {
+  it('never names a concrete donor field in any inferred purpose', () => {
+    const inf = inferFromBookmark(MODERN_BOOKMARK);
+    const donorNames = ['Sales', 'Category', 'Order Date', 'State'];
+    for (const s of inf.slots) {
+      for (const name of donorNames) {
+        expect(s.purpose).not.toContain(name);
+      }
+    }
+  });
+
+  it('autoPurpose phrasing is generic and independent of any field name', () => {
+    // Same kind + shelf → same phrasing regardless of which donor field it was.
+    expect(autoPurpose('quantitative', ['cols'])).toBe(autoPurpose('quantitative', ['rows']));
+    expect(autoPurpose('geo', ['rows'])).toContain('map');
+    expect(autoPurpose('temporal', ['cols'])).toContain('temporal');
+  });
+});
+
+describe('inferBindingDescriptor', () => {
+  const inf = inferFromBookmark(MODERN_BOOKMARK);
+  const manifest = inferBindingDescriptor('my-template', inf);
+
+  it('numbers template_field {{field_base_N}} in slot order', () => {
+    expect(manifest.slots.map((s) => s.template_field)).toEqual(
+      manifest.slots.map((_s, i) => `{{field_base_${i + 1}}}`),
+    );
+  });
+
+  it('carries derivation and kind onto each SlotSpec', () => {
+    const sales = manifest.slots.find((s) => s.derivation === 'sum');
+    expect(sales?.derivation).toBe('sum');
+    expect(sales?.kind).toBe('quantitative');
+  });
+
+  it('marks every synthesized slot bindable', () => {
+    expect(manifest.slots.every((s) => s.bindable)).toBe(true);
+  });
+});
+
+describe('structural binding descriptor boundary', () => {
+  it('exports only neutral structural binding data', async () => {
+    const module = await import('./inferSlots.js');
+    expect(module).toHaveProperty('inferBindingDescriptor');
+    expect(module).not.toHaveProperty('synthesizeManifest');
+
+    const describeBinding = module.inferBindingDescriptor as unknown as (
+      name: string,
+      inference: ReturnType<typeof inferFromBookmark>,
+    ) => Record<string, unknown>;
+    const descriptor = describeBinding('my-template', inferFromBookmark(MODERN_BOOKMARK)) as {
+      slots: Array<Record<string, unknown>>;
+      calcs: Array<Record<string, unknown>>;
+    } & Record<string, unknown>;
+
+    expect(Object.keys(descriptor)).toEqual(['template', 'slots', 'calcs']);
+    expect(descriptor.slots.map((slot) => slot.slot_id)).toEqual([
+      'field_base_1',
+      'field_base_2',
+      'field_base_3',
+    ]);
+    expect(descriptor.slots.every((slot) => !('hint' in slot))).toBe(true);
+  });
+});

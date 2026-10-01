@@ -50,6 +50,9 @@ export const getWorkbookInventoryTool = (
             title: result.value.title,
             ...(result.value.location !== undefined ? { location: result.value.location } : {}),
             unsavedChanges: result.value.unsavedChanges,
+            nativeSheetCollections: (['worksheets', 'dashboards', 'storyboards'] as const).filter(
+              (kind) => result.value[kind] !== undefined,
+            ),
             worksheets: result.value.worksheets ?? [],
             dashboards: result.value.dashboards ?? [],
             storyboards: result.value.storyboards ?? [],

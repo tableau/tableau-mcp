@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -166,6 +167,14 @@ export const getListAvailableFieldsTool = (
           }
 
           const cacheWorkbookFile = workbookFile?.trim() ? workbookFile : undefined;
+          if (cacheWorkbookFile) {
+            const guardedWorkbook = guardStrictCachePath(cacheWorkbookFile);
+            if (!guardedWorkbook.ok) {
+              return new ArgsValidationError(
+                strictCachePathError(cacheWorkbookFile, guardedWorkbook),
+              ).toErr();
+            }
+          }
           const explicitSession = session?.trim();
           if (
             hasLuid === true &&

@@ -2766,6 +2766,296 @@ function colorSeriesBinding(
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
 }
 
+type BasicLineSlots = {
+  color: TemplateManifest['slots'][number];
+  measure: TemplateManifest['slots'][number];
+  temporal: TemplateManifest['slots'][number];
+};
+
+type BasicLineIntent =
+  | { kind: 'not-applicable' | 'defer' }
+  | {
+      kind: 'accept';
+      grain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
+      seriesBinding?: { slot_id: string; field: string };
+    };
+
+function optionalLineSeriesSlots(m: TemplateManifest): BasicLineSlots | null {
+  if (m.family !== 'time-series' || m.calcs.length > 0) return null;
+  const color = m.slots.filter(
+    (slot) =>
+      slot.bindable && !slot.required && slot.kind === 'categorical' && slot.role.includes('color'),
+  );
+  const temporal = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'temporal' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  const measure = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'quantitative' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  if (color.length !== 1 || temporal.length !== 1 || measure.length !== 1) return null;
+  const axisRole = (slot: TemplateManifest['slots'][number]): 'rows' | 'cols' | null => {
+    const roles = (['rows', 'cols'] as const).filter((role) => slot.role.includes(role));
+    return roles.length === 1 ? roles[0] : null;
+  };
+  if (!axisRole(temporal[0]) || axisRole(temporal[0]) === axisRole(measure[0])) return null;
+  const supported = new Set([color[0], temporal[0], measure[0]]);
+  if (m.slots.some((slot) => slot.bindable && !supported.has(slot) && !isFacetSlot(slot))) {
+    return null;
+  }
+  return { color: color[0], measure: measure[0], temporal: temporal[0] };
+}
+
+type BasicLineFieldSpan = {
+  field: SchemaField;
+  start: number;
+  end: number;
+  token: string;
+  acronymGrain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
+};
+
+const BASIC_LINE_GRAINS: Readonly<Record<string, 'tdy' | 'tmn' | 'tqr' | 'tyr'>> = {
+  daily: 'tdy',
+  day: 'tdy',
+  monthly: 'tmn',
+  month: 'tmn',
+  quarterly: 'tqr',
+  quarter: 'tqr',
+  yearly: 'tyr',
+  year: 'tyr',
+};
+
+function basicLineFieldSpans(
+  ask: string,
+  summary: SchemaSummary,
+  filterFields: Set<SchemaField>,
+): BasicLineFieldSpan[] | null {
+  const exactNames = fieldExactNames(summary.fields);
+  const candidates: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  for (const field of summary.fields) {
+    const names = [bareName(field.columnName), field.caption, field.name].filter(
+      (name): name is string => !!name,
+    );
+    for (const name of names) {
+      let cursor = 0;
+      while (cursor < ask.length) {
+        const match = fieldNameMatchInAskSpan(ask.slice(cursor), name, exactNames);
+        if (!match) break;
+        candidates.push({ field, start: cursor + match.start, end: cursor + match.end });
+        cursor += match.end;
+      }
+    }
+    if (candidates.some((candidate) => candidate.field === field)) continue;
+    const expansion = names
+      .map((name) => ACRONYM_EXPANSIONS[name.toLowerCase()])
+      .find((value) => value !== undefined);
+    if (!expansion) continue;
+    const matches = expansion.map((word) => phraseMatchInAsk(ask, word));
+    if (matches.some((match) => match === null)) continue;
+    const start = Math.min(...matches.map((match) => match!.start));
+    const end = Math.max(...matches.map((match) => match!.end));
+    const spanTokens = normalizeFieldPhrase(ask.slice(start, end)).split(' ').sort();
+    if (spanTokens.join(' ') !== [...expansion].sort().join(' ')) continue;
+    const grainWord = expansion.find((word) => BASIC_LINE_GRAINS[word]);
+    candidates.push({
+      field,
+      start,
+      end,
+      ...(grainWord ? { acronymGrain: BASIC_LINE_GRAINS[grainWord] } : {}),
+    });
+  }
+
+  const selected: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  const ordered = candidates.sort(
+    (left, right) => left.start - right.start || right.end - right.start - (left.end - left.start),
+  );
+  for (const candidate of ordered) {
+    if (selected.some((span) => candidate.start < span.end && candidate.end > span.start)) continue;
+    const equalOwners = new Set(
+      ordered
+        .filter((other) => other.start === candidate.start && other.end === candidate.end)
+        .map((other) => other.field),
+    );
+    if (equalOwners.size > 1) return null;
+    selected.push(candidate);
+  }
+  return selected
+    .sort((left, right) => left.start - right.start)
+    .map((span, index) => ({
+      ...span,
+      token: `__${filterFields.has(span.field) ? 'f' : isMeasure(span.field) ? 'q' : TEMPORAL_DATATYPES.has(span.field.datatype) ? 't' : 'c'}${index}__`,
+    }));
+}
+
+function parseBasicLineAsk(
+  ask: string,
+  summary: SchemaSummary,
+  filterCandidates: SchemaField[],
+  requireExactCharacters = false,
+): {
+  measure: SchemaField;
+  temporal?: SchemaField;
+  grain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
+  series?: SchemaField;
+  facet?: SchemaField;
+} | null {
+  const spans = basicLineFieldSpans(ask, summary, new Set(filterCandidates));
+  if (!spans) return null;
+  const byToken = new Map(spans.map((span) => [span.token, span]));
+  let typed: string;
+  if (requireExactCharacters) {
+    const strict = strictCoveredAskTokens(ask, spans);
+    if (strict === null) return null;
+    typed = strict;
+  } else {
+    typed = ask;
+    for (const span of [...spans].sort((left, right) => right.start - left.start)) {
+      typed = `${typed.slice(0, span.start)} ${span.token} ${typed.slice(span.end)}`;
+    }
+    typed = typed
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  const prefix = '(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?';
+  const grain = '(?:(daily|monthly|quarterly|yearly) )?';
+  const aggregate =
+    '(?:(sum|distinct count|count distinct|average|avg|median|minimum|min|maximum|max|count) )?';
+  const temporal = '(__t\\d+__|time|date|day|month|quarter|year)';
+  const forms = [
+    new RegExp(
+      `^${prefix}line(?: (?:chart|graph))?(?: of)? ${grain}${aggregate}(__q\\d+__) (?:over|by) ${temporal}(.*)$`,
+    ),
+    new RegExp(
+      `^${prefix}${grain}line(?: (?:chart|graph))?(?: of)? ${aggregate}(__q\\d+__) (?:over|by) ${temporal}(.*)$`,
+    ),
+    new RegExp(`^${prefix}${grain}${aggregate}(__q\\d+__)(?: trend)? over ${temporal}(.*)$`),
+  ];
+  const core = forms.map((form) => form.exec(typed)).find((match) => match !== null);
+  if (!core) return null;
+  const [, grainWord, , measureToken, temporalToken, rawRest] = core;
+  const measureSpan = byToken.get(measureToken);
+  if (!measureSpan || !isMeasure(measureSpan.field)) return null;
+  const temporalSpan = temporalToken.startsWith('__') ? byToken.get(temporalToken) : undefined;
+  if (temporalSpan && !TEMPORAL_DATATYPES.has(temporalSpan.field.datatype)) return null;
+  const explicitGrain = grainWord ? BASIC_LINE_GRAINS[grainWord] : undefined;
+  const temporalGrain = temporalToken.startsWith('__')
+    ? undefined
+    : BASIC_LINE_GRAINS[temporalToken];
+  const grains = new Set(
+    [explicitGrain, temporalGrain, measureSpan.acronymGrain].filter(
+      (value): value is 'tdy' | 'tmn' | 'tqr' | 'tyr' => value !== undefined,
+    ),
+  );
+  if (grains.size > 1) return null;
+
+  let rest = rawRest.trim();
+  let series: SchemaField | undefined;
+  let facet: SchemaField | undefined;
+  let filterSeen = false;
+  while (rest) {
+    rest = rest.replace(/^and\s+/, '');
+    const clauses: Array<{ kind: 'series' | 'facet' | 'filter'; match: RegExpExecArray | null }> = [
+      {
+        kind: 'series',
+        match: /^(?:(?:grouped|split|colou?r(?:ed)?) by|by) (__c\d+__)(?:\s+|$)/.exec(rest),
+      },
+      {
+        kind: 'facet',
+        match:
+          /^(?:small multiples by|faceted by|facet by|trellis by|for each|one per|per) (__c\d+__)(?:\s+|$)/.exec(
+            rest,
+          ),
+      },
+      {
+        kind: 'filter',
+        match:
+          /^(?:filter by ((__f\d+__)(?: and __f\d+__){0,4})|with (?:interactive )?((__f\d+__)(?: and __f\d+__){0,4}) filters?)(?:\s+|$)/.exec(
+            rest,
+          ),
+      },
+    ];
+    const clause = clauses.find(({ match }) => match !== null);
+    if (!clause?.match) return null;
+    if (clause.kind === 'filter') {
+      const filterTokens = (clause.match[1] ?? clause.match[3]).match(/__f\d+__/g) ?? [];
+      const fields = filterTokens.map((token) => byToken.get(token)?.field);
+      if (
+        filterSeen ||
+        filterCandidates.length === 0 ||
+        filterCandidates.length > MAX_EXACT_FILTER_FIELDS ||
+        fields.length !== filterCandidates.length ||
+        fields.some((field, index) => field !== filterCandidates[index])
+      ) {
+        return null;
+      }
+      filterSeen = true;
+    } else {
+      const field = byToken.get(clause.match[1])?.field;
+      if (!field) return null;
+      if (clause.kind === 'series') {
+        if (facet || (series && series !== field)) return null;
+        series = field;
+      } else {
+        if (series || facet) return null;
+        facet = field;
+      }
+    }
+    rest = rest.slice(clause.match[0].length).trim();
+  }
+  if (filterCandidates.length > 0 && !filterSeen) return null;
+  return {
+    measure: measureSpan.field,
+    ...(temporalSpan ? { temporal: temporalSpan.field } : {}),
+    ...(grains.size === 1 ? { grain: [...grains][0] } : {}),
+    ...(series ? { series } : {}),
+    ...(facet ? { facet } : {}),
+  };
+}
+
+// WHY: optional line color is safe only when the complete ask parses into supported roles.
+function resolveBasicLineIntent(
+  m: TemplateManifest,
+  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
+  ask: string,
+  summary: SchemaSummary,
+  filterCandidates: SchemaField[],
+): BasicLineIntent {
+  const slots = optionalLineSeriesSlots(m);
+  if (!slots) return { kind: 'not-applicable' };
+  const parsed = parseBasicLineAsk(ask, summary, filterCandidates);
+  if (!parsed) return { kind: 'defer' };
+  const measureBinding = bound.find((binding) => binding.slot_id === slots.measure.slot_id);
+  const temporalBinding = bound.find((binding) => binding.slot_id === slots.temporal.slot_id);
+  if (
+    measureBinding?.field !== parsed.measure.name ||
+    !temporalBinding ||
+    (parsed.temporal && temporalBinding.field !== parsed.temporal.name)
+  ) {
+    return { kind: 'defer' };
+  }
+  const resolvedFacet = bound.find((binding) =>
+    m.slots.some((slot) => slot.slot_id === binding.slot_id && isFacetSlot(slot)),
+  );
+  if ((parsed.facet?.name ?? null) !== (resolvedFacet?.field ?? null)) return { kind: 'defer' };
+  return {
+    kind: 'accept',
+    ...(parsed.grain ? { grain: parsed.grain } : {}),
+    ...(parsed.series
+      ? { seriesBinding: { slot_id: slots.color.slot_id, field: parsed.series.name } }
+      : {}),
+  };
+}
+
 export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
 type ClassifiedBinding = { slot_id: string; field: string; derivation?: Derivation };
 
@@ -3479,6 +3769,86 @@ interface NoLlmClassification {
   encodings?: EncodingReport;
 }
 
+export const COMPLETE_REQUEST_TEMPLATE_IDS = [
+  'ranking-ordered-bar',
+  'trend-line-chart',
+  'correlation-scatter-plot-chart',
+] as const;
+
+function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): string | null {
+  let typed = ask;
+  for (const span of [...spans].sort((left, right) => right.start - left.start)) {
+    typed = `${typed.slice(0, span.start)} ${span.token} ${typed.slice(span.end)}`;
+  }
+  typed = typed.trim().replace(/\.$/u, '').trim();
+  if (/[^\p{L}\p{N}_\s]/u.test(typed)) return null;
+  return typed.toLowerCase().replace(/\s+/gu, ' ');
+}
+
+/** A conservative whole-ask proof over the existing deterministic binding. */
+export function provesCompleteSingleSheetRequest(
+  ask: string,
+  classification: NoLlmClassification,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): boolean {
+  if (
+    !COMPLETE_REQUEST_TEMPLATE_IDS.some((id) => id === classification.template) ||
+    manifest.template !== classification.template ||
+    (classification.notes?.length ?? 0) > 0 ||
+    classification.top_n !== undefined ||
+    (classification.filters?.length ?? 0) > 0 ||
+    classification.encodings === undefined ||
+    classification.encodings.filled.length > 0 ||
+    classification.encodings.unfilled.length > 0
+  ) {
+    return false;
+  }
+
+  const boundFields = classification.bindings.map((binding) => binding.field).sort();
+  if (classification.template === 'trend-line-chart') {
+    const parsed = parseBasicLineAsk(ask, summary, [], true);
+    if (!parsed?.temporal || parsed.series || parsed.facet || boundFields.length !== 2)
+      return false;
+    const temporalSlot = manifest.slots.find(
+      (slot) => slot.bindable && slot.required && slot.kind === 'temporal',
+    );
+    const temporalBinding = classification.bindings.find(
+      (binding) => binding.slot_id === temporalSlot?.slot_id,
+    );
+    if (
+      !temporalSlot ||
+      temporalBinding?.field !== parsed.temporal.name ||
+      (parsed.grain !== undefined &&
+        (temporalBinding.derivation ?? temporalSlot.derivation) !== parsed.grain)
+    ) {
+      return false;
+    }
+    return boundFields.join('\0') === [parsed.measure.name, parsed.temporal.name].sort().join('\0');
+  }
+
+  const spans = basicLineFieldSpans(ask, summary, new Set());
+  if (!spans) return false;
+  const typed = strictCoveredAskTokens(ask, spans);
+  if (typed === null) return false;
+  const prefix = '(?:(?:show me|create|make|display) )?(?:(?:a|an|the) )?';
+  const form =
+    classification.template === 'ranking-ordered-bar'
+      ? new RegExp(`^${prefix}(?:horizontal )?bar (?:chart|graph) of (__q\\d+__) by (__c\\d+__)$`)
+      : new RegExp(
+          `^${prefix}scatter (?:plot|chart) of (__q\\d+__) and (__q\\d+__) by (__c\\d+__)$`,
+        );
+  const match = form.exec(typed);
+  if (!match) return false;
+  const fieldsByToken = new Map(spans.map((span) => [span.token, span.field]));
+  const requested = match.slice(1).map((token) => fieldsByToken.get(token)?.name);
+  return (
+    requested.every((field) => field !== undefined) &&
+    requested.length === boundFields.length &&
+    requested.sort().join('\0') === boundFields.join('\0')
+  );
+}
+
 /**
  * A clear "top N" phrase; zero and non-integers deliberately do not match.
  * The current proposal contract carries only `top_n: integer` and the apply path
@@ -3799,6 +4169,7 @@ export function classifyNoLlm(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
+  requireCompleteRequest = false,
 ): NoLlmClassification | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
@@ -4083,8 +4454,33 @@ export function classifyNoLlm(
   // A facet cue wins over series color. Otherwise inspect the full datasource, not
   // only `matched` (which contains ask-named fields): e4 intentionally does not name
   // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
-  const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
-  if (colorSeries) bindings.push(colorSeries);
+  if (requireCompleteRequest) {
+    const basicLine = resolveBasicLineIntent(chosen, bindings, ask, summary, filterCandidates);
+    if (basicLine.kind === 'defer') return null;
+    if (basicLine.kind === 'accept') {
+      const lineSlots = optionalLineSeriesSlots(chosen)!;
+      const temporalBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.temporal.slot_id,
+      );
+      const temporalField = temporalBinding
+        ? summary.fields.find((field) => field.name === temporalBinding.field)
+        : undefined;
+      if (!temporalBinding || !temporalField) return null;
+      if (
+        basicLine.grain &&
+        lineSlots.temporal.derivation !== basicLine.grain &&
+        !['date', 'datetime'].includes(temporalField.datatype)
+      )
+        return null;
+      if (basicLine.grain && lineSlots.temporal.derivation !== basicLine.grain) {
+        temporalBinding.derivation = basicLine.grain;
+      }
+      if (basicLine.seriesBinding) bindings.push(basicLine.seriesBinding);
+    }
+  } else {
+    const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+    if (colorSeries) bindings.push(colorSeries);
+  }
   // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(

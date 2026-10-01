@@ -104,5 +104,76 @@ describe('DesktopConfig', () => {
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', 'not-a-pid');
       expect(new Config().desktopSessionId).toBeUndefined();
     });
+
+    it('preserves ordinary multi-instance behavior by default', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      expect(new Config().desktopSessionScope).toBe('ordinary');
+    });
+
+    it('enables strict scope only with a valid pinned pid', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      const config = new Config();
+      expect(config.desktopSessionScope).toBe('strict');
+      expect(config.desktopSessionId).toBe('4242');
+    });
+
+    it.each([undefined, '', 'not-a-pid', '0', '-1', '4.2'])(
+      'rejects strict scope with invalid pin %s at startup',
+      (sessionId) => {
+        vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+        if (sessionId === undefined) delete process.env.TABLEAU_DESKTOP_SESSION_ID;
+        else vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', sessionId);
+        expect(() => new Config()).toThrow(
+          'TABLEAU_DESKTOP_SESSION_SCOPE=strict requires TABLEAU_DESKTOP_SESSION_ID',
+        );
+      },
+    );
+
+    it('rejects an unknown session scope at startup', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'best-effort');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      expect(() => new Config()).toThrow(
+        'TABLEAU_DESKTOP_SESSION_SCOPE must be "strict" when set.',
+      );
+    });
+  });
+
+  describe('expected workspace identity', () => {
+    const target = {
+      workbookTitle: 'Sales & Support',
+      sheetId: 'sheet-1',
+      sheetName: 'Overview',
+    };
+
+    it('is absent by default and accepts the exact identity only with strict scope', () => {
+      expect(new Config().expectedWorkspaceIdentity).toBeUndefined();
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      vi.stubEnv('TABLEAU_DESKTOP_EXPECTED_WORKSPACE', JSON.stringify(target));
+      expect(new Config().expectedWorkspaceIdentity).toEqual(target);
+    });
+
+    it('rejects an expected identity without strict scope', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_EXPECTED_WORKSPACE', JSON.stringify(target));
+      expect(() => new Config()).toThrow('TABLEAU_DESKTOP_EXPECTED_WORKSPACE requires strict');
+    });
+
+    it.each([
+      '',
+      'not-json',
+      '{}',
+      JSON.stringify({ ...target, extra: 'ignored' }),
+      JSON.stringify({ ...target, sheetId: 1 }),
+      JSON.stringify({ ...target, sheetName: '' }),
+      JSON.stringify({ ...target, sheetName: 'line\nbreak' }),
+      JSON.stringify({ ...target, sheetName: 'x'.repeat(2049) }),
+      `${' '.repeat(8193)}${JSON.stringify(target)}`,
+    ])('rejects malformed expected workspace identity %s', (value) => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      vi.stubEnv('TABLEAU_DESKTOP_EXPECTED_WORKSPACE', value);
+      expect(() => new Config()).toThrow('TABLEAU_DESKTOP_EXPECTED_WORKSPACE');
+    });
   });
 });

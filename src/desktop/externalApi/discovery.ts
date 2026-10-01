@@ -54,6 +54,8 @@ export type DiscoverInstancesDeps = {
   readFile?: (path: string) => string;
   /** Liveness check for a pid. Injectable for tests. */
   isPidAlive?: (pid: number) => boolean;
+  /** Read only this pid's discovery file. Used by strict session scope. */
+  targetPid?: number;
 };
 
 /** Default pid liveness probe using a no-op signal. */
@@ -80,18 +82,22 @@ export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<Exter
   const isPidAlive = deps.isPidAlive ?? defaultIsPidAlive;
 
   const candidates: Array<{ dir: string; name: string }> = [];
-  for (const dir of dirs) {
-    try {
-      for (const name of readDir(dir)) {
-        if (name.endsWith('.json')) candidates.push({ dir, name });
+  if (deps.targetPid !== undefined) {
+    for (const dir of dirs) candidates.push({ dir, name: `${deps.targetPid}.json` });
+  } else {
+    for (const dir of dirs) {
+      try {
+        for (const name of readDir(dir)) {
+          if (name.endsWith('.json')) candidates.push({ dir, name });
+        }
+      } catch (error) {
+        log({
+          message: 'External API discovery directory not readable',
+          level: 'debug',
+          logger: 'ExternalApiDiscovery',
+          data: { dir, error },
+        });
       }
-    } catch (error) {
-      log({
-        message: 'External API discovery directory not readable',
-        level: 'debug',
-        logger: 'ExternalApiDiscovery',
-        data: { dir, error },
-      });
     }
   }
   if (candidates.length === 0) {
@@ -115,6 +121,7 @@ export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<Exter
     }
 
     const file = parsed.data;
+    if (deps.targetPid !== undefined && file.pid !== deps.targetPid) continue;
     if (!isPidAlive(file.pid)) {
       log({
         message: 'Skipping External API discovery entry with dead pid',

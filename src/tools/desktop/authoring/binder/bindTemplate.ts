@@ -74,6 +74,7 @@ import {
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
+import { matchesExpectedWorkspaceIdentity } from '../../../../desktop/wrappers/expectedWorkspaceIdentity.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   describeLoadWorkbookXmlError,
@@ -129,17 +130,18 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
+  session: z.string().optional().describe('PID; omit if pinned/sole.'),
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply now'),
+  auto_apply: z.boolean().optional(),
+  requireCompleteRequest: z.boolean().optional(),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
   target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
+  datasource: z.string().optional().describe('Internal name or unique caption.'),
   calcs: z
     .array(
       z.object({
@@ -196,6 +198,25 @@ type AppliedDefault = Pick<
   'measure' | 'top_n' | 'reason' | 'context_measures'
 >;
 
+type CompletionCaveat =
+  | 'unconverted_currency'
+  | 'field_validation_unverified'
+  | 'query_render_unverified';
+
+type CompletionEvidence = {
+  version: 1;
+  kind: 'single_sheet_apply';
+  caveats: CompletionCaveat[];
+  askSha256?: string;
+};
+
+type RequestCoverage = {
+  version: 1;
+  kind: 'complete_single_sheet_binding';
+  askSha256: string;
+  template: string;
+};
+
 /**
  * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
  * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
@@ -212,6 +233,8 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
+  completionEvidence?: CompletionEvidence;
+  requestCoverage?: RequestCoverage;
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
@@ -250,7 +273,12 @@ type BlockedBindTemplateResult = {
     | 'fallback_required'
     | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
-    | 'proposal_filter_resolution_failed';
+    | 'proposal_filter_resolution_failed'
+    | 'request_not_covered';
+  applied?: false;
+  may_have_applied?: false;
+  writeAttempts?: 0;
+  requestCoverage?: { version: 1; kind: 'declined'; askSha256: string };
   guidance: string;
   call_2_contract?: Call2Contract;
   mismatches?: ProposalContractMismatch[];
@@ -367,8 +395,8 @@ function refMatchesSchemaField(ref: CanonicalColumnRef, field: SchemaField): boo
 function currencyHeterogeneityCaveat(
   schemaSummary: SchemaSummary,
   worksheetXml: string | null,
-): string {
-  if (!worksheetXml) return '';
+): { guidance: string; completionCaveat: 'unconverted_currency' | null } | null {
+  if (!worksheetXml) return null;
 
   const displayedRefs = canonicalRefsIn(xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']));
   const summedMeasure = schemaSummary.fields.find(
@@ -378,7 +406,7 @@ function currencyHeterogeneityCaveat(
         (ref) => ref.derivation.toLowerCase() === 'sum' && refMatchesSchemaField(ref, field),
       ),
   );
-  if (!summedMeasure) return '';
+  if (!summedMeasure) return null;
 
   // Detail/LOD, shape, and text partition marks per member just like rows/cols do,
   // so a currency column on any of them means the sum is NOT cross-currency.
@@ -394,11 +422,14 @@ function currencyHeterogeneityCaveat(
       ) &&
       !visibleDimensionRefs.some((ref) => refMatchesSchemaField(ref, field)),
   );
-  if (!omittedUnitDimension) return '';
+  if (!omittedUnitDimension) return null;
 
   const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.columnName);
   const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.columnName);
-  return `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`;
+  return {
+    guidance: `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`,
+    completionCaveat: /^currency([ _-]?code)?$/i.test(unitName) ? 'unconverted_currency' : null,
+  };
 }
 
 type SummaryRowsEnrichment = Pick<
@@ -560,6 +591,26 @@ function blockedResult(
       ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
     },
     prefillNextAction(nextActionLabel),
+  );
+}
+
+function completeRequestDecline(ask: string): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'request_not_covered',
+      applied: false,
+      may_have_applied: false,
+      writeAttempts: 0,
+      requestCoverage: {
+        version: 1,
+        kind: 'declined',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      },
+      guidance:
+        'The complete request was not proven safe for a direct bind. Continue with the ordinary authoring path without replaying this bind.',
+    },
+    prefillNextAction('Continue with ordinary authoring'),
   );
 }
 
@@ -1652,7 +1703,11 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
-    if (inner.type === 'workbook-drift') {
+    if (
+      inner.type === 'workbook-drift' ||
+      inner.type === 'workspace-identity-mismatch' ||
+      inner.type === 'workspace-identity-unavailable'
+    ) {
       return describeLoadWorkbookXmlError(inner);
     }
     return 'invalid workbook content';
@@ -1671,7 +1726,9 @@ function applyFailureDisposition(
     error.type === 'load-workbook-xml-error' &&
     (error.error.type === 'invalid-xml' ||
       error.error.type === 'validation-failed' ||
-      error.error.type === 'workbook-drift')
+      error.error.type === 'workbook-drift' ||
+      error.error.type === 'workspace-identity-mismatch' ||
+      error.error.type === 'workspace-identity-unavailable')
   ) {
     return 'pre-dispatch';
   }
@@ -2543,6 +2600,7 @@ async function performAutoApply({
     xml: appliedWorkbookXml,
     baselineXml: applyBaselineXml,
     expectedWorkbookXml: applyBaselineXml,
+    expectedWorkspaceIdentity: config.expectedWorkspaceIdentity,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
@@ -2770,7 +2828,8 @@ async function performAutoApply({
   const defaultGuidance = appliedDefault
     ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default, offer to change the measure or top_n${contextMeasureGuidance}.`
     : '';
-  const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const heterogeneityCaveat = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const currencyGuidance = heterogeneityCaveat?.guidance ?? '';
   const guidance = `${
     promiseOutcome === 'failed' || postApplyUncertain
       ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
@@ -2786,6 +2845,52 @@ async function performAutoApply({
           ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
           : `${receiptText} ${terminalGuidance}`
   }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  const nativeFindings = verificationReport.findings ?? [];
+  const nativeFieldUnverified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'skipped' &&
+    nativeFindings.length === 1 &&
+    nativeFindings[0].severity === 'warning' &&
+    nativeFindings[0].source === 'used-field-validity' &&
+    nativeFindings[0].reason === 'unsupported-api';
+  const nativeFieldVerified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'passed' &&
+    nativeFindings.length === 0;
+  const accountedGuidance = `${receiptText} ${TERMINAL_GUIDANCE}${currencyGuidance ? ` ${currencyGuidance}` : ''}${promiseCheck}`;
+  const completionEligible =
+    res.requestCoverage !== undefined &&
+    !trustedDeterministicApply &&
+    args.sheet_type === 'worksheet' &&
+    !needsFollowUp &&
+    !appliedDefault &&
+    successfulCalcCaptions.length === 0 &&
+    args.top_n === undefined &&
+    args.sort === undefined &&
+    (args.filters?.length ?? 0) === 0 &&
+    spliced.appliedFilterCount === 0 &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified) &&
+    res.encodings !== undefined &&
+    res.encodings.unfilled.length === 0 &&
+    summaryRows.summary_rows !== undefined &&
+    summaryRows.summary_rows_order !== undefined &&
+    summaryRows.summary_rows_scope !== undefined &&
+    summaryRows.summary_rows_error === undefined &&
+    summaryRows.truncated !== true &&
+    (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
+    readbackEvidence === '' &&
+    guidance === accountedGuidance;
+  const caveats: CompletionCaveat[] = [];
+  if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
+  if (nativeFieldUnverified) caveats.push('field_validation_unverified');
+  caveats.push('query_render_unverified');
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
@@ -2806,6 +2911,17 @@ async function performAutoApply({
       : { bind: bindMs, inject: injectMs, apply: applyMs },
     verification: receiptInput.readback,
     ...summaryRows,
+    ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
+    ...(completionEligible
+      ? {
+          completionEvidence: {
+            version: 1,
+            kind: 'single_sheet_apply',
+            caveats,
+            askSha256: res.requestCoverage!.askSha256,
+          } as const,
+        }
+      : {}),
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
   if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
@@ -3100,6 +3216,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         proposal,
         minConfidence,
         auto_apply,
+        requireCompleteRequest,
         target_worksheet,
         datasource,
         calcs,
@@ -3115,6 +3232,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           proposal,
           minConfidence,
           auto_apply,
+          requireCompleteRequest,
           target_worksheet,
           datasource,
           calcs,
@@ -3130,6 +3248,46 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          if (
+            requireCompleteRequest === true &&
+            (auto_apply !== true ||
+              proposal !== undefined ||
+              calcs !== undefined ||
+              skip_validation !== undefined ||
+              target_worksheet !== undefined ||
+              datasource !== undefined)
+          ) {
+            return new Ok(completeRequestDecline(ask));
+          }
+          const expectedWorkspaceIdentity = extra.config.expectedWorkspaceIdentity;
+          if (expectedWorkspaceIdentity !== undefined && calcs && calcs.length > 0) {
+            return new ArgsValidationError(
+              'calcs are not supported in a bind with a workspace guard before the first Desktop write',
+            ).toErr();
+          }
+          let guardedExecutor: ExternalApiToolExecutor | undefined;
+          if (expectedWorkspaceIdentity !== undefined) {
+            let workbook;
+            try {
+              guardedExecutor = await extra.getExecutor(resolvedSession);
+              workbook = await guardedExecutor.getWorkbook(extra.signal);
+            } catch {
+              return new ArgsValidationError(
+                'Desktop workspace identity could not be confirmed before binding',
+              ).toErr();
+            }
+            if (workbook.isErr()) {
+              return new ArgsValidationError(
+                'Desktop workspace identity could not be confirmed before binding',
+              ).toErr();
+            }
+            if (!matchesExpectedWorkspaceIdentity(workbook.value, expectedWorkspaceIdentity)) {
+              return new ArgsValidationError(
+                'Desktop workspace identity does not match the requested workbook and active worksheet',
+              ).toErr();
+            }
+          }
+
           const trustedDeterministicApply =
             extra.config.allowSkipValidation === true &&
             skip_validation === true &&
@@ -3239,7 +3397,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
-          const executor = await extra.getExecutor(resolvedSession);
+          const executor = guardedExecutor ?? (await extra.getExecutor(resolvedSession));
           // Phase timing (only reported when auto_apply performs). The bind phase
           // subsumes the live workbook read since server-side they are one step.
           const bindStart = Date.now();
@@ -3257,6 +3415,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+              if (requireCompleteRequest === true) return new Ok(completeRequestDecline(ask));
               return new IncompleteOperationError(
                 ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
               ).toErr();
@@ -3316,6 +3475,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
             ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
             automaticOnly: true,
+            ...(requireCompleteRequest === true ? { completeRequestLineColorOptional: true } : {}),
           });
           const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
           const manifests =
@@ -3382,12 +3542,14 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ask,
               workbookXml,
               manifests,
+              ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
               proposal === undefined &&
               auto_apply === true &&
+              requireCompleteRequest !== true &&
               res.status === 'propose' &&
               res.llm_input.recommended &&
               requiredFilterFields === undefined
@@ -3452,6 +3614,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const bindMs = Date.now() - bindStart;
           schemaSummary ??= summarizeSchema(workbookXml);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
+          if (
+            requireCompleteRequest === true &&
+            (res.status !== 'bound' ||
+              res.requestCoverage === undefined ||
+              res.used_llm ||
+              (res.warnings?.length ?? 0) > 0 ||
+              res.encodings === undefined ||
+              res.encodings.unfilled.length > 0 ||
+              appliedDefault !== undefined)
+          ) {
+            return new Ok(completeRequestDecline(ask));
+          }
 
           // ── One structured correction boundary ─────────────────────────
           // Only `propose` earns a structured Call 2. Every escalation closes the fast path.

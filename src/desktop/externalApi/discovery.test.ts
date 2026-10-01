@@ -106,6 +106,53 @@ describe('discoverInstances', () => {
     expect(instances).toEqual([]);
   });
 
+  it('reads only the requested pid file when discovery is strictly scoped', () => {
+    const readDir = vi.fn(() => ['4242.json', '7.json']);
+    const readFile = vi.fn((path: string) => {
+      if (path.endsWith('/4242.json')) {
+        return JSON.stringify({
+          schemaVersion: 1,
+          instanceId: 'target',
+          pid: 4242,
+          baseUrl: 'http://127.0.0.1:8765',
+          token: 'target-token',
+        });
+      }
+      throw new Error(`foreign discovery file read: ${path}`);
+    });
+
+    const instances = discoverInstances({
+      discoveryDir: '/discovery',
+      targetPid: 4242,
+      readDir,
+      readFile,
+      isPidAlive: () => true,
+    });
+
+    expect(instances).toEqual([expect.objectContaining({ pid: 4242, instanceId: 'target' })]);
+    expect(readDir).not.toHaveBeenCalled();
+    expect(readFile).toHaveBeenCalledOnce();
+    expect(readFile).toHaveBeenCalledWith('/discovery/4242.json');
+  });
+
+  it('rejects a target filename whose payload names a foreign pid', () => {
+    const instances = discoverInstances({
+      discoveryDir: '/discovery',
+      targetPid: 4242,
+      readFile: () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          instanceId: 'foreign',
+          pid: 7,
+          baseUrl: 'http://127.0.0.1:8766',
+          token: 'foreign-token',
+        }),
+      isPidAlive: () => true,
+    });
+
+    expect(instances).toEqual([]);
+  });
+
   it('skips files whose schemaVersion is not 1', () => {
     const instances = discoverInstances({
       discoveryDir: '/discovery',

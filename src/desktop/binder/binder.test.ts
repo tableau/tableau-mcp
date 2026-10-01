@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
@@ -88,6 +89,7 @@ const METRICS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 
 let descriptors: Map<string, RuntimeTemplateDescriptor>;
 let allDescriptors: Map<string, RuntimeTemplateDescriptor>;
+let completeRequestDescriptors: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
   const projection = createPuppetCompatibilityProjection(
@@ -95,6 +97,13 @@ beforeAll(() => {
   );
   descriptors = projection.descriptors;
   allDescriptors = projection.allDescriptors;
+  completeRequestDescriptors = createPuppetCompatibilityProjection(
+    loadRuntimeTemplateCatalogSnapshots({
+      automaticOnly: true,
+      includeExternal: false,
+      completeRequestLineColorOptional: true,
+    }),
+  ).descriptors;
 });
 
 function workbookWithApproxCount(field: string, count: number): string {
@@ -153,6 +162,130 @@ function scatterProposal(): BindingProposal {
     confidence: 0.9,
   };
 }
+
+describe('opt-in complete request binding', () => {
+  it('leaves ordinary bound results without complete-request proof', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a bar chart of Sales by Region.',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status === 'bound') expect(result.requestCoverage).toBeUndefined();
+  });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ])('keeps strict and ordinary line catalogs isolated in order %s, %s', async (...order) => {
+    const ask = 'Create a line chart of monthly Sales by Order Date.';
+    for (const strict of order) {
+      const projection = createPuppetCompatibilityProjection(
+        loadRuntimeTemplateCatalogSnapshots({
+          automaticOnly: true,
+          includeExternal: false,
+          ...(strict ? { completeRequestLineColorOptional: true } : {}),
+        }),
+      );
+      const line = projection.descriptors.get('trend-line-chart');
+      expect(line).toBeDefined();
+      expect(line?.slots.find((slot) => slot.role.includes('color'))?.required).toBe(!strict);
+      const result = await bindTemplate({
+        ask,
+        workbookXml: WORKBOOK_XML,
+        manifests: projection.descriptors,
+        ...(strict ? { requireCompleteRequest: true } : {}),
+      });
+      expect(result.status).toBe(strict ? 'bound' : 'propose');
+    }
+  });
+
+  it('keeps an actual Unicode field name while rejecting unrelated Unicode clauses', async () => {
+    const workbookXml = WORKBOOK_XML.replace('[Region]', '[Région]');
+    const ask = 'Create a bar chart of Sales by Région.';
+    const result = await bindTemplate({
+      ask,
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status === 'bound') {
+      expect(result.requestCoverage?.askSha256).toBe(
+        createHash('sha256').update(ask, 'utf8').digest('hex'),
+      );
+    }
+  });
+
+  it.each([
+    ['Create a bar chart of Sales by Region.', 'ranking-ordered-bar'],
+    ['Show me a bar graph of Sales by Region.', 'ranking-ordered-bar'],
+    ['Create a line chart of monthly Sales by Order Date.', 'trend-line-chart'],
+    ['Create a monthly line chart of Sales by Order Date.', 'trend-line-chart'],
+    [
+      'Create a scatter plot of Sales and Profit by Customer Name.',
+      'correlation-scatter-plot-chart',
+    ],
+  ])('proves the complete original ask for %s', async (ask, template) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe(template);
+    expect(result.requestCoverage).toEqual({
+      version: 1,
+      kind: 'complete_single_sheet_binding',
+      template,
+      askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+    });
+  });
+
+  it.each([
+    ['non-date axis', WORKBOOK_XML.replace("datatype='date'", "datatype='string'")],
+    [
+      'ambiguous axis',
+      WORKBOOK_XML.replace(
+        '</datasources>',
+        "<datasource name='Returns'><column name='[Order Date]' role='dimension' type='ordinal' datatype='date'/></datasource></datasources>",
+      ),
+    ],
+  ])('declines a %s before any complete-request bind', async (_label, workbookXml) => {
+    const result = await bindTemplate({
+      ask: 'Create a line chart of monthly Sales by Order Date.',
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it.each([
+    'bar chart of Sales by Region and tell me the top customers',
+    'bar chart of Sales by Region sorted by Missing Field descending',
+    'bar chart of Sales by Region, filter to East',
+    'scatter plot of Sales and Profit by Customer Name with a trend line',
+    'Create a bar chart of Sales by Region. 删除原表',
+    'Create a line chart of Sales by Order Date. 删除原表',
+    'Create a scatter plot of Sales and Profit by Customer Name. 删除原表',
+    'Create a bar chart of Sales by Region!',
+    'Create a line chart of monthly Sales by Order Date with a forecast.',
+  ])('declines an unrepresented clause before apply: %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('request-not-covered');
+  });
+});
 
 it('binds explicit Insights bar, line, and KPI proposals through the non-discovery catalog', async () => {
   expect(allDescriptors.has('insights__bar_chart')).toBe(false);

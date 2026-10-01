@@ -44,10 +44,24 @@ export class ExternalClientApiUnavailableError extends Error {
   }
 }
 
+export class StrictDesktopSessionScopeError extends Error {
+  constructor(sessionId: string, pinnedSessionId: string) {
+    super(
+      `Tableau Desktop session '${sessionId}' is outside this server's strict session scope. Omit session or use the pinned session '${pinnedSessionId}'.`,
+    );
+    this.name = 'StrictDesktopSessionScopeError';
+  }
+}
+
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
 
   async getExecutor(sessionId: string): Promise<ExternalApiToolExecutor> {
+    const config = getDesktopConfig();
+    if (config.desktopSessionScope === 'strict' && sessionId !== config.desktopSessionId) {
+      throw new StrictDesktopSessionScopeError(sessionId, config.desktopSessionId!);
+    }
+
     let session = this.sessions.get(sessionId);
 
     if (!session) {
@@ -57,9 +71,11 @@ export class SessionManager {
       }
 
       const pid = sessionIdResult.value;
-      const config = getDesktopConfig();
       const discover = (): ReturnType<typeof discoverInstances> =>
-        discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+        discoverInstances({
+          discoveryDir: config.externalApiDiscoveryDir,
+          ...(config.desktopSessionScope === 'strict' ? { targetPid: pid } : {}),
+        });
       const executor = new ExternalApiToolExecutor({
         pid,
         discover,

@@ -55,6 +55,10 @@ export function runApplyPreamble({
   const readResult = readContainedCacheTextFile(file);
   if (!readResult.ok) {
     switch (readResult.issue) {
+      case CONTAINED_CACHE_READ_ISSUE.scopeUnavailable:
+        return new ArgsValidationError(
+          `Security error: strict Desktop cache scope is unavailable; the owned instance must be discoverable before cached ${kind} XML can be read.`,
+        ).toErr();
       case CONTAINED_CACHE_READ_ISSUE.outsideCache:
       case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
         return new ArgsValidationError(

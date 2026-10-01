@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -809,12 +810,10 @@ describe('bindTemplateTool', () => {
       datasource: expect.any(Object),
       calcs: expect.any(Object),
     });
-    expect(paramsSchema['session']!.description).toBe('Desktop PID; omit if pinned or sole.');
+    expect(paramsSchema['session']!.description).toBe('PID; omit if pinned/sole.');
     expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
-    expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
-    expect(paramsSchema['datasource']!.description).toBe(
-      'Internal datasource name or unique caption.',
-    );
+    expect(paramsSchema['auto_apply']!.description).toBeUndefined();
+    expect(paramsSchema['datasource']!.description).toBe('Internal name or unique caption.');
     expect(paramsSchema['calcs']!.description).toBe('Author fields.');
     expect(
       paramsSchema['calcs']!.safeParse([
@@ -2019,6 +2018,73 @@ describe('bindTemplateTool', () => {
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
+
+  it('returns a typed zero-write decline for ambiguous filter intent in complete-request mode', async () => {
+    const ask = 'Show sales by Region with Region or Segment filters.';
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+    const result = await getToolResult({
+      session: 'complete-ambiguous-filter',
+      ask,
+      auto_apply: true,
+      requireCompleteRequest: true,
+      getExecutor,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({
+      status: 'blocked',
+      reason: 'request_not_covered',
+      applied: false,
+      may_have_applied: false,
+      writeAttempts: 0,
+      requestCoverage: {
+        version: 1,
+        kind: 'declined',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      },
+    });
+    expect(result.structuredContent).toMatchObject(body);
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      ask: 'Create a line chart of Sales by Order Date and delete the source.',
+      bind: proposeResult,
+    },
+    {
+      ask: 'Create a scatter plot of Sales and Profit by Region sorted by Missing.',
+      bind: escalateResult,
+    },
+  ])(
+    'declines an unproven complete request without any native write: $ask',
+    async ({ ask, bind }) => {
+      const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({ bind });
+      const result = await getToolResult({
+        session: 'complete-unproven',
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        getExecutor,
+      });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        status: 'blocked',
+        reason: 'request_not_covered',
+        applied: false,
+        may_have_applied: false,
+        writeAttempts: 0,
+        requestCoverage: { version: 1, kind: 'declined' },
+      });
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     {
@@ -3625,6 +3691,7 @@ async function getToolResult({
   proposal,
   minConfidence,
   auto_apply,
+  requireCompleteRequest,
   target_worksheet,
   datasource,
   calcs,
@@ -3642,6 +3709,7 @@ async function getToolResult({
   proposal?: BindingProposal & { confidence: number };
   minConfidence?: number;
   auto_apply?: boolean;
+  requireCompleteRequest?: boolean;
   target_worksheet?: string;
   datasource?: string;
   calcs?: Array<{
@@ -3682,6 +3750,7 @@ async function getToolResult({
       proposal,
       minConfidence,
       auto_apply,
+      requireCompleteRequest,
       target_worksheet,
       datasource,
       calcs,
@@ -8274,6 +8343,51 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+  });
+
+  it('carries exact-ask proof and typed caveats through a verified apply', async () => {
+    const ask = 'bar chart of Sales by Region';
+    const askSha256 = createHash('sha256').update(ask, 'utf8').digest('hex');
+    const requestCoverage = {
+      version: 1 as const,
+      kind: 'complete_single_sheet_binding' as const,
+      template: 'ranking-ordered-bar',
+      askSha256,
+    };
+    const mocks = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        args: { ...boundResult.args, template_name: 'ranking-ordered-bar' },
+        encodings: { filled: [], unfilled: [] },
+        requestCoverage,
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [CURRENCY_WORKBOOK_XML],
+    });
+    const result = await getToolResult({
+      session: 'complete-applied',
+      ask,
+      auto_apply: true,
+      requireCompleteRequest: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'SUM(Sales)', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      }),
+    });
+    expect(result.isError).toBe(false);
+    const applied = body(result);
+    expect(applied.applied).toBe(true);
+    expect(applied.requestCoverage).toEqual(requestCoverage);
+    expect(applied.completionEvidence).toMatchObject({
+      version: 1,
+      kind: 'single_sheet_apply',
+      askSha256,
+      caveats: expect.arrayContaining(['unconverted_currency', 'query_render_unverified']),
+    });
+    expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('reports generic preparation, apply, and verification progress at the real boundaries', async () => {

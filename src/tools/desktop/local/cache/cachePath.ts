@@ -1,1 +1,6 @@
-export { getCacheDir, isWithinCacheDir } from '../../../../desktop/cachePath.js';
+export {
+  getCacheDir,
+  guardStrictCachePath,
+  isWithinCacheDir,
+  strictCachePathError,
+} from '../../../../desktop/cachePath.js';

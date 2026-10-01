@@ -267,6 +267,8 @@ const NON_TOOL_VOCABULARY = [
   'workbook-read',
   'worksheet-edit-buffer',
   'worksheet-image',
+  'workspace-identity-mismatch',
+  'workspace-identity-unavailable',
   'zone-delete',
   'zone-style',
   'zone-surgery',

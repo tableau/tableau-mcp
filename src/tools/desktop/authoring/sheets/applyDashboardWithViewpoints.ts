@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.js';
@@ -60,6 +61,12 @@ export const getApplyDashboardWithViewpointsTool = (
         extra,
         args: { session, dashboardName, dashboardFile, worksheetNames },
         callback: async () => {
+          const guardedDashboard = guardStrictCachePath(dashboardFile);
+          if (!guardedDashboard.ok) {
+            return new ArgsValidationError(
+              strictCachePathError(dashboardFile, guardedDashboard),
+            ).toErr();
+          }
           if (!existsSync(dashboardFile)) {
             return new WorkbookNotFoundError(
               `Cached dashboard file not found: ${dashboardFile}`,
