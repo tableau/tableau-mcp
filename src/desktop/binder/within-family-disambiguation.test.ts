@@ -318,6 +318,34 @@ describe('classifyNoLlm — geo slot name affinity', () => {
 // (section 4's ZERO-candidates test) is unchanged. The auto-completed field is reported
 // in `notes` so the caller can say "using Country/Region".
 describe('classifyNoLlm — geo-slot completion (W60)', () => {
+  it('FAIL-CLOSED: geo completion cannot reuse a field consumed by a categorical slot', () => {
+    const countryAndState: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field('Country', 'dimension', 'nominal', 'string'),
+        field('State', 'dimension', 'nominal', 'string'),
+        field('Sales', 'measure', 'quantitative', 'real'),
+      ],
+    };
+    const m = mapOf(
+      synth(
+        'choropleth',
+        'spatial',
+        ['choropleth'],
+        [
+          { ...slot('category', 'categorical'), template_field: 'Country' },
+          slot('country', 'geo'),
+          slot('state', 'geo'),
+          { ...slot('value', 'quantitative'), derivation: 'sum' },
+        ],
+      ),
+    );
+
+    expect(
+      classifyNoLlm('choropleth of Sales by Country and State', m, countryAndState),
+    ).toBeNull();
+  });
+
   it('auto-completes the unnamed country slot (state named → country widens to Country/Region)', () => {
     const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
     // The ask names ONLY State/Province + Profit — Country/Region is NOT named.
