@@ -9,7 +9,14 @@ directory alongside their corresponding source files and are named `*.test.ts`.
 
 ## Running
 
-To run the unit tests, use the `npm run test` or `npm run coverage` commands.
+Run the complete unit-test suite once with:
+
+```bash
+npx vitest run --config ./vitest.config.ts
+```
+
+Use `npm run coverage` to run the same suite with coverage reporting. The `npm test` command starts
+Vitest in watch mode, so reserve it for interactive development rather than CI or one-shot checks.
 
 ## Debugging
 
