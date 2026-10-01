@@ -30,6 +30,7 @@ import * as runtimeTemplateCatalogModule from '../../../../desktop/templates/run
 import { readTemplate } from '../../../../desktop/templates/templatePath.js';
 import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../../desktop/validation/registry.js';
+import { calcFieldNamesRule } from '../../../../desktop/validation/rules/calcFieldNames.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
@@ -147,6 +148,42 @@ const RANKING_CONTEXT_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
     </datasource>
   </datasources>
 </workbook>`;
+const RETAINED_HISTOGRAM_WORKSHEET_XML = `<worksheet name='Create a histogram chart of Revenue.' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='h6-gross-margin-calc' name='federated.csv040059ff380b040059ff380b' />
+      </datasources>
+      <datasource-dependencies datasource='federated.csv040059ff380b040059ff380b'>
+        <column aggregation='None' caption='revenue' datatype='integer' name='[Profit (bin)_tpl_12e12d4d]' role='dimension' type='ordinal'>
+          <calculation class='bin' decimals='2' formula='[revenue]' peg='0' size='500' />
+        </column>
+        <column-instance column='[revenue]' derivation='Count' name='[cnt:revenue:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Profit (bin)_tpl_12e12d4d]' derivation='None' name='[none:Profit (bin)_tpl_12e12d4d:qk]' pivot='key' type='quantitative' />
+        <column caption='Revenue' datatype='integer' name='[revenue]' role='measure' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing custom-mark-size-in-axis-units='1.0' mark-alignment='mark-alignment-left' mark-sizing-setting='marks-scaling-on' use-custom-mark-size='false' />
+      </pane>
+    </panes>
+    <rows>[federated.csv040059ff380b040059ff380b].[cnt:revenue:qk]</rows>
+    <cols>[federated.csv040059ff380b040059ff380b].[none:Profit (bin)_tpl_12e12d4d:qk]</cols>
+    <show-full-range>
+      <column>[federated.csv040059ff380b040059ff380b].[none:Profit (bin)_tpl_12e12d4d:qk]</column>
+    </show-full-range>
+  </table>
+  <simple-id uuid='{8C2294E5-4AA0-4DCA-992E-790D6F5B661D}' />
+</worksheet>
+`;
+
 const CURRENCY_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
@@ -2061,6 +2098,13 @@ describe('bindTemplateTool', () => {
       ask: 'Create a scatter plot of Sales and Profit by Region sorted by Missing.',
       bind: escalateResult,
     },
+    {
+      ask: 'Create a histogram of Sales with bins of 500.',
+      bind: {
+        ...boundResult,
+        args: { ...boundResult.args, template_name: 'distribution-histogram' },
+      },
+    },
   ])(
     'declines an unproven complete request without any native write: $ask',
     async ({ ask, bind }) => {
@@ -3923,6 +3967,7 @@ function summaryRowsExecutor(
     | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
     | ReturnType<typeof Err>
     | 'pending',
+  options: { apiVersion?: string; worksheetName?: string; datasource?: string } = {},
 ): TableauDesktopToolContext['getExecutor'] {
   const getWorksheetSummaryData =
     summary === 'pending'
@@ -3936,7 +3981,7 @@ function summaryRowsExecutor(
             );
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
-    desktopApiVersion: '0.2.16',
+    desktopApiVersion: options.apiVersion ?? '0.2.16',
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
@@ -3945,8 +3990,8 @@ function summaryRowsExecutor(
         worksheets: [
           {
             id: 'sheet-sales',
-            name: 'Sales by Region',
-            datasources: ['superstore'],
+            name: options.worksheetName ?? 'Sales by Region',
+            datasources: [options.datasource ?? 'superstore'],
           },
         ],
       }),
@@ -6043,6 +6088,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       sheet_name: 'Sales by Region',
       verification: { status: 'skipped' },
     });
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('operationEvidence');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
@@ -6082,6 +6128,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         sheet_name: 'Sales by Region',
         verification: { status: 'failed' },
       });
+      expect(JSON.parse(result.content[0].text)).not.toHaveProperty('operationEvidence');
       expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
@@ -8381,6 +8428,8 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     const applied = body(result);
     expect(applied.applied).toBe(true);
     expect(applied.requestCoverage).toEqual(requestCoverage);
+    expect(applied.operationEvidence).toBeUndefined();
+    expect(result.structuredContent?.operationEvidence).toBeUndefined();
     expect(applied.completionEvidence).toMatchObject({
       version: 1,
       kind: 'single_sheet_apply',
@@ -8389,6 +8438,170 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     });
     expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ])(
+    'keeps the retained Revenue histogram answer honest when legacy warning=%s and invalid reference=%s',
+    async (legacyBinWarning, invalidReference) => {
+      const ask = 'Create a histogram chart of Revenue.';
+      const datasource = 'federated.csv040059ff380b040059ff380b';
+      const sourceWorkbook = `<?xml version='1.0'?><workbook><datasources><datasource name='${datasource}'><column caption='Revenue' name='[revenue]' role='measure' type='quantitative' datatype='integer' /></datasource></datasources><worksheets><worksheet name='se-eval-stage-probe' /></worksheets></workbook>`;
+      const appliedWorkbook = sourceWorkbook.replace(
+        '</worksheets>',
+        `${invalidReference ? RETAINED_HISTOGRAM_WORKSHEET_XML.replace("formula='[revenue]'", "formula='[Definitely Missing]'") : RETAINED_HISTOGRAM_WORKSHEET_XML}</worksheets>`,
+      );
+      const requestCoverage = {
+        version: 1 as const,
+        kind: 'complete_single_sheet_binding' as const,
+        template: 'distribution-histogram',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      };
+      const mocks = setupAutoApplyMocks({
+        bind: {
+          ...boundResult,
+          args: {
+            ...boundResult.args,
+            template_name: 'distribution-histogram',
+            title: ask,
+            template_parameters: { DATASOURCE: datasource },
+            field_mapping: {
+              '{{field_base_1}}@cnt': `[${datasource}].[cnt:revenue:qk]`,
+              '{{field_base_1}}@none': `[${datasource}].[none:revenue:qk]`,
+            },
+          },
+          encodings: { filled: [], unfilled: [] },
+          requestCoverage,
+        },
+        inject: { ok: true, xml: appliedWorkbook },
+        workbookReads: [sourceWorkbook],
+      });
+      vi.mocked(validationRegistry.runValidation).mockImplementation((xml) => ({
+        valid: true,
+        issues: [
+          ...calcFieldNamesRule.validate(xml),
+          ...(legacyBinWarning && xml.includes("class='bin'")
+            ? [
+                {
+                  ruleId: 'calc-field-names',
+                  severity: 'warning' as const,
+                  message: 'Legacy native-bin name heuristic warning',
+                },
+              ]
+            : []),
+        ],
+      }));
+      if (invalidReference) {
+        expect(calcFieldNamesRule.validate(appliedWorkbook)).toEqual([
+          expect.objectContaining({ ruleId: 'calc-field-names', severity: 'warning' }),
+        ]);
+      }
+      const result = await getToolResult({
+        session: invalidReference
+          ? 'retained-histogram-missing-field'
+          : legacyBinWarning
+            ? 'retained-histogram-legacy-warning'
+            : 'retained-histogram-fixed',
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        getExecutor: summaryRowsExecutor(
+          mocks,
+          {
+            columns: [
+              { name: 'revenue', dataType: 'integer' },
+              { name: 'CNT(Revenue)', dataType: 'integer' },
+            ],
+            rows: [
+              [3, 1],
+              [2, 4],
+              [1, 11],
+              [0, 4],
+            ],
+          },
+          { apiVersion: '0.2.15', worksheetName: ask, datasource },
+        ),
+      });
+      const applied = body(result);
+      expect(applied.applied).toBe(true);
+      expect(applied.requestCoverage).toEqual(requestCoverage);
+      if (legacyBinWarning || invalidReference) {
+        expect(applied.completionEvidence).toBeUndefined();
+      } else {
+        expect(applied.completionEvidence).toMatchObject({
+          version: 1,
+          kind: 'single_sheet_apply',
+          askSha256: requestCoverage.askSha256,
+          caveats: ['field_validation_unverified', 'query_render_unverified'],
+        });
+        expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+      }
+      expect(applied.operationEvidence).toBeUndefined();
+      expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ['Currency Code', 'currency_code', true, 'line chart of Sales by Region'],
+    ['Unit of Measure', 'unit', false, 'line chart of Sales by Region'],
+    [
+      'Currency Code',
+      'currency_code',
+      true,
+      'line chart of Sales by Region and then create a dashboard',
+    ],
+  ])(
+    'reports only typed facts for a settled ordinary line with %s in %s',
+    async (unitCaption, unitColumn, recognizedCurrency, ask) => {
+      const workbookXml = CURRENCY_WORKBOOK_XML.replace('Currency Code', unitCaption).replace(
+        'currency_code',
+        unitColumn,
+      );
+      const mocks = setupAutoApplyMocks({
+        bind: {
+          ...boundResult,
+          args: { ...boundResult.args, template_name: 'trend-line-chart' },
+          encodings: { filled: [], unfilled: [] },
+        },
+        inject: {
+          ok: true,
+          xml: INJECTED_RANKING_WORKBOOK_XML.replace(
+            "<mark class='Bar' />",
+            "<mark class='Line' />",
+          ),
+        },
+        workbookReads: [workbookXml],
+      });
+      const result = await getToolResult({
+        session: `ordinary-line-${unitColumn}`,
+        ask,
+        auto_apply: true,
+        getExecutor: readbackExecutor(mocks, { apiVersion: '0.2.15' }),
+      });
+      const applied = body(result);
+      expect(applied.applied).toBe(true);
+      expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
+      expect(applied.guidance).toContain('without conversion');
+      expect(applied.requestCoverage).toBeUndefined();
+      expect(applied.completionEvidence).toBeUndefined();
+      expect(applied.operationEvidence).toEqual({
+        version: 1,
+        kind: 'single_sheet_apply',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+        template: 'trend-line-chart',
+        sheetName: applied.sheet_name,
+        caveats: [
+          ...(recognizedCurrency ? ['unconverted_currency'] : []),
+          'field_validation_unverified',
+          'query_render_unverified',
+        ],
+      });
+      expect(result.structuredContent?.operationEvidence).toEqual(applied.operationEvidence);
+      expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('reports generic preparation, apply, and verification progress at the real boundaries', async () => {
     const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
@@ -8484,6 +8697,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       findings: [expect.objectContaining({ reason: 'validation-read-failed' })],
     });
     expect(applied.guidance).toContain('Do NOT call bind-template again or replay apply.');
+    expect(applied.operationEvidence).toBeUndefined();
     expect(result.structuredContent).toBeUndefined();
   });
 
@@ -8643,6 +8857,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).toContain('HOST VERIFICATION — failed');
     expect(applied.guidance).toContain('verification failed (see findings)');
     expect(applied.guidance).not.toContain('Done — no further tool calls needed');
+    expect(applied.operationEvidence).toBeUndefined();
     expect(
       (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
     ).not.toBe('done');
@@ -8673,6 +8888,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).toContain('inspect live worksheet state');
     expect(applied.guidance).toContain('get-worksheet-xml');
     expect(applied.guidance).toContain('Do NOT call bind-template again');
+    expect(applied.operationEvidence).toBeUndefined();
     expect(
       (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
     ).not.toBe('done');

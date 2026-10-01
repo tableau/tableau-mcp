@@ -210,6 +210,15 @@ type CompletionEvidence = {
   askSha256?: string;
 };
 
+type OperationEvidence = {
+  version: 1;
+  kind: 'single_sheet_apply';
+  askSha256: string;
+  template: string;
+  sheetName: string;
+  caveats: CompletionCaveat[];
+};
+
 type RequestCoverage = {
   version: 1;
   kind: 'complete_single_sheet_binding';
@@ -234,6 +243,7 @@ type AppliedFastPathResult = {
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
   completionEvidence?: CompletionEvidence;
+  operationEvidence?: OperationEvidence;
   requestCoverage?: RequestCoverage;
   guidance: string;
   applied_default?: AppliedDefault;
@@ -2891,6 +2901,17 @@ async function performAutoApply({
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
   if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
+  const operationEligible =
+    !trustedDeterministicApply &&
+    res.requestCoverage === undefined &&
+    args.sheet_type === 'worksheet' &&
+    !needsFollowUp &&
+    readbackRan &&
+    encodingAnalysisComplete &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified);
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
@@ -2912,6 +2933,18 @@ async function performAutoApply({
     verification: receiptInput.readback,
     ...summaryRows,
     ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
+    ...(operationEligible
+      ? {
+          operationEvidence: {
+            version: 1,
+            kind: 'single_sheet_apply',
+            askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+            template: args.template_name,
+            sheetName: literalTitle,
+            caveats,
+          } as const,
+        }
+      : {}),
     ...(completionEligible
       ? {
           completionEvidence: {

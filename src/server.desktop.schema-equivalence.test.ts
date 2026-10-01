@@ -4,7 +4,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import { getDesktopConfig } from './config.desktop.js';
+import { isCompleteRequestChartDescriptor } from './desktop/binder/classify.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
+import {
+  getCompleteRequestTemplateIds,
+  loadRuntimeTemplateDescriptors,
+} from './desktop/templates/runtimeTemplateCatalog.js';
 import {
   COMPLETE_REQUEST_BIND_CAPABILITY_KEY,
   COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
@@ -85,6 +90,25 @@ describe('Desktop strict-session initialize capability', () => {
   it.each(['standalone', 'shared'] as const)(
     'advertises the canonical strict target through the actual %s initialize response',
     async (mode) => {
+      const structurallyEligible = [
+        ...loadRuntimeTemplateDescriptors({
+          automaticOnly: true,
+          includeExternal: false,
+          completeRequestLineColorOptional: true,
+        }).values(),
+      ]
+        .filter(isCompleteRequestChartDescriptor)
+        .map((descriptor) => descriptor.template);
+      expect(structurallyEligible).toEqual(
+        expect.arrayContaining([
+          'ranking-ordered-bar',
+          'trend-line-chart',
+          'correlation-scatter-plot-chart',
+          'distribution-histogram',
+        ]),
+      );
+      expect(structurallyEligible.length).toBeLessThanOrEqual(16);
+      expect(getCompleteRequestTemplateIds()).toEqual(structurallyEligible);
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '004242');
       const sharedServer = new McpServer(
@@ -123,11 +147,7 @@ describe('Desktop strict-session initialize capability', () => {
           [COMPLETE_REQUEST_BIND_CAPABILITY_KEY]: {
             version: COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
             tool: 'bind-template',
-            templates: [
-              'ranking-ordered-bar',
-              'trend-line-chart',
-              'correlation-scatter-plot-chart',
-            ],
+            templates: structurallyEligible,
           },
         });
       } finally {

@@ -19,7 +19,6 @@ import {
   readResourceAsset,
   RESOURCES_ROOT,
 } from './desktop/assets.js';
-import { COMPLETE_REQUEST_TEMPLATE_IDS } from './desktop/binder/classify.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
 import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
@@ -32,6 +31,7 @@ import {
   readKnowledgeResource,
 } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
+import { getCompleteRequestTemplateIds } from './desktop/templates/runtimeTemplateCatalog.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -341,7 +341,7 @@ export class DesktopMcpServer extends Server {
           [COMPLETE_REQUEST_BIND_CAPABILITY_KEY]: {
             version: COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
             tool: 'bind-template',
-            templates: [...COMPLETE_REQUEST_TEMPLATE_IDS],
+            templates: getCompleteRequestTemplateIds(),
           },
           ...(config.expectedWorkspaceIdentity
             ? {

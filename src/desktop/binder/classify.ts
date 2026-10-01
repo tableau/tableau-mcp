@@ -3769,12 +3769,6 @@ interface NoLlmClassification {
   encodings?: EncodingReport;
 }
 
-export const COMPLETE_REQUEST_TEMPLATE_IDS = [
-  'ranking-ordered-bar',
-  'trend-line-chart',
-  'correlation-scatter-plot-chart',
-] as const;
-
 function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): string | null {
   let typed = ask;
   for (const span of [...spans].sort((left, right) => right.start - left.start)) {
@@ -3785,15 +3779,69 @@ function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): strin
   return typed.toLowerCase().replace(/\s+/gu, ' ');
 }
 
-/** A conservative whole-ask proof over the existing deterministic binding. */
+type CompleteChartShape = 'single' | 'pair' | 'scatter';
+
+function completeChartShape(manifest: TemplateManifest): CompleteChartShape | null {
+  if (!manifest.fast_path_eligible || manifest.fast_path_blockers.length > 0) return null;
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  const optional = manifest.slots.filter((slot) => slot.bindable && !slot.required);
+  const signature = required
+    .map(
+      (slot) => `${slot.kind}:${slot.role.join('+')}:${slot.communicative_role}:${slot.derivation}`,
+    )
+    .sort()
+    .join('|');
+  const noOtherSlots = optional.length === 0;
+  if (
+    noOtherSlots &&
+    manifest.calcs.length === 1 &&
+    required.length === 2 &&
+    required[0].template_field === required[1].template_field &&
+    signature === 'quantitative:cols:measure-value:none|quantitative:rows:measure-value:cnt'
+  )
+    return 'single';
+  if (manifest.calcs.length !== 0) return null;
+  if (
+    noOtherSlots &&
+    (signature === 'categorical:rows:axis-partition:none|quantitative:cols:measure-value:sum' ||
+      signature === 'categorical:cols:axis-partition:none|quantitative:rows:measure-value:sum')
+  )
+    return 'pair';
+  if (
+    signature === 'quantitative:rows:measure-value:sum|temporal:cols:axis-partition:tmn' &&
+    optional.every(
+      (slot) =>
+        slot.kind === 'categorical' &&
+        slot.role.length === 1 &&
+        slot.role[0] === 'color' &&
+        slot.communicative_role === 'distribution-breakout',
+    ) &&
+    optional.length <= 1
+  )
+    return 'pair';
+  if (
+    noOtherSlots &&
+    signature ===
+      'categorical:lod:distribution-breakout:none|quantitative:cols:measure-value:sum|quantitative:rows:measure-value:sum'
+  )
+    return 'scatter';
+  return null;
+}
+
+export function isCompleteRequestChartDescriptor(manifest: RuntimeTemplateDescriptor): boolean {
+  return completeChartShape(manifest) !== null;
+}
+
+/** Every non-field word must describe this selected chart and its bound slots. */
 export function provesCompleteSingleSheetRequest(
   ask: string,
   classification: NoLlmClassification,
   summary: SchemaSummary,
   manifest: TemplateManifest,
 ): boolean {
+  const shape = completeChartShape(manifest);
   if (
-    !COMPLETE_REQUEST_TEMPLATE_IDS.some((id) => id === classification.template) ||
+    shape === null ||
     manifest.template !== classification.template ||
     (classification.notes?.length ?? 0) > 0 ||
     classification.top_n !== undefined ||
@@ -3801,52 +3849,140 @@ export function provesCompleteSingleSheetRequest(
     classification.encodings === undefined ||
     classification.encodings.filled.length > 0 ||
     classification.encodings.unfilled.length > 0
-  ) {
+  )
     return false;
-  }
-
-  const boundFields = classification.bindings.map((binding) => binding.field).sort();
-  if (classification.template === 'trend-line-chart') {
-    const parsed = parseBasicLineAsk(ask, summary, [], true);
-    if (!parsed?.temporal || parsed.series || parsed.facet || boundFields.length !== 2)
-      return false;
-    const temporalSlot = manifest.slots.find(
-      (slot) => slot.bindable && slot.required && slot.kind === 'temporal',
-    );
-    const temporalBinding = classification.bindings.find(
-      (binding) => binding.slot_id === temporalSlot?.slot_id,
-    );
-    if (
-      !temporalSlot ||
-      temporalBinding?.field !== parsed.temporal.name ||
-      (parsed.grain !== undefined &&
-        (temporalBinding.derivation ?? temporalSlot.derivation) !== parsed.grain)
-    ) {
-      return false;
-    }
-    return boundFields.join('\0') === [parsed.measure.name, parsed.temporal.name].sort().join('\0');
-  }
-
   const spans = basicLineFieldSpans(ask, summary, new Set());
   if (!spans) return false;
   const typed = strictCoveredAskTokens(ask, spans);
   if (typed === null) return false;
-  const prefix = '(?:(?:show me|create|make|display) )?(?:(?:a|an|the) )?';
-  const form =
-    classification.template === 'ranking-ordered-bar'
-      ? new RegExp(`^${prefix}(?:horizontal )?bar (?:chart|graph) of (__q\\d+__) by (__c\\d+__)$`)
-      : new RegExp(
-          `^${prefix}scatter (?:plot|chart) of (__q\\d+__) and (__q\\d+__) by (__c\\d+__)$`,
-        );
-  const match = form.exec(typed);
-  if (!match) return false;
-  const fieldsByToken = new Map(spans.map((span) => [span.token, span.field]));
-  const requested = match.slice(1).map((token) => fieldsByToken.get(token)?.name);
-  return (
-    requested.every((field) => field !== undefined) &&
-    requested.length === boundFields.length &&
-    requested.sort().join('\0') === boundFields.join('\0')
+  let request = typed.replace(/^(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?/u, '');
+  const groups = new Map<string, TemplateManifest['slots']>();
+  const bindings = new Map(classification.bindings.map((binding) => [binding.slot_id, binding]));
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  if (bindings.size !== required.length || classification.bindings.length !== required.length)
+    return false;
+  for (const slot of required) {
+    if (!bindings.has(slot.slot_id)) return false;
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  }
+  const describedNoun = manifest.description
+    .split(' ')
+    .filter((word) => word && !['chart', 'plot', 'graph'].includes(word))
+    .at(-1);
+  const namedNouns = matchedKeywords(maskFieldNames(ask, summary), manifest.intent_keywords)
+    .filter((word) => CHART_NOUN_KEYWORDS.has(word.toLowerCase()))
+    .sort((left, right) => right.length - left.length);
+  if (describedNoun && manifest.intent_keywords.includes(describedNoun))
+    namedNouns.push(describedNoun);
+  let grain: Derivation | undefined;
+  let horizontal = false;
+  if (request.startsWith('horizontal ')) {
+    horizontal = true;
+    request = request.slice('horizontal '.length);
+  }
+  const leadingGrain = /^(daily|monthly|quarterly|yearly) /u.exec(request);
+  if (leadingGrain) {
+    grain = BASIC_LINE_GRAINS[leadingGrain[1]];
+    request = request.slice(leadingGrain[0].length);
+  }
+  const noun = namedNouns.find((candidate) =>
+    request.startsWith(`${candidate.toLowerCase().replace(/-/gu, ' ')} `),
   );
+  let fieldsText: string;
+  if (noun) {
+    const nounStart = `${noun.toLowerCase().replace(/-/gu, ' ')} `;
+    fieldsText = request
+      .slice(nounStart.length)
+      .replace(/^(?:chart|plot|graph) /u, '')
+      .replace(/^of /u, '');
+  } else {
+    const trend = /^(__[qct]\d+__) trend over (__[qct]\d+__)$/u.exec(request);
+    if (!trend || !manifest.intent_keywords.includes('trend')) return false;
+    fieldsText = `${trend[1]} over ${trend[2]}`;
+  }
+  const innerGrain = /^(daily|monthly|quarterly|yearly) /u.exec(fieldsText);
+  if (innerGrain) {
+    if (grain !== undefined) return false;
+    grain = BASIC_LINE_GRAINS[innerGrain[1]];
+    fieldsText = fieldsText.slice(innerGrain[0].length);
+  }
+  let aggregation: Derivation | undefined;
+  const aggregate =
+    /^(distinct count|count distinct|average|avg|median|minimum|min|maximum|max|count|sum) /u.exec(
+      fieldsText,
+    );
+  if (aggregate) {
+    aggregation =
+      aggregate[1] === 'sum'
+        ? 'sum'
+        : AGGREGATION_WORDS.find((item) => item.phrase === aggregate[1])?.deriv;
+    fieldsText = fieldsText.slice(aggregate[0].length);
+  }
+  const pieces = fieldsText.split(/ (and|by|over) /u);
+  if (pieces.length === 0 || pieces.length % 2 === 0) return false;
+  const tokens = pieces.filter((_part, index) => index % 2 === 0);
+  const links = pieces.filter((_part, index) => index % 2 === 1);
+  if (tokens.some((token) => !/^__[qct]\d+__$/u.test(token))) return false;
+  const expectedLinks = shape === 'scatter' ? ['and', 'by'] : shape === 'pair' ? [links[0]] : [];
+  if (
+    tokens.length !== groups.size ||
+    links.length !== expectedLinks.length ||
+    links.some((link, index) => link !== expectedLinks[index]) ||
+    (shape === 'pair' && !['by', 'over'].includes(links[0])) ||
+    (shape === 'single' && (grain !== undefined || aggregation !== undefined || horizontal))
+  )
+    return false;
+  const ordered = tokens.map((token) => spans.find((span) => span.token === token)?.field);
+  if (ordered.some((field) => field === undefined)) return false;
+  const resolved = ordered as SchemaField[];
+  if (
+    (shape === 'single' && !isMeasure(resolved[0])) ||
+    (shape === 'pair' &&
+      (!isMeasure(resolved[0]) || (!isCategorical(resolved[1]) && !isTemporal(resolved[1])))) ||
+    (shape === 'scatter' &&
+      (!isMeasure(resolved[0]) || !isMeasure(resolved[1]) || !isCategorical(resolved[2])))
+  )
+    return false;
+  if (shape === 'pair' && links[0] === 'over' && !isTemporal(resolved[1])) return false;
+  if (
+    horizontal &&
+    !required.some((slot) => slot.kind === 'categorical' && slot.role.includes('rows'))
+  )
+    return false;
+  if (grain && !required.some((slot) => slot.kind === 'temporal')) return false;
+  const seen = new Set<string>();
+  for (const [index, field] of resolved.entries()) {
+    const matching = [...groups].filter(([, slots]) =>
+      slots.every((slot) => bindings.get(slot.slot_id)?.field === field.name),
+    );
+    if (matching.length !== 1 || seen.has(matching[0][0])) return false;
+    const [templateField, slots] = matching[0];
+    seen.add(templateField);
+    if (
+      shape === 'scatter' &&
+      !slots.every((slot) =>
+        slot.role.includes(index === 0 ? 'rows' : index === 1 ? 'cols' : 'lod'),
+      )
+    )
+      return false;
+    if (
+      slots.some(
+        (slot) =>
+          (slot.kind === 'quantitative' && !isMeasure(field)) ||
+          (slot.kind === 'categorical' && !isCategorical(field)) ||
+          (slot.kind === 'temporal' && !isTemporal(field)) ||
+          (grain &&
+            slot.kind === 'temporal' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== grain) ||
+          (aggregation &&
+            slot.kind === 'quantitative' &&
+            slot.derivation !== 'none' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== aggregation),
+      )
+    )
+      return false;
+  }
+  return seen.size === groups.size;
 }
 
 /**
@@ -4261,7 +4397,11 @@ export function classifyNoLlm(
   if (histogram?.fast_path_eligible) {
     const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
     if (bindings) {
-      return attachAskModifiers(ask, { template: histogram.template, bindings }, filterCandidates);
+      return attachAskModifiers(
+        ask,
+        { template: histogram.template, bindings, encodings: { filled: [], unfilled: [] } },
+        filterCandidates,
+      );
     }
   }
 

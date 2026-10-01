@@ -1,3 +1,4 @@
+import { isCompleteRequestChartDescriptor } from '../binder/classify.js';
 import type { Family, RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
 import {
   listTemplateCatalog,
@@ -113,6 +114,21 @@ export function runtimeTemplateDescriptorFromSnapshot(
     intent_keywords: keywordsFromName(snapshot.template, family),
     description: phrase(snapshot.template),
   };
+}
+
+let packagedCompleteRequestTemplateIds: string[] | undefined;
+
+export function getCompleteRequestTemplateIds(): string[] {
+  packagedCompleteRequestTemplateIds ??= [
+    ...loadRuntimeTemplateDescriptors({
+      automaticOnly: true,
+      includeExternal: false,
+      completeRequestLineColorOptional: true,
+    }).values(),
+  ]
+    .filter(isCompleteRequestChartDescriptor)
+    .map((descriptor) => descriptor.template);
+  return [...packagedCompleteRequestTemplateIds];
 }
 
 export interface RuntimeTemplateCatalogOptions extends TemplateCatalogOptions {
