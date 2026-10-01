@@ -4,13 +4,8 @@ import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ArgsValidationError,
-  ProjectNotAllowedError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
-import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -21,6 +16,7 @@ import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
+import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -294,18 +290,6 @@ function assertMinimumRestApiVersionSupported(): void {
   if (!RestApi.versionIsAtLeast('3.29')) {
     throw new UnknownError(
       `publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
-    );
-  }
-}
-
-function assertProjectAllowedByBoundedContext(
-  projectId: string,
-  boundedContext: BoundedContext,
-): void {
-  const { projectIds } = boundedContext;
-  if (projectIds && !projectIds.has(projectId)) {
-    throw new ProjectNotAllowedError(
-      `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
     );
   }
 }
