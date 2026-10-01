@@ -211,7 +211,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * @param workbookType - `twb` or `twbx`, matching the file uploaded to the session
    * @param name - The name to give the published workbook
    * @param projectId - The ID of the project to publish into (mutually exclusive with `location`)
-   * @param location - Personal-space destination `{ id, type: 'PersonalSpace' }` (mutually exclusive with `projectId`)
+   * @param location - The Personal Space LUID to publish into (mutually exclusive with `projectId`)
    * @param overwrite - Whether to overwrite an existing workbook with the same name
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
    */
@@ -229,7 +229,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     workbookType: 'twb' | 'twbx';
     name: string;
     projectId?: string;
-    location?: { id: string; type: 'PersonalSpace' };
+    location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
     if ((projectId === undefined) === (location === undefined)) {
@@ -238,7 +238,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     const destination =
       projectId !== undefined
         ? `<project id="${escapeXmlAttribute(projectId)}"/>`
-        : `<location id="${escapeXmlAttribute(location!.id)}" type="${escapeXmlAttribute(location!.type)}"/>`;
+        : `<location id="${escapeXmlAttribute(location!)}" type="PersonalSpace"/>`;
     const xml =
       `<tsRequest><workbook name="${escapeXmlAttribute(name)}">` +
       destination +

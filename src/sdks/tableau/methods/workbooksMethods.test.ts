@@ -243,7 +243,7 @@ describe('WorkbooksMethods', () => {
         uploadSessionId: 'session-1',
         workbookType: 'twbx',
         name: 'My Workbook',
-        location: { id: 'ps-luid', type: 'PersonalSpace' },
+        location: 'ps-luid',
       });
 
       expect(result.location).toEqual({ id: 'ps-luid', type: 'PersonalSpace' });
@@ -272,7 +272,7 @@ describe('WorkbooksMethods', () => {
           workbookType: 'twbx',
           name: 'My Workbook',
           projectId: 'project-1',
-          location: { id: 'ps-luid', type: 'PersonalSpace' },
+          location: 'ps-luid',
         }),
       ).rejects.toThrow('exactly one of `projectId` or `location`');
     });

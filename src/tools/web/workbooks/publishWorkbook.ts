@@ -171,7 +171,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
 
               const destination =
                 personalSpace !== undefined
-                  ? { location: { id: personalSpace.luid, type: 'PersonalSpace' as const } }
+                  ? { location: personalSpace.luid }
                   : { projectId };
 
               let publishedWorkbook: Workbook;

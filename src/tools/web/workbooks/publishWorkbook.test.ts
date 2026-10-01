@@ -545,7 +545,7 @@ describe('publishWorkbookTool', () => {
       uploadSessionId: 'validated-upload-id',
       name: 'My New Workbook',
       workbookType: 'twb',
-      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+      location: 'personal-space-luid',
       overwrite: false,
     });
     // Auto-default path must not pass projectId to the SDK.

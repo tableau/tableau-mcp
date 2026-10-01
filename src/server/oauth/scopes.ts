@@ -171,11 +171,11 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
  * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
  * simplicity over narrowing the blast radius.
  */
-export const PUBLISH_WORKBOOK_BASE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
+  'tableau:content:read',
 ];
-export const PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE: TableauApiScope = 'tableau:content:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -252,8 +252,7 @@ const toolScopeMap: Record<
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    // Composed from the named constants above (single source of truth) rather than duplicated.
-    api: new Set([...PUBLISH_WORKBOOK_BASE_API_SCOPES, PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE]),
+    api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
