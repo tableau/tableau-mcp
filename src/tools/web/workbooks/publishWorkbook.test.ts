@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
+  mockGetSite: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
 }));
 
@@ -38,6 +39,9 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
       personalSpaceMethods: {
         getPersonalSpace: mocks.mockGetPersonalSpace,
+      },
+      sitesMethods: {
+        getSite: mocks.mockGetSite,
       },
       siteId: 'test-site-id',
     });
@@ -78,7 +82,13 @@ describe('publishWorkbookTool', () => {
     mocks.mockReadFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockGetPersonalSpace.mockReset();
+    mocks.mockGetSite.mockReset();
     mocks.useRestApiCalls.length = 0;
+    mocks.mockGetSite.mockResolvedValue({
+      id: 'test-site-id',
+      name: 'Test Site',
+      personalSpaceEnabled: true,
+    });
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
@@ -619,10 +629,45 @@ describe('publishWorkbookTool', () => {
 
     await getToolResult(validArgs);
 
+    expect(mocks.mockGetSite).not.toHaveBeenCalled();
     expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 'target-project-id' }),
     );
+  });
+
+  it('errors without publishing when Personal Space is not enabled for the site', async () => {
+    mocks.mockGetSite.mockResolvedValue({
+      id: 'test-site-id',
+      name: 'Test Site',
+      personalSpaceEnabled: false,
+    });
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Personal Space is not enabled for this site');
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('errors without publishing when the site Personal Space capability check fails', async () => {
+    mocks.mockGetSite.mockRejectedValue(new Error('500 server error'));
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('projectId is required');
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('requests the content:read scope only when projectId is omitted', async () => {

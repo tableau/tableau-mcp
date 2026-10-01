@@ -17,6 +17,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
+import { Site } from '../../../sdks/tableau/types/site.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
@@ -370,6 +371,27 @@ function assertMinimumRestApiVersionSupported(): void {
 async function resolvePersonalSpace(
   restApi: RestApi,
 ): Promise<Result<PersonalSpace, McpToolError>> {
+  // Check the site-level capability before resolving the caller's own space: a site with
+  // Personal Space turned off entirely has no /personalSpace resource to find, so checking
+  // first avoids a doomed-to-404 round trip and gives a clearer, named reason. This does NOT
+  // subsume the separate "direct publish to personal space" site setting below — that gate
+  // isn't visible on the site resource and only surfaces as a 400000 at publish time (see
+  // mapPersonalSpacePublishError).
+  let site: Site;
+  try {
+    site = await restApi.sitesMethods.getSite({ siteId: restApi.siteId });
+  } catch (error) {
+    return new ArgsValidationError(
+      `projectId is required: could not determine whether Personal Space is enabled for this site (${getExceptionMessage(error)}).`,
+    ).toErr();
+  }
+
+  if (!site.personalSpaceEnabled) {
+    return new ArgsValidationError(
+      'projectId is required: Personal Space is not enabled for this site.',
+    ).toErr();
+  }
+
   let personalSpace: PersonalSpace;
   try {
     personalSpace = await restApi.personalSpaceMethods.getPersonalSpace({
