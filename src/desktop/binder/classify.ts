@@ -3634,19 +3634,26 @@ function completeChartShape(manifest: TemplateManifest): CompleteChartShape | nu
     .sort()
     .join('|');
   const noOtherSlots = optional.length === 0;
+  const markClasses = manifest.mark_classes ?? [];
+  const hasOnlyMarkClass = (allowed: readonly string[]): boolean =>
+    markClasses.length === 1 && allowed.includes(markClasses[0]);
   if (
     noOtherSlots &&
     manifest.calcs.length === 1 &&
     required.length === 2 &&
     required[0].template_field === required[1].template_field &&
-    signature === 'quantitative:cols:measure-value:none|quantitative:rows:measure-value:cnt'
+    signature === 'quantitative:cols:measure-value:none|quantitative:rows:measure-value:cnt' &&
+    hasOnlyMarkClass(['Bar'])
   )
     return 'single';
   if (manifest.calcs.length !== 0) return null;
   if (
     noOtherSlots &&
     (signature === 'categorical:rows:axis-partition:none|quantitative:cols:measure-value:sum' ||
-      signature === 'categorical:cols:axis-partition:none|quantitative:rows:measure-value:sum')
+      signature === 'categorical:cols:axis-partition:none|quantitative:rows:measure-value:sum') &&
+    // Tableau's Automatic mark resolves to bars for this exact discrete-category /
+    // continuous-measure axis structure. Other Automatic shapes remain unproved.
+    hasOnlyMarkClass(['Bar', 'Automatic'])
   )
     return 'pair';
   if (
@@ -3658,13 +3665,15 @@ function completeChartShape(manifest: TemplateManifest): CompleteChartShape | nu
         slot.role[0] === 'color' &&
         slot.communicative_role === 'distribution-breakout',
     ) &&
-    optional.length <= 1
+    optional.length <= 1 &&
+    hasOnlyMarkClass(['Line'])
   )
     return 'pair';
   if (
     noOtherSlots &&
     signature ===
-      'categorical:lod:distribution-breakout:none|quantitative:cols:measure-value:sum|quantitative:rows:measure-value:sum'
+      'categorical:lod:distribution-breakout:none|quantitative:cols:measure-value:sum|quantitative:rows:measure-value:sum' &&
+    hasOnlyMarkClass(['Circle'])
   )
     return 'scatter';
   return null;

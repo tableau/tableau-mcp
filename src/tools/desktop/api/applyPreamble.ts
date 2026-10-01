@@ -1,5 +1,6 @@
 import { Ok, Result } from 'ts-results-es';
 
+import { getDesktopConfig } from '../../../config.desktop.js';
 import {
   CONTAINED_CACHE_READ_ISSUE,
   getCacheDir,
@@ -92,6 +93,11 @@ export function runApplyPreamble({
   } else if (sidecarRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
     sidecarInput = { type: 'missing' };
   } else {
+    if (getDesktopConfig().desktopSessionScope === 'strict') {
+      return new ArgsValidationError(
+        `Security error: the ${kind} cache sidecar could not be read safely inside the owned strict Desktop cache scope.`,
+      ).toErr();
+    }
     sidecarInput = {
       type: 'unreadable',
       error: sidecarRead.error ?? new Error(`Secure sidecar read rejected: ${sidecarRead.issue}`),

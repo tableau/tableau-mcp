@@ -68,6 +68,7 @@ describe('getApplyDatasourceTool', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     for (const path of temporaryPaths.splice(0)) {
       rmSync(path, { recursive: true, force: true });
@@ -318,6 +319,29 @@ describe('getApplyDatasourceTool', () => {
     expect(order).toEqual(['list', 'apply:Sales%20Extract']);
   });
 
+  it('rejects an unsafe sidecar before dispatch in strict session scope', async () => {
+    const server = new DesktopMcpServer();
+    const requestExtra = getMockRequestHandlerExtra();
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '123');
+    const file = datasourceFile('strict-unsafe-sidecar');
+    const escapedSidecar = join(outsideDirectory('strict-unsafe-sidecar'), 'escaped.meta.json');
+    writeFileSync(escapedSidecar, '{}');
+    symlinkSync(escapedSidecar, sidecarPath(file));
+
+    const { result, order, executor } = await invoke({
+      datasourceName: 'Sales',
+      file,
+      server,
+      requestExtra,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain('cache sidecar could not be read safely');
+    expect(order).toEqual(['list']);
+    expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
+  });
+
   it('allows safely read but malformed sidecar content', async () => {
     const file = datasourceFile('malformed-sidecar');
     writeFileSync(sidecarPath(file), 'not json');
@@ -434,6 +458,8 @@ describe('getApplyDatasourceTool', () => {
     listError,
     applyError,
     signal,
+    server,
+    requestExtra,
   }: {
     datasourceName: string;
     file: string;
@@ -442,6 +468,8 @@ describe('getApplyDatasourceTool', () => {
     listError?: ExecuteCommandError;
     applyError?: ExecuteCommandError;
     signal?: AbortSignal;
+    server?: DesktopMcpServer;
+    requestExtra?: ReturnType<typeof getMockRequestHandlerExtra>;
   }): Promise<{
     result: CallToolResult;
     order: string[];
@@ -469,10 +497,10 @@ describe('getApplyDatasourceTool', () => {
       applyDatasourceDocument,
       applyWorkbookDocument,
     });
-    const tool = getApplyDatasourceTool(new DesktopMcpServer());
+    const tool = getApplyDatasourceTool(server ?? new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);
     const extra = {
-      ...getMockRequestHandlerExtra(),
+      ...(requestExtra ?? getMockRequestHandlerExtra()),
       getExecutor: vi
         .fn()
         .mockResolvedValue(executor) as unknown as TableauDesktopToolContext['getExecutor'],

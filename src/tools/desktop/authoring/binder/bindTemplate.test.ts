@@ -32,6 +32,8 @@ import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/tem
 import * as validationRegistry from '../../../../desktop/validation/registry.js';
 import { calcFieldNamesRule } from '../../../../desktop/validation/rules/calcFieldNames.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
+import type { LoadWorkbookXmlError } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
   NoDesktopInstancesFoundError,
@@ -51,6 +53,11 @@ import { proposalSignature } from './proposalSignature.js';
 // bindTemplate is stubbed. The runtime catalog is built from the real bundled TBMs;
 // static manifests are intentionally absent.
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
+vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../../desktop/wrappers/loadWorkbookXml.js')>();
+  return { ...actual, loadWorkbookXml: vi.fn(actual.loadWorkbookXml) };
+});
 vi.mock('../../../../desktop/binder/binder.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../desktop/binder/binder.js')>();
   return { ...actual, bindTemplate: vi.fn() };
@@ -844,14 +851,18 @@ describe('bindTemplateTool', () => {
       proposal: expect.any(Object),
       minConfidence: expect.any(Object),
       auto_apply: expect.any(Object),
+      requireCompleteRequest: expect.any(Object),
       datasource: expect.any(Object),
       calcs: expect.any(Object),
     });
     expect(paramsSchema['session']!.description).toBe('PID; omit if pinned/sole.');
-    expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add.');
-    expect(paramsSchema['auto_apply']!.description).toBeUndefined();
-    expect(paramsSchema['datasource']!.description).toBe('Internal name or unique caption.');
-    expect(paramsSchema['calcs']!.description).toBe('Author fields.');
+    expect(paramsSchema['target_worksheet']!.description).toBe('Sheet id/name; omit to add');
+    expect(paramsSchema['auto_apply']!.description).toBe('Apply now');
+    expect(paramsSchema['requireCompleteRequest']!.description).toBe(
+      'Prove full ask first or decline with no writes; need auto_apply',
+    );
+    expect(paramsSchema['datasource']!.description).toBe('Internal name/unique caption');
+    expect(paramsSchema['calcs']!.description).toBe('Add fields');
     expect(
       paramsSchema['calcs']!.safeParse([
         { caption: 'Margin', formula: '[Profit] / [Sales]', datatype: 'number' },
@@ -1114,6 +1125,7 @@ describe('bindTemplateTool', () => {
     expect(body.output_schema).toEqual({ type: 'object' });
     expect(body.guidance).toContain('Call 2');
     expect(body.guidance).toContain('auto_apply:true');
+    expect(body.guidance).toContain('top_n ranks; filters[].context scopes filters.');
     expect(body.guidance).toContain('Do not call other authoring tools between calls');
     expect(body.guidance).toContain('ask-user');
     expect(body.guidance).not.toContain('add-field');
@@ -6928,6 +6940,75 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.args).toEqual(boundResult.status === 'bound' ? boundResult.args : undefined);
   });
 
+  it.each([
+    {
+      label: 'invalid XML',
+      error: { type: 'invalid-xml' } satisfies LoadWorkbookXmlError,
+      description: 'invalid workbook content',
+      retrySafe: true,
+    },
+    {
+      label: 'validation failure',
+      error: {
+        type: 'validation-failed',
+        issues: [{ ruleId: 'test-rule', severity: 'error', message: 'bad field reference' }],
+      } satisfies LoadWorkbookXmlError,
+      description: 'preflight validation failed: bad field reference',
+      retrySafe: true,
+    },
+    {
+      label: 'workbook drift',
+      error: { type: 'workbook-drift' } satisfies LoadWorkbookXmlError,
+      description: 'The workbook changed before the authoring write.',
+      retrySafe: true,
+    },
+    {
+      label: 'workspace identity mismatch',
+      error: { type: 'workspace-identity-mismatch' } satisfies LoadWorkbookXmlError,
+      description:
+        'The Desktop workspace no longer matches the requested workbook and active worksheet.',
+      retrySafe: true,
+    },
+    {
+      label: 'workspace identity unavailable',
+      error: { type: 'workspace-identity-unavailable' } satisfies LoadWorkbookXmlError,
+      description: 'The Desktop workspace could not be confirmed before the authoring write.',
+      retrySafe: true,
+    },
+    {
+      label: 'Desktop load rejection',
+      error: {
+        type: 'load-rejected',
+        message: 'Qualified Name Parse Error',
+      } satisfies LoadWorkbookXmlError,
+      description: 'Tableau rejected the load: Qualified Name Parse Error',
+      retrySafe: false,
+    },
+  ])(
+    'reports $label with its dispatch-aware retry disposition',
+    async ({ error, description, retrySafe }) => {
+      const { getExecutor } = setupAutoApplyMocks();
+
+      vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockImplementationOnce(async () =>
+        Err({ type: 'load-workbook-xml-error' as const, error }),
+      );
+      const result = await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        applied: false,
+        apply_error: `apply failed: ${description}`,
+        retry_safe: retrySafe,
+      });
+    },
+  );
+
   it('preflight validation failure aborts the apply and falls back (no dispatch)', async () => {
     const { executeCommand, getExecutor } = setupAutoApplyMocks({ validationValid: false });
 
@@ -8632,6 +8713,8 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       expect(applied.requestCoverage).toEqual(requestCoverage);
       if (legacyBinWarning || invalidReference) {
         expect(applied.completionEvidence).toBeUndefined();
+        expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+        expect(applied.guidance).not.toContain('no further tool calls');
       } else {
         expect(applied.completionEvidence).toMatchObject({
           version: 2,

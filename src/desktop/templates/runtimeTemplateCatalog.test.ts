@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path';
 
 import {
+  getCompleteRequestTemplateIds,
   getRuntimeTemplateSnapshot,
   loadRuntimeTemplateCatalogSnapshots,
   loadRuntimeTemplateDescriptors,
@@ -75,6 +76,70 @@ describe('runtimeTemplateDescriptorFromSnapshot', () => {
 });
 
 describe('loadRuntimeTemplateCatalogSnapshots', () => {
+  it('derives complete-request eligibility from the resolved bookmark mark semantics', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-complete-mark-'));
+    const previous = process.env['TEMPLATES_DIR'];
+    try {
+      const packagedBar = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/ranking-ordered-bar.tbm'),
+        'utf8',
+      );
+      process.env['TEMPLATES_DIR'] = root;
+      writeFileSync(join(root, 'ranking-ordered-bar.tbm'), packagedBar);
+      expect(getCompleteRequestTemplateIds()).toContain('ranking-ordered-bar');
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace("<mark class='Automatic'", "<mark class='Circle'"),
+      );
+      expect(getCompleteRequestTemplateIds()).not.toContain('ranking-ordered-bar');
+      expect(getCompleteRequestTemplateIds({ includeExternal: false })).toContain(
+        'ranking-ordered-bar',
+      );
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace(
+          "<mark class='Automatic' />",
+          "<mark class='Bar' /><mark class='Circle' />",
+        ),
+      );
+      expect(getCompleteRequestTemplateIds()).not.toContain('ranking-ordered-bar');
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace(
+          "<mark class='Automatic' />",
+          "<mark class='Bar' /><mark class='Bar' />",
+        ),
+      );
+      expect(getCompleteRequestTemplateIds()).not.toContain('ranking-ordered-bar');
+    } finally {
+      if (previous === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('advertises eligible custom templates from the active external catalog', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-complete-custom-'));
+    const previous = process.env['TEMPLATES_DIR'];
+    try {
+      const packagedBar = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/ranking-ordered-bar.tbm'),
+        'utf8',
+      );
+      process.env['TEMPLATES_DIR'] = root;
+      writeFileSync(join(root, 'custom-bar.tbm'), packagedBar);
+
+      expect(getCompleteRequestTemplateIds()).toContain('custom-bar');
+    } finally {
+      if (previous === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('treats identical native line bookmarks alike under distinct template names', () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-line-alias-'));
     const previous = process.env['TEMPLATES_DIR'];

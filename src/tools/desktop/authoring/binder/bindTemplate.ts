@@ -134,14 +134,17 @@ const paramsSchema = {
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional(),
-  requireCompleteRequest: z.boolean().optional(),
+  auto_apply: z.boolean().optional().describe('Apply now'),
+  requireCompleteRequest: z
+    .boolean()
+    .optional()
+    .describe('Prove full ask first or decline with no writes; need auto_apply'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Sheet id/name; omit to add.'),
-  datasource: z.string().optional().describe('Internal name or unique caption.'),
+  target_worksheet: z.string().optional().describe('Sheet id/name; omit to add'),
+  datasource: z.string().optional().describe('Internal name/unique caption'),
   calcs: z
     .array(
       z.object({
@@ -152,7 +155,7 @@ const paramsSchema = {
       }),
     )
     .optional()
-    .describe('Author fields.'),
+    .describe('Add fields'),
 };
 
 /**
@@ -1640,7 +1643,7 @@ function buildGuidance(
       guidance =
         'Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs ' +
         'to exact compatible field names, and make Call 2 with the same ask/target, proposal, and ' +
-        `auto_apply:true. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
+        `top-level auto_apply:true. top_n ranks; filters[].context scopes filters. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
         'Do not call other authoring tools between calls.';
       break;
     case 'escalate':
@@ -1694,50 +1697,49 @@ function withoutLegacyApplyInstructions(result: BinderResult): PublicBinderResul
   return safeResult;
 }
 
-/** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
-function describeApplyError(
-  error:
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
-): string {
-  if (error.type === 'load-workbook-xml-error') {
-    const inner = error.error;
-    if (inner.type === 'validation-failed') {
-      return `preflight validation failed: ${inner.issues.map((i) => i.message).join('; ')}`;
-    }
-    if (inner.type === 'load-rejected') {
-      return `Tableau rejected the load: ${inner.message}`;
-    }
-    if (
-      inner.type === 'workbook-drift' ||
-      inner.type === 'workspace-identity-mismatch' ||
-      inner.type === 'workspace-identity-unavailable'
-    ) {
-      return describeLoadWorkbookXmlError(inner);
-    }
-    return 'invalid workbook content';
-  }
-  return `workbook load command failed: ${JSON.stringify(error.error)}`;
-}
-
 type AutoApplyFailureDisposition = 'pre-dispatch' | 'post-dispatch';
 
-function applyFailureDisposition(
-  error:
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
-): AutoApplyFailureDisposition {
-  if (
-    error.type === 'load-workbook-xml-error' &&
-    (error.error.type === 'invalid-xml' ||
-      error.error.type === 'validation-failed' ||
-      error.error.type === 'workbook-drift' ||
-      error.error.type === 'workspace-identity-mismatch' ||
-      error.error.type === 'workspace-identity-unavailable')
-  ) {
-    return 'pre-dispatch';
+type AutoApplyError =
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError };
+
+function classifyApplyFailure(error: AutoApplyError): {
+  description: string;
+  disposition: AutoApplyFailureDisposition;
+} {
+  if (error.type === 'execute-command-error') {
+    return {
+      description: `workbook load command failed: ${JSON.stringify(error.error)}`,
+      disposition: 'post-dispatch',
+    };
   }
-  return 'post-dispatch';
+
+  const inner = error.error;
+  switch (inner.type) {
+    case 'invalid-xml':
+      return { description: 'invalid workbook content', disposition: 'pre-dispatch' };
+    case 'validation-failed':
+      return {
+        description: `preflight validation failed: ${inner.issues.map((issue) => issue.message).join('; ')}`,
+        disposition: 'pre-dispatch',
+      };
+    case 'workbook-drift':
+    case 'workspace-identity-mismatch':
+    case 'workspace-identity-unavailable':
+      return {
+        description: describeLoadWorkbookXmlError(inner),
+        disposition: 'pre-dispatch',
+      };
+    case 'load-rejected':
+      return {
+        description: `Tableau rejected the load: ${inner.message}`,
+        disposition: 'post-dispatch',
+      };
+    default: {
+      const exhaustive: never = inner;
+      return exhaustive;
+    }
+  }
 }
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
@@ -2613,15 +2615,15 @@ async function performAutoApply({
     applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applyResult.isErr()) {
-    const failureDisposition = applyFailureDisposition(applyResult.error);
+    const failure = classifyApplyFailure(applyResult.error);
     return {
       result: applyFallback(
         base,
-        `apply failed: ${describeApplyError(applyResult.error)}`,
+        `apply failed: ${failure.description}`,
         undefined,
-        failureDisposition === 'pre-dispatch',
+        failure.disposition === 'pre-dispatch',
       ),
-      failureDisposition,
+      failureDisposition: failure.disposition,
     };
   }
   const applyMs = Date.now() - applyStart;
@@ -2904,8 +2906,10 @@ async function performAutoApply({
     verification.findings.length === 0 &&
     (nativeFieldVerified || nativeFieldUnverified);
   const evidenceEligible = completionEligible || operationEligible;
-  const settledGuidance =
-    evidenceEligible && summaryPreviewUnavailable
+  const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
+  const settledGuidance = completionEvidenceWithheld
+    ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+    : evidenceEligible && summaryPreviewUnavailable
       ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
       : guidance;
   const applied: AppliedFastPathResult = {
@@ -2956,7 +2960,7 @@ async function performAutoApply({
       ),
     };
   }
-  return needsFollowUp && !evidenceEligible
+  return (needsFollowUp || completionEvidenceWithheld) && !evidenceEligible
     ? { incomplete: true, result: applied }
     : {
         result: withNextAction(
@@ -3500,6 +3504,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             automaticOnly: true,
             ...(requireCompleteRequest === true ? { completeRequestLineColorOptional: true } : {}),
           });
+          if (requireCompleteRequest === true && extra.config.desktopSessionScope === 'strict') {
+            const advertised = new Set(server.getCompleteRequestTemplateIds());
+            for (const template of runtimeCatalog.keys()) {
+              if (!advertised.has(template)) runtimeCatalog.delete(template);
+            }
+          }
           const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
           const manifests =
             proposal === undefined

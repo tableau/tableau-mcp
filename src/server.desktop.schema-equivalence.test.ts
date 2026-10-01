@@ -18,6 +18,7 @@ import {
   getDesktopToolListEntry,
   STRICT_SESSION_SCOPE_CAPABILITY_KEY,
   STRICT_SESSION_SCOPE_CAPABILITY_VERSION,
+  STRICT_WORKSPACE_TOOL_PROFILE,
 } from './server.desktop.js';
 import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
@@ -171,6 +172,81 @@ describe('Desktop strict-session initialize capability', () => {
       await client.connect(clientTransport);
 
       expect(client.getServerCapabilities()?.experimental).toBeUndefined();
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('does not advertise bind capabilities when the selected profile omits bind-template', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv('TOOL_PROFILE', 'spec-loop');
+    const desktopServer = new DesktopMcpServer();
+    const client = new Client({ name: 'strict-spec-loop-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const experimental = client.getServerCapabilities()?.experimental;
+      expect(experimental).toHaveProperty(STRICT_SESSION_SCOPE_CAPABILITY_KEY);
+      expect(experimental).not.toHaveProperty('tableauDesktopBindTemplateCompletion');
+      expect(experimental).not.toHaveProperty(COMPLETE_REQUEST_BIND_CAPABILITY_KEY);
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('registers only bind-template and audited reads for an exact strict workspace', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv(
+      'TABLEAU_DESKTOP_EXPECTED_WORKSPACE',
+      JSON.stringify({ workbookTitle: 'Sales', sheetId: 'sheet-1', sheetName: 'Overview' }),
+    );
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const desktopServer = new DesktopMcpServer();
+    await desktopServer.registerTools();
+    const client = new Client({ name: 'strict-workspace-tools-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      expect(tools.map(({ name }) => name).sort()).toEqual(
+        [...STRICT_WORKSPACE_TOOL_PROFILE].sort(),
+      );
+      expect(
+        tools
+          .filter(({ name }) => name !== 'bind-template')
+          .every(({ annotations }) => annotations?.readOnlyHint === true),
+      ).toBe(true);
+      expect(tools.filter(({ name }) => name !== 'bind-template')).not.toEqual([]);
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('keeps the selected profile unchanged for strict scope without an exact workspace', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const desktopServer = new DesktopMcpServer();
+    await desktopServer.registerTools();
+    const client = new Client({ name: 'strict-session-tools-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const names = (await client.listTools()).tools.map(({ name }) => name);
+      expect(names).toContain('bind-template');
+      expect(names).toContain('execute-tableau-command');
+      expect(names).toContain('apply-workbook');
     } finally {
       await client.close();
       await desktopServer.mcpServer.close();

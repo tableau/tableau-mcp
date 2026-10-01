@@ -17,6 +17,8 @@ export interface TemplateRuntimeSnapshot {
   template: string;
   sourceHash: string;
   descriptor: TemplateBindingDescriptor;
+  /** Mark classes authored across every relevant bookmark pane, preserving pane count. */
+  markClasses?: string[];
   fit?: TemplateFitFacts;
   xml: string;
   eligibility: TemplatePass1Eligibility;
@@ -34,6 +36,7 @@ export function createTemplateRuntimeSnapshot(
     template,
     sourceHash: createHash('sha256').update(bookmarkXml).digest('hex'),
     descriptor,
+    markClasses: inference.markClasses?.slice() ?? [],
     fit: deriveTemplateFitFacts(inference, descriptor),
     xml: converted.xml,
     eligibility: deriveTemplatePass1Eligibility(converted),

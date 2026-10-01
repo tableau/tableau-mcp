@@ -693,6 +693,7 @@ export function inferFromBookmark(
   return {
     slots,
     calcs,
+    markClasses: authoredMarks.map((mark) => attr(mark, 'class')).filter(Boolean),
     unknownCount,
     donorCaptions: [...cols.values()].map((c) => c.caption).filter(Boolean),
     donorDatasources: [

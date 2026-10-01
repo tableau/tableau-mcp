@@ -161,6 +161,28 @@ describe('runApplyPreamble secure contained cache read', () => {
     });
   });
 
+  it('rejects an unsafe sidecar in strict mode', () => {
+    const base = new configModule.Config();
+    vi.mocked(configModule.getDesktopConfig).mockReturnValue({
+      ...base,
+      desktopSessionId: '7',
+      desktopSessionScope: 'strict',
+    } as configModule.Config);
+    const directory = cacheDirectory('strict-unsafe-sidecar');
+    const file = join(directory, 'datasource.xml');
+    const outside = outsideDirectory('strict-unsafe-sidecar');
+    const outsideSidecar = join(outside, 'escaped.meta.json');
+    writeFileSync(file, '<datasource/>');
+    writeFileSync(outsideSidecar, matchingSidecar('d'.repeat(64)));
+    symlinkSync(outsideSidecar, sidecarPath(file));
+
+    const result = run(file);
+
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr().type).toBe('args-validation');
+    expect(result.unwrapErr().message).toContain('sidecar');
+  });
+
   it('refuses a fingerprint mismatch from safely read sidecar text', () => {
     const file = join(cacheDirectory('mismatch'), 'datasource.xml');
     writeFileSync(file, '<datasource/>');

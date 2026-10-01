@@ -111,24 +111,24 @@ export function runtimeTemplateDescriptorFromSnapshot(
     family,
     fast_path_eligible: fastPathEligible,
     fast_path_blockers: snapshot.eligibility.pass1_blockers.slice(),
+    mark_classes: snapshot.markClasses?.slice() ?? [],
     intent_keywords: keywordsFromName(snapshot.template, family),
     description: phrase(snapshot.template),
   };
 }
 
-let packagedCompleteRequestTemplateIds: string[] | undefined;
-
-export function getCompleteRequestTemplateIds(): string[] {
-  packagedCompleteRequestTemplateIds ??= [
+export function getCompleteRequestTemplateIds(
+  options: RuntimeTemplateCatalogOptions = {},
+): string[] {
+  return [
     ...loadRuntimeTemplateDescriptors({
+      ...options,
       automaticOnly: true,
-      includeExternal: false,
       completeRequestLineColorOptional: true,
     }).values(),
   ]
     .filter(isCompleteRequestChartDescriptor)
     .map((descriptor) => descriptor.template);
-  return [...packagedCompleteRequestTemplateIds];
 }
 
 export interface RuntimeTemplateCatalogOptions extends TemplateCatalogOptions {
