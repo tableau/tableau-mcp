@@ -4,7 +4,7 @@ This guide walks through getting started with Tableau MCP. The easiest way for C
 
 ## Run with npx
 
-The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.org/en/download) 18 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
+The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
 
 ```json
 {
