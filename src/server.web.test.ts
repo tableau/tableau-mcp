@@ -109,9 +109,12 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
+  function createMockAppTool(opts?: {
+    hideWhenUnsupported?: boolean;
+    name?: WebToolName;
+  }): WebTool<any> {
     return {
-      name: 'mock-app-tool' as WebToolName,
+      name: opts?.name ?? ('mock-app-tool' as WebToolName),
       server: {} as any,
       title: 'Test App Tool',
       description: 'Test App Tool',
@@ -123,7 +126,7 @@ describe('server', () => {
         idempotentHint: true,
         openWorldHint: false,
       },
-      callback: vi.fn(),
+      callback: vi.fn().mockResolvedValue({ content: [] }),
       disabled: false,
       requiredApiScopes: [],
       minRequiredRole: SiteRole.VIEWER,
@@ -633,6 +636,48 @@ describe('server', () => {
       },
     });
   });
+
+  it.each([
+    {
+      clientId: 'https://cursor.com/some/cimd',
+      expectedRenderable: true,
+      registration: 'app',
+    },
+    {
+      clientId: 'https://claude.ai/some/cimd',
+      expectedRenderable: false,
+      registration: 'plain',
+    },
+  ])(
+    'passes mcpAppToolsRenderable=$expectedRenderable through a lazily registered $registration tool',
+    async ({ clientId, expectedRenderable, registration }) => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'mcp-apps',
+      );
+
+      const server = getServer({ clientId });
+      const mockAppTool = createMockAppTool({ name: 'delete-content' });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+      await server.registerTools();
+      await server.loadWebTools('content');
+
+      const registeredCallback =
+        registration === 'app'
+          ? mocks.mockRegisterAppTool.mock.calls[0]?.[3]
+          : vi
+              .mocked(server.mcpServer.registerTool)
+              .mock.calls.find((call) => call[0] === 'delete-content')?.[2];
+      invariant(registeredCallback);
+      await registeredCallback({}, getMockRequestHandlerExtra());
+
+      expect(mockAppTool.callback).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ mcpAppToolsRenderable: expectedRenderable }),
+      );
+    },
+  );
 
   function createMockAdminTool(): WebTool<any> {
     return {

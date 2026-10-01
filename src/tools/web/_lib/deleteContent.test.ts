@@ -181,12 +181,29 @@ describe('deleteContentTool', () => {
       expect(text).toContain('Preview');
       expect(text).toContain(mockWorkbook.name);
       expect(text).toContain(DEFAULT_PENDING_DELETION_TAG);
+      // Project-name resolution: mockWorkbook lives in project 'Samples', so the preview names it
+      // rather than emitting the old misleading "unknown project" wording.
+      expect(text).toContain("in project 'Samples'");
+      expect(text).not.toContain('unknown project');
       expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
         workbookId: 'wb-1',
         siteId: 'test-site-id',
         tagLabels: [DEFAULT_PENDING_DELETION_TAG],
       });
       expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    });
+
+    it('names "no project" for a project-less (Personal Space) workbook instead of "unknown project"', async () => {
+      // A workbook in a user's Personal Space has NO project element in its REST response (verified
+      // live). The preview must phrase that as project-less, not as a lookup failure.
+      const { project: _omit, ...projectlessWorkbook } = mockWorkbook;
+      mocks.mockGetWorkbook.mockResolvedValue(projectlessWorkbook);
+      const result = await getToolResult({ resourceType: 'workbook', resourceId: 'wb-1' });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text).toContain('in no project (e.g. a Personal Space item)');
+      expect(text).not.toContain('unknown project');
     });
 
     it('deletes when confirm:true and the tag is present', async () => {
@@ -199,6 +216,7 @@ describe('deleteContentTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Deleted workbook');
+      expect(result.content[0].text).toContain("in project 'Samples'");
       expect(mocks.mockDeleteWorkbook).toHaveBeenCalledWith({
         workbookId: 'wb-1',
         siteId: 'test-site-id',
@@ -275,6 +293,7 @@ describe('deleteContentTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Deleted data source');
+      expect(result.content[0].text).toContain("in project 'Samples'");
       expect(mocks.mockDeleteDatasource).toHaveBeenCalledWith({
         datasourceId: 'ds-1',
         siteId: 'test-site-id',
@@ -547,7 +566,11 @@ describe('deleteContentTool', () => {
     });
 
     it('workbook preview returns the LEGACY delete-workbook-confirm panel and records approval under delete-content', async () => {
-      const result = await getToolResult({ resourceType: 'workbook', resourceId: 'wb-app' });
+      const result = await getToolResult({
+        resourceType: 'workbook',
+        resourceId: 'wb-app',
+        mcpAppToolsRenderable: true,
+      });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       const payload = JSON.parse(result.content[0].text);
@@ -568,7 +591,11 @@ describe('deleteContentTool', () => {
     });
 
     it('datasource preview returns the LEGACY delete-datasource-confirm panel', async () => {
-      const result = await getToolResult({ resourceType: 'datasource', resourceId: 'ds-app' });
+      const result = await getToolResult({
+        resourceType: 'datasource',
+        resourceId: 'ds-app',
+        mcpAppToolsRenderable: true,
+      });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       const payload = JSON.parse(result.content[0].text);
@@ -580,6 +607,7 @@ describe('deleteContentTool', () => {
       const result = await getToolResult({
         resourceType: 'extract-refresh-task',
         resourceId: validTaskId,
+        mcpAppToolsRenderable: true,
       });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
@@ -593,11 +621,49 @@ describe('deleteContentTool', () => {
         resourceType: 'workbook',
         resourceId: 'wb-1',
         confirm: true,
+        mcpAppToolsRenderable: true,
       });
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Mutation blocked');
       expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    });
+
+    // --- DEFECT B (W-24212898): flag ON but the client CANNOT render the app card ---
+    // A flag-on-but-app-incapable client is registered as a PLAIN tool, so returning the app-card
+    // JSON blob would render as unreadable raw JSON. The preview branch keys on the real render
+    // capability (mcpAppToolsRenderable), NOT the flag, so such a client falls through to the readable
+    // text preview flow and can still complete a model-visible tag-gated confirm.
+    describe('DEFECT-B: app-incapable client (flag ON, not renderable)', () => {
+      it('workbook preview returns readable TEXT, not an app-card payload', async () => {
+        const result = await getToolResult({
+          resourceType: 'workbook',
+          resourceId: 'wb-1',
+          mcpAppToolsRenderable: false,
+        });
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        const text = result.content[0].text;
+        // Readable preview prose — NOT a JSON app-card blob.
+        expect(text).toContain('Preview');
+        expect(text).toContain(DEFAULT_PENDING_DELETION_TAG);
+        // Not an app-card payload: no confirm-panel kind marker appears in the readable prose.
+        expect(text).not.toContain('delete-workbook-confirm');
+      });
+
+      it('workbook confirm succeeds via the model-visible tag gate (no app approval needed)', async () => {
+        mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
+        const result = await getToolResult({
+          resourceType: 'workbook',
+          resourceId: 'wb-1',
+          confirm: true,
+          mcpAppToolsRenderable: false,
+        });
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('Deleted workbook');
+        expect(mocks.mockDeleteWorkbook).toHaveBeenCalled();
+      });
     });
   });
 });
@@ -608,6 +674,10 @@ async function getToolResult(args: {
   confirm?: boolean;
   tag?: string;
   confirmationToken?: string;
+  // When true, simulate a client that can ACTUALLY render an MCP-Apps confirm card so the tool takes
+  // its app-card branch. Defaults false (plain-tool client → readable text preview flow). The
+  // `mcp-apps` feature flag alone no longer selects the app path; this render-capability signal does.
+  mcpAppToolsRenderable?: boolean;
 }): Promise<CallToolResult> {
   const tool = await getDeleteContentTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -619,7 +689,7 @@ async function getToolResult(args: {
       tag: args.tag,
       confirmationToken: args.confirmationToken,
     },
-    getMockRequestHandlerExtra(),
+    getMockRequestHandlerExtra({ mcpAppToolsRenderable: args.mcpAppToolsRenderable ?? false }),
   );
 }
 

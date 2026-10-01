@@ -20,12 +20,15 @@ export const TWB_RELPATH = TEMPLATE_TWB_FILENAME;
 export const TREX_RELPATH = `Packages/${TEMPLATE_PACKAGE_DIRNAME}/extensions/data-app.trex`;
 
 /**
- * Literal placeholder tokens embedded in the committed template. Both tokens
- * appear across the .twb and data-app.trex; the manifest id token
- * (`TODO-MANIFEST-ID`) is also the package directory name.
+ * Literal placeholder tokens embedded in the committed template. The package id and
+ * display name tokens appear across the .twb and data-app.trex; the manifest id token
+ * (`TODO-MANIFEST-ID`) is also the package directory name. The sheet name token appears
+ * only in the .twb (worksheet/window/referenced-view name), so the worksheet tab reflects
+ * the app's display name instead of a hardcoded "Sheet 1".
  */
 const PLACEHOLDER_PACKAGE_ID = 'TODO-MANIFEST-ID';
 const PLACEHOLDER_DISPLAY_NAME = 'TODO App Name';
+const PLACEHOLDER_SHEET_NAME = 'TODO Sheet Name';
 
 export interface Replacement {
   find: string;
@@ -107,6 +110,7 @@ export function buildTextReplacements(identity: DataAppIdentity): Record<string,
     [TWB_RELPATH]: [
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },
       { find: PLACEHOLDER_DISPLAY_NAME, replace: displayNameXml },
+      { find: PLACEHOLDER_SHEET_NAME, replace: displayNameXml },
     ],
     [TREX_RELPATH]: [
       { find: PLACEHOLDER_PACKAGE_ID, replace: identity.packageId },

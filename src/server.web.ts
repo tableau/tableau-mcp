@@ -320,6 +320,9 @@ export class WebMcpServer extends Server {
         },
         getConfigWithOverrides: async () =>
           getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
+        // Keep tool callback behavior aligned with the registration path: clients forced onto the
+        // plain-tool fallback must receive text results even when the global MCP Apps flag is on.
+        mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
       };
 
       return tableauToolCallback(args, tableauRequestHandlerExtra);

@@ -11,6 +11,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
+import { formatProjectPhrase } from './deleteContent.js';
 import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
 import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
@@ -134,10 +135,10 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                   }
                   recordOutcome({ ok: true });
 
-                  const projectName = target.project ?? 'unknown project';
+                  const projectPhrase = formatProjectPhrase(target.project);
                   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
                   return new Ok(
-                    `Deleted workbook '${target.name}' (id ${resourceId}) in '${projectName}', ${ownerText}. ` +
+                    `Deleted workbook '${target.name}' (id ${resourceId}) ${projectPhrase}, ${ownerText}. ` +
                       'It can be restored from the Tableau recycle bin for a limited time before permanent removal.',
                   );
                 }
@@ -194,10 +195,10 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                   }
                   recordOutcome({ ok: true });
 
-                  const projectName = target.project ?? 'unknown project';
+                  const projectPhrase = formatProjectPhrase(target.project);
                   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
                   return new Ok(
-                    `Deleted data source '${target.name}' (id ${resourceId}) in '${projectName}', ${ownerText}. ` +
+                    `Deleted data source '${target.name}' (id ${resourceId}) ${projectPhrase}, ${ownerText}. ` +
                       'On Tableau Cloud it can be restored from the recycle bin for a limited time before permanent removal; ' +
                       'on Tableau Server deletion is permanent. ' +
                       'Dependent workbooks and flows were not deleted but no longer have this data source.',
