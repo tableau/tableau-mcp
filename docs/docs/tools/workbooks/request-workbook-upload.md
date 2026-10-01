@@ -14,8 +14,10 @@ Tableau MCP only the resulting `workbookUploadId`. Local MCP servers that can re
 directly can skip this tool and pass `workbookFilePath` to [Publish Workbook](publish-workbook.md)
 instead.
 
-:::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+:::info[Enabled by Default]
+This tool is gated behind the `authoring-tools` feature flag, which ships as `true` in
+`features.json`. An administrator can disable the tool by setting `authoring-tools` to `false`. See
+[Feature Flags](../../developers/feature-flags.md).
 :::
 
 :::info[Requires S3 configuration]

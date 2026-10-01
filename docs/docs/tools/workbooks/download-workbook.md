@@ -6,8 +6,10 @@ sidebar_position: 3
 
 Downloads workbook content from Tableau as either an unpackaged TWB XML file or a packaged TWBX file.
 
-:::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+:::info[Enabled by Default]
+This tool is gated behind the `authoring-tools` feature flag, which ships as `true` in
+`features.json`. An administrator can disable the tool by setting `authoring-tools` to `false`. See
+[Feature Flags](../../developers/feature-flags.md).
 :::
 
 ## Required permissions

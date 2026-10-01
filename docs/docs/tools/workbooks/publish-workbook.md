@@ -12,8 +12,10 @@ blocking errors returned instead of publishing. TWBX workbooks are uploaded dire
 validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged
 inside a TWBX.
 
-:::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+:::info[Enabled by Default]
+This tool is gated behind the `authoring-tools` feature flag, which ships as `true` in
+`features.json`. An administrator can disable the tool by setting `authoring-tools` to `false`. See
+[Feature Flags](../../developers/feature-flags.md).
 :::
 
 :::info[Minimum REST API version]
