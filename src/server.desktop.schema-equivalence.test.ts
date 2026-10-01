@@ -11,6 +11,7 @@ import {
   loadRuntimeTemplateDescriptors,
 } from './desktop/templates/runtimeTemplateCatalog.js';
 import {
+  BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION,
   COMPLETE_REQUEST_BIND_CAPABILITY_KEY,
   COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
   DesktopMcpServer,
@@ -109,6 +110,9 @@ describe('Desktop strict-session initialize capability', () => {
       );
       expect(structurallyEligible.length).toBeLessThanOrEqual(16);
       expect(getCompleteRequestTemplateIds()).toEqual(structurallyEligible);
+      expect(BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION).toBe(2);
+      expect(STRICT_SESSION_SCOPE_CAPABILITY_VERSION).toBe(1);
+      expect(COMPLETE_REQUEST_BIND_CAPABILITY_VERSION).toBe(1);
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '004242');
       const sharedServer = new McpServer(
@@ -140,7 +144,7 @@ describe('Desktop strict-session initialize capability', () => {
             sessionId: '4242',
           },
           tableauDesktopBindTemplateCompletion: {
-            version: 1,
+            version: 2,
             tool: 'bind-template',
             resultKind: 'single_sheet_apply',
           },
@@ -202,7 +206,7 @@ describe('Desktop strict-session initialize capability', () => {
         await client.connect(clientTransport);
         expect(client.getServerCapabilities()?.experimental).toMatchObject({
           tableauDesktopBindTemplateCompletion: {
-            version: 1,
+            version: 2,
             tool: 'bind-template',
             resultKind: 'single_sheet_apply',
           },

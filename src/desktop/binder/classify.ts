@@ -2772,14 +2772,6 @@ type BasicLineSlots = {
   temporal: TemplateManifest['slots'][number];
 };
 
-type BasicLineIntent =
-  | { kind: 'not-applicable' | 'defer' }
-  | {
-      kind: 'accept';
-      grain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
-      seriesBinding?: { slot_id: string; field: string };
-    };
-
 function optionalLineSeriesSlots(m: TemplateManifest): BasicLineSlots | null {
   if (m.family !== 'time-series' || m.calcs.length > 0) return null;
   const color = m.slots.filter(
@@ -2892,168 +2884,6 @@ function basicLineFieldSpans(
       ...span,
       token: `__${filterFields.has(span.field) ? 'f' : isMeasure(span.field) ? 'q' : TEMPORAL_DATATYPES.has(span.field.datatype) ? 't' : 'c'}${index}__`,
     }));
-}
-
-function parseBasicLineAsk(
-  ask: string,
-  summary: SchemaSummary,
-  filterCandidates: SchemaField[],
-  requireExactCharacters = false,
-): {
-  measure: SchemaField;
-  temporal?: SchemaField;
-  grain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
-  series?: SchemaField;
-  facet?: SchemaField;
-} | null {
-  const spans = basicLineFieldSpans(ask, summary, new Set(filterCandidates));
-  if (!spans) return null;
-  const byToken = new Map(spans.map((span) => [span.token, span]));
-  let typed: string;
-  if (requireExactCharacters) {
-    const strict = strictCoveredAskTokens(ask, spans);
-    if (strict === null) return null;
-    typed = strict;
-  } else {
-    typed = ask;
-    for (const span of [...spans].sort((left, right) => right.start - left.start)) {
-      typed = `${typed.slice(0, span.start)} ${span.token} ${typed.slice(span.end)}`;
-    }
-    typed = typed
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, ' ')
-      .trim()
-      .replace(/\s+/g, ' ');
-  }
-
-  const prefix = '(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?';
-  const grain = '(?:(daily|monthly|quarterly|yearly) )?';
-  const aggregate =
-    '(?:(sum|distinct count|count distinct|average|avg|median|minimum|min|maximum|max|count) )?';
-  const temporal = '(__t\\d+__|time|date|day|month|quarter|year)';
-  const forms = [
-    new RegExp(
-      `^${prefix}line(?: (?:chart|graph))?(?: of)? ${grain}${aggregate}(__q\\d+__) (?:over|by) ${temporal}(.*)$`,
-    ),
-    new RegExp(
-      `^${prefix}${grain}line(?: (?:chart|graph))?(?: of)? ${aggregate}(__q\\d+__) (?:over|by) ${temporal}(.*)$`,
-    ),
-    new RegExp(`^${prefix}${grain}${aggregate}(__q\\d+__)(?: trend)? over ${temporal}(.*)$`),
-  ];
-  const core = forms.map((form) => form.exec(typed)).find((match) => match !== null);
-  if (!core) return null;
-  const [, grainWord, , measureToken, temporalToken, rawRest] = core;
-  const measureSpan = byToken.get(measureToken);
-  if (!measureSpan || !isMeasure(measureSpan.field)) return null;
-  const temporalSpan = temporalToken.startsWith('__') ? byToken.get(temporalToken) : undefined;
-  if (temporalSpan && !TEMPORAL_DATATYPES.has(temporalSpan.field.datatype)) return null;
-  const explicitGrain = grainWord ? BASIC_LINE_GRAINS[grainWord] : undefined;
-  const temporalGrain = temporalToken.startsWith('__')
-    ? undefined
-    : BASIC_LINE_GRAINS[temporalToken];
-  const grains = new Set(
-    [explicitGrain, temporalGrain, measureSpan.acronymGrain].filter(
-      (value): value is 'tdy' | 'tmn' | 'tqr' | 'tyr' => value !== undefined,
-    ),
-  );
-  if (grains.size > 1) return null;
-
-  let rest = rawRest.trim();
-  let series: SchemaField | undefined;
-  let facet: SchemaField | undefined;
-  let filterSeen = false;
-  while (rest) {
-    rest = rest.replace(/^and\s+/, '');
-    const clauses: Array<{ kind: 'series' | 'facet' | 'filter'; match: RegExpExecArray | null }> = [
-      {
-        kind: 'series',
-        match: /^(?:(?:grouped|split|colou?r(?:ed)?) by|by) (__c\d+__)(?:\s+|$)/.exec(rest),
-      },
-      {
-        kind: 'facet',
-        match:
-          /^(?:small multiples by|faceted by|facet by|trellis by|for each|one per|per) (__c\d+__)(?:\s+|$)/.exec(
-            rest,
-          ),
-      },
-      {
-        kind: 'filter',
-        match:
-          /^(?:filter by ((__f\d+__)(?: and __f\d+__){0,4})|with (?:interactive )?((__f\d+__)(?: and __f\d+__){0,4}) filters?)(?:\s+|$)/.exec(
-            rest,
-          ),
-      },
-    ];
-    const clause = clauses.find(({ match }) => match !== null);
-    if (!clause?.match) return null;
-    if (clause.kind === 'filter') {
-      const filterTokens = (clause.match[1] ?? clause.match[3]).match(/__f\d+__/g) ?? [];
-      const fields = filterTokens.map((token) => byToken.get(token)?.field);
-      if (
-        filterSeen ||
-        filterCandidates.length === 0 ||
-        filterCandidates.length > MAX_EXACT_FILTER_FIELDS ||
-        fields.length !== filterCandidates.length ||
-        fields.some((field, index) => field !== filterCandidates[index])
-      ) {
-        return null;
-      }
-      filterSeen = true;
-    } else {
-      const field = byToken.get(clause.match[1])?.field;
-      if (!field) return null;
-      if (clause.kind === 'series') {
-        if (facet || (series && series !== field)) return null;
-        series = field;
-      } else {
-        if (series || facet) return null;
-        facet = field;
-      }
-    }
-    rest = rest.slice(clause.match[0].length).trim();
-  }
-  if (filterCandidates.length > 0 && !filterSeen) return null;
-  return {
-    measure: measureSpan.field,
-    ...(temporalSpan ? { temporal: temporalSpan.field } : {}),
-    ...(grains.size === 1 ? { grain: [...grains][0] } : {}),
-    ...(series ? { series } : {}),
-    ...(facet ? { facet } : {}),
-  };
-}
-
-// WHY: optional line color is safe only when the complete ask parses into supported roles.
-function resolveBasicLineIntent(
-  m: TemplateManifest,
-  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
-  ask: string,
-  summary: SchemaSummary,
-  filterCandidates: SchemaField[],
-): BasicLineIntent {
-  const slots = optionalLineSeriesSlots(m);
-  if (!slots) return { kind: 'not-applicable' };
-  const parsed = parseBasicLineAsk(ask, summary, filterCandidates);
-  if (!parsed) return { kind: 'defer' };
-  const measureBinding = bound.find((binding) => binding.slot_id === slots.measure.slot_id);
-  const temporalBinding = bound.find((binding) => binding.slot_id === slots.temporal.slot_id);
-  if (
-    measureBinding?.field !== parsed.measure.name ||
-    !temporalBinding ||
-    (parsed.temporal && temporalBinding.field !== parsed.temporal.name)
-  ) {
-    return { kind: 'defer' };
-  }
-  const resolvedFacet = bound.find((binding) =>
-    m.slots.some((slot) => slot.slot_id === binding.slot_id && isFacetSlot(slot)),
-  );
-  if ((parsed.facet?.name ?? null) !== (resolvedFacet?.field ?? null)) return { kind: 'defer' };
-  return {
-    kind: 'accept',
-    ...(parsed.grain ? { grain: parsed.grain } : {}),
-    ...(parsed.series
-      ? { seriesBinding: { slot_id: slots.color.slot_id, field: parsed.series.name } }
-      : {}),
-  };
 }
 
 export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
@@ -3767,6 +3597,7 @@ interface NoLlmClassification {
    * optional-encoding analysis ran, including empty arrays when no encoding cue was found.
    */
   encodings?: EncodingReport;
+  completeRequestParse?: ParsedCompleteRequest;
 }
 
 function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): string | null {
@@ -3780,6 +3611,17 @@ function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): strin
 }
 
 type CompleteChartShape = 'single' | 'pair' | 'scatter';
+
+type ParsedCompleteRequest = {
+  ask: string;
+  template: string;
+  shape: CompleteChartShape;
+  fields: SchemaField[];
+  links: string[];
+  grain?: Derivation;
+  aggregation?: Derivation;
+  horizontal: boolean;
+};
 
 function completeChartShape(manifest: TemplateManifest): CompleteChartShape | null {
   if (!manifest.fast_path_eligible || manifest.fast_path_blockers.length > 0) return null;
@@ -3832,39 +3674,23 @@ export function isCompleteRequestChartDescriptor(manifest: RuntimeTemplateDescri
   return completeChartShape(manifest) !== null;
 }
 
-/** Every non-field word must describe this selected chart and its bound slots. */
-export function provesCompleteSingleSheetRequest(
+/** Every non-field word must describe the selected chart and its required fields. */
+function parseCompleteSingleSheetRequest(
   ask: string,
-  classification: NoLlmClassification,
   summary: SchemaSummary,
   manifest: TemplateManifest,
-): boolean {
+): ParsedCompleteRequest | null {
   const shape = completeChartShape(manifest);
-  if (
-    shape === null ||
-    manifest.template !== classification.template ||
-    (classification.notes?.length ?? 0) > 0 ||
-    classification.top_n !== undefined ||
-    (classification.filters?.length ?? 0) > 0 ||
-    classification.encodings === undefined ||
-    classification.encodings.filled.length > 0 ||
-    classification.encodings.unfilled.length > 0
-  )
-    return false;
+  if (shape === null) return null;
   const spans = basicLineFieldSpans(ask, summary, new Set());
-  if (!spans) return false;
+  if (!spans) return null;
   const typed = strictCoveredAskTokens(ask, spans);
-  if (typed === null) return false;
+  if (typed === null) return null;
   let request = typed.replace(/^(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?/u, '');
-  const groups = new Map<string, TemplateManifest['slots']>();
-  const bindings = new Map(classification.bindings.map((binding) => [binding.slot_id, binding]));
   const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
-  if (bindings.size !== required.length || classification.bindings.length !== required.length)
-    return false;
-  for (const slot of required) {
-    if (!bindings.has(slot.slot_id)) return false;
+  const groups = new Map<string, TemplateManifest['slots']>();
+  for (const slot of required)
     groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
-  }
   const describedNoun = manifest.description
     .split(' ')
     .filter((word) => word && !['chart', 'plot', 'graph'].includes(word))
@@ -3897,12 +3723,12 @@ export function provesCompleteSingleSheetRequest(
       .replace(/^of /u, '');
   } else {
     const trend = /^(__[qct]\d+__) trend over (__[qct]\d+__)$/u.exec(request);
-    if (!trend || !manifest.intent_keywords.includes('trend')) return false;
+    if (!trend || !manifest.intent_keywords.includes('trend')) return null;
     fieldsText = `${trend[1]} over ${trend[2]}`;
   }
   const innerGrain = /^(daily|monthly|quarterly|yearly) /u.exec(fieldsText);
   if (innerGrain) {
-    if (grain !== undefined) return false;
+    if (grain !== undefined) return null;
     grain = BASIC_LINE_GRAINS[innerGrain[1]];
     fieldsText = fieldsText.slice(innerGrain[0].length);
   }
@@ -3919,10 +3745,10 @@ export function provesCompleteSingleSheetRequest(
     fieldsText = fieldsText.slice(aggregate[0].length);
   }
   const pieces = fieldsText.split(/ (and|by|over) /u);
-  if (pieces.length === 0 || pieces.length % 2 === 0) return false;
+  if (pieces.length === 0 || pieces.length % 2 === 0) return null;
   const tokens = pieces.filter((_part, index) => index % 2 === 0);
   const links = pieces.filter((_part, index) => index % 2 === 1);
-  if (tokens.some((token) => !/^__[qct]\d+__$/u.test(token))) return false;
+  if (tokens.some((token) => !/^__[qct]\d+__$/u.test(token))) return null;
   const expectedLinks = shape === 'scatter' ? ['and', 'by'] : shape === 'pair' ? [links[0]] : [];
   if (
     tokens.length !== groups.size ||
@@ -3931,9 +3757,9 @@ export function provesCompleteSingleSheetRequest(
     (shape === 'pair' && !['by', 'over'].includes(links[0])) ||
     (shape === 'single' && (grain !== undefined || aggregation !== undefined || horizontal))
   )
-    return false;
+    return null;
   const ordered = tokens.map((token) => spans.find((span) => span.token === token)?.field);
-  if (ordered.some((field) => field === undefined)) return false;
+  if (ordered.some((field) => field === undefined)) return null;
   const resolved = ordered as SchemaField[];
   if (
     (shape === 'single' && !isMeasure(resolved[0])) ||
@@ -3942,14 +3768,60 @@ export function provesCompleteSingleSheetRequest(
     (shape === 'scatter' &&
       (!isMeasure(resolved[0]) || !isMeasure(resolved[1]) || !isCategorical(resolved[2])))
   )
-    return false;
-  if (shape === 'pair' && links[0] === 'over' && !isTemporal(resolved[1])) return false;
+    return null;
+  if (shape === 'pair' && links[0] === 'over' && !isTemporal(resolved[1])) return null;
+  const measureGrain = spans.find((span) => span.token === tokens[0])?.acronymGrain;
+  if (measureGrain && required.some((slot) => slot.kind === 'temporal')) {
+    if (grain && grain !== measureGrain) return null;
+    grain = measureGrain;
+  }
   if (
     horizontal &&
     !required.some((slot) => slot.kind === 'categorical' && slot.role.includes('rows'))
   )
+    return null;
+  if (grain && !required.some((slot) => slot.kind === 'temporal')) return null;
+  return {
+    ask,
+    template: manifest.template,
+    shape,
+    fields: resolved,
+    links,
+    ...(grain ? { grain } : {}),
+    ...(aggregation ? { aggregation } : {}),
+    horizontal,
+  };
+}
+
+/** Compare the one parsed full request with the actual validated slot bindings. */
+export function provesCompleteSingleSheetRequest(
+  ask: string,
+  classification: NoLlmClassification,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): boolean {
+  if (
+    manifest.template !== classification.template ||
+    (classification.notes?.length ?? 0) > 0 ||
+    classification.top_n !== undefined ||
+    (classification.filters?.length ?? 0) > 0 ||
+    classification.encodings === undefined ||
+    classification.encodings.filled.length > 0 ||
+    classification.encodings.unfilled.length > 0
+  )
     return false;
-  if (grain && !required.some((slot) => slot.kind === 'temporal')) return false;
+  const parsed = classification.completeRequestParse;
+  if (!parsed || parsed.ask !== ask || parsed.template !== manifest.template) return false;
+  const { shape, fields: resolved, grain, aggregation } = parsed;
+  const groups = new Map<string, TemplateManifest['slots']>();
+  const bindings = new Map(classification.bindings.map((binding) => [binding.slot_id, binding]));
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  if (bindings.size !== required.length || classification.bindings.length !== required.length)
+    return false;
+  for (const slot of required) {
+    if (!bindings.has(slot.slot_id)) return false;
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  }
   const seen = new Set<string>();
   for (const [index, field] of resolved.entries()) {
     const matching = [...groups].filter(([, slots]) =>
@@ -4397,9 +4269,18 @@ export function classifyNoLlm(
   if (histogram?.fast_path_eligible) {
     const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
     if (bindings) {
+      const completeRequestParse = requireCompleteRequest
+        ? parseCompleteSingleSheetRequest(ask, summary, histogram)
+        : null;
+      if (requireCompleteRequest && completeRequestParse === null) return null;
       return attachAskModifiers(
         ask,
-        { template: histogram.template, bindings, encodings: { filled: [], unfilled: [] } },
+        {
+          template: histogram.template,
+          bindings,
+          encodings: { filled: [], unfilled: [] },
+          ...(completeRequestParse ? { completeRequestParse } : {}),
+        },
         filterCandidates,
       );
     }
@@ -4591,31 +4472,45 @@ export function classifyNoLlm(
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
+  const completeRequestParse = requireCompleteRequest
+    ? parseCompleteSingleSheetRequest(ask, summary, chosen)
+    : null;
+  if (requireCompleteRequest && completeRequestParse === null) return null;
   // A facet cue wins over series color. Otherwise inspect the full datasource, not
   // only `matched` (which contains ask-named fields): e4 intentionally does not name
   // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
   if (requireCompleteRequest) {
-    const basicLine = resolveBasicLineIntent(chosen, bindings, ask, summary, filterCandidates);
-    if (basicLine.kind === 'defer') return null;
-    if (basicLine.kind === 'accept') {
-      const lineSlots = optionalLineSeriesSlots(chosen)!;
+    const lineSlots = optionalLineSeriesSlots(chosen);
+    if (lineSlots) {
+      if (completeRequestParse?.shape !== 'pair') return null;
       const temporalBinding = bindings.find(
         (binding) => binding.slot_id === lineSlots.temporal.slot_id,
       );
       const temporalField = temporalBinding
         ? summary.fields.find((field) => field.name === temporalBinding.field)
         : undefined;
-      if (!temporalBinding || !temporalField) return null;
+      const measureBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.measure.slot_id,
+      );
       if (
-        basicLine.grain &&
-        lineSlots.temporal.derivation !== basicLine.grain &&
+        !temporalBinding ||
+        !temporalField ||
+        temporalField !== completeRequestParse.fields[1] ||
+        measureBinding?.field !== completeRequestParse.fields[0]?.name
+      )
+        return null;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain &&
         !['date', 'datetime'].includes(temporalField.datatype)
       )
         return null;
-      if (basicLine.grain && lineSlots.temporal.derivation !== basicLine.grain) {
-        temporalBinding.derivation = basicLine.grain;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain
+      ) {
+        temporalBinding.derivation = completeRequestParse.grain;
       }
-      if (basicLine.seriesBinding) bindings.push(basicLine.seriesBinding);
     }
   } else {
     const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
@@ -4630,6 +4525,7 @@ export function classifyNoLlm(
       bindings,
       ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
       encodings: symbolMapEncodings.encodings,
+      ...(completeRequestParse ? { completeRequestParse } : {}),
     },
     filterCandidates,
   );

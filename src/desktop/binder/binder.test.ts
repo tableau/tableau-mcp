@@ -223,6 +223,7 @@ describe('opt-in complete request binding', () => {
     ['Show me a bar graph of Sales by Region.', 'ranking-ordered-bar'],
     ['Create a line chart of monthly Sales by Order Date.', 'trend-line-chart'],
     ['Create a monthly line chart of Sales by Order Date.', 'trend-line-chart'],
+    ['Create a trend chart of Sales over Order Date.', 'trend-line-chart'],
     [
       'Create a scatter plot of Sales and Profit by Customer Name.',
       'correlation-scatter-plot-chart',
@@ -352,6 +353,26 @@ describe('opt-in complete request binding', () => {
     expect(result.requestCoverage?.askSha256).toBe(
       createHash('sha256').update(ask, 'utf8').digest('hex'),
     );
+  });
+
+  it('carries the parsed business-acronym grain into strict temporal binding', async () => {
+    const ask = 'Create a line chart of daily active users over Order Date.';
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[DAU]' role='measure' type='quantitative' datatype='real' /></datasource>",
+    );
+    const result = await bindTemplate({
+      ask,
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[sum:DAU:qk]',
+      '{{field_base_2}}': '[Superstore].[tdy:Order Date:qk]',
+    });
   });
 
   it('declines an added instruction after a previously proven line form', async () => {

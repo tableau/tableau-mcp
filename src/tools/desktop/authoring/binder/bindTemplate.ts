@@ -201,21 +201,15 @@ type AppliedDefault = Pick<
 type CompletionCaveat =
   | 'unconverted_currency'
   | 'field_validation_unverified'
-  | 'query_render_unverified';
+  | 'query_render_unverified'
+  | 'summary_preview_unavailable';
 
 type CompletionEvidence = {
-  version: 1;
-  kind: 'single_sheet_apply';
-  caveats: CompletionCaveat[];
-  askSha256?: string;
-};
-
-type OperationEvidence = {
-  version: 1;
+  version: 2;
   kind: 'single_sheet_apply';
   askSha256: string;
-  template: string;
-  sheetName: string;
+  coverage: 'complete_request' | 'applied_operation';
+  application: { status: 'applied'; template: string; sheetName: string };
   caveats: CompletionCaveat[];
 };
 
@@ -243,7 +237,6 @@ type AppliedFastPathResult = {
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
   completionEvidence?: CompletionEvidence;
-  operationEvidence?: OperationEvidence;
   requestCoverage?: RequestCoverage;
   guidance: string;
   applied_default?: AppliedDefault;
@@ -359,6 +352,8 @@ const SUMMARY_ROWS_MAX_ROWS = 20;
 const EMPTY_SUMMARY_ROWS_ERROR = 'empty readback — verify with get-summary-data';
 const EMPTY_SUMMARY_ROWS_GUIDANCE =
   'Summary readback returned zero rows; check the sheet and its filters before claiming the chart is complete.';
+const SETTLED_SUMMARY_PREVIEW_GUIDANCE =
+  'Summary preview unavailable; do not claim values or replay the apply.';
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
@@ -2800,6 +2795,7 @@ async function performAutoApply({
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
+  const summaryPreviewUnavailable = summaryRows.summary_rows === undefined;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2818,12 +2814,9 @@ async function performAutoApply({
       usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const needsFollowUp =
-    incomplete ||
-    (injected.warnings?.length ?? 0) > 0 ||
-    emptySummaryReadback ||
-    summaryReadbackTimedOut ||
-    postApplyUncertain;
+  const coreNeedsFollowUp =
+    incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2867,12 +2860,11 @@ async function performAutoApply({
     verificationReport.ok === true &&
     verificationReport.status === 'passed' &&
     nativeFindings.length === 0;
-  const accountedGuidance = `${receiptText} ${TERMINAL_GUIDANCE}${currencyGuidance ? ` ${currencyGuidance}` : ''}${promiseCheck}`;
   const completionEligible =
     res.requestCoverage !== undefined &&
     !trustedDeterministicApply &&
     args.sheet_type === 'worksheet' &&
-    !needsFollowUp &&
+    !coreNeedsFollowUp &&
     !appliedDefault &&
     successfulCalcCaptions.length === 0 &&
     args.top_n === undefined &&
@@ -2889,34 +2881,38 @@ async function performAutoApply({
     (nativeFieldVerified || nativeFieldUnverified) &&
     res.encodings !== undefined &&
     res.encodings.unfilled.length === 0 &&
-    summaryRows.summary_rows !== undefined &&
-    summaryRows.summary_rows_order !== undefined &&
-    summaryRows.summary_rows_scope !== undefined &&
-    summaryRows.summary_rows_error === undefined &&
-    summaryRows.truncated !== true &&
     (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
-    readbackEvidence === '' &&
-    guidance === accountedGuidance;
+    readbackEvidence === '';
   const caveats: CompletionCaveat[] = [];
   if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
   if (nativeFieldUnverified) caveats.push('field_validation_unverified');
   caveats.push('query_render_unverified');
+  if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
   const operationEligible =
     !trustedDeterministicApply &&
     res.requestCoverage === undefined &&
     args.sheet_type === 'worksheet' &&
-    !needsFollowUp &&
+    !coreNeedsFollowUp &&
     readbackRan &&
     encodingAnalysisComplete &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
     verification?.ok === true &&
     verification.status === 'passed' &&
     verification.findings.length === 0 &&
     (nativeFieldVerified || nativeFieldUnverified);
+  const evidenceEligible = completionEligible || operationEligible;
+  const settledGuidance =
+    evidenceEligible && summaryPreviewUnavailable
+      ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+      : guidance;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
-    guidance,
+    guidance: settledGuidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
@@ -2933,25 +2929,19 @@ async function performAutoApply({
     verification: receiptInput.readback,
     ...summaryRows,
     ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
-    ...(operationEligible
-      ? {
-          operationEvidence: {
-            version: 1,
-            kind: 'single_sheet_apply',
-            askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
-            template: args.template_name,
-            sheetName: literalTitle,
-            caveats,
-          } as const,
-        }
-      : {}),
-    ...(completionEligible
+    ...(evidenceEligible
       ? {
           completionEvidence: {
-            version: 1,
+            version: 2,
             kind: 'single_sheet_apply',
+            askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+            coverage: completionEligible ? 'complete_request' : 'applied_operation',
+            application: {
+              status: 'applied',
+              template: args.template_name,
+              sheetName: literalTitle,
+            },
             caveats,
-            askSha256: res.requestCoverage!.askSha256,
           } as const,
         }
       : {}),
@@ -2966,7 +2956,7 @@ async function performAutoApply({
       ),
     };
   }
-  return needsFollowUp
+  return needsFollowUp && !evidenceEligible
     ? { incomplete: true, result: applied }
     : {
         result: withNextAction(

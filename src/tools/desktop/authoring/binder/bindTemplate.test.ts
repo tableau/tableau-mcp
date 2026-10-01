@@ -8431,11 +8431,114 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.operationEvidence).toBeUndefined();
     expect(result.structuredContent?.operationEvidence).toBeUndefined();
     expect(applied.completionEvidence).toMatchObject({
-      version: 1,
+      version: 2,
       kind: 'single_sheet_apply',
       askSha256,
+      coverage: 'complete_request',
+      application: {
+        status: 'applied',
+        template: 'ranking-ordered-bar',
+        sheetName: applied.sheet_name,
+      },
       caveats: expect.arrayContaining(['unconverted_currency', 'query_render_unverified']),
     });
+    expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['Boolean category', [[true, 1200]]],
+    [
+      'more than twenty preview rows',
+      Array.from({ length: 21 }, (_, index) => [`R${index}`, index]),
+    ],
+  ])(
+    'keeps settled complete-request proof when %s is in optional summary data',
+    async (_label, rows) => {
+      const ask = 'bar chart of Sales by Region';
+      const requestCoverage = {
+        version: 1 as const,
+        kind: 'complete_single_sheet_binding' as const,
+        template: 'ranking-ordered-bar',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      };
+      const mocks = setupAutoApplyMocks({
+        bind: {
+          ...boundResult,
+          args: { ...boundResult.args, template_name: 'ranking-ordered-bar' },
+          encodings: { filled: [], unfilled: [] },
+          requestCoverage,
+        },
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+        workbookReads: [CURRENCY_WORKBOOK_XML],
+      });
+      const result = await getToolResult({
+        session: `completion-preview-${_label}`,
+        ask,
+        auto_apply: true,
+        requireCompleteRequest: true,
+        getExecutor: summaryRowsExecutor(mocks, {
+          columns: [
+            { name: 'Region', dataType: 'string' },
+            { name: 'SUM(Sales)', dataType: 'real' },
+          ],
+          rows,
+        }),
+      });
+      const applied = body(result);
+      expect(applied.applied).toBe(true);
+      expect(applied.completionEvidence).toMatchObject({
+        version: 2,
+        kind: 'single_sheet_apply',
+        askSha256: requestCoverage.askSha256,
+        coverage: 'complete_request',
+        application: {
+          status: 'applied',
+          template: 'ranking-ordered-bar',
+          sheetName: applied.sheet_name,
+        },
+      });
+      expect((applied.completionEvidence as { caveats: string[] }).caveats).toEqual(
+        rows.length > 20
+          ? ['unconverted_currency', 'query_render_unverified', 'summary_preview_unavailable']
+          : ['unconverted_currency', 'query_render_unverified'],
+      );
+      expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('keeps structural completion proof when the summary read returns no preview rows', async () => {
+    const ask = 'bar chart of Sales by Region';
+    const mocks = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        args: { ...boundResult.args, template_name: 'ranking-ordered-bar' },
+        encodings: { filled: [], unfilled: [] },
+        requestCoverage: {
+          version: 1,
+          kind: 'complete_single_sheet_binding',
+          template: 'ranking-ordered-bar',
+          askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+        },
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [CURRENCY_WORKBOOK_XML],
+    });
+    const result = await getToolResult({
+      session: 'completion-empty-preview',
+      ask,
+      auto_apply: true,
+      requireCompleteRequest: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: [], rows: [] }),
+    });
+    const applied = body(result);
+    expect(applied.applied).toBe(true);
+    expect(applied.summary_rows).toBeUndefined();
+    expect(applied.completionEvidence).toMatchObject({
+      version: 2,
+      coverage: 'complete_request',
+      caveats: ['unconverted_currency', 'query_render_unverified', 'summary_preview_unavailable'],
+    });
+    expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
     expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
@@ -8531,9 +8634,15 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
         expect(applied.completionEvidence).toBeUndefined();
       } else {
         expect(applied.completionEvidence).toMatchObject({
-          version: 1,
+          version: 2,
           kind: 'single_sheet_apply',
           askSha256: requestCoverage.askSha256,
+          coverage: 'complete_request',
+          application: {
+            status: 'applied',
+            template: 'distribution-histogram',
+            sheetName: applied.sheet_name,
+          },
           caveats: ['field_validation_unverified', 'query_render_unverified'],
         });
         expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
@@ -8585,20 +8694,24 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
       expect(applied.guidance).toContain('without conversion');
       expect(applied.requestCoverage).toBeUndefined();
-      expect(applied.completionEvidence).toBeUndefined();
-      expect(applied.operationEvidence).toEqual({
-        version: 1,
+      expect(applied.completionEvidence).toEqual({
+        version: 2,
         kind: 'single_sheet_apply',
         askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
-        template: 'trend-line-chart',
-        sheetName: applied.sheet_name,
+        coverage: 'applied_operation',
+        application: {
+          status: 'applied',
+          template: 'trend-line-chart',
+          sheetName: applied.sheet_name,
+        },
         caveats: [
           ...(recognizedCurrency ? ['unconverted_currency'] : []),
           'field_validation_unverified',
           'query_render_unverified',
+          'summary_preview_unavailable',
         ],
       });
-      expect(result.structuredContent?.operationEvidence).toEqual(applied.operationEvidence);
+      expect(result.structuredContent?.completionEvidence).toEqual(applied.completionEvidence);
       expect(mocks.applyWorkbookDocument).toHaveBeenCalledTimes(1);
     },
   );

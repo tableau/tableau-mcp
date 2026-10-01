@@ -160,8 +160,7 @@ function createSupportedRuntimeSnapshot(
 ): TemplateRuntimeSnapshot | null {
   try {
     return createTemplateRuntimeSnapshot(template, bookmark, {
-      plainTemporalLineColorOptional:
-        completeRequestLineColorOptional && template === 'trend-line-chart',
+      plainTemporalLineColorOptional: completeRequestLineColorOptional,
     });
   } catch {
     return null;

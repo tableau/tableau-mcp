@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import {
@@ -75,6 +75,35 @@ describe('runtimeTemplateDescriptorFromSnapshot', () => {
 });
 
 describe('loadRuntimeTemplateCatalogSnapshots', () => {
+  it('treats identical native line bookmarks alike under distinct template names', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-line-alias-'));
+    const previous = process.env['TEMPLATES_DIR'];
+    try {
+      const bookmark = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/trend-line-chart.tbm'),
+        'utf8',
+      );
+      process.env['TEMPLATES_DIR'] = root;
+      writeFileSync(join(root, 'trend-line-chart.tbm'), bookmark);
+      writeFileSync(join(root, 'trend-custom-line.tbm'), bookmark);
+      const catalog = loadRuntimeTemplateCatalogSnapshots({
+        includeProtected: false,
+        completeRequestLineColorOptional: true,
+      });
+      const original = catalog.get('trend-line-chart')?.descriptor;
+      const renamed = catalog.get('trend-custom-line')?.descriptor;
+      expect(original).toBeDefined();
+      expect(renamed).toBeDefined();
+      expect(renamed?.slots.map((slot) => ({ role: slot.role, required: slot.required }))).toEqual(
+        original?.slots.map((slot) => ({ role: slot.role, required: slot.required })),
+      );
+    } finally {
+      if (previous === undefined) delete process.env['TEMPLATES_DIR'];
+      else process.env['TEMPLATES_DIR'] = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('resolves automatic templates before reading extended siblings and keeps exact lookup available', () => {
     const read = vi.spyOn(templatePath, 'readBookmarkFromCatalogEntry');
     const extended = 'ranking__ordered-bar__show-order-when-rank-matters-more-than-value';
