@@ -4,12 +4,14 @@ import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
+import * as discoveryModule from '../externalApi/discovery.js';
 import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
 import * as cacheFingerprintModule from './cacheFingerprint.js';
 
 const {
   checkSidecar,
   checkSidecarInput,
+  defaultFingerprintResolver,
   restampSidecarAfterEdit,
   sidecarPath,
   sourceSha256,
@@ -31,6 +33,7 @@ function resolver(instance: InstanceFingerprint | undefined): FingerprintResolve
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -66,6 +69,34 @@ describe('sourceSha256', () => {
 });
 
 describe('cache fingerprint sidecars', () => {
+  it('uses the custom discovery dir and target-only discovery in strict scope', () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', '/custom/discovery');
+    const discoverSpy = vi.spyOn(discoveryModule, 'discoverInstances').mockReturnValue([
+      {
+        pid: 4242,
+        instanceId: 'target',
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'target-token',
+      },
+    ]);
+
+    expect(defaultFingerprintResolver('4242')).toEqual({ pid: 4242, instanceId: 'target' });
+    expect(discoverSpy).toHaveBeenCalledWith({
+      discoveryDir: '/custom/discovery',
+      targetPid: 4242,
+    });
+  });
+
+  it('rejects a foreign strict-scoped fingerprint before discovery', () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    const discoverSpy = vi.spyOn(discoveryModule, 'discoverInstances');
+
+    expect(defaultFingerprintResolver('7')).toBeUndefined();
+    expect(discoverSpy).not.toHaveBeenCalled();
+  });
   it('checks safely pre-read datasource sidecar text without reopening the path', () => {
     const sourceHash = 'd'.repeat(64);
     const result = checkSidecarInput(

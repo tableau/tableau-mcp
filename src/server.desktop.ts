@@ -31,6 +31,7 @@ import {
   readKnowledgeResource,
 } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/session/sessionManager.js';
+import { getCompleteRequestTemplateIds } from './desktop/templates/runtimeTemplateCatalog.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -41,6 +42,34 @@ import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
+
+export const STRICT_SESSION_SCOPE_CAPABILITY_KEY = 'tableauDesktopSessionScope';
+export const STRICT_SESSION_SCOPE_CAPABILITY_VERSION = 1;
+export const BIND_TEMPLATE_COMPLETION_CAPABILITY_KEY = 'tableauDesktopBindTemplateCompletion';
+export const BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION = 2;
+export const WORKSPACE_GUARD_CAPABILITY_KEY = 'tableauDesktopWorkspaceGuard';
+export const WORKSPACE_GUARD_CAPABILITY_VERSION = 1;
+export const COMPLETE_REQUEST_BIND_CAPABILITY_KEY = 'tableauDesktopCompleteRequestBind';
+export const COMPLETE_REQUEST_BIND_CAPABILITY_VERSION = 1;
+
+/** Only these audited reads remain callable beside the guarded binder for an exact workspace. */
+export const STRICT_WORKSPACE_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set([
+  'bind-template',
+  'list-instances',
+  'get-desktop-state',
+  'get-diagnostics',
+  'get-active-dialogs',
+  'list-worksheets',
+  'get-show-me-options',
+  'list-dashboards',
+  'search-workbook-fields',
+  'get-summary-data',
+  'list-worksheet-logical-tables',
+  'get-worksheet-underlying-data',
+  'get-workbook-inventory',
+  'list-workbook-datasources',
+  'get-datasource-info',
+]);
 
 /**
  * Slim demo tool set (W60 spike lever 1 / preamble-hunt P1): registering ~10 tools instead
@@ -299,20 +328,67 @@ export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: fa
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
+  private readonly completeRequestTemplateIds: readonly string[];
   private knowledgeCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+    const config = getDesktopConfig();
     super({
       mcpServer,
       clientInfo,
       serverName,
       serverVersion,
       instructions: buildDesktopInstructions({
-        sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
-        profile: getDesktopConfig().toolProfile,
+        sessionPinned: config.desktopSessionId !== undefined,
+        sessionScope: config.desktopSessionScope,
+        profile: config.toolProfile,
       }),
     });
+
+    const bindTemplateRegistered =
+      config.desktopSessionScope === 'strict' &&
+      new Set(this._selectToolsToRegister(config).map(({ name }) => name)).has('bind-template');
+    this.completeRequestTemplateIds = Object.freeze(
+      config.desktopSessionScope === 'strict' && bindTemplateRegistered
+        ? getCompleteRequestTemplateIds()
+        : [],
+    );
+    if (config.desktopSessionScope === 'strict') {
+      this.mcpServer.server.registerCapabilities({
+        experimental: {
+          [STRICT_SESSION_SCOPE_CAPABILITY_KEY]: {
+            version: STRICT_SESSION_SCOPE_CAPABILITY_VERSION,
+            mode: 'strict',
+            sessionId: config.desktopSessionId!,
+          },
+          ...(bindTemplateRegistered
+            ? {
+                [BIND_TEMPLATE_COMPLETION_CAPABILITY_KEY]: {
+                  version: BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION,
+                  tool: 'bind-template',
+                  resultKind: 'single_sheet_apply',
+                },
+                [COMPLETE_REQUEST_BIND_CAPABILITY_KEY]: {
+                  version: COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
+                  tool: 'bind-template',
+                  templates: this.completeRequestTemplateIds,
+                },
+              }
+            : {}),
+          ...(config.expectedWorkspaceIdentity
+            ? {
+                [WORKSPACE_GUARD_CAPABILITY_KEY]: {
+                  version: WORKSPACE_GUARD_CAPABILITY_VERSION,
+                  target: config.expectedWorkspaceIdentity,
+                },
+              }
+            : {}),
+        },
+      });
+    }
   }
+
+  getCompleteRequestTemplateIds = (): readonly string[] => this.completeRequestTemplateIds;
 
   registerResources = async (): Promise<void> => {
     if (!this.knowledgeCorpusChecked) {
@@ -387,6 +463,7 @@ export class DesktopMcpServer extends Server {
 
     const instructions = buildDesktopInstructions({
       sessionPinned: config.desktopSessionId !== undefined,
+      sessionScope: config.desktopSessionScope,
       profile: config.toolProfile,
     });
     await emitEpisodeEvent(config, {
@@ -412,6 +489,13 @@ export class DesktopMcpServer extends Server {
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
     const config = getDesktopConfig();
+    return this._selectToolsToRegister(config, true);
+  };
+
+  private _selectToolsToRegister = (
+    config: ReturnType<typeof getDesktopConfig>,
+    reportApiDrops = false,
+  ): Array<DesktopTool<any>> => {
     const factories = [
       ...desktopToolFactories,
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
@@ -419,11 +503,16 @@ export class DesktopMcpServer extends Server {
     const allTools = factories.map((toolFactory) => toolFactory(this));
     const profileTools = selectToolsForProfile(allTools, config.toolProfile);
 
-    const instances = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+    const instances = discoverInstances({
+      discoveryDir: config.externalApiDiscoveryDir,
+      ...(config.desktopSessionScope === 'strict'
+        ? { targetPid: Number(config.desktopSessionId) }
+        : {}),
+    });
     const connectedApiVersion = resolveConnectedApiVersion(instances, config.desktopSessionId);
     const gatedTools = filterToolsByApiVersion(profileTools, connectedApiVersion);
 
-    if (gatedTools.length < profileTools.length) {
+    if (reportApiDrops && gatedTools.length < profileTools.length) {
       const dropped = profileTools
         .filter((tool) => !gatedTools.includes(tool))
         .map((tool) => tool.name);
@@ -433,7 +522,9 @@ export class DesktopMcpServer extends Server {
         logger: 'DesktopMcpServer',
       });
     }
-    return gatedTools;
+    return config.desktopSessionScope === 'strict' && config.expectedWorkspaceIdentity !== undefined
+      ? gatedTools.filter((tool) => STRICT_WORKSPACE_TOOL_PROFILE.has(tool.name))
+      : gatedTools;
   };
 
   private _registerKnowledgeResources = (): void => {

@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -10,6 +11,7 @@ import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
+  ArgsValidationError,
   CacheSessionMismatchError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
@@ -73,6 +75,12 @@ export const getBuildAndApplyDashboardTool = (
         extra,
         args: { session, dashboardName, dashboardFile, workbookFile, layoutSpec, worksheetNames },
         callback: async () => {
+          for (const file of [workbookFile, dashboardFile]) {
+            const guarded = guardStrictCachePath(file);
+            if (!guarded.ok) {
+              return new ArgsValidationError(strictCachePathError(file, guarded)).toErr();
+            }
+          }
           if (!existsSync(workbookFile)) {
             return new WorkbookNotFoundError(
               `Workbook cache file not found: ${workbookFile}`,

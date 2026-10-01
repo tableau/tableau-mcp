@@ -1,3 +1,4 @@
+import { isCompleteRequestChartDescriptor } from '../binder/classify.js';
 import type { Family, RuntimeTemplateDescriptor } from '../binder/manifest-types.js';
 import {
   listTemplateCatalog,
@@ -110,14 +111,30 @@ export function runtimeTemplateDescriptorFromSnapshot(
     family,
     fast_path_eligible: fastPathEligible,
     fast_path_blockers: snapshot.eligibility.pass1_blockers.slice(),
+    mark_classes: snapshot.markClasses?.slice() ?? [],
     intent_keywords: keywordsFromName(snapshot.template, family),
     description: phrase(snapshot.template),
   };
 }
 
+export function getCompleteRequestTemplateIds(
+  options: RuntimeTemplateCatalogOptions = {},
+): string[] {
+  return [
+    ...loadRuntimeTemplateDescriptors({
+      ...options,
+      automaticOnly: true,
+      completeRequestLineColorOptional: true,
+    }).values(),
+  ]
+    .filter(isCompleteRequestChartDescriptor)
+    .map((descriptor) => descriptor.template);
+}
+
 export interface RuntimeTemplateCatalogOptions extends TemplateCatalogOptions {
   additionalTemplates?: readonly string[];
   automaticOnly?: boolean;
+  completeRequestLineColorOptional?: boolean;
 }
 
 export function loadRuntimeTemplateDescriptors(
@@ -139,9 +156,12 @@ export interface RuntimeTemplateCatalogSnapshot {
 function createSupportedRuntimeSnapshot(
   template: string,
   bookmark: string,
+  completeRequestLineColorOptional = false,
 ): TemplateRuntimeSnapshot | null {
   try {
-    return createTemplateRuntimeSnapshot(template, bookmark);
+    return createTemplateRuntimeSnapshot(template, bookmark, {
+      plainTemporalLineColorOptional: completeRequestLineColorOptional,
+    });
   } catch {
     return null;
   }
@@ -163,7 +183,11 @@ export function loadRuntimeTemplateCatalogSnapshots(
     if (entry.discoveryIssue) continue;
     const bookmark = readBookmarkFromCatalogEntry(entry, options.operations);
     if (bookmark === null) continue;
-    const snapshot = createSupportedRuntimeSnapshot(entry.template, bookmark);
+    const snapshot = createSupportedRuntimeSnapshot(
+      entry.template,
+      bookmark,
+      options.completeRequestLineColorOptional === true,
+    );
     if (snapshot === null) continue;
     snapshots.set(entry.template, {
       snapshot,

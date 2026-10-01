@@ -19,6 +19,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
@@ -101,6 +102,10 @@ export function getStickyWorksheetFile({
     return undefined;
   }
   if (pointer.worksheet_id !== trimmedId) {
+    return undefined;
+  }
+  const guardedTarget = guardStrictCachePath(pointer.file);
+  if (!guardedTarget.ok) {
     return undefined;
   }
   if (!existsSync(pointer.file)) {
@@ -233,6 +238,11 @@ export async function resolveWorksheetEditFile({
       }
       resolvedFile = minted.value;
     }
+  }
+
+  const guardedFile = guardStrictCachePath(resolvedFile);
+  if (!guardedFile.ok) {
+    return Err(new ArgsValidationError(strictCachePathError(resolvedFile, guardedFile)));
   }
 
   if (bufferWorksheetId) {

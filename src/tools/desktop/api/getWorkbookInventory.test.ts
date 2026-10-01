@@ -23,6 +23,7 @@ const resultSchema = z.object({
   location: z.string().nullable().optional(),
   unsavedChanges: z.boolean(),
   targetFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  nativeSheetCollections: z.array(z.enum(['worksheets', 'dashboards', 'storyboards'])),
   worksheets: z.array(
     z.object({
       id: z.string(),
@@ -71,6 +72,7 @@ describe('getWorkbookInventoryTool', () => {
         title: 'Regional Sales Analysis',
         location: '/Users/tableau/Documents/regional-sales.twb',
         unsavedChanges: true,
+        nativeSheetCollections: ['worksheets', 'dashboards', 'storyboards'],
         targetFingerprint: workbookTargetFingerprint({
           title: 'Regional Sales Analysis',
           location: '/Users/tableau/Documents/regional-sales.twb',
@@ -88,6 +90,31 @@ describe('getWorkbookInventoryTool', () => {
       expect(body.dashboards[0]).toMatchObject({ id: 'dash-exec', name: 'Executive Dashboard' });
       expect(body.storyboards[0]).toMatchObject({ id: 'story-qbr', name: 'QBR Story' });
       expect(harness.server.requests.at(-1)?.path).toBe('/v0/workbook');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('reports only sheet collections actually supplied by the native endpoint', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook', {
+        status: 200,
+        body: JSON.stringify({
+          title: 'Sparse Book',
+          unsavedChanges: false,
+          worksheets: [],
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool();
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toMatchObject({
+        nativeSheetCollections: ['worksheets'],
+        worksheets: [],
+        dashboards: [],
+        storyboards: [],
+      });
     } finally {
       await harness.close();
     }

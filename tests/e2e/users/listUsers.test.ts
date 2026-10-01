@@ -143,29 +143,29 @@ describe('list-users', () => {
       return;
     }
 
-    // THE BUG: `limit` was applied to the FETCH before the client-side filter
-    // ran. On the live site (~18,008 users) the first `limit` fetched rows are
-    // typically active admins/service accounts that FAIL an inactivity filter,
-    // so `limit:5` + `lastLogin:lt:<recent cutoff>` returned 0 users even though
-    // thousands matched. After the fix `limit` bounds POST-filter matches: the
-    // tool pages until it has 5 filter-matches, so this returns exactly 5 users.
-    //
-    // Use a large pageSize so the 5 matches are found in as few sequential REST
-    // calls as possible. The cutoff is recent (2026-07-01) so the vast majority
-    // of the 18,008 users — anyone who has not logged in since then, plus every
-    // never-logged-in user — match; 5 matches are found on the very first page.
+    const inactivityCutoff = '2026-07-01T00:00:00Z';
+    const inactivityFilter = `lastLogin:lt:${inactivityCutoff}`;
+    // Prove the fixture has one more match than the tested limit so truncation is deterministic.
+    const reference = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 6, filter: inactivityFilter },
+    });
+
+    expect(reference.users.length).toBeGreaterThanOrEqual(2);
+    const limit = Math.min(5, reference.users.length - 1);
+
     const result = await client.callTool('list-users', {
       schema: listUsersResultSchema,
-      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:lt:2026-07-01T00:00:00Z' },
+      toolArgs: { pageSize: 1000, limit, filter: inactivityFilter },
     });
 
     // The regression assertion: NON-empty, and exactly `limit` matching users.
-    expect(result.users.length).toBe(5);
+    expect(result.users.length).toBe(limit);
 
     // Every returned user actually satisfies the filter: either an inactive
     // lastLogin strictly before the cutoff, or a never-logged-in user (no
     // lastLogin — the most-inactive class, which MUST match `lt`).
-    const cutoff = new Date('2026-07-01T00:00:00Z').getTime();
+    const cutoff = new Date(inactivityCutoff).getTime();
     for (const user of result.users) {
       if (user.lastLogin === undefined) {
         continue; // never-logged-in: correctly included by lt
@@ -173,10 +173,7 @@ describe('list-users', () => {
       expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoff);
     }
 
-    // resultInfo must report the limit-truncation honestly: far more than 5
-    // users match on an 18,008-user site, so truncated:true with
-    // truncationReason 'requested-limit' (the caller's own limit was binding).
-    expect(result.mcp?.resultInfo.returnedCount).toBe(5);
+    expect(result.mcp?.resultInfo.returnedCount).toBe(limit);
     expect(result.mcp?.resultInfo.truncated).toBe(true);
     expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
   });

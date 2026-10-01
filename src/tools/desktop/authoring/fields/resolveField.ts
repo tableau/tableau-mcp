@@ -4,9 +4,11 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { type FieldResolution, resolveField } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
+  ArgsValidationError,
   FileNotFoundError,
   FileReadError,
   UnknownError,
@@ -113,6 +115,12 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
             workbookXml = refresh.xml;
           } else {
             resolvedWorkbookFile = requestedWorkbookFile;
+            const guardedWorkbook = guardStrictCachePath(resolvedWorkbookFile);
+            if (!guardedWorkbook.ok) {
+              return new ArgsValidationError(
+                strictCachePathError(resolvedWorkbookFile, guardedWorkbook),
+              ).toErr();
+            }
             if (!existsSync(resolvedWorkbookFile)) {
               return new FileNotFoundError(resolvedWorkbookFile).toErr();
             }

@@ -14,7 +14,13 @@
 import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
+import { getDesktopConfig } from '../../config.desktop.js';
 import { log } from '../../logging/logger.js';
+import {
+  CONTAINED_CACHE_READ_ISSUE,
+  guardStrictCachePath,
+  readContainedCacheTextFile,
+} from '../cachePath.js';
 import { discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiInstance } from '../externalApi/types.js';
 import { parseSessionPid } from '../session/parseSessionPid.js';
@@ -76,7 +82,14 @@ export function fingerprintFromInstance(instance: ExternalApiInstance): Instance
 export function defaultFingerprintResolver(sessionId: string): InstanceFingerprint | undefined {
   const pid = parseSessionPid(sessionId);
   if (pid === undefined) return undefined;
-  const instance = discoverInstances().find((candidate) => candidate.pid === pid);
+  const config = getDesktopConfig();
+  if (config.desktopSessionScope === 'strict' && sessionId !== config.desktopSessionId) {
+    return undefined;
+  }
+  const instance = discoverInstances({
+    discoveryDir: config.externalApiDiscoveryDir,
+    ...(config.desktopSessionScope === 'strict' ? { targetPid: pid } : {}),
+  }).find((candidate) => candidate.pid === pid);
   return instance ? fingerprintFromInstance(instance) : undefined;
 }
 
@@ -131,8 +144,13 @@ export function writeSidecar(
     ...(sourceHash === undefined ? {} : { source_sha256: sourceHash }),
   };
 
+  const metaFile = sidecarPath(cacheFile);
   try {
-    writeFileSync(sidecarPath(cacheFile), JSON.stringify(meta, null, 2), 'utf-8');
+    const guarded = guardStrictCachePath(metaFile);
+    if (!guarded.ok) {
+      throw new Error(`unsafe strict cache sidecar path (${guarded.reason})`);
+    }
+    writeFileSync(guarded.path, JSON.stringify(meta, null, 2), 'utf-8');
   } catch (error) {
     log({
       message: 'cache sidecar write failed',
@@ -159,6 +177,25 @@ export function checkSidecar(
   resolve: FingerprintResolver = defaultFingerprintResolver,
 ): CheckSidecarResult {
   const metaFile = sidecarPath(cacheFile);
+  if (getDesktopConfig().desktopSessionScope === 'strict') {
+    const read = readContainedCacheTextFile(metaFile);
+    if (read.ok) {
+      return checkSidecarInput(
+        cacheFile,
+        sessionId,
+        kind,
+        { type: 'read', text: read.text },
+        resolve,
+      );
+    }
+    if (read.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
+      return checkSidecarInput(cacheFile, sessionId, kind, { type: 'missing' }, resolve);
+    }
+    return {
+      ok: false,
+      message: `Refusing to use ${kind} cache sidecar outside the owned strict Desktop cache scope: ${metaFile} (${read.issue}).`,
+    };
+  }
   if (!existsSync(metaFile)) {
     return checkSidecarInput(cacheFile, sessionId, kind, { type: 'missing' }, resolve);
   }

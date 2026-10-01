@@ -187,6 +187,8 @@ export interface RuntimeTemplateDescriptor extends TemplateBindingContract {
   fast_path_eligible: boolean;
   /** Exact structural eligibility findings from the TBM compiler. */
   fast_path_blockers: string[];
+  /** Mark classes authored across every relevant bookmark pane, preserving pane count. */
+  mark_classes?: string[];
   intent_keywords: string[];
   description: string;
 }

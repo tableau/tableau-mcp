@@ -111,6 +111,7 @@ export type EscalateReason =
   | 'cross-datasource-binding'
   | 'calc-dependency-unmet'
   | 'low-confidence'
+  | 'request-not-covered'
   // M10 Finding 3: the ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
   // classifier fails closed (never classifies a truncated subset) and escalates to
   // the general authoring flow rather than risk a silent wrong bind.

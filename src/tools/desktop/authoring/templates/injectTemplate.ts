@@ -10,6 +10,7 @@ import {
   formatExplicitBindErrors,
 } from '../../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { OptionalFieldPruneSpec } from '../../../../desktop/templates/optionalFieldPrune.js';
@@ -96,6 +97,13 @@ export const getInjectTemplateTool = (
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          const guardedWorkbook = guardStrictCachePath(workbookFile);
+          if (!guardedWorkbook.ok) {
+            return new ArgsValidationError(
+              strictCachePathError(workbookFile, guardedWorkbook),
+            ).toErr();
+          }
 
           if (!existsSync(resolve(workbookFile))) {
             return new FileNotFoundError(workbookFile).toErr();

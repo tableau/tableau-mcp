@@ -9,7 +9,13 @@ import {
 } from './desktop/limits/inlineImageCap.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
+import {
+  type ExpectedWorkspaceIdentity,
+  parseExpectedWorkspaceIdentity,
+} from './desktop/wrappers/expectedWorkspaceIdentity.js';
 import { parseNumber } from './utils/parseNumber.js';
+
+export type DesktopSessionScope = 'ordinary' | 'strict';
 
 export class Config extends BaseConfig {
   // toolProfile lives on BaseConfig (shared with web/combined); desktop consumes it via
@@ -48,6 +54,12 @@ export class Config extends BaseConfig {
    */
   desktopSessionId: string | undefined;
 
+  /** Process-wide boundary that confines every Desktop API path to the pinned pid. */
+  desktopSessionScope: DesktopSessionScope;
+
+  /** Exact UI workspace accepted only by a strict, pinned Desktop child process. */
+  expectedWorkspaceIdentity: ExpectedWorkspaceIdentity | undefined;
+
   /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
    * agent is told Desktop stopped answering. Env-overridable via TABLEAU_DESKTOP_CALL_TIMEOUT_MS;
@@ -74,6 +86,8 @@ export class Config extends BaseConfig {
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_SESSION_SCOPE: desktopSessionScope,
+      TABLEAU_DESKTOP_EXPECTED_WORKSPACE: expectedWorkspace,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
     } = cleansedVars;
@@ -83,10 +97,36 @@ export class Config extends BaseConfig {
     }
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
+    const requestedScope = desktopSessionScope?.trim().toLowerCase();
+    if (requestedScope !== undefined && requestedScope !== '' && requestedScope !== 'strict') {
+      throw new Error('TABLEAU_DESKTOP_SESSION_SCOPE must be "strict" when set.');
+    }
+    this.desktopSessionScope = requestedScope === 'strict' ? 'strict' : 'ordinary';
+
+    const parsedSessionPid = desktopSessionId ? parseSessionPid(desktopSessionId) : undefined;
+    const validStrictPid =
+      parsedSessionPid !== undefined &&
+      Number.isSafeInteger(parsedSessionPid) &&
+      parsedSessionPid > 0;
+    if (this.desktopSessionScope === 'strict' && !validStrictPid) {
+      throw new Error(
+        'TABLEAU_DESKTOP_SESSION_SCOPE=strict requires TABLEAU_DESKTOP_SESSION_ID to be a positive numeric Tableau Desktop PID.',
+      );
+    }
     this.desktopSessionId =
-      desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
-        ? desktopSessionId
-        : undefined;
+      this.desktopSessionScope === 'strict'
+        ? String(parsedSessionPid)
+        : desktopSessionId && parsedSessionPid !== undefined
+          ? desktopSessionId
+          : undefined;
+
+    if (expectedWorkspace !== undefined && this.desktopSessionScope !== 'strict') {
+      throw new Error('TABLEAU_DESKTOP_EXPECTED_WORKSPACE requires strict Desktop session scope.');
+    }
+    this.expectedWorkspaceIdentity =
+      expectedWorkspace === undefined
+        ? undefined
+        : parseExpectedWorkspaceIdentity(expectedWorkspace);
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,

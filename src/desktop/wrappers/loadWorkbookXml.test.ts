@@ -180,6 +180,107 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(appliedXml).toEqual([validXmlWithWindows]);
   });
 
+  it.each([
+    {
+      title: 'Other',
+      worksheets: [{ id: 'sheet-1', name: 'Overview', hidden: false, isActiveSheet: true }],
+    },
+    {
+      title: 'Sales',
+      worksheets: [{ id: 'sheet-2', name: 'Overview', hidden: false, isActiveSheet: true }],
+    },
+    {
+      title: 'Sales',
+      worksheets: [{ id: 'sheet-1', name: 'Other', hidden: false, isActiveSheet: true }],
+    },
+    { title: 'Sales', worksheets: [{ id: 'sheet-1', name: 'Overview', hidden: false }] },
+    {
+      title: 'Sales',
+      worksheets: [
+        { id: 'sheet-1', name: 'Overview', hidden: false, isActiveSheet: true },
+        { id: 'sheet-2', name: 'Other', hidden: false, isActiveSheet: true },
+      ],
+    },
+    {
+      title: 'Sales',
+      worksheets: [{ id: 'sheet-1', name: 'Overview', hidden: false, isActiveSheet: false }],
+      dashboards: [{ id: 'dashboard-1', name: 'Overview', hidden: false, isActiveSheet: true }],
+    },
+  ])(
+    'refuses a changed or ambiguous workspace before the whole-workbook POST: %j',
+    async (native) => {
+      const applyWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+      const getWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: validXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        );
+      const getWorkbook = vi.fn().mockResolvedValue(
+        Ok({
+          location: null,
+          unsavedChanges: false,
+          dashboards: [],
+          storyboards: [],
+          ...native,
+        }),
+      );
+      const executor = makeExecutorMock({
+        applyWorkbookDocument,
+        getWorkbookDocument,
+        getWorkbook,
+      });
+      const result = await loadWorkbookXml({
+        xml: validXmlWithWindows,
+        expectedWorkbookXml: validXml,
+        expectedWorkspaceIdentity: {
+          workbookTitle: 'Sales',
+          sheetId: 'sheet-1',
+          sheetName: 'Overview',
+        },
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+      expect(result.isErr()).toBe(true);
+      expect(getWorkbookDocument).toHaveBeenCalledOnce();
+      expect(getWorkbook).toHaveBeenCalledOnce();
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses an unavailable workspace read before the whole-workbook POST', async () => {
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: validXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      getWorkbook: vi
+        .fn()
+        .mockResolvedValue(Err({ type: 'command-timed-out', error: 'read timed out' })),
+    });
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      expectedWorkbookXml: validXml,
+      expectedWorkspaceIdentity: {
+        workbookTitle: 'Sales',
+        sheetId: 'sheet-1',
+        sheetName: 'Overview',
+      },
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+    expect(result.isErr()).toBe(true);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('refuses a guarded apply before dispatch when the live workbook has drifted', async () => {
     const applyWorkbookDocument = vi.fn();
     const getWorkbookDocument = vi.fn().mockResolvedValue(

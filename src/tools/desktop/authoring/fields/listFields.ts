@@ -2,8 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
+import { guardStrictCachePath, strictCachePathError } from '../../../../desktop/cachePath.js';
 import { listFields } from '../../../../desktop/metadata/index.js';
 import {
+  ArgsValidationError,
   FileNotFoundError,
   FileReadError,
   XmlModificationError,
@@ -35,6 +37,12 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
         extra,
         args: { worksheetFile },
         callback: async () => {
+          const guardedWorksheet = guardStrictCachePath(worksheetFile);
+          if (!guardedWorksheet.ok) {
+            return new ArgsValidationError(
+              strictCachePathError(worksheetFile, guardedWorksheet),
+            ).toErr();
+          }
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();
           }

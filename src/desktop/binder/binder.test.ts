@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createPuppetCompatibilityProjection } from '../templates/puppetCompatibilityProjection.js';
@@ -13,6 +14,7 @@ import {
   summarizeSchema,
   TITLE_CONTROL_CHAR_RE,
 } from './binder.js';
+import { provesCompleteSingleSheetRequest } from './classify.js';
 import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 
 const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
@@ -88,6 +90,7 @@ const METRICS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 
 let descriptors: Map<string, RuntimeTemplateDescriptor>;
 let allDescriptors: Map<string, RuntimeTemplateDescriptor>;
+let completeRequestDescriptors: Map<string, RuntimeTemplateDescriptor>;
 
 beforeAll(() => {
   const projection = createPuppetCompatibilityProjection(
@@ -95,6 +98,13 @@ beforeAll(() => {
   );
   descriptors = projection.descriptors;
   allDescriptors = projection.allDescriptors;
+  completeRequestDescriptors = createPuppetCompatibilityProjection(
+    loadRuntimeTemplateCatalogSnapshots({
+      automaticOnly: true,
+      includeExternal: false,
+      completeRequestLineColorOptional: true,
+    }),
+  ).descriptors;
 });
 
 function workbookWithApproxCount(field: string, count: number): string {
@@ -153,6 +163,355 @@ function scatterProposal(): BindingProposal {
     confidence: 0.9,
   };
 }
+
+describe('opt-in complete request binding', () => {
+  it('leaves ordinary bound results without complete-request proof', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a bar chart of Sales by Region.',
+      workbookXml: WORKBOOK_XML,
+      manifests: descriptors,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status === 'bound') expect(result.requestCoverage).toBeUndefined();
+  });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ])('keeps strict and ordinary line catalogs isolated in order %s, %s', async (...order) => {
+    const ask = 'Create a line chart of monthly Sales by Order Date.';
+    for (const strict of order) {
+      const projection = createPuppetCompatibilityProjection(
+        loadRuntimeTemplateCatalogSnapshots({
+          automaticOnly: true,
+          includeExternal: false,
+          ...(strict ? { completeRequestLineColorOptional: true } : {}),
+        }),
+      );
+      const line = projection.descriptors.get('trend-line-chart');
+      expect(line).toBeDefined();
+      expect(line?.slots.find((slot) => slot.role.includes('color'))?.required).toBe(!strict);
+      const result = await bindTemplate({
+        ask,
+        workbookXml: WORKBOOK_XML,
+        manifests: projection.descriptors,
+        ...(strict ? { requireCompleteRequest: true } : {}),
+      });
+      expect(result.status).toBe(strict ? 'bound' : 'propose');
+    }
+  });
+
+  it('keeps an actual Unicode field name while rejecting unrelated Unicode clauses', async () => {
+    const workbookXml = WORKBOOK_XML.replace('[Region]', '[Région]');
+    const ask = 'Create a bar chart of Sales by Région.';
+    const result = await bindTemplate({
+      ask,
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status === 'bound') {
+      expect(result.requestCoverage?.askSha256).toBe(
+        createHash('sha256').update(ask, 'utf8').digest('hex'),
+      );
+    }
+  });
+
+  it.each([
+    ['Create a bar chart of Sales by Region.', 'ranking-ordered-bar'],
+    ['Show me a bar graph of Sales by Region.', 'ranking-ordered-bar'],
+    ['Create a line chart of monthly Sales by Order Date.', 'trend-line-chart'],
+    ['Create a monthly line chart of Sales by Order Date.', 'trend-line-chart'],
+    ['Create a trend chart of Sales over Order Date.', 'trend-line-chart'],
+    [
+      'Create a scatter plot of Sales and Profit by Customer Name.',
+      'correlation-scatter-plot-chart',
+    ],
+  ])('proves the complete original ask for %s', async (ask, template) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe(template);
+    expect(result.requestCoverage).toEqual({
+      version: 1,
+      kind: 'complete_single_sheet_binding',
+      template,
+      askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+    });
+  });
+
+  it('proves a structurally compatible chart with a new template ID and noun', async () => {
+    const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+    expect(bar).toBeDefined();
+    if (!bar) return;
+    const column: RuntimeTemplateDescriptor = {
+      ...bar,
+      template: 'magnitude-simple-column',
+      family: 'magnitude',
+      intent_keywords: ['column chart', 'column'],
+      description: 'column chart',
+    };
+    const ask = 'Create a column chart of Sales by Region.';
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: new Map([[column.template, column]]),
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe(column.template);
+    expect(result.requestCoverage).toEqual({
+      version: 1,
+      kind: 'complete_single_sheet_binding',
+      template: column.template,
+      askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+    });
+
+    const wrongRelationship = await bindTemplate({
+      ask: 'Create a column chart of Region by Sales.',
+      workbookXml: WORKBOOK_XML,
+      manifests: new Map([[column.template, column]]),
+      requireCompleteRequest: true,
+    });
+    expect(wrongRelationship.status).toBe('escalate');
+    if (wrongRelationship.status === 'escalate') {
+      expect(wrongRelationship.reason).toBe('request-not-covered');
+    }
+  });
+
+  it('requires scatter measure order to match the bound x and y roles', () => {
+    const ask = 'Create a scatter plot of Sales and Profit by Customer Name.';
+    const summary = summarizeSchema(WORKBOOK_XML);
+    const classified = classifyNoLlm(ask, completeRequestDescriptors, summary, true);
+    const scatter = completeRequestDescriptors.get('correlation-scatter-plot-chart');
+    expect(classified?.template).toBe(scatter?.template);
+    expect(scatter).toBeDefined();
+    if (!classified || !scatter) return;
+    expect(provesCompleteSingleSheetRequest(ask, classified, summary, scatter)).toBe(true);
+
+    const reversed = {
+      ...classified,
+      bindings: classified.bindings.map((binding) =>
+        binding.slot_id === 'field_base_1'
+          ? { ...binding, field: 'Profit' }
+          : binding.slot_id === 'field_base_2'
+            ? { ...binding, field: 'Sales' }
+            : binding,
+      ),
+    };
+    expect(provesCompleteSingleSheetRequest(ask, reversed, summary, scatter)).toBe(false);
+  });
+
+  it('uses the selected chart noun when descriptor text has a descriptive suffix', async () => {
+    const bar = completeRequestDescriptors.get('ranking-ordered-bar');
+    expect(bar).toBeDefined();
+    if (!bar) return;
+    const column: RuntimeTemplateDescriptor = {
+      ...bar,
+      template: 'magnitude-simple-column',
+      family: 'magnitude',
+      intent_keywords: ['column chart', 'column'],
+      description: 'simple column chart for comparing values',
+    };
+    const result = await bindTemplate({
+      ask: 'Create a column chart of Sales by Region.',
+      workbookXml: WORKBOOK_XML,
+      manifests: new Map([[column.template, column]]),
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status === 'bound') expect(result.args.template_name).toBe(column.template);
+  });
+
+  it.each([
+    ['Create a line chart of Sales over Order Date.', 'sum'],
+    ['Make a monthly line graph of sum Sales by Order Date.', 'sum'],
+    ['Create a line graph of monthly Sales over Order Date.', 'sum'],
+    ['Create a line chart of average Sales over Order Date.', 'avg'],
+    ['Show me the Sales trend over Order Date.', 'sum'],
+  ])('preserves proven native-date line form and derivation for %s', async (ask, aggregate) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe('trend-line-chart');
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': `[Superstore].[${aggregate}:Sales:qk]`,
+      '{{field_base_2}}': '[Superstore].[tmn:Order Date:qk]',
+    });
+    expect(result.requestCoverage?.askSha256).toBe(
+      createHash('sha256').update(ask, 'utf8').digest('hex'),
+    );
+  });
+
+  it('carries the parsed business-acronym grain into strict temporal binding', async () => {
+    const ask = 'Create a line chart of daily active users over Order Date.';
+    const workbookXml = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[DAU]' role='measure' type='quantitative' datatype='real' /></datasource>",
+    );
+    const result = await bindTemplate({
+      ask,
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}': '[Superstore].[sum:DAU:qk]',
+      '{{field_base_2}}': '[Superstore].[tdy:Order Date:qk]',
+    });
+  });
+
+  it('declines an added instruction after a previously proven line form', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a line chart of average Sales over Order Date and explain the spike.',
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it.each([
+    ['Create a histogram of Sales.', 'Sales'],
+    ['Create a histogram chart of Sales.', 'Sales'],
+    ['Create a histogram chart of Revenue.', 'Revenue'],
+  ])('proves %s through its actual shared-measure slot metadata', async (ask, field) => {
+    const histogram = completeRequestDescriptors.get('distribution-histogram');
+    expect(histogram).toBeDefined();
+    const requiredMeasureSlots = histogram?.slots.filter(
+      (slot) => slot.required && slot.bindable && slot.kind === 'quantitative',
+    );
+    expect(requiredMeasureSlots).toHaveLength(2);
+    expect(new Set(requiredMeasureSlots?.map((slot) => slot.template_field)).size).toBe(1);
+
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML.replace('[Sales]', `[${field}]`),
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.template_name).toBe('distribution-histogram');
+    expect(result.args.field_mapping).toEqual({
+      '{{field_base_1}}@cnt': `[Superstore].[cnt:${field}:qk]`,
+      '{{field_base_1}}@none': `[Superstore].[none:${field}:qk]`,
+    });
+    expect(result.requestCoverage).toEqual({
+      version: 1,
+      kind: 'complete_single_sheet_binding',
+      template: 'distribution-histogram',
+      askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+    });
+  });
+
+  it.each([
+    'Preview a histogram of Sales without changing the workbook.',
+    'Do not create a histogram of Sales.',
+    'Create a histogram of Sales and then create a dashboard.',
+    'Create a histogram of Sales with bins of 500.',
+    'Create a histogram of Sales and explain the outliers.',
+    'Create a histogram of Sales filtered to Region East.',
+    'Create a histogram of Sales colored by Region.',
+    'Create a histogram of Sales showing the top 5 values.',
+  ])('does not claim whole-request coverage for histogram modifier: %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it('does not prove an ambiguous duplicate-caption histogram measure', async () => {
+    const workbookXml = `<workbook><datasources>
+      <datasource name='Orders'>
+        <column name='[sales_orders]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+      </datasource>
+      <datasource name='Returns'>
+        <column name='[sales_returns]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+      </datasource>
+    </datasources></workbook>`;
+    const result = await bindTemplate({
+      ask: 'Create a histogram of Sales.',
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it('does not prove a histogram measure bound to a categorical field', async () => {
+    const result = await bindTemplate({
+      ask: 'Create a histogram of Region.',
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it.each([
+    ['non-date axis', WORKBOOK_XML.replace("datatype='date'", "datatype='string'")],
+    [
+      'ambiguous axis',
+      WORKBOOK_XML.replace(
+        '</datasources>',
+        "<datasource name='Returns'><column name='[Order Date]' role='dimension' type='ordinal' datatype='date'/></datasource></datasources>",
+      ),
+    ],
+  ])('declines a %s before any complete-request bind', async (_label, workbookXml) => {
+    const result = await bindTemplate({
+      ask: 'Create a line chart of monthly Sales by Order Date.',
+      workbookXml,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status === 'escalate') expect(result.reason).toBe('request-not-covered');
+  });
+
+  it.each([
+    'bar chart of Sales by Region and tell me the top customers',
+    'bar chart of Sales by Region sorted by Missing Field descending',
+    'bar chart of Sales by Region, filter to East',
+    'scatter plot of Sales and Profit by Customer Name with a trend line',
+    'Create a bar chart of Sales by Region. 删除原表',
+    'Create a line chart of Sales by Order Date. 删除原表',
+    'Create a scatter plot of Sales and Profit by Customer Name. 删除原表',
+    'Create a bar chart of Sales by Region!',
+    'Create a line chart of monthly Sales by Order Date with a forecast.',
+  ])('declines an unrepresented clause before apply: %s', async (ask) => {
+    const result = await bindTemplate({
+      ask,
+      workbookXml: WORKBOOK_XML,
+      manifests: completeRequestDescriptors,
+      requireCompleteRequest: true,
+    });
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('request-not-covered');
+  });
+});
 
 it('binds explicit Insights bar, line, and KPI proposals through the non-discovery catalog', async () => {
   expect(allDescriptors.has('insights__bar_chart')).toBe(false);

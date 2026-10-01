@@ -14,11 +14,8 @@ describe('proposalSchema — strict object contract', () => {
     confidence: 0.9,
   };
 
-  it('tells callers to copy the immediately preceding proposal contract exactly', () => {
-    expect(proposalSchema.description).toContain('Call 2');
-    expect(proposalSchema.description).toContain('returned template/slots');
-    expect(proposalSchema.description).toContain('reuse ask/target');
-    expect(proposalSchema.description).toContain('top-level auto_apply:true');
+  it('points callers to the returned proposal contract and exact field names', () => {
+    expect(proposalSchema.description).toBe('Use call_2_contract.');
     expect(bindingSchema.shape.field.description).toMatch(/exact llm_input\.fields\[\]\.name/i);
   });
 

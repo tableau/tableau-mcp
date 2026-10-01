@@ -33,6 +33,12 @@ describe('listInstancesTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -118,6 +124,45 @@ describe('listInstancesTool', () => {
       ],
       instructions:
         'Use the session ID of the instance you want to use in the session parameter of other tools.',
+    });
+  });
+
+  it('strict scope lists only the target without connection or token metadata', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '77700');
+    mocks.discoverInstances.mockReturnValue([
+      {
+        pid: 26928,
+        baseUrl: 'http://127.0.0.1:8766',
+        token: 'foreign-secret',
+        instanceId: 'foreign-instance',
+        apiVersion: '9.9',
+      },
+      {
+        pid: 77700,
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'target-secret',
+        instanceId: 'target-instance',
+        apiVersion: '1.0',
+      },
+    ]);
+
+    const result = await getToolResult();
+    invariant(result.content[0].type === 'text');
+    const text = result.content[0].text;
+    expect(JSON.parse(text)).toMatchObject({
+      message: 'Found 1 running Tableau Desktop instance (External Client API).',
+      instances: [{ sessionId: '77700', pid: 77700 }],
+      instructions: expect.stringContaining('restricted to this Tableau Desktop session'),
+    });
+    expect(text).not.toContain('26928');
+    expect(text).not.toContain('127.0.0.1');
+    expect(text).not.toContain('foreign-secret');
+    expect(text).not.toContain('instanceId');
+    expect(text).not.toContain('9.9');
+    expect(mocks.discoverInstances).toHaveBeenCalledWith({
+      discoveryDir: undefined,
+      targetPid: 77700,
     });
   });
 });

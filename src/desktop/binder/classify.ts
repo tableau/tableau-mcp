@@ -2766,6 +2766,126 @@ function colorSeriesBinding(
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
 }
 
+type BasicLineSlots = {
+  color: TemplateManifest['slots'][number];
+  measure: TemplateManifest['slots'][number];
+  temporal: TemplateManifest['slots'][number];
+};
+
+function optionalLineSeriesSlots(m: TemplateManifest): BasicLineSlots | null {
+  if (m.family !== 'time-series' || m.calcs.length > 0) return null;
+  const color = m.slots.filter(
+    (slot) =>
+      slot.bindable && !slot.required && slot.kind === 'categorical' && slot.role.includes('color'),
+  );
+  const temporal = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'temporal' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  const measure = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'quantitative' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  if (color.length !== 1 || temporal.length !== 1 || measure.length !== 1) return null;
+  const axisRole = (slot: TemplateManifest['slots'][number]): 'rows' | 'cols' | null => {
+    const roles = (['rows', 'cols'] as const).filter((role) => slot.role.includes(role));
+    return roles.length === 1 ? roles[0] : null;
+  };
+  if (!axisRole(temporal[0]) || axisRole(temporal[0]) === axisRole(measure[0])) return null;
+  const supported = new Set([color[0], temporal[0], measure[0]]);
+  if (m.slots.some((slot) => slot.bindable && !supported.has(slot) && !isFacetSlot(slot))) {
+    return null;
+  }
+  return { color: color[0], measure: measure[0], temporal: temporal[0] };
+}
+
+type BasicLineFieldSpan = {
+  field: SchemaField;
+  start: number;
+  end: number;
+  token: string;
+  acronymGrain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
+};
+
+const BASIC_LINE_GRAINS: Readonly<Record<string, 'tdy' | 'tmn' | 'tqr' | 'tyr'>> = {
+  daily: 'tdy',
+  day: 'tdy',
+  monthly: 'tmn',
+  month: 'tmn',
+  quarterly: 'tqr',
+  quarter: 'tqr',
+  yearly: 'tyr',
+  year: 'tyr',
+};
+
+function basicLineFieldSpans(
+  ask: string,
+  summary: SchemaSummary,
+  filterFields: Set<SchemaField>,
+): BasicLineFieldSpan[] | null {
+  const exactNames = fieldExactNames(summary.fields);
+  const candidates: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  for (const field of summary.fields) {
+    const names = [bareName(field.columnName), field.caption, field.name].filter(
+      (name): name is string => !!name,
+    );
+    for (const name of names) {
+      let cursor = 0;
+      while (cursor < ask.length) {
+        const match = fieldNameMatchInAskSpan(ask.slice(cursor), name, exactNames);
+        if (!match) break;
+        candidates.push({ field, start: cursor + match.start, end: cursor + match.end });
+        cursor += match.end;
+      }
+    }
+    if (candidates.some((candidate) => candidate.field === field)) continue;
+    const expansion = names
+      .map((name) => ACRONYM_EXPANSIONS[name.toLowerCase()])
+      .find((value) => value !== undefined);
+    if (!expansion) continue;
+    const matches = expansion.map((word) => phraseMatchInAsk(ask, word));
+    if (matches.some((match) => match === null)) continue;
+    const start = Math.min(...matches.map((match) => match!.start));
+    const end = Math.max(...matches.map((match) => match!.end));
+    const spanTokens = normalizeFieldPhrase(ask.slice(start, end)).split(' ').sort();
+    if (spanTokens.join(' ') !== [...expansion].sort().join(' ')) continue;
+    const grainWord = expansion.find((word) => BASIC_LINE_GRAINS[word]);
+    candidates.push({
+      field,
+      start,
+      end,
+      ...(grainWord ? { acronymGrain: BASIC_LINE_GRAINS[grainWord] } : {}),
+    });
+  }
+
+  const selected: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  const ordered = candidates.sort(
+    (left, right) => left.start - right.start || right.end - right.start - (left.end - left.start),
+  );
+  for (const candidate of ordered) {
+    if (selected.some((span) => candidate.start < span.end && candidate.end > span.start)) continue;
+    const equalOwners = new Set(
+      ordered
+        .filter((other) => other.start === candidate.start && other.end === candidate.end)
+        .map((other) => other.field),
+    );
+    if (equalOwners.size > 1) return null;
+    selected.push(candidate);
+  }
+  return selected
+    .sort((left, right) => left.start - right.start)
+    .map((span, index) => ({
+      ...span,
+      token: `__${filterFields.has(span.field) ? 'f' : isMeasure(span.field) ? 'q' : TEMPORAL_DATATYPES.has(span.field.datatype) ? 't' : 'c'}${index}__`,
+    }));
+}
+
 export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
 type ClassifiedBinding = { slot_id: string; field: string; derivation?: Derivation };
 
@@ -3477,6 +3597,273 @@ interface NoLlmClassification {
    * optional-encoding analysis ran, including empty arrays when no encoding cue was found.
    */
   encodings?: EncodingReport;
+  completeRequestParse?: ParsedCompleteRequest;
+}
+
+function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): string | null {
+  let typed = ask;
+  for (const span of [...spans].sort((left, right) => right.start - left.start)) {
+    typed = `${typed.slice(0, span.start)} ${span.token} ${typed.slice(span.end)}`;
+  }
+  typed = typed.trim().replace(/\.$/u, '').trim();
+  if (/[^\p{L}\p{N}_\s]/u.test(typed)) return null;
+  return typed.toLowerCase().replace(/\s+/gu, ' ');
+}
+
+type CompleteChartShape = 'single' | 'pair' | 'scatter';
+
+type ParsedCompleteRequest = {
+  ask: string;
+  template: string;
+  shape: CompleteChartShape;
+  fields: SchemaField[];
+  links: string[];
+  grain?: Derivation;
+  aggregation?: Derivation;
+  horizontal: boolean;
+};
+
+function completeChartShape(manifest: TemplateManifest): CompleteChartShape | null {
+  if (!manifest.fast_path_eligible || manifest.fast_path_blockers.length > 0) return null;
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  const optional = manifest.slots.filter((slot) => slot.bindable && !slot.required);
+  const signature = required
+    .map(
+      (slot) => `${slot.kind}:${slot.role.join('+')}:${slot.communicative_role}:${slot.derivation}`,
+    )
+    .sort()
+    .join('|');
+  const noOtherSlots = optional.length === 0;
+  const markClasses = manifest.mark_classes ?? [];
+  const hasOnlyMarkClass = (allowed: readonly string[]): boolean =>
+    markClasses.length === 1 && allowed.includes(markClasses[0]);
+  if (
+    noOtherSlots &&
+    manifest.calcs.length === 1 &&
+    required.length === 2 &&
+    required[0].template_field === required[1].template_field &&
+    signature === 'quantitative:cols:measure-value:none|quantitative:rows:measure-value:cnt' &&
+    hasOnlyMarkClass(['Bar'])
+  )
+    return 'single';
+  if (manifest.calcs.length !== 0) return null;
+  if (
+    noOtherSlots &&
+    (signature === 'categorical:rows:axis-partition:none|quantitative:cols:measure-value:sum' ||
+      signature === 'categorical:cols:axis-partition:none|quantitative:rows:measure-value:sum') &&
+    // Tableau's Automatic mark resolves to bars for this exact discrete-category /
+    // continuous-measure axis structure. Other Automatic shapes remain unproved.
+    hasOnlyMarkClass(['Bar', 'Automatic'])
+  )
+    return 'pair';
+  if (
+    signature === 'quantitative:rows:measure-value:sum|temporal:cols:axis-partition:tmn' &&
+    optional.every(
+      (slot) =>
+        slot.kind === 'categorical' &&
+        slot.role.length === 1 &&
+        slot.role[0] === 'color' &&
+        slot.communicative_role === 'distribution-breakout',
+    ) &&
+    optional.length <= 1 &&
+    hasOnlyMarkClass(['Line'])
+  )
+    return 'pair';
+  if (
+    noOtherSlots &&
+    signature ===
+      'categorical:lod:distribution-breakout:none|quantitative:cols:measure-value:sum|quantitative:rows:measure-value:sum' &&
+    hasOnlyMarkClass(['Circle'])
+  )
+    return 'scatter';
+  return null;
+}
+
+export function isCompleteRequestChartDescriptor(manifest: RuntimeTemplateDescriptor): boolean {
+  return completeChartShape(manifest) !== null;
+}
+
+/** Every non-field word must describe the selected chart and its required fields. */
+function parseCompleteSingleSheetRequest(
+  ask: string,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): ParsedCompleteRequest | null {
+  const shape = completeChartShape(manifest);
+  if (shape === null) return null;
+  const spans = basicLineFieldSpans(ask, summary, new Set());
+  if (!spans) return null;
+  const typed = strictCoveredAskTokens(ask, spans);
+  if (typed === null) return null;
+  let request = typed.replace(/^(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?/u, '');
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  const groups = new Map<string, TemplateManifest['slots']>();
+  for (const slot of required)
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  const describedNoun = manifest.description
+    .split(' ')
+    .filter((word) => word && !['chart', 'plot', 'graph'].includes(word))
+    .at(-1);
+  const namedNouns = matchedKeywords(maskFieldNames(ask, summary), manifest.intent_keywords)
+    .filter((word) => CHART_NOUN_KEYWORDS.has(word.toLowerCase()))
+    .sort((left, right) => right.length - left.length);
+  if (describedNoun && manifest.intent_keywords.includes(describedNoun))
+    namedNouns.push(describedNoun);
+  let grain: Derivation | undefined;
+  let horizontal = false;
+  if (request.startsWith('horizontal ')) {
+    horizontal = true;
+    request = request.slice('horizontal '.length);
+  }
+  const leadingGrain = /^(daily|monthly|quarterly|yearly) /u.exec(request);
+  if (leadingGrain) {
+    grain = BASIC_LINE_GRAINS[leadingGrain[1]];
+    request = request.slice(leadingGrain[0].length);
+  }
+  const noun = namedNouns.find((candidate) =>
+    request.startsWith(`${candidate.toLowerCase().replace(/-/gu, ' ')} `),
+  );
+  let fieldsText: string;
+  if (noun) {
+    const nounStart = `${noun.toLowerCase().replace(/-/gu, ' ')} `;
+    fieldsText = request
+      .slice(nounStart.length)
+      .replace(/^(?:chart|plot|graph) /u, '')
+      .replace(/^of /u, '');
+  } else {
+    const trend = /^(__[qct]\d+__) trend over (__[qct]\d+__)$/u.exec(request);
+    if (!trend || !manifest.intent_keywords.includes('trend')) return null;
+    fieldsText = `${trend[1]} over ${trend[2]}`;
+  }
+  const innerGrain = /^(daily|monthly|quarterly|yearly) /u.exec(fieldsText);
+  if (innerGrain) {
+    if (grain !== undefined) return null;
+    grain = BASIC_LINE_GRAINS[innerGrain[1]];
+    fieldsText = fieldsText.slice(innerGrain[0].length);
+  }
+  let aggregation: Derivation | undefined;
+  const aggregate =
+    /^(distinct count|count distinct|average|avg|median|minimum|min|maximum|max|count|sum) /u.exec(
+      fieldsText,
+    );
+  if (aggregate) {
+    aggregation =
+      aggregate[1] === 'sum'
+        ? 'sum'
+        : AGGREGATION_WORDS.find((item) => item.phrase === aggregate[1])?.deriv;
+    fieldsText = fieldsText.slice(aggregate[0].length);
+  }
+  const pieces = fieldsText.split(/ (and|by|over) /u);
+  if (pieces.length === 0 || pieces.length % 2 === 0) return null;
+  const tokens = pieces.filter((_part, index) => index % 2 === 0);
+  const links = pieces.filter((_part, index) => index % 2 === 1);
+  if (tokens.some((token) => !/^__[qct]\d+__$/u.test(token))) return null;
+  const expectedLinks = shape === 'scatter' ? ['and', 'by'] : shape === 'pair' ? [links[0]] : [];
+  if (
+    tokens.length !== groups.size ||
+    links.length !== expectedLinks.length ||
+    links.some((link, index) => link !== expectedLinks[index]) ||
+    (shape === 'pair' && !['by', 'over'].includes(links[0])) ||
+    (shape === 'single' && (grain !== undefined || aggregation !== undefined || horizontal))
+  )
+    return null;
+  const ordered = tokens.map((token) => spans.find((span) => span.token === token)?.field);
+  if (ordered.some((field) => field === undefined)) return null;
+  const resolved = ordered as SchemaField[];
+  if (
+    (shape === 'single' && !isMeasure(resolved[0])) ||
+    (shape === 'pair' &&
+      (!isMeasure(resolved[0]) || (!isCategorical(resolved[1]) && !isTemporal(resolved[1])))) ||
+    (shape === 'scatter' &&
+      (!isMeasure(resolved[0]) || !isMeasure(resolved[1]) || !isCategorical(resolved[2])))
+  )
+    return null;
+  if (shape === 'pair' && links[0] === 'over' && !isTemporal(resolved[1])) return null;
+  const measureGrain = spans.find((span) => span.token === tokens[0])?.acronymGrain;
+  if (measureGrain && required.some((slot) => slot.kind === 'temporal')) {
+    if (grain && grain !== measureGrain) return null;
+    grain = measureGrain;
+  }
+  if (
+    horizontal &&
+    !required.some((slot) => slot.kind === 'categorical' && slot.role.includes('rows'))
+  )
+    return null;
+  if (grain && !required.some((slot) => slot.kind === 'temporal')) return null;
+  return {
+    ask,
+    template: manifest.template,
+    shape,
+    fields: resolved,
+    links,
+    ...(grain ? { grain } : {}),
+    ...(aggregation ? { aggregation } : {}),
+    horizontal,
+  };
+}
+
+/** Compare the one parsed full request with the actual validated slot bindings. */
+export function provesCompleteSingleSheetRequest(
+  ask: string,
+  classification: NoLlmClassification,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): boolean {
+  if (
+    manifest.template !== classification.template ||
+    (classification.notes?.length ?? 0) > 0 ||
+    classification.top_n !== undefined ||
+    (classification.filters?.length ?? 0) > 0 ||
+    classification.encodings === undefined ||
+    classification.encodings.filled.length > 0 ||
+    classification.encodings.unfilled.length > 0
+  )
+    return false;
+  const parsed = classification.completeRequestParse;
+  if (!parsed || parsed.ask !== ask || parsed.template !== manifest.template) return false;
+  const { shape, fields: resolved, grain, aggregation } = parsed;
+  const groups = new Map<string, TemplateManifest['slots']>();
+  const bindings = new Map(classification.bindings.map((binding) => [binding.slot_id, binding]));
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  if (bindings.size !== required.length || classification.bindings.length !== required.length)
+    return false;
+  for (const slot of required) {
+    if (!bindings.has(slot.slot_id)) return false;
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  }
+  const seen = new Set<string>();
+  for (const [index, field] of resolved.entries()) {
+    const matching = [...groups].filter(([, slots]) =>
+      slots.every((slot) => bindings.get(slot.slot_id)?.field === field.name),
+    );
+    if (matching.length !== 1 || seen.has(matching[0][0])) return false;
+    const [templateField, slots] = matching[0];
+    seen.add(templateField);
+    if (
+      shape === 'scatter' &&
+      !slots.every((slot) =>
+        slot.role.includes(index === 0 ? 'rows' : index === 1 ? 'cols' : 'lod'),
+      )
+    )
+      return false;
+    if (
+      slots.some(
+        (slot) =>
+          (slot.kind === 'quantitative' && !isMeasure(field)) ||
+          (slot.kind === 'categorical' && !isCategorical(field)) ||
+          (slot.kind === 'temporal' && !isTemporal(field)) ||
+          (grain &&
+            slot.kind === 'temporal' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== grain) ||
+          (aggregation &&
+            slot.kind === 'quantitative' &&
+            slot.derivation !== 'none' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== aggregation),
+      )
+    )
+      return false;
+  }
+  return seen.size === groups.size;
 }
 
 /**
@@ -3799,6 +4186,7 @@ export function classifyNoLlm(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
+  requireCompleteRequest = false,
 ): NoLlmClassification | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
@@ -3890,7 +4278,20 @@ export function classifyNoLlm(
   if (histogram?.fast_path_eligible) {
     const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
     if (bindings) {
-      return attachAskModifiers(ask, { template: histogram.template, bindings }, filterCandidates);
+      const completeRequestParse = requireCompleteRequest
+        ? parseCompleteSingleSheetRequest(ask, summary, histogram)
+        : null;
+      if (requireCompleteRequest && completeRequestParse === null) return null;
+      return attachAskModifiers(
+        ask,
+        {
+          template: histogram.template,
+          bindings,
+          encodings: { filled: [], unfilled: [] },
+          ...(completeRequestParse ? { completeRequestParse } : {}),
+        },
+        filterCandidates,
+      );
     }
   }
 
@@ -4080,11 +4481,50 @@ export function classifyNoLlm(
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
+  const completeRequestParse = requireCompleteRequest
+    ? parseCompleteSingleSheetRequest(ask, summary, chosen)
+    : null;
+  if (requireCompleteRequest && completeRequestParse === null) return null;
   // A facet cue wins over series color. Otherwise inspect the full datasource, not
   // only `matched` (which contains ask-named fields): e4 intentionally does not name
   // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
-  const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
-  if (colorSeries) bindings.push(colorSeries);
+  if (requireCompleteRequest) {
+    const lineSlots = optionalLineSeriesSlots(chosen);
+    if (lineSlots) {
+      if (completeRequestParse?.shape !== 'pair') return null;
+      const temporalBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.temporal.slot_id,
+      );
+      const temporalField = temporalBinding
+        ? summary.fields.find((field) => field.name === temporalBinding.field)
+        : undefined;
+      const measureBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.measure.slot_id,
+      );
+      if (
+        !temporalBinding ||
+        !temporalField ||
+        temporalField !== completeRequestParse.fields[1] ||
+        measureBinding?.field !== completeRequestParse.fields[0]?.name
+      )
+        return null;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain &&
+        !['date', 'datetime'].includes(temporalField.datatype)
+      )
+        return null;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain
+      ) {
+        temporalBinding.derivation = completeRequestParse.grain;
+      }
+    }
+  } else {
+    const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+    if (colorSeries) bindings.push(colorSeries);
+  }
   // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(
@@ -4094,6 +4534,7 @@ export function classifyNoLlm(
       bindings,
       ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
       encodings: symbolMapEncodings.encodings,
+      ...(completeRequestParse ? { completeRequestParse } : {}),
     },
     filterCandidates,
   );

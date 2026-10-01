@@ -3,7 +3,23 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-import { DesktopMcpServer, getDesktopToolListEntry } from './server.desktop.js';
+import { getDesktopConfig } from './config.desktop.js';
+import { isCompleteRequestChartDescriptor } from './desktop/binder/classify.js';
+import { buildDesktopInstructions } from './desktop/instructions.js';
+import {
+  getCompleteRequestTemplateIds,
+  loadRuntimeTemplateDescriptors,
+} from './desktop/templates/runtimeTemplateCatalog.js';
+import {
+  BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION,
+  COMPLETE_REQUEST_BIND_CAPABILITY_KEY,
+  COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
+  DesktopMcpServer,
+  getDesktopToolListEntry,
+  STRICT_SESSION_SCOPE_CAPABILITY_KEY,
+  STRICT_SESSION_SCOPE_CAPABILITY_VERSION,
+  STRICT_WORKSPACE_TOOL_PROFILE,
+} from './server.desktop.js';
 import type { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
@@ -66,4 +82,216 @@ describe('getDesktopToolListEntry SDK schema equivalence', () => {
       await sdkServer.close();
     }
   });
+});
+
+describe('Desktop strict-session initialize capability', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each(['standalone', 'shared'] as const)(
+    'advertises the canonical strict target through the actual %s initialize response',
+    async (mode) => {
+      const structurallyEligible = [
+        ...loadRuntimeTemplateDescriptors({
+          automaticOnly: true,
+          includeExternal: false,
+          completeRequestLineColorOptional: true,
+        }).values(),
+      ]
+        .filter(isCompleteRequestChartDescriptor)
+        .map((descriptor) => descriptor.template);
+      expect(structurallyEligible).toEqual(
+        expect.arrayContaining([
+          'ranking-ordered-bar',
+          'trend-line-chart',
+          'correlation-scatter-plot-chart',
+          'distribution-histogram',
+        ]),
+      );
+      expect(structurallyEligible.length).toBeLessThanOrEqual(16);
+      expect(getCompleteRequestTemplateIds()).toEqual(structurallyEligible);
+      expect(BIND_TEMPLATE_COMPLETION_CAPABILITY_VERSION).toBe(2);
+      expect(STRICT_SESSION_SCOPE_CAPABILITY_VERSION).toBe(1);
+      expect(COMPLETE_REQUEST_BIND_CAPABILITY_VERSION).toBe(1);
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '004242');
+      const sharedServer = new McpServer(
+        { name: 'shared', version: '0.0.0' },
+        {
+          instructions: buildDesktopInstructions({
+            sessionPinned: true,
+            sessionScope: 'strict',
+            profile: getDesktopConfig().toolProfile,
+          }),
+        },
+      );
+      const desktopServer =
+        mode === 'standalone'
+          ? new DesktopMcpServer()
+          : new DesktopMcpServer({ mcpServer: sharedServer });
+      const sdkServer = mode === 'standalone' ? desktopServer.mcpServer : sharedServer;
+      const client = new Client({ name: 'strict-capability-client', version: '0.0.0' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+      try {
+        await sdkServer.connect(serverTransport);
+        await client.connect(clientTransport);
+
+        expect(client.getServerCapabilities()?.experimental).toEqual({
+          [STRICT_SESSION_SCOPE_CAPABILITY_KEY]: {
+            version: STRICT_SESSION_SCOPE_CAPABILITY_VERSION,
+            mode: 'strict',
+            sessionId: '4242',
+          },
+          tableauDesktopBindTemplateCompletion: {
+            version: 2,
+            tool: 'bind-template',
+            resultKind: 'single_sheet_apply',
+          },
+          [COMPLETE_REQUEST_BIND_CAPABILITY_KEY]: {
+            version: COMPLETE_REQUEST_BIND_CAPABILITY_VERSION,
+            tool: 'bind-template',
+            templates: structurallyEligible,
+          },
+        });
+      } finally {
+        await client.close();
+        await sdkServer.close();
+      }
+    },
+  );
+
+  it('does not add the strict-session capability in ordinary mode', async () => {
+    const desktopServer = new DesktopMcpServer();
+    const client = new Client({ name: 'ordinary-capability-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getServerCapabilities()?.experimental).toBeUndefined();
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('does not advertise bind capabilities when the selected profile omits bind-template', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv('TOOL_PROFILE', 'spec-loop');
+    const desktopServer = new DesktopMcpServer();
+    const client = new Client({ name: 'strict-spec-loop-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const experimental = client.getServerCapabilities()?.experimental;
+      expect(experimental).toHaveProperty(STRICT_SESSION_SCOPE_CAPABILITY_KEY);
+      expect(experimental).not.toHaveProperty('tableauDesktopBindTemplateCompletion');
+      expect(experimental).not.toHaveProperty(COMPLETE_REQUEST_BIND_CAPABILITY_KEY);
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('registers only bind-template and audited reads for an exact strict workspace', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv(
+      'TABLEAU_DESKTOP_EXPECTED_WORKSPACE',
+      JSON.stringify({ workbookTitle: 'Sales', sheetId: 'sheet-1', sheetName: 'Overview' }),
+    );
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const desktopServer = new DesktopMcpServer();
+    await desktopServer.registerTools();
+    const client = new Client({ name: 'strict-workspace-tools-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const tools = (await client.listTools()).tools;
+      expect(tools.map(({ name }) => name).sort()).toEqual(
+        [...STRICT_WORKSPACE_TOOL_PROFILE].sort(),
+      );
+      expect(
+        tools
+          .filter(({ name }) => name !== 'bind-template')
+          .every(({ annotations }) => annotations?.readOnlyHint === true),
+      ).toBe(true);
+      expect(tools.filter(({ name }) => name !== 'bind-template')).not.toEqual([]);
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it('keeps the selected profile unchanged for strict scope without an exact workspace', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const desktopServer = new DesktopMcpServer();
+    await desktopServer.registerTools();
+    const client = new Client({ name: 'strict-session-tools-client', version: '0.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await desktopServer.mcpServer.connect(serverTransport);
+      await client.connect(clientTransport);
+      const names = (await client.listTools()).tools.map(({ name }) => name);
+      expect(names).toContain('bind-template');
+      expect(names).toContain('execute-tableau-command');
+      expect(names).toContain('apply-workbook');
+    } finally {
+      await client.close();
+      await desktopServer.mcpServer.close();
+    }
+  });
+
+  it.each(['standalone', 'shared'] as const)(
+    'advertises an exact workspace guard in %s strict mode without changing the completion capability',
+    async (mode) => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_SCOPE', 'strict');
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      const target = { workbookTitle: 'Sales', sheetId: 'sheet-1', sheetName: 'Overview' };
+      vi.stubEnv('TABLEAU_DESKTOP_EXPECTED_WORKSPACE', JSON.stringify(target));
+      const sharedServer = new McpServer(
+        { name: 'shared', version: '0.0.0' },
+        {
+          instructions: buildDesktopInstructions({
+            sessionPinned: true,
+            sessionScope: 'strict',
+            profile: getDesktopConfig().toolProfile,
+          }),
+        },
+      );
+      const desktopServer =
+        mode === 'standalone'
+          ? new DesktopMcpServer()
+          : new DesktopMcpServer({ mcpServer: sharedServer });
+      const sdkServer = mode === 'standalone' ? desktopServer.mcpServer : sharedServer;
+      const client = new Client({ name: 'workspace-capability-client', version: '0.0.0' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      try {
+        await sdkServer.connect(serverTransport);
+        await client.connect(clientTransport);
+        expect(client.getServerCapabilities()?.experimental).toMatchObject({
+          tableauDesktopBindTemplateCompletion: {
+            version: 2,
+            tool: 'bind-template',
+            resultKind: 'single_sheet_apply',
+          },
+          tableauDesktopWorkspaceGuard: { version: 1, target },
+        });
+      } finally {
+        await client.close();
+        await sdkServer.close();
+      }
+    },
+  );
 });

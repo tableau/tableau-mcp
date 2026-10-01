@@ -197,7 +197,10 @@ function communicativeRole(
  * rows/cols/mark encodings for placement, and decomposes placed calcs to their base
  * inputs. `kind: 'unknown'` fields are SKIPPED (counted, never guessed).
  */
-export function inferFromBookmark(rawXml: string): Inference {
+export function inferFromBookmark(
+  rawXml: string,
+  options: { plainTemporalLineColorOptional?: boolean } = {},
+): Inference {
   const { all, attr } = parseBookmarkDom(rawXml);
   const rootLayoutOptions = all('layout-options').filter(
     (layout) => layout.parentNode?.nodeName === 'bookmark',
@@ -532,6 +535,63 @@ export function inferFromBookmark(rawXml: string): Inference {
       kindOf(cols.get(e.base)) !== 'unknown',
   );
 
+  // A plain temporal line stays meaningful when its sole color breakout is pruned.
+  // Keep this structural: every extra axis, mark, partitioning encoding, or calc restores
+  // the general LOD rule.
+  const authoredMarks = placementElements('mark').filter((mark) => attr(mark, 'class'));
+  const directAxisPlacements = placed.filter(
+    (placement) => placement.shelves.has('rows') || placement.shelves.has('cols'),
+  );
+  const rowAxisPlacements = directAxisPlacements.filter((placement) =>
+    placement.shelves.has('rows'),
+  );
+  const columnAxisPlacements = directAxisPlacements.filter((placement) =>
+    placement.shelves.has('cols'),
+  );
+  const aggregateQuantitativeAxis = directAxisPlacements.filter(
+    (placement) =>
+      slotKindOf(cols.get(placement.base), placement.derivation) === 'quantitative' &&
+      AGGREGATE_DERIVATIONS.has(placement.derivation) &&
+      placement.instanceRoles.size === 1 &&
+      placement.instanceRoles.has('qk'),
+  );
+  const temporalAxis = directAxisPlacements.filter(
+    (placement) =>
+      slotKindOf(cols.get(placement.base), placement.derivation) === 'temporal' &&
+      placement.instanceRoles.size === 1 &&
+      placement.instanceRoles.has('qk'),
+  );
+  const disaggregatedNonAxisPartitioners = placed.filter(
+    (placement) =>
+      !placement.shelves.has('rows') &&
+      !placement.shelves.has('cols') &&
+      !AGGREGATE_DERIVATIONS.has(placement.derivation) &&
+      [...placement.shelves].some((shelf) => !NON_PARTITIONING_SHELVES.has(shelf)),
+  );
+  const lineSeriesColor = disaggregatedNonAxisPartitioners.find(
+    (placement) =>
+      slotKindOf(cols.get(placement.base), placement.derivation) === 'categorical' &&
+      placement.derivation === 'none' &&
+      placement.instanceRoles.size === 1 &&
+      placement.instanceRoles.has('nk') &&
+      placement.shelves.size === 1 &&
+      placement.shelves.has('color'),
+  );
+  const plainTemporalLineSeriesColorKey =
+    authoredMarks.length === 1 &&
+    attr(authoredMarks[0], 'class') === 'Line' &&
+    directAxisPlacements.length === 2 &&
+    rowAxisPlacements.length === 1 &&
+    columnAxisPlacements.length === 1 &&
+    aggregateQuantitativeAxis.length === 1 &&
+    temporalAxis.length === 1 &&
+    disaggregatedNonAxisPartitioners.length === 1 &&
+    lineSeriesColor === disaggregatedNonAxisPartitioners[0] &&
+    placedCalcs.length === 0 &&
+    tableCalcByBase.size === 0
+      ? pairKey(lineSeriesColor.base, lineSeriesColor.derivation)
+      : undefined;
+
   const slots: InferredSlot[] = [];
   const seen = new Set<string>();
   let unknownCount = 0;
@@ -572,7 +632,9 @@ export function inferFromBookmark(rawXml: string): Inference {
     // required/role are unchanged — placement already governs them).
     const tcRole = addressingRole.get(e.base);
     const tableCalc = tableCalcByBase.get(e.base);
-    const required = affectsLod || definesDisplay || !!tcRole;
+    const plainTemporalLineSeriesColor =
+      options.plainTemporalLineColorOptional === true && key === plainTemporalLineSeriesColorKey;
+    const required = (affectsLod && !plainTemporalLineSeriesColor) || definesDisplay || !!tcRole;
     slots.push({
       slot_id: multiDeriv ? `${baseId}_${e.derivation}` : baseId,
       sourceField: e.base,
@@ -631,6 +693,7 @@ export function inferFromBookmark(rawXml: string): Inference {
   return {
     slots,
     calcs,
+    markClasses: authoredMarks.map((mark) => attr(mark, 'class')).filter(Boolean),
     unknownCount,
     donorCaptions: [...cols.values()].map((c) => c.caption).filter(Boolean),
     donorDatasources: [

@@ -17,11 +17,17 @@ import { ValidationIssue } from '../validation/types.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { sourceSha256 } from './cacheFingerprint.js';
+import {
+  type ExpectedWorkspaceIdentity,
+  matchesExpectedWorkspaceIdentity,
+} from './expectedWorkspaceIdentity.js';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
   | { type: 'workbook-drift'; message?: string }
+  | { type: 'workspace-identity-mismatch' }
+  | { type: 'workspace-identity-unavailable' }
   // The workbook document POST reported transport-level completion, but Tableau
   // rejected the actual document load (e.g. "Qualified Name Parse Error").
   // `message` carries Desktop's own error text.
@@ -36,6 +42,10 @@ export interface LoadWorkbookXmlOk {
 
 export function describeLoadWorkbookXmlError(error: LoadWorkbookXmlError): string {
   if (error.type === 'workbook-drift') return 'The workbook changed before the authoring write.';
+  if (error.type === 'workspace-identity-mismatch')
+    return 'The Desktop workspace no longer matches the requested workbook and active worksheet.';
+  if (error.type === 'workspace-identity-unavailable')
+    return 'The Desktop workspace could not be confirmed before the authoring write.';
   if (error.type === 'load-rejected') return error.message;
   if (error.type === 'validation-failed') {
     return error.issues.map((issue) => issue.message).join('; ');
@@ -54,6 +64,7 @@ export async function loadWorkbookXml({
   baselineXml,
   expectedWorkbookXml,
   expectedSourceHash,
+  expectedWorkspaceIdentity,
   cachedLiveRelative,
   focus,
   applyOptions,
@@ -65,6 +76,7 @@ export async function loadWorkbookXml({
   baselineXml?: string;
   expectedWorkbookXml?: string;
   expectedSourceHash?: string;
+  expectedWorkspaceIdentity?: ExpectedWorkspaceIdentity;
   cachedLiveRelative?: boolean;
   focus: ApplyFocus;
   applyOptions?: ApplyWorkbookDocumentOptions;
@@ -145,6 +157,30 @@ export async function loadWorkbookXml({
           issues: validation.issues.filter((issue) => issue.severity !== 'error'),
         };
         logValidationWarnings(validation.issues);
+      }
+    }
+
+    if (expectedWorkspaceIdentity !== undefined) {
+      let workbook;
+      try {
+        workbook = await executor.getWorkbook(signal);
+      } catch {
+        return Err({
+          type: 'load-workbook-xml-error',
+          error: { type: 'workspace-identity-unavailable' },
+        });
+      }
+      if (workbook.isErr()) {
+        return Err({
+          type: 'load-workbook-xml-error',
+          error: { type: 'workspace-identity-unavailable' },
+        });
+      }
+      if (!matchesExpectedWorkspaceIdentity(workbook.value, expectedWorkspaceIdentity)) {
+        return Err({
+          type: 'load-workbook-xml-error',
+          error: { type: 'workspace-identity-mismatch' },
+        });
       }
     }
 
