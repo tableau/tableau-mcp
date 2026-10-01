@@ -170,9 +170,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
               }
 
               const destination =
-                personalSpace !== undefined
-                  ? { location: personalSpace.luid }
-                  : { projectId };
+                personalSpace !== undefined ? { location: personalSpace.luid } : { projectId };
 
               let publishedWorkbook: Workbook;
               try {
