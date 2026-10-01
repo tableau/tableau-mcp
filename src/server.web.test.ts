@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
+  mockRunningAsSea: vi.fn(() => false),
+  mockReadSeaAssetText: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockCheckRegistrationConditions: vi.fn(),
@@ -58,6 +60,12 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./utils/sea.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/sea.js')>()),
+  runningAsSea: mocks.mockRunningAsSea,
+  readSeaAssetText: mocks.mockReadSeaAssetText,
+}));
+
 vi.mock('./tools/web/adminGate.js', () => ({
   getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
   assertAdmin: mocks.mockAssertAdmin,
@@ -84,6 +92,8 @@ describe('server', () => {
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockRunningAsSea.mockReset().mockReturnValue(false);
+    mocks.mockReadSeaAssetText.mockReset();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
     mocks.mockCheckRegistrationConditions
@@ -111,6 +121,7 @@ describe('server', () => {
 
   function createMockAppTool(opts?: {
     hideWhenUnsupported?: boolean;
+    htmlPath?: string;
     name?: WebToolName;
   }): WebTool<any> {
     return {
@@ -136,7 +147,7 @@ describe('server', () => {
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
-        htmlPath: '<html><body>Test App UI</body></html>',
+        htmlPath: opts?.htmlPath ?? 'web/apps/dist/mcp-app.html',
         ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
@@ -608,6 +619,13 @@ describe('server', () => {
 
     const result = await readCallback();
 
+    expect(mocks.mockReadFile).toHaveBeenCalledWith(
+      expect.stringMatching(/web[\\/]apps[\\/]dist[\\/]mcp-app\.html$/),
+      'utf-8',
+    );
+    expect(mocks.mockReadSeaAssetText).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html><body>Test App UI</body></html>');
+
     expect(result.contents[0]._meta).toEqual({
       ui: {
         csp: {
@@ -635,6 +653,41 @@ describe('server', () => {
         },
       },
     });
+  });
+
+  it('reads app resources from the embedded asset when running as a SEA', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue('<html>embedded app</html>');
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    const result = await readCallback();
+
+    expect(mocks.mockReadSeaAssetText).toHaveBeenCalledWith('web/apps/dist/mcp-app.html');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html>embedded app</html>');
+  });
+
+  it('fails closed when a SEA app resource is missing instead of falling back to disk', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue(null);
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    await expect(readCallback()).rejects.toThrow(
+      "SEA app resource 'web/apps/dist/mcp-app.html' is missing or unreadable",
+    );
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
   });
 
   it.each([

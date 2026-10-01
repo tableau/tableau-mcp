@@ -13,9 +13,11 @@ export const MANIFEST_KEY = 'asset-manifest.json';
 export const DESKTOP_ASSET_DIRS: readonly string[] = ['resources/desktop', 'desktop/data'];
 
 // Single files (build-root relative) embedded into every SEA blob regardless of variant.
-// features.json is read by ServerFeatureGate at startup; a SEA has no filesystem next to
-// the binary, so it must ride in the blob or the feature gate loads with all features off.
-export const ALWAYS_EMBEDDED_FILES: readonly string[] = ['features.json'];
+export const ALWAYS_EMBEDDED_FILES: readonly string[] = [
+  'features.json',
+  'web/apps/dist/mcp-app.html',
+  'web/apps/dist/hitl-confirm.html',
+];
 
 async function walkFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
