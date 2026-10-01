@@ -48,11 +48,11 @@ AI never sees raw HTTP — it just sees the tool interface.
 
 Not every API endpoint makes a good MCP tool. Ask these questions first:
 
-| Question                                                                                                    | Why It Matters                                                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Question                                                                                                    | Why It Matters                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Does a user or agent have a reason to invoke this in a conversational flow or as part of an automation?** | Tools should solve real problems among all of our user personas (Business User, Analyst, Admin, and Data Steward). An API that only matters during system setup may not be a good fit. |
-| **Is the API available on Tableau Cloud and/or Server REST API?**                                           | The MCP server authenticates through Tableau's REST API session. Your API must be callable with a REST API session token (`X-Tableau-Auth`).                                            |
-| **Is the response bounded and predictable?**                                                                | A tool that returns 50,000 rows is difficult for an Agent to deal with. Good tools have pagination, filtering, or natural result limits.                                                |
+| **Is the API available on Tableau Cloud and/or Server REST API?**                                           | The MCP server authenticates through Tableau's REST API session. Your API must be callable with a REST API session token (`X-Tableau-Auth`).                                           |
+| **Is the response bounded and predictable?**                                                                | A tool that returns 50,000 rows is difficult for an Agent to deal with. Good tools have pagination, filtering, or natural result limits.                                               |
 
 ## How Tools Work in This Codebase
 
@@ -61,7 +61,7 @@ to onboarding yours.
 
 ### Anatomy of a Tool
 
-A tool is a TypeScript file that exports a **factory function**. The factory creates a `Tool`
+A web tool is a TypeScript file that exports a **factory function**. The factory creates a `WebTool`
 instance with four key parts:
 
 ```
@@ -134,15 +134,17 @@ likely to select it correctly.
 
 ### Tool Grouping
 
-Tools are organized into **groups** that represent feature areas:
+Tools are organized into **groups** that represent feature areas. The current groups are defined in
+`src/tools/web/toolName.ts`:
 
-| Group                 | Feature Area                                                       |
-| --------------------- | ------------------------------------------------------------------ |
-| `datasource`          | Data Q&A — listing, inspecting, and querying published datasources |
-| `workbook`            | Workbook exploration                                               |
-| `view`                | View data and image retrieval                                      |
-| `pulse`               | Tableau Pulse metric definitions, metrics, insights                |
-| `content-exploration` | Cross-content search                                               |
+| Groups                                         | Feature Areas                                            |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `datasource`, `workbook`, `project`, `view`    | Tableau content discovery and retrieval                  |
+| `authoring`, `content`, `data-apps`            | Content creation, publishing, deletion, and app creation |
+| `flow`, `tasks`, `jobs`                        | Tableau Prep flows and asynchronous work                 |
+| `pulse`, `insights`, `admin-insights`          | Pulse and analytics insights                             |
+| `users`, `token-management`                    | User and authorization management                        |
+| `content-exploration`, `knowledge`, `mcp-apps` | Search, knowledge, and interactive MCP experiences       |
 
 If your feature fits into an existing group, add your tool there. If it represents an entirely new
 capability, propose a new group name.
@@ -280,19 +282,21 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { useRestApi } from '../../restApiInstance.js';
-import { Server } from '../../server.js';
-import { Tool } from '../tool.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
+import { WebMcpServer } from '../../../server.web.js';
+import { WebTool } from '../tool.js';
 
 const paramsSchema = {
   resourceId: z.string().describe('The LUID of the resource'),
   includeDetails: z.boolean().optional().describe('Include extended details'),
 };
 
-export const getMyNewTool = (server: Server): Tool<typeof paramsSchema> => {
-  const myNewTool = new Tool({
+export const getMyNewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const myNewTool = new WebTool({
     server,
     name: 'my-new-tool',
+    minRequiredRole: SiteRole.VIEWER,
     description: `
 Retrieves details about [your resource] using the Tableau REST API.
 Use this tool when a user asks about [specific use case].
@@ -308,6 +312,8 @@ Use this tool when a user asks about [specific use case].
     annotations: {
       title: 'My New Tool',
       readOnlyHint: true, // true if it doesn't modify data
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ resourceId, includeDetails }, extra): Promise<CallToolResult> => {
@@ -364,21 +370,20 @@ export const webToolFactories = [
 
 ### Step 7: Write Tests
 
-Create `myNewTool.test.ts` alongside your tool. The project uses **Vitest** (not Jest). Unit tests
-mock the REST API and verify your tool's behavior:
+Create `myNewTool.test.ts` alongside your tool. The project uses **Vitest** (not Jest), with its
+test APIs configured as globals. Unit tests mock the REST API and verify your tool's behavior:
 
 ```typescript
-import { describe, expect, it, vi } from 'vitest';
-import { Provider } from '../../utils/provider.js';
+import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getMyNewTool } from './myNewTool.js';
-import { Server } from '../../server.js';
 
 const mockUseRestApi = vi.hoisted(() => vi.fn());
-vi.mock('../../restApiInstance.js', () => ({ useRestApi: mockUseRestApi }));
+vi.mock('../../../restApiInstance.js', () => ({ useRestApi: mockUseRestApi }));
 
 describe('my-new-tool', () => {
-  const tool = getMyNewTool(new Server());
+  const tool = getMyNewTool(new WebMcpServer());
   const callback = Provider.from(tool.callback);
 
   it('returns resource data on success', async () => {
@@ -395,7 +400,7 @@ Run tests with:
 
 ```bash
 # All unit tests
-npm test
+npx vitest run --config ./vitest.config.ts
 
 # Just your tool
 npx vitest run src/tools/web/myNewTool/myNewTool.test.ts
@@ -407,10 +412,8 @@ npx vitest src/tools/web/myNewTool/myNewTool.test.ts
 ### Step 8: Build and Verify
 
 ```bash
-npm run build          # Must compile without errors
-npx tsc --noEmit       # Type-check
-npx eslint src/        # Lint
-npm test               # All unit tests pass
+scripts/agent-check # Lint, type-check, and run all unit tests
+npm run build       # Build all production variants
 ```
 
 ## Common Patterns You'll Encounter
@@ -431,9 +434,9 @@ project, tag, or LUID, implement a constrain function.
 
 ### Error Handling
 
-You generally don't need to write error handling code. The `logAndExecute` method on the base `Tool`
-class catches exceptions, extracts HTTP status codes, logs failures, records telemetry, and returns
-structured error messages to the AI.
+You generally don't need to write error handling code. The `logAndExecute` method inherited by
+`WebTool` catches exceptions, extracts HTTP status codes, logs failures, records telemetry, and
+returns structured error messages to the AI.
 
 When your tool needs to return a domain-specific error (e.g., a resource isn't allowed by bounded
 context, or a feature is disabled), return an `McpToolError` subclass from
@@ -441,7 +444,7 @@ context, or a feature is disabled), return an `McpToolError` subclass from
 `getErrorText()`:
 
 ```typescript
-import { FeatureDisabledError, DatasourceNotAllowedError } from '../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError, FeatureDisabledError } from '../../../errors/mcpToolError.js';
 
 // Inside your callback:
 if (!isFeatureEnabled) {
@@ -477,13 +480,13 @@ AI's context window is finite, so every token counts.
 - [ ] Unit tests cover success, empty-result, and error paths
 - [ ] `npm run build` succeeds
 - [ ] `npx tsc --noEmit` has no type errors
-- [ ] `npx eslint src/` passes
-- [ ] `npm test` passes
+- [ ] `npm run lint` passes
+- [ ] `npx vitest run --config ./vitest.config.ts` passes
 - [ ] Tool documentation page added in `docs/docs/tools/`
 
 ## Getting Help
 
 - **Slack:** `#tab-dev-mcp-project` (internal Tableau employees only) or `#tableau-ai-solutions`
   (public channel for the community)
-- **Codebase reference:** Look at `src/tools/web/datasources/` for a straightforward read-only
-  tool, or `src/tools/web/pulse/` for a group of related tools
+- **Codebase reference:** Look at `src/tools/web/datasources/` for a straightforward read-only tool,
+  or `src/tools/web/pulse/` for a group of related tools

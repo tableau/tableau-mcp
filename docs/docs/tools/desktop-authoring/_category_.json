@@ -1,0 +1,8 @@
+{
+  "label": "Desktop Authoring",
+  "position": 16,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for inspecting and updating the workbook open in Tableau Desktop."
+  }
+}
