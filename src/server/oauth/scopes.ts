@@ -165,15 +165,11 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 
 /**
- * Tableau API scopes for the `publish-workbook` tool. Like `get-flow`, the tool composes its
- * per-call scope set from these constants rather than passing the static maximum: Tableau Connected
- * Apps reject a JWT that requests an un-granted scope, so an explicit-`projectId` call (which never
- * touches Personal Space) must not request the personal-space scope, or it would break sign-in for
- * every deployment that never granted it. `PUBLISH_WORKBOOK_BASE_API_SCOPES` is always required; the
- * personal-space scope is added only on the auto-default path (when `projectId` is omitted).
- *
- * The maximum set (`toolScopeMap['publish-workbook'].api`, used for the MCP-layer OAuth gate) is
- * composed from these same constants, so there is a single source of truth.
+ * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
+ * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
+ * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * simplicity over narrowing the blast radius.
  */
 export const PUBLISH_WORKBOOK_BASE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
@@ -256,8 +252,7 @@ const toolScopeMap: Record<
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    // Maximum scope surface for the MCP-layer OAuth gate, composed from the same constants
-    // publish-workbook uses to build its per-call minimum set (single source of truth).
+    // Composed from the named constants above (single source of truth) rather than duplicated.
     api: new Set([...PUBLISH_WORKBOOK_BASE_API_SCOPES, PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE]),
   },
   'list-projects': {

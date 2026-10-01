@@ -504,8 +504,6 @@ describe('scopes', () => {
     it('should require base publish scopes plus content read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
-      // content:read is the max-surface personal-space scope; the tool requests it per-call only
-      // when projectId is omitted (see publishWorkbook.ts), but the static gate advertises it.
       expect(scopes).toEqual([
         'tableau:workbooks:create',
         'tableau:file_uploads:create',

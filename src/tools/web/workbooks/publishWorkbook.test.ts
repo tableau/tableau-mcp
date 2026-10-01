@@ -627,7 +627,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('requests the content:read scope only when projectId is omitted', async () => {
+  it('always requests the full publish-workbook scope set regardless of projectId', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -655,6 +655,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
+      'tableau:content:read',
     ]);
   });
 

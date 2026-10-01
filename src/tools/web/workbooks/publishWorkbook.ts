@@ -21,11 +21,6 @@ import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
-import {
-  PUBLISH_WORKBOOK_BASE_API_SCOPES,
-  PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE,
-  TableauApiScope,
-} from '../../../server/oauth/scopes.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
@@ -134,18 +129,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
             assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
           }
 
-          // Compute the JWT scopes actually needed for THIS call. The tool's static max set
-          // advertises the personal-space scope for the MCP-layer gate, but Connected Apps reject
-          // a JWT requesting an un-granted scope, so an explicit-projectId call (which never
-          // touches Personal Space) must not request it.
-          const tableauApiScopes: TableauApiScope[] = [...PUBLISH_WORKBOOK_BASE_API_SCOPES];
-          if (!projectId) {
-            tableauApiScopes.push(PUBLISH_WORKBOOK_PERSONAL_SPACE_API_SCOPE);
-          }
-
           const result = await useRestApi<Result<PublishWorkbookResult, McpToolError>>({
             ...extra,
-            jwtScopes: tableauApiScopes,
+            jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
               // Resolve Personal Space up front on the auto-default path so a read-only or
               // unresolvable space fails before uploading anything.
