@@ -67,7 +67,6 @@ export function stripDonorCurrencyOrLocaleFormats(
   return new XMLSerializer().serializeToString(document);
 }
 
-/** Escape the five XML metacharacters (identical to the inject-template tool). */
 /**
  * xmldom >=0.9 (this repo ships 0.9.10) throws NamespaceError serializing user:*
  * attributes with no xmlns:user in scope; templates are workbook fragments that
