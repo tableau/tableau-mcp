@@ -34,7 +34,7 @@ Create a `features.json` file in the project root:
 ```typescript
 import { getFeatureGate } from './features/init.js';
 
-if (getFeatureGate().isFeatureEnabled('mcp-apps')) {
+if (await getFeatureGate().isFeatureEnabled('mcp-apps')) {
   // MCP Apps logic here
 }
 ```
@@ -49,5 +49,5 @@ if (getFeatureGate().isFeatureEnabled('mcp-apps')) {
 ## Adding a New Feature Flag
 
 1. Add the feature name and default value to `features.json` (for server provider)
-2. Use `getFeatureGate().isFeatureEnabled('your-feature')` in your code
+2. Use `await getFeatureGate().isFeatureEnabled('your-feature')` in your code
 3. No code changes needed to enable/disable - just update the JSON file (server provider) or the custom provider's configuration (custom provider)
