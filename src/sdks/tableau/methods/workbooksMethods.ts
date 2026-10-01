@@ -197,6 +197,35 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Modifies the project of the specified workbook (i.e. moves it between projects).
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbooks:update`
+   *
+   * @param workbookId - The ID of the workbook to update.
+   * @param siteId - The Tableau site ID
+   * @param projectId - The ID of the project to move the workbook into.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
+   */
+  updateWorkbook = async ({
+    workbookId,
+    siteId,
+    projectId,
+  }: {
+    workbookId: string;
+    siteId: string;
+    projectId: string;
+  }): Promise<Partial<Workbook>> => {
+    const { workbook } = await this._apiClient.updateWorkbook(
+      { workbook: { project: { id: projectId } } },
+      {
+        params: { siteId, workbookId },
+        ...this.authHeader,
+      },
+    );
+    return workbook;
+  };
+
+  /**
    * Publishes a workbook on the specified site, committing a file previously uploaded
    * via `validateWorkbookAndUpload`.
    * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the

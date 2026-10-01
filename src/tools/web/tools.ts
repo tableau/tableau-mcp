@@ -48,6 +48,7 @@ import { getListViewsTool } from './views/listViews.js';
 import { getDownloadWorkbookTool } from './workbooks/downloadWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getMoveWorkbookTool } from './workbooks/moveWorkbook.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
@@ -88,6 +89,7 @@ export const webToolFactories = [
   getGetWorkbookTool,
   getRequestWorkbookUploadTool,
   getPublishWorkbookTool,
+  getMoveWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,

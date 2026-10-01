@@ -91,6 +91,38 @@ describe('WorkbooksMethods', () => {
     });
   });
 
+  describe('updateWorkbook', () => {
+    it('PUTs the new project id and returns the partial updated workbook', async () => {
+      const mockUpdateWorkbook = vi.fn().mockResolvedValue({
+        workbook: { id: 'wb-1', project: { id: 'project-2', name: 'Target Project' } },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        updateWorkbook: mockUpdateWorkbook,
+      };
+
+      const result = await workbooksMethods.updateWorkbook({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+        projectId: 'project-2',
+      });
+
+      expect(result).toEqual({ id: 'wb-1', project: { id: 'project-2', name: 'Target Project' } });
+      expect(mockUpdateWorkbook).toHaveBeenCalledWith(
+        { workbook: { project: { id: 'project-2' } } },
+        {
+          params: { siteId: 'site-1', workbookId: 'wb-1' },
+          headers: { Authorization: 'Bearer test' },
+        },
+      );
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({

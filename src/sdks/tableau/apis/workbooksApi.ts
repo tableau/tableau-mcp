@@ -102,12 +102,37 @@ const queryWorkbookConnectionsEndpoint = makeEndpoint({
   }),
 });
 
+/**
+ * Update Workbook
+ * PUT /api/api-version/sites/site-id/workbooks/workbook-id
+ * Modifies the project of the specified workbook.
+ * Tableau Cloud scope: tableau:workbooks:update
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
+ */
+const updateWorkbookEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/workbooks/:workbookId',
+  alias: 'updateWorkbook',
+  description: 'Modifies the project of the specified workbook.',
+  parameters: [
+    { name: 'siteId', type: 'Path', schema: z.string() },
+    { name: 'workbookId', type: 'Path', schema: z.string() },
+    {
+      name: 'body',
+      type: 'Body',
+      schema: z.object({ workbook: z.object({ project: z.object({ id: z.string() }) }) }),
+    },
+  ],
+  response: z.object({ workbook: workbookSchema.partial() }),
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   queryWorkbookConnectionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  updateWorkbookEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

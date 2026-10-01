@@ -237,6 +237,39 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:workbook:create');
     });
 
+    it('should exclude tableau:mcp:workbook:write when authoring-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(claudeClientId);
+      expect(scopes).not.toContain('tableau:mcp:workbook:write');
+    });
+
+    it('should include tableau:mcp:workbook:write when authoring-tools is enabled for a non-Slack client', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(claudeClientId);
+      expect(scopes).toContain('tableau:mcp:workbook:write');
+    });
+
+    it('should exclude tableau:mcp:workbook:write when authoring-tools is enabled for Slack', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(slackClientId);
+      expect(scopes).not.toContain('tableau:mcp:workbook:write');
+    });
+
     it('should always include other MCP scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -805,6 +838,25 @@ describe('scopes', () => {
       } as any);
 
       await expect(isValidScope('tableau:mcp:workbook:create', slackClientId)).resolves.toBe(false);
+    });
+
+    it('should return false for tableau:mcp:workbook:write when authoring-tools is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(false);
+    });
+
+    it('should return true for tableau:mcp:workbook:write when authoring-tools is enabled for a non-Slack client', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(true);
     });
 
     it('should return false for invalid scopes', async () => {
