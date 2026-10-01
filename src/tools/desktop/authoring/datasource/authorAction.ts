@@ -123,7 +123,7 @@ type AuthorActionResult = AuthorActionResultBase &
         // clear-selection, if any — both echoed back from the applied XML.
         sourceFieldAggregation: string;
         clearValue?: string;
-        onClear?: z.infer<typeof onClearSchema>;
+        onClear: z.infer<typeof onClearSchema>;
       }
     | {
         mode: 'set';
@@ -868,7 +868,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             target,
             targetParameter: target,
             sourceFieldAggregation: effectiveAggregation,
-            clearValue: effectiveClearValue,
+            onClear: encodedClearValue === undefined ? 'keep-current' : 'set-value',
+            clearValue: encodedClearValue === undefined ? undefined : effectiveClearValue,
             hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
           });
         },
@@ -1090,6 +1091,11 @@ export function resolveClearOption(
   datatype: string | undefined,
   clearValue: string | undefined,
 ): Result<string | undefined, ArgsValidationError> {
+  if (onClear === 'set-value' && clearValue === undefined) {
+    return new ArgsValidationError(
+      'onClear=set-value requires clearValue. Pass an explicit empty string to reset a string parameter to empty.',
+    ).toErr();
+  }
   const raw = clearValue ?? '';
   const isString = datatype === undefined || datatype === 'string';
   // strings keep whitespace verbatim (only '' is blank); other datatypes trim before the check

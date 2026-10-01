@@ -11,10 +11,9 @@ dotenv.config({ path: 'tests/eval/.env' });
  * `onClear` field.
  *
  * Like flows.test.ts, this asserts ONLY on tool selection and the arguments the
- * model generates — not on returned data. author-action runs against a live
- * Tableau Desktop via the External Client API, which isn't present in eval CI,
- * so the tool CALL errors; but the arguments the model emitted are still
- * recorded in the run history, and those arguments are what this eval grades.
+ * model generates — not on returned data. The agent uses the real tool schemas
+ * with inert execution callbacks, so no tool call can modify an open workbook.
+ * The emitted arguments are still recorded in the run history for grading.
  *
  * The `onClear` enum ('keep-current' | 'set-value') is new: before it existed,
  * one optional `clearValue` field could not distinguish "reset the parameter to
@@ -40,6 +39,7 @@ async function runAgentWithTools(
     model,
     systemPrompt: agentSystemPrompt,
     toolAllowList: ['author_action'],
+    stubToolExecution: true,
   });
 
   return await withTrace('run_author_action_eval_agent', async () => {
@@ -106,6 +106,7 @@ describe('author-action onClear (eval)', () => {
     // exact case one optional clearValue field could not distinguish from keep-current (both
     // arrive as ""). Only onClear='set-value' expresses it, so this fails without the enum.
     expect(authorAction.arguments.onClear).toBe('set-value');
-    expect(authorAction.arguments.clearValue ?? '').toBe('');
+    expect(authorAction.arguments).toHaveProperty('clearValue');
+    expect(authorAction.arguments.clearValue).toBe('');
   });
 });

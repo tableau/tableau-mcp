@@ -162,6 +162,15 @@ describe('resolveClearOption', () => {
     expect(encoded.value).toBe('s:LROOT:');
   });
 
+  it.each([undefined, 'string', 'integer', 'real', 'boolean', 'date', 'datetime'])(
+    'rejects an omitted clearValue with set-value for datatype %s',
+    (datatype) => {
+      const encoded = resolveClearOption('set-value', datatype, undefined);
+      invariant(encoded.isErr());
+      expect(encoded.error.getErrorText()).toContain('onClear=set-value requires clearValue');
+    },
+  );
+
   it('errors when set-value is asked for on a non-string parameter with a blank clearValue', () => {
     // "Set value to" with nothing to set is a contradiction; a numeric parameter has no empty value.
     const encoded = resolveClearOption('set-value', 'integer', '   ');
@@ -960,7 +969,8 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.sourceFieldAggregation).toBe('attr');
-    expect(parsed.clearValue).toBeUndefined();
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<agg-type type='attr' />");
     expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
@@ -1057,6 +1067,7 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.clearValue).toBe('Month');
+    expect(parsed.onClear).toBe('set-value');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:Month' />");
   });
@@ -1085,6 +1096,7 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.clearValue).toBe('');
+    expect(parsed.onClear).toBe('set-value');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:' />");
   });
@@ -1108,6 +1120,10 @@ describe('authorActionTool', () => {
     });
 
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
   });
@@ -1131,8 +1147,29 @@ describe('authorActionTool', () => {
     });
 
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('rejects set-value without clearValue before applying a parameter action', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        onClear: 'set-value',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('onClear=set-value requires clearValue');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('errors when onClear is set-value on a non-string parameter with a blank clearValue', async () => {
@@ -1321,7 +1358,8 @@ describe('authorActionTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.clearValue).toBe('');
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
   });

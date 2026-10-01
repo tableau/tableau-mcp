@@ -49,9 +49,9 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
 }
 
 // Spawns the desktop build (build/index.desktop.js) instead of the web build. Desktop tools are
-// only in that bundle. It boots on stdio with no SERVER/AUTH/discovery env and registers its tools
-// statically, so an agent can list and call them (emitting arguments we grade) without a live
-// Tableau Desktop — the call errors at execution, but the function_call arguments are still recorded.
+// only in that bundle. It registers its schemas without a live Tableau Desktop, but normal
+// execution can discover and modify an open workbook. Argument-only evals must pass
+// stubToolExecution to getAgent so tool calls never reach this server.
 export async function getDesktopMcpServer(): Promise<MCPServerStdio> {
   // DESKTOP_MCP_BUNDLE lets the A/B run point at a base-commit bundle without onClear;
   // defaults to the current build. Same harness, same prompts — only the schema differs.
@@ -76,6 +76,7 @@ export async function getAgent({
   model,
   mcpServer,
   toolAllowList,
+  stubToolExecution = false,
 }: {
   systemPrompt: string;
   model: string;
@@ -86,6 +87,8 @@ export async function getAgent({
   // eval: with one tool and toolChoice:'required', the grade is purely whether the description
   // steers the arguments, not whether the model found the tool.
   toolAllowList?: Array<string>;
+  // Keep the server's tool schemas, but replace execution with an inert result for argument grading.
+  stubToolExecution?: boolean;
 }): Promise<Agent> {
   return await withTrace('get_agent', async () => {
     const agentOptions = {
@@ -104,13 +107,21 @@ export async function getAgent({
       return new Agent(agentOptions);
     }
 
-    // Allow-listed: expose only those tools, un-prefixed, and skip mcpServers so the server
-    // doesn't re-add every tool. The tools invoke through the server captured in their closure.
-    if (toolAllowList) {
+    // Skip mcpServers so it cannot re-add filtered tools or bypass the execution stubs.
+    if (toolAllowList || stubToolExecution) {
       const tools = (await getAllMcpTools([mcpServer])).filter((tool) =>
-        toolAllowList.includes(tool.name),
+        toolAllowList ? toolAllowList.includes(tool.name) : true,
       );
-      return new Agent({ ...agentOptions, tools, modelSettings: { toolChoice: 'required' } });
+      return new Agent({
+        ...agentOptions,
+        tools: stubToolExecution
+          ? tools.map((tool) => ({
+              ...tool,
+              invoke: async () => 'Tool execution skipped for argument-only evaluation.',
+            }))
+          : tools,
+        modelSettings: { toolChoice: 'required' },
+      });
     }
 
     const tools = await getAllMcpTools([mcpServer]);
