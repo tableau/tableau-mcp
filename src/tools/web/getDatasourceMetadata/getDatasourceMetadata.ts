@@ -197,12 +197,38 @@ export const getGetDatasourceMetadataTool = (
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
+              // Resolve published vs embedded. A publishedDatasources match (Metadata API) is
+              // authoritative and free. Otherwise probe the REST datasources endpoint, which only
+              // lists published data sources — so Ok there means published and a not-found means
+              // embedded. 'error' (permissions/transient) is non-authoritative, so the type is left
+              // unset; labeling is best-effort and must never break the metadata response. Run on
+              // every path so the type is resolved even when the Metadata API is disabled or throws.
+              const resolveDatasourceType = async (
+                hasPublishedMatch: boolean,
+              ): Promise<FieldsResult['datasourceType']> => {
+                if (hasPublishedMatch) {
+                  return 'published';
+                }
+                const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
+                  siteId: restApi.siteId,
+                  datasourceId: datasourceLuid,
+                });
+                if (restLookup.isOk()) {
+                  return 'published';
+                }
+                if (restLookup.error === 'not-found') {
+                  return 'embedded';
+                }
+                return undefined;
+              };
+
               if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
                 return Ok(
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
+                    await resolveDatasourceType(false),
                   ),
                 );
               }
@@ -218,31 +244,14 @@ export const getGetDatasourceMetadataTool = (
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
+                    await resolveDatasourceType(false),
                   ),
                 );
               }
 
-              // Resolve published vs embedded. A publishedDatasources match is authoritative and
-              // free. On a miss, disambiguate an embedded (workbook) data source from a published
-              // one that isn't indexed by the Metadata API yet via the REST datasources endpoint,
-              // which only lists published data sources — so a not-found there means embedded.
-              let datasourceType: FieldsResult['datasourceType'] = listFieldsResult.data
-                .publishedDatasources?.[0]
-                ? 'published'
-                : undefined;
-              if (!datasourceType) {
-                const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
-                  siteId: restApi.siteId,
-                  datasourceId: datasourceLuid,
-                });
-                if (restLookup.isOk()) {
-                  datasourceType = 'published';
-                } else if (restLookup.error === 'not-found') {
-                  datasourceType = 'embedded';
-                }
-                // 'error' (permissions/transient) is non-authoritative; leave the type unset since
-                // labeling is best-effort and must never break the metadata response.
-              }
+              const datasourceType = await resolveDatasourceType(
+                !!listFieldsResult.data.publishedDatasources?.[0],
+              );
 
               // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
               return Ok(

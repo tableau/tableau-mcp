@@ -806,6 +806,38 @@ describe('getDatasourceMetadataTool', () => {
     ]);
   });
 
+  it('should label datasourceType embedded when listFields throws and REST reports not-found', async () => {
+    // GraphQL throwing (service unavailable) falls back to VDS-only metadata, but we still probe REST
+    // to classify — a not-found there means embedded.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('not-found'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockTryQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      datasourceId: 'test-luid',
+    });
+  });
+
+  it('should label datasourceType published when listFields throws and REST resolves the datasource', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(new Ok({ id: 'test-luid' }));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
+  });
+
   it('should handle when both APIs fail', async () => {
     const readMetadataError = 'ReadMetadata API Error';
     const graphqlError = 'GraphQL API Error';
@@ -832,7 +864,8 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
-    // Type can't be inferred without the Metadata-API enrichment, so it's left unset.
+    // With the Metadata API disabled we still probe REST to classify, but the default mock returns a
+    // non-authoritative error, so the type is left unset.
     expect(responseData).not.toHaveProperty('datasourceType');
 
     // Should only have basic fields from readMetadata without enrichment
@@ -869,6 +902,40 @@ describe('getDatasourceMetadataTool', () => {
         datasourceLuid: 'test-luid',
       },
     });
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should label datasourceType embedded when disableMetadataApiRequests is true and REST reports not-found', async () => {
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('not-found'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+    expect(mocks.mockTryQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      datasourceId: 'test-luid',
+    });
+  });
+
+  it('should label datasourceType published when disableMetadataApiRequests is true and REST resolves the datasource', async () => {
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockTryQueryDatasource.mockResolvedValue(new Ok({ id: 'test-luid' }));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 

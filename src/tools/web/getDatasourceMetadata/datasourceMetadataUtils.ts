@@ -113,9 +113,13 @@ export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 export function simplifyReadMetadataResult(
   readMetadataResult: MetadataResponse,
   datasourceModelResult?: DatasourceModelResponse,
+  datasourceType?: FieldsResult['datasourceType'],
 ): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
+    // The caller resolves published vs embedded authoritatively (see getDatasourceMetadata); we just
+    // stamp it. Left unset when the caller couldn't determine it.
+    ...(datasourceType ? { datasourceType } : {}),
     ...(datasourceModelResult
       ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
       : {}),
