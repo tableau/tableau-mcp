@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -21,7 +20,14 @@ import {
   sessionParam,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { getCacheDir, isWithinCacheDir } from './cachePath.js';
+import {
+  CONTAINED_CACHE_READ_ISSUE,
+  CONTAINED_CACHE_WRITE_ISSUE,
+  getCacheDir,
+  isWithinCacheDir,
+  readContainedCacheTextFile,
+  writeContainedCacheTextFile,
+} from './cachePath.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -143,15 +149,23 @@ export const getWriteCachedXmlTool = (
                   `same ${selectorTag}; nothing was written.`,
               ).toErr();
             }
-            if (!existsSync(absolutePath)) {
+            const containedRead = readContainedCacheTextFile(absolutePath);
+            if (!containedRead.ok && containedRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
               return new FileNotFoundError(filePath).toErr();
             }
-            let existing: string;
-            try {
-              existing = readFileSync(absolutePath, 'utf-8');
-            } catch (err) {
-              return new FileReadError(err).toErr();
+            if (
+              !containedRead.ok &&
+              (containedRead.issue === CONTAINED_CACHE_READ_ISSUE.outsideCache ||
+                containedRead.issue === CONTAINED_CACHE_READ_ISSUE.unsafeFile)
+            ) {
+              return new ArgsValidationError(
+                `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+              ).toErr();
             }
+            if (!containedRead.ok) {
+              return new FileReadError(containedRead.error).toErr();
+            }
+            const existing = containedRead.text;
             const spliced = replaceElement(existing, selectorTag, selectorName, xmlContent);
             if (spliced === null) {
               return new ArgsValidationError(
@@ -161,17 +175,33 @@ export const getWriteCachedXmlTool = (
             contentToWrite = spliced;
           }
 
-          try {
-            writeFileSync(absolutePath, contentToWrite, 'utf-8');
-            restampSidecarAfterEdit(absolutePath, resolvedSession);
-            return new Ok({
-              filePath,
-              bytes: contentToWrite.length,
-              spliced: selectorTag !== undefined,
-            });
-          } catch (err) {
-            return new FileReadError(err).toErr();
+          const writeResult = writeContainedCacheTextFile(absolutePath, contentToWrite);
+          if (
+            !writeResult.ok &&
+            writeResult.issue === CONTAINED_CACHE_WRITE_ISSUE.unsupportedNewPath
+          ) {
+            return new ArgsValidationError(
+              `Security error: new cache files must be direct children of the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
           }
+          if (
+            !writeResult.ok &&
+            (writeResult.issue === CONTAINED_CACHE_WRITE_ISSUE.outsideCache ||
+              writeResult.issue === CONTAINED_CACHE_WRITE_ISSUE.unsafeFile)
+          ) {
+            return new ArgsValidationError(
+              `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
+          }
+          if (!writeResult.ok) {
+            return new FileReadError(writeResult.error).toErr();
+          }
+          restampSidecarAfterEdit(absolutePath, resolvedSession);
+          return new Ok({
+            filePath,
+            bytes: contentToWrite.length,
+            spliced: selectorTag !== undefined,
+          });
         },
         getSuccessResult: ({ filePath, bytes, spliced }) => ({
           content: [

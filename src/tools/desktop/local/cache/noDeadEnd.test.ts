@@ -21,6 +21,7 @@ vi.mock('fs');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   ...(await importOriginal<typeof cachePathModule>()),
   readContainedCacheTextFile: vi.fn(),
+  writeContainedCacheTextFile: vi.fn(),
 }));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
@@ -56,6 +57,10 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
       store.set(String(p), String(data));
     });
     mockContainedCacheReadFromFs();
+    vi.mocked(cachePathModule.writeContainedCacheTextFile).mockImplementation((path, text) => {
+      store.set(path, text);
+      return { ok: true, path };
+    });
   });
 
   it('supports get(capped) -> slice-read -> targeted write -> apply(file) with only server tools', async () => {

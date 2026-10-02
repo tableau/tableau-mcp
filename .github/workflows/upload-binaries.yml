@@ -26,6 +26,14 @@ jobs:
           npm run build:sea -- --platform linux-x64
           cp build/sea/default/linux-x64/tableau-mcp tableau-mcp
           cp build/sea/desktop/linux-x64/tableau-mcp-desktop tableau-mcp-desktop
+      - name: Test cache path containment
+        run: >-
+          npx --no-install vitest run
+          src/desktop/cachePath.test.ts
+          src/tools/desktop/local/cache/readCachedXml.test.ts
+          src/tools/desktop/local/cache/writeCachedXml.test.ts
+          src/tools/desktop/local/cache/cacheContainment.integration.test.ts
+          --maxWorkers=2
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
@@ -66,6 +74,14 @@ jobs:
           npm run build:sea -- --platform win-x64
           Copy-Item -Path .\build\sea\default\win-x64\tableau-mcp.exe -Destination .\tableau-mcp.exe
           Copy-Item -Path .\build\sea\desktop\win-x64\tableau-mcp-desktop.exe -Destination .\tableau-mcp-desktop.exe
+      - name: Test cache path containment
+        shell: pwsh
+        run: |
+          npx --no-install vitest run src/desktop/cachePath.test.ts src/tools/desktop/local/cache/readCachedXml.test.ts src/tools/desktop/local/cache/writeCachedXml.test.ts src/tools/desktop/local/cache/cacheContainment.integration.test.ts --maxWorkers=2
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            exit $testExitCode
+          }
       - name: Smoke Desktop SEA
         shell: pwsh
         run: |
@@ -126,6 +142,14 @@ jobs:
           cp "build/sea/default/${{ matrix.platform }}/tableau-mcp" tableau-mcp
           cp "build/sea/desktop/${{ matrix.platform }}/tableau-mcp-desktop" tableau-mcp-desktop
           chmod +x tableau-mcp tableau-mcp-desktop
+      - name: Test cache path containment
+        run: >-
+          npx --no-install vitest run
+          src/desktop/cachePath.test.ts
+          src/tools/desktop/local/cache/readCachedXml.test.ts
+          src/tools/desktop/local/cache/writeCachedXml.test.ts
+          src/tools/desktop/local/cache/cacheContainment.integration.test.ts
+          --maxWorkers=2
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA

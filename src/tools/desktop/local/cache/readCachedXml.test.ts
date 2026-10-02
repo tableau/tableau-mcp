@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -8,9 +9,10 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getReadCachedXmlTool } from './readCachedXml.js';
 
 vi.mock('../../../../desktop/cache.js');
-vi.mock('fs');
-
-import { existsSync, readFileSync } from 'fs';
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 
@@ -32,8 +34,11 @@ describe('readCachedXmlTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupCacheMock();
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML);
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: true,
+      path: CACHED_FILE,
+      text: SAMPLE_XML,
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -60,7 +65,10 @@ describe('readCachedXmlTool', () => {
   });
 
   it('should return error when file does not exist', async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: false,
+      issue: 'missing',
+    });
 
     const result = await getResult(CACHED_FILE);
 
@@ -91,12 +99,14 @@ describe('readCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Security error');
     }
-    expect(readFileSync).not.toHaveBeenCalled();
+    expect(cachePathModule.readContainedCacheTextFile).not.toHaveBeenCalled();
   });
 
-  it('should return error when readFileSync throws', async () => {
-    vi.mocked(readFileSync).mockImplementation(() => {
-      throw new Error('Permission denied');
+  it('should return error when the contained read fails', async () => {
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: false,
+      issue: 'read-error',
+      error: new Error('Permission denied'),
     });
 
     const result = await getResult(CACHED_FILE);
@@ -116,7 +126,11 @@ describe('readCachedXmlTool', () => {
       '</workbook>';
 
     beforeEach(() => {
-      vi.mocked(readFileSync).mockReturnValue(WORKBOOK);
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text: WORKBOOK,
+      });
     });
 
     it('returns only the selected worksheet element, not the whole file', async () => {
@@ -140,14 +154,14 @@ describe('readCachedXmlTool', () => {
     });
 
     it('rejects a worksheetName/worksheet conflict without reading', async () => {
-      vi.mocked(readFileSync).mockClear();
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockClear();
       const result = await getResult(CACHED_FILE, { worksheetName: 'Sales', worksheet: 'Profit' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('worksheetName ("Sales")');
       expect(result.content[0].text).toContain('Pass one of them.');
-      expect(readFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.readContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('returns only the selected dashboard element', async () => {
@@ -176,7 +190,11 @@ describe('readCachedXmlTool', () => {
 
   describe('ambiguous selector rejection (Andy-lens "please")', () => {
     beforeEach(() => {
-      vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML);
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text: SAMPLE_XML,
+      });
     });
 
     it('rejects worksheet + dashboard, naming both selectors, without reading', async () => {
@@ -186,7 +204,7 @@ describe('readCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('worksheet');
       expect(result.content[0].text).toContain('dashboard');
-      expect(readFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.readContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('rejects worksheet + byte range, naming both selectors received', async () => {
@@ -212,11 +230,14 @@ describe('readCachedXmlTool', () => {
     });
 
     it('leaves the single worksheet selector path unchanged', async () => {
-      vi.mocked(readFileSync).mockReturnValue(
-        '<workbook><worksheets>' +
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text:
+          '<workbook><worksheets>' +
           "<worksheet name='Sales'><rows>[Sales]</rows></worksheet>" +
           '</worksheets></workbook>',
-      );
+      });
       const result = await getResult(CACHED_FILE, { worksheet: 'Sales' });
 
       expect(result.isError).toBeFalsy();
