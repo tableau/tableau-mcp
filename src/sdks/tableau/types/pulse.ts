@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+// Date-only value (YYYY-MM-DD), non-empty — used by specific_period, which names
+// a calendar day, not a datetime. Distinct from tableauDateTimeSchema (below),
+// which also accepts a time component and an empty string.
+export const tableauDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format must be a date, YYYY-MM-DD.');
+
 const pulseMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -43,13 +50,38 @@ export const pulseExtensionOptionsSchema = z.object({
   allowed_dimensions: z.array(z.string()).optional(),
   allowed_granularities: z.array(z.string()).optional(),
   offset_from_today: z.number().optional(),
+  use_dynamic_offset: z.boolean().optional(),
 });
+
+const pulseLastXPeriodSchema = z.union([
+  z.object({
+    period: z.union([z.literal(7), z.literal(14), z.literal(30), z.literal(60), z.literal(90)]),
+    period_type: z.literal('GRANULARITY_BY_DAY'),
+    include_current_period: z.literal(true),
+  }),
+  z.object({
+    period: z.literal(1),
+    period_type: z.literal('GRANULARITY_BY_YEAR'),
+    include_current_period: z.literal(false),
+  }),
+]);
 
 export const pulseMetricSpecificationSchema = z.object({
   filters: z.array(pulseFilterSchema).optional(),
   measurement_period: z.object({
     granularity: z.string(),
     range: z.string(),
+    specific_period: z
+      .object({
+        date: tableauDateSchema,
+        end_date: tableauDateSchema.optional(),
+      })
+      .refine((sp) => sp.end_date === undefined || sp.end_date >= sp.date, {
+        message: 'specific_period.end_date must be on or after specific_period.date.',
+        path: ['end_date'],
+      })
+      .optional(),
+    last_x_period: pulseLastXPeriodSchema.optional(),
   }),
   comparison: z.object({ comparison: z.string() }),
 });
@@ -350,6 +382,9 @@ export const pulseBundleRequestSchema = z.object({
       time_zone: z.string(),
       language: languageEnumSchema,
       locale: localeEnumSchema,
+      // Same field/format as the brief request's `now` (YYYY-MM-DD or
+      // YYYY-MM-DD HH:MM:SS, or empty for today-relative) — reuse its schema.
+      now: tableauDateTimeSchema.optional(),
     }),
     input: z.object({
       metadata: z.object({
@@ -481,7 +516,13 @@ export const pulseInsightBriefResponseSchema = z.object({
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
-export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
+export const pulseInsightBundleTypeEnum = [
+  'ban',
+  'springboard',
+  'basic',
+  'detail',
+  'exploration',
+] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 
 /**

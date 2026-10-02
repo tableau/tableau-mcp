@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "4.18.0",
+  "version": "4.18.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -16,10 +16,12 @@
     "mcp"
   ],
   "bin": {
-    "tableau-mcp-server": "./build/index.js"
+    "tableau-mcp-server": "./build/index.js",
+    "tableau-desktop-mcp-server": "./build/index.desktop.js"
   },
   "exports": {
     ".": "./build/index.js",
+    "./desktop": "./build/index.desktop.js",
     "./tracing": "./build/telemetry/tracing.js",
     "./features/featureGateProvider": {
       "types": "./build/features/featureGateProvider.d.ts"
@@ -34,12 +36,17 @@
   "scripts": {
     "build": "tsx src/scripts/build.ts && tsc --project tsconfig.providers.json",
     "build:desktop": "tsx src/scripts/build.ts --variant desktop && tsc --project tsconfig.providers.json",
+    "build:desktop:dirty": "tsx src/scripts/build.ts --variant desktop --dirty && tsc --project tsconfig.providers.json",
+    "build:desktop:watch": "tsx src/scripts/build.ts --variant desktop --dev --watch",
     "build:combined": "tsx src/scripts/build.ts --variant combined && tsc --project tsconfig.providers.json",
     "build:dev": "tsx src/scripts/build.ts --dev && tsc --project tsconfig.providers.json",
     "build:docker": "docker build -t tableau-mcp .",
+    "build:sea": "tsx src/scripts/buildSea.ts",
+    "build:sea:desktop": "tsx src/scripts/buildSea.ts --variant desktop",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest :build:mcpb",
     "build:manifest": "tsx src/scripts/createClaudeMcpBundleManifest.ts",
+    "build:template-content-pack": "node --import tsx src/scripts/buildTemplateContentPack.ts",
     "start:http": "node build/index.js",
     "start:http:combined": "node build/index.combined.js",
     "start:http:apm": "node -r ./build/telemetry/tracing.js build/index.js",
@@ -59,7 +66,7 @@
     "test:eval": "vitest --config ./vitest.config.eval.ts",
     "test:oauth:embedded": "vitest --config ./vitest.config.oauth.embedded.ts",
     "test:oauth:tableau": "npx playwright test",
-    "coverage": "vitest run --config ./vitest.config.ts --coverage",
+    "coverage": "vitest run --config ./vitest.config.ts --coverage --maxWorkers=2",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version",
@@ -73,13 +80,19 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@xmldom/xmldom": "^0.9.10",
     "@zodios/core": "^10.9.6",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csv-parse": "^7.0.2",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fast-levenshtein": "^3.0.0",
+    "fast-xml-parser": "^5.9.0",
+    "fuse.js": "7.4.2",
     "jose": "^6.0.12",
+    "jsonc-parser": "^3.3.1",
+    "probe-image-size": "7.4.0",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^7.1.0",
     "uuid": "^14.0.1",
@@ -100,6 +113,7 @@
     "@types/express": "^5.0.3",
     "@types/fast-levenshtein": "^0.0.1",
     "@types/node": "^22.15.3",
+    "@types/probe-image-size": "7.2.5",
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",

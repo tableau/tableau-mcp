@@ -1,0 +1,568 @@
+/**
+ * Post-apply worksheet readback verification.
+ *
+ * Tableau Desktop can accept a worksheet apply and then silently strip nodes it
+ * cannot persist. This verifier compares only the intent-bearing worksheet
+ * structures that must survive for the rendered chart to match the authored
+ * XML, while tolerating readback-only formatting/style noise.
+ */
+import { parseShelfValue } from '../metadata/fields.js';
+import { normalizeArray, parseXML } from '../metadata/parser.js';
+
+export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort';
+export type ReadbackFindingSeverity = 'error' | 'warning';
+
+export interface ReadbackFinding {
+  kind: ReadbackFindingKind;
+  node: string;
+  column?: string;
+  intended: string;
+  readback: 'missing' | 'changed';
+  severity: ReadbackFindingSeverity;
+}
+
+export function isPromisedSortLossWarning(finding: ReadbackFinding): boolean {
+  return (
+    finding.kind === 'sort' &&
+    finding.severity === 'warning' &&
+    (finding.node === 'computed-sort' || finding.node === 'shelf-sort-v2')
+  );
+}
+
+export type ReadbackVerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+
+export type VerificationSource = 'readback' | 'used-field-validity';
+
+export interface VerificationFinding {
+  severity: ReadbackFindingSeverity;
+  source: VerificationSource;
+  message: string;
+  worksheetId?: string;
+  fieldName?: string;
+  fieldCaption?: string;
+  shelf?: string;
+  marksSpecificationId?: string;
+  encodingType?: string;
+  reason?: string;
+}
+
+export interface ReadbackVerificationResult {
+  ok: boolean;
+  status: ReadbackVerificationStatus;
+  message?: string;
+  findings?: VerificationFinding[];
+}
+
+type XmlRecord = Record<string, any>;
+
+interface EncodingSignature {
+  paneIndex: number;
+  tag: string;
+  column: string;
+}
+
+interface MarkSignature {
+  paneIndex: number;
+  klass: string;
+}
+
+interface TopNFilterSignature {
+  function: string;
+  count: string;
+  end: string;
+  units: string;
+  order: {
+    direction: string;
+    expression: string;
+    levelMembers: {
+      level: string;
+    } | null;
+  } | null;
+}
+
+interface FilterSignature {
+  klass: string;
+  column: string;
+  context: boolean;
+  groupfilters: string;
+  topN: TopNFilterSignature | null;
+}
+
+interface SortSignature {
+  tag: 'shelf-sort-v2' | 'computed-sort';
+  column: string;
+  direction: string;
+  using: string;
+  shelf: string;
+  field: string;
+}
+
+interface WorksheetSignature {
+  encodings: EncodingSignature[];
+  shelves: {
+    rows: string[];
+    cols: string[];
+  };
+  marks: MarkSignature[];
+  filters: FilterSignature[];
+  slices: string[];
+  sorts: SortSignature[];
+  /** column-instance names declared in datasource-dependencies, e.g. "[none:Location:nk]". */
+  declaredInstances: Set<string>;
+}
+
+function isRecord(value: unknown): value is XmlRecord {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function attr(node: XmlRecord, name: string): string {
+  const value = node[`@_${name}`];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function textValue(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+  if (isRecord(value) && typeof value['#text'] === 'string') return value['#text'].trim();
+  return '';
+}
+
+function worksheetRoot(parsed: XmlRecord): XmlRecord | null {
+  const rootWorksheet = normalizeArray(parsed.worksheet).find(isRecord);
+  if (rootWorksheet) return rootWorksheet;
+  const firstWorkbookWorksheet = normalizeArray(parsed.workbook?.worksheets?.worksheet).find(
+    isRecord,
+  );
+  return firstWorkbookWorksheet ?? null;
+}
+
+function directChildren(parent: XmlRecord | undefined, key: string): XmlRecord[] {
+  if (!parent) return [];
+  return normalizeArray(parent[key]).filter(isRecord);
+}
+
+function walkElements(node: unknown, visit: (tag: string, element: XmlRecord) => void): void {
+  if (!isRecord(node)) return;
+  for (const [tag, value] of Object.entries(node)) {
+    if (tag.startsWith('@_') || tag === '#text') continue;
+    for (const child of normalizeArray(value)) {
+      if (!isRecord(child)) continue;
+      visit(tag, child);
+      walkElements(child, visit);
+    }
+  }
+}
+
+function unwrapGroupingParens(value: string): string {
+  let text = value.trim();
+  while (text.startsWith('(') && text.endsWith(')')) {
+    let depth = 0;
+    let wrapsAll = true;
+    let inBracketedName = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (inBracketedName) {
+        if (char === ']' && text[i + 1] === ']') {
+          i++;
+          continue;
+        }
+        if (char === ']') inBracketedName = false;
+        continue;
+      }
+      if (char === '[') {
+        inBracketedName = true;
+        continue;
+      }
+      if (char === '(') depth += 1;
+      else if (char === ')') {
+        depth -= 1;
+        if (depth === 0 && i !== text.length - 1) {
+          wrapsAll = false;
+          break;
+        }
+      }
+    }
+    if (!wrapsAll || depth !== 0) break;
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+function shelfValues(value: unknown): string[] {
+  return normalizeArray(value)
+    .flatMap((item) => parseShelfValue(unwrapGroupingParens(textValue(item))))
+    .map((item) => unwrapGroupingParens(item))
+    .filter(Boolean);
+}
+
+function collectEncodings(worksheet: XmlRecord): EncodingSignature[] {
+  const panes = directChildren(worksheet.table?.panes, 'pane');
+  const out: EncodingSignature[] = [];
+  panes.forEach((pane, paneIndex) => {
+    const encodings = isRecord(pane.encodings) ? pane.encodings : undefined;
+    if (!encodings) return;
+    for (const [tag, value] of Object.entries(encodings)) {
+      if (tag.startsWith('@_') || tag === '#text') continue;
+      for (const encoding of normalizeArray(value).filter(isRecord)) {
+        out.push({ paneIndex, tag, column: attr(encoding, 'column') });
+      }
+    }
+  });
+  return out;
+}
+
+function collectMarks(worksheet: XmlRecord): MarkSignature[] {
+  const panes = directChildren(worksheet.table?.panes, 'pane');
+  return panes.flatMap((pane, paneIndex) => {
+    const mark = isRecord(pane.mark) ? pane.mark : null;
+    const klass = mark ? attr(mark, 'class') : '';
+    return klass ? [{ paneIndex, klass }] : [];
+  });
+}
+
+function canonicalGroupfilter(groupfilter: XmlRecord): string {
+  const attributes: Array<[string, string]> = [];
+  for (const [rawName, value] of Object.entries(groupfilter)) {
+    if (!rawName.startsWith('@_')) continue;
+    const name = rawName.slice(2);
+    if (name.startsWith('user:') && name !== 'user:ui-enumeration') continue;
+    attributes.push([name, textValue(value)]);
+  }
+  attributes.sort(([leftName, leftValue], [rightName, rightValue]) => {
+    return leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue);
+  });
+
+  const children = directChildren(groupfilter, 'groupfilter').map(canonicalGroupfilter);
+  if (attr(groupfilter, 'function').toLowerCase() === 'union') children.sort();
+
+  return JSON.stringify({ attributes, children });
+}
+
+function nestedGroupfilterSignature(filter: XmlRecord): string {
+  return JSON.stringify(directChildren(filter, 'groupfilter').map(canonicalGroupfilter));
+}
+
+function directGroupfilter(parent: XmlRecord, functionName: string): XmlRecord | null {
+  return (
+    directChildren(parent, 'groupfilter').find(
+      (groupfilter) => attr(groupfilter, 'function') === functionName,
+    ) ?? null
+  );
+}
+
+function topNFilterSignature(filter: XmlRecord): TopNFilterSignature | null {
+  const end = directGroupfilter(filter, 'end');
+  if (!end) return null;
+
+  const order = directGroupfilter(end, 'order');
+  const levelMembers = order ? directGroupfilter(order, 'level-members') : null;
+  return {
+    function: attr(end, 'function'),
+    count: attr(end, 'count'),
+    end: attr(end, 'end'),
+    units: attr(end, 'units'),
+    order: order
+      ? {
+          direction: attr(order, 'direction'),
+          expression: attr(order, 'expression'),
+          levelMembers: levelMembers ? { level: attr(levelMembers, 'level') } : null,
+        }
+      : null,
+  };
+}
+
+function collectFilters(worksheet: XmlRecord): FilterSignature[] {
+  const filters: FilterSignature[] = [];
+  walkElements(worksheet, (tag, element) => {
+    if (tag !== 'filter') return;
+    filters.push({
+      klass: attr(element, 'class'),
+      column: attr(element, 'column'),
+      context: attr(element, 'context').toLowerCase() === 'true',
+      groupfilters: nestedGroupfilterSignature(element),
+      topN: topNFilterSignature(element),
+    });
+  });
+  return filters;
+}
+
+function collectSlices(worksheet: XmlRecord): string[] {
+  return directChildren(worksheet.table, 'view').flatMap((view) =>
+    directChildren(view, 'slices').flatMap((slices) =>
+      normalizeArray(slices.column).map(textValue).filter(Boolean),
+    ),
+  );
+}
+
+function collectDeclaredInstances(worksheet: XmlRecord): Set<string> {
+  const declared = new Set<string>();
+  walkElements(worksheet, (tag, element) => {
+    if (tag !== 'column-instance') return;
+    const name = attr(element, 'name');
+    if (name) declared.add(name);
+  });
+  return declared;
+}
+
+/** The bracketed instance segment of an encoding column ref: "[DS].[none:X:nk]" → "[none:X:nk]". */
+function instanceNameFromColumnRef(columnRef: string): string | null {
+  const m = /(\[[^\]]+\])\s*$/.exec(columnRef);
+  return m ? m[1] : null;
+}
+
+function collectSorts(worksheet: XmlRecord): SortSignature[] {
+  const sorts: SortSignature[] = [];
+  walkElements(worksheet, (tag, element) => {
+    if (tag !== 'shelf-sort-v2' && tag !== 'computed-sort') return;
+    sorts.push({
+      tag,
+      column: attr(element, 'column'),
+      direction: attr(element, 'direction'),
+      using: attr(element, 'using'),
+      shelf: attr(element, 'shelf'),
+      field: attr(element, 'field'),
+    });
+  });
+  return sorts;
+}
+
+function signature(xml: string): WorksheetSignature | null {
+  try {
+    const parsed = parseXML(xml) as XmlRecord;
+    const worksheet = worksheetRoot(parsed);
+    if (!worksheet) return null;
+    return {
+      encodings: collectEncodings(worksheet),
+      shelves: {
+        rows: shelfValues(worksheet.table?.rows),
+        cols: shelfValues(worksheet.table?.cols),
+      },
+      marks: collectMarks(worksheet),
+      filters: collectFilters(worksheet),
+      slices: collectSlices(worksheet),
+      sorts: collectSorts(worksheet),
+      declaredInstances: collectDeclaredInstances(worksheet),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function encodingIntended(sig: EncodingSignature): string {
+  return sig.column ? `<${sig.tag} column="${sig.column}">` : `<${sig.tag}>`;
+}
+
+function filterIntended(sig: FilterSignature): string {
+  const klass = sig.klass ? ` class="${sig.klass}"` : '';
+  const column = sig.column ? ` column="${sig.column}"` : '';
+  return `<filter${klass}${column}>`;
+}
+
+function sortIntended(sig: SortSignature): string {
+  const attrs = [
+    sig.column ? `column="${sig.column}"` : '',
+    sig.direction ? `direction="${sig.direction}"` : '',
+    sig.using ? `using="${sig.using}"` : '',
+    sig.shelf ? `shelf="${sig.shelf}"` : '',
+    sig.field ? `field="${sig.field}"` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return attrs ? `<${sig.tag} ${attrs}>` : `<${sig.tag}>`;
+}
+
+function sameEncoding(a: EncodingSignature, b: EncodingSignature): boolean {
+  return a.paneIndex === b.paneIndex && a.tag === b.tag && a.column === b.column;
+}
+
+function sameTopNFilter(a: TopNFilterSignature, b: TopNFilterSignature): boolean {
+  return (
+    a.function === b.function &&
+    a.count === b.count &&
+    a.end === b.end &&
+    a.units === b.units &&
+    a.order?.direction === b.order?.direction &&
+    a.order?.expression === b.order?.expression &&
+    a.order?.levelMembers?.level === b.order?.levelMembers?.level
+  );
+}
+
+function sameFilter(a: FilterSignature, b: FilterSignature): boolean {
+  return (
+    a.klass === b.klass &&
+    a.column === b.column &&
+    a.context === b.context &&
+    (a.topN ? !!b.topN && sameTopNFilter(a.topN, b.topN) : a.groupfilters === b.groupfilters)
+  );
+}
+
+function sameSort(a: SortSignature, b: SortSignature): boolean {
+  return (
+    a.tag === b.tag &&
+    a.column === b.column &&
+    a.direction === b.direction &&
+    a.using === b.using &&
+    a.shelf === b.shelf &&
+    a.field === b.field
+  );
+}
+
+function sortRelated(a: SortSignature, b: SortSignature): boolean {
+  return a.tag === b.tag && a.column === b.column;
+}
+
+export function verifyWorksheetReadback(
+  intendedXml: string,
+  readbackXml: string,
+): ReadbackFinding[] {
+  const intended = signature(intendedXml);
+  const readback = signature(readbackXml);
+  if (!intended || !readback) return [];
+
+  const findings: ReadbackFinding[] = [];
+
+  for (const enc of intended.encodings) {
+    if (readback.encodings.some((candidate) => sameEncoding(enc, candidate))) continue;
+    const related = readback.encodings.some(
+      (candidate) => candidate.paneIndex === enc.paneIndex && candidate.tag === enc.tag,
+    );
+    findings.push({
+      kind: 'encoding',
+      node: enc.tag,
+      column: enc.column || undefined,
+      intended: encodingIntended(enc),
+      readback: related ? 'changed' : 'missing',
+      severity: 'error',
+    });
+  }
+
+  // An encoding tag can survive while its column-instance declaration is dropped —
+  // the encoding is then inert (LOD encodings and their CIs are co-dependent; see
+  // tactics/viz/marks-and-encodings.md). Require the declaration too. (RT finding RB-03)
+  for (const enc of intended.encodings) {
+    if (!enc.column) continue;
+    const instanceName = instanceNameFromColumnRef(enc.column);
+    if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
+    if (readback.declaredInstances.has(instanceName)) continue;
+    if (!readback.encodings.some((candidate) => sameEncoding(enc, candidate))) continue; // already reported above
+    findings.push({
+      kind: 'encoding',
+      node: 'column-instance',
+      column: instanceName,
+      intended: `<column-instance name="${instanceName}">`,
+      readback: 'missing',
+      severity: 'error',
+    });
+  }
+
+  for (const shelf of ['rows', 'cols'] as const) {
+    const intendedPills = intended.shelves[shelf];
+    const readbackPills = readback.shelves[shelf];
+    const length = Math.max(intendedPills.length, readbackPills.length);
+    for (let i = 0; i < length; i++) {
+      const intendedValue = intendedPills[i];
+      const readbackValue = readbackPills[i];
+      if (intendedValue === readbackValue) continue;
+      const value = intendedValue || readbackValue;
+      findings.push({
+        kind: 'shelf',
+        node: shelf,
+        column: value,
+        intended: value,
+        readback: readbackPills.length > 0 ? 'changed' : 'missing',
+        severity: 'error',
+      });
+    }
+  }
+
+  for (const mark of intended.marks) {
+    const candidate = readback.marks.find((item) => item.paneIndex === mark.paneIndex);
+    if (candidate?.klass === mark.klass) continue;
+    // An authored `Automatic` mark is resolved by Tableau to a concrete class (Bar,
+    // Circle, …) on readback — that is expected resolution, not a dropped mark. Any
+    // concrete class in the same pane satisfies an intended `Automatic`; only a truly
+    // absent mark (no candidate) is a real drop. (False-positive guard, RB readback.)
+    if (mark.klass.toLowerCase() === 'automatic' && candidate) continue;
+    findings.push({
+      kind: 'mark',
+      node: 'mark',
+      intended: `<mark class="${mark.klass}">`,
+      readback: candidate ? 'changed' : 'missing',
+      severity: 'error',
+    });
+  }
+
+  for (const filter of intended.filters) {
+    const matchingFilter = readback.filters.find((candidate) => sameFilter(filter, candidate));
+    const missingTopNSlice =
+      !!filter.topN &&
+      intended.slices.includes(filter.column) &&
+      !readback.slices.includes(filter.column);
+    if (!matchingFilter || missingTopNSlice) {
+      const related = readback.filters.some((candidate) => candidate.klass === filter.klass);
+      findings.push({
+        kind: 'filter',
+        node: 'filter',
+        column: filter.column || undefined,
+        intended: filterIntended(filter),
+        readback: matchingFilter || related ? 'changed' : 'missing',
+        severity: 'error',
+      });
+      continue;
+    }
+
+    // A surviving filter is inert when Tableau drops its intended column-instance declaration.
+    const instanceName = instanceNameFromColumnRef(filter.column);
+    if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
+    if (readback.declaredInstances.has(instanceName)) continue;
+    findings.push({
+      kind: 'filter',
+      node: 'column-instance',
+      column: instanceName,
+      intended: `<column-instance name="${instanceName}">`,
+      readback: 'missing',
+      severity: 'error',
+    });
+  }
+
+  const topNFilterColumns = new Set(
+    intended.filters.filter((filter) => filter.topN).map((filter) => filter.column),
+  );
+  for (const sort of intended.sorts) {
+    if (readback.sorts.some((candidate) => sameSort(sort, candidate))) continue;
+    findings.push({
+      kind: 'sort',
+      node: sort.tag,
+      column: sort.column || undefined,
+      intended: sortIntended(sort),
+      readback: readback.sorts.some((candidate) => sortRelated(sort, candidate))
+        ? 'changed'
+        : 'missing',
+      severity:
+        sort.tag === 'computed-sort' && topNFilterColumns.has(sort.column) ? 'error' : 'warning',
+    });
+  }
+
+  return findings;
+}
+
+function formatReadbackFinding(finding: ReadbackFinding): string {
+  const column = finding.column ? ` column="${finding.column}"` : '';
+  return `<${finding.node}${column}>`;
+}
+
+export function formatReadbackVerificationError(findings: ReadbackFinding[]): string {
+  const errors = findings.filter((finding) => finding.severity === 'error');
+  if (errors.length === 0) return '';
+  return (
+    `apply succeeded but a node isn't present in the rendered worksheet: ${errors.map(formatReadbackFinding).join(', ')}. ` +
+    'Before rewriting the XML, check whether the apply was blocked by an open Tableau dialog and whether every ' +
+    'field reference resolved - these are the most common causes.'
+  );
+}
+
+export function formatReadbackVerificationWarnings(findings: ReadbackFinding[]): string {
+  const warnings = findings.filter((finding) => finding.severity === 'warning');
+  if (warnings.length === 0) return '';
+  return `\n\n⚠️ Readback verification warning — Tableau changed or dropped: ${warnings.map(formatReadbackFinding).join(', ')}. Re-check the rendered chart before moving on.`;
+}

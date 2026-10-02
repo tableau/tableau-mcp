@@ -1,0 +1,336 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <Extensions />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VizExtensions />
+    <_.fcp.VizExtensionsDupEncodingUUID.true...VizExtensionsDupEncodingUUID />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <datasources>
+    <datasource caption='worldcup-standings-tableau' inline='true' name='federated.0sws74t0fh46kq19oyksf18yjlvo' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='worldcup-standings-tableau' name='textscan.1h6m8rk0yvb7iu1gy0t3l18f4b90'>
+            <connection class='textscan' directory='' filename='worldcup-standings-tableau.csv' password='' server='' />
+          </named-connection>
+        </named-connections>
+        <relation connection='textscan.1h6m8rk0yvb7iu1gy0t3l18f4b90' name='worldcup-standings-tableau.csv' table='[worldcup-standings-tableau#csv]' type='table'>
+          <columns character-set='UTF-8' header='yes' locale='en_US' separator=','>
+            <column datatype='string' name='country' ordinal='0' />
+            <column datatype='string' name='countryCode' ordinal='1' />
+            <column datatype='string' name='group' ordinal='2' />
+            <column datatype='integer' name='position' ordinal='3' />
+            <column datatype='integer' name='played' ordinal='4' />
+            <column datatype='integer' name='won' ordinal='5' />
+            <column datatype='integer' name='drawn' ordinal='6' />
+            <column datatype='integer' name='lost' ordinal='7' />
+            <column datatype='integer' name='goalsFor' ordinal='8' />
+            <column datatype='integer' name='goalsAgainst' ordinal='9' />
+            <column datatype='integer' name='points' ordinal='10' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>country</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[country]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>country</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>countryCode</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[countryCode]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>countryCode</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>group</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[group]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>group</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>position</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[position]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>position</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>played</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[played]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>played</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>won</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[won]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>won</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>drawn</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[drawn]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>drawn</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>lost</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[lost]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>lost</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>goalsFor</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[goalsFor]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>goalsFor</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>goalsAgainst</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[goalsAgainst]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>goalsAgainst</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>points</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[points]</local-name>
+            <parent-name>[worldcup-standings-tableau.csv]</parent-name>
+            <remote-alias>points</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Goal Difference' datatype='integer' name='[Calculation_100000000001]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[goalsFor] - [goalsAgainst] // Goal difference: goals for minus goals against' />
+      </column>
+      <column caption='Group Stage Leader' datatype='boolean' name='[Calculation_100000000002]' role='measure' type='nominal'>
+        <calculation class='tableau' formula='RANK_UNIQUE(SUM([Calculation_100000000001]))=1'>
+          <table-calc ordering-field='[federated.0sws74t0fh46kq19oyksf18yjlvo].[country]' ordering-type='Field' />
+        </calculation>
+      </column>
+      <column caption='worldcup-standings-tableau.csv' datatype='table' name='[__tableau_internal_object_id__].[worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047]' role='measure' type='quantitative' />
+      <column caption='country_code' datatype='string' name='[countryCode]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Country' datatype='string' name='[country]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Drawn' datatype='integer' name='[drawn]' role='measure' type='quantitative' />
+      <column caption='Goals Against' datatype='integer' name='[goalsAgainst]' role='measure' type='quantitative' />
+      <column caption='Goals For' datatype='integer' name='[goalsFor]' role='measure' type='quantitative' />
+      <column caption='World Cup Group' datatype='string' name='[group]' role='dimension' type='nominal' />
+      <column caption='Lost' datatype='integer' name='[lost]' role='measure' type='quantitative' />
+      <column caption='Played' datatype='integer' name='[played]' role='measure' type='quantitative' />
+      <column caption='Points' datatype='integer' name='[points]' role='measure' type='quantitative' />
+      <column caption='Position' datatype='integer' name='[position]' role='measure' type='quantitative' />
+      <column caption='Won' datatype='integer' name='[won]' role='measure' type='quantitative' />
+      <column-instance column='[Calculation_100000000002]' derivation='User' name='[usr:Calculation_100000000002:nk]' pivot='key' type='nominal'>
+        <table-calc ordering-field='[federated.0sws74t0fh46kq19oyksf18yjlvo].[country]' ordering-type='Field' />
+      </column-instance>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[usr:Calculation_100000000002:nk]' type='palette'>
+            <map to='#4e79a7'>
+              <bucket>true</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>false</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />
+      </semantic-values>
+      <object-graph>
+        <objects>
+          <object caption='worldcup-standings-tableau.csv' id='worldcup-standings-tableau.csv_5A3A8A104E604BF0A28B029C13919047'>
+            <properties context=''>
+              <relation connection='textscan.1h6m8rk0yvb7iu1gy0t3l18f4b90' name='worldcup-standings-tableau.csv' table='[worldcup-standings-tableau#csv]' type='table'>
+                <columns character-set='UTF-8' header='yes' locale='en_US' separator=','>
+                  <column datatype='string' name='country' ordinal='0' />
+                  <column datatype='string' name='countryCode' ordinal='1' />
+                  <column datatype='string' name='group' ordinal='2' />
+                  <column datatype='integer' name='position' ordinal='3' />
+                  <column datatype='integer' name='played' ordinal='4' />
+                  <column datatype='integer' name='won' ordinal='5' />
+                  <column datatype='integer' name='drawn' ordinal='6' />
+                  <column datatype='integer' name='lost' ordinal='7' />
+                  <column datatype='integer' name='goalsFor' ordinal='8' />
+                  <column datatype='integer' name='goalsAgainst' ordinal='9' />
+                  <column datatype='integer' name='points' ordinal='10' />
+                </columns>
+              </relation>
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.0sws74t0fh46kq19oyksf18yjlvo].[none:country:nk]</field>
+          <field>[federated.0sws74t0fh46kq19oyksf18yjlvo].[none:group:nk]</field>
+        </color-one-way>
+      </highlight>
+    </viewpoint>
+    <simple-id uuid='{7D79DF0C-E8A2-4C51-83DC-4ABBD0F03C96}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='worldcup-standings-tableau' name='federated.0sws74t0fh46kq19oyksf18yjlvo' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0sws74t0fh46kq19oyksf18yjlvo'>
+        <column caption='Goal Difference' datatype='integer' name='[Calculation_100000000001]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='[goalsFor] - [goalsAgainst] // Goal difference: goals for minus goals against' />
+        </column>
+        <column caption='Country' datatype='string' name='[country]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column caption='Goals Against' datatype='integer' name='[goalsAgainst]' role='measure' type='quantitative' />
+        <column caption='Goals For' datatype='integer' name='[goalsFor]' role='measure' type='quantitative' />
+        <column caption='World Cup Group' datatype='string' name='[group]' role='dimension' type='nominal' />
+        <column-instance column='[country]' derivation='None' name='[none:country:nk]' pivot='key' type='nominal' />
+        <column-instance column='[group]' derivation='None' name='[none:group:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_100000000001]' derivation='Sum' name='[sum:Calculation_100000000001:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='VizExtension' />
+        <add-in add-in-id='com.tableau.extension.sankey' extension-url='https://extensions.tableauusercontent.com/sandbox/sankey/sankey.html' extension-version='1.5.0' instance-id='551A2C7F88A54479A8C5C745E694BA77'>
+          <instance-settings />
+          <type-settings>
+            <worksheet />
+          </type-settings>
+        </add-in>
+        <encodings>
+          <custom _.fcp.VizExtensionsDupEncodingUUID.true...encoding-id='{8D23A40F-670F-4E59-95ED-9AE729B47470}' column='[federated.0sws74t0fh46kq19oyksf18yjlvo].[none:country:nk]' custom-type-name='level' />
+          <custom _.fcp.VizExtensionsDupEncodingUUID.true...encoding-id='{13E904F6-7ADC-4141-A9DF-803C920B5DE8}' column='[federated.0sws74t0fh46kq19oyksf18yjlvo].[none:group:nk]' custom-type-name='level' />
+          <custom _.fcp.VizExtensionsDupEncodingUUID.true...encoding-id='{7F3E5BFB-3383-4C35-811B-7BA4A856E933}' column='[federated.0sws74t0fh46kq19oyksf18yjlvo].[sum:Calculation_100000000001:qk]' custom-type-name='edge' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows />
+    <cols />
+  </table>
+</bookmark>

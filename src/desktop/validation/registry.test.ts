@@ -1,7 +1,50 @@
-import { runValidation } from './registry.js';
-import type { ValidationRule } from './types.js';
+import { introducedBlockingValidationIssues, runValidation } from './registry.js';
+import type { ValidationIssue, ValidationRule } from './types.js';
 
 describe('validation framework', () => {
+  describe('introducedBlockingValidationIssues', () => {
+    const issue = (overrides: Partial<ValidationIssue> = {}): ValidationIssue => ({
+      ruleId: 'test-rule',
+      severity: 'error',
+      message: 'existing problem',
+      xpath: '//worksheet[@name="Existing"]',
+      ...overrides,
+    });
+
+    it('ignores an unchanged blocking issue from the baseline workbook', () => {
+      expect(introducedBlockingValidationIssues([issue()], [issue()])).toEqual([]);
+    });
+
+    it('returns a newly introduced blocking issue', () => {
+      const introduced = issue({ xpath: '//worksheet[@name="New"]' });
+
+      expect(introducedBlockingValidationIssues([issue()], [issue(), introduced])).toEqual([
+        introduced,
+      ]);
+    });
+
+    it('returns an extra duplicate of a baseline blocking issue', () => {
+      const duplicate = issue();
+
+      expect(introducedBlockingValidationIssues([issue()], [issue(), duplicate])).toEqual([
+        duplicate,
+      ]);
+    });
+
+    it('returns an aggregated issue whose occurrence count increased', () => {
+      const baseline = issue({ occurrenceCount: 1 });
+      const candidate = issue({ occurrenceCount: 2 });
+
+      expect(introducedBlockingValidationIssues([baseline], [candidate])).toEqual([candidate]);
+    });
+
+    it('ignores warning-only differences', () => {
+      const warning = issue({ severity: 'warning', message: 'new warning' });
+
+      expect(introducedBlockingValidationIssues([], [warning])).toEqual([]);
+    });
+  });
+
   it('returns valid=true when no issues are emitted', () => {
     const passRule: ValidationRule = {
       id: 'test-pass-rule',

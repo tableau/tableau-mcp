@@ -1,0 +1,761 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt;</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Survey Data (str)' inline='true' name='federated.0w7d7y516eho731d703ht1yw6d0w' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Survey YN' name='hyper.0pmryyg1py3y9611d8u1p0ozfyhc'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.0pmryyg1py3y9611d8u1p0ozfyhc' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Q3_9 - Makes good coffee</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_9 - Makes good coffee]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_9 - Makes good coffee</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_4 - Temperature</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_4 - Temperature]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_4 - Temperature</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_5 - Galvanic Skin Response</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Q2_5 - Galvanic Skin Response]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_5 - Galvanic Skin Response</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>2</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_6 - Breathing</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_6 - Breathing]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_6 - Breathing</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_7 - Perspiration</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_7 - Perspiration]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_7 - Perspiration</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_9 - Adrenaline Production</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_9 - Adrenaline Production]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_9 - Adrenaline Production</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_4 - Can Play Jazz</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_4 - Can Play Jazz]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_4 - Can Play Jazz</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_3 - Blood Pressure</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_3 - Blood Pressure]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_3 - Blood Pressure</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_5 - Likes the Beatles</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_5 - Likes the Beatles]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_5 - Likes the Beatles</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_8 - Is Kind to animals</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_8 - Is Kind to animals]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_8 - Is Kind to animals</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q100 - Salary</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q100 - Salary]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q100 - Salary</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>845</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_8 - Pupil Dilation</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_8 - Pupil Dilation]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_8 - Pupil Dilation</remote-alias>
+            <ordinal>11</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_1 - Pulse Rate</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_1 - Pulse Rate]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_1 - Pulse Rate</remote-alias>
+            <ordinal>12</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q1 - Vote in the upcoming election?</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q1 - Vote in the upcoming election?]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q1 - Vote in the upcoming election?</remote-alias>
+            <ordinal>13</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>4</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_2 - Good Sense of Humor</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_2 - Good Sense of Humor]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_2 - Good Sense of Humor</remote-alias>
+            <ordinal>14</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q2_2 - Metabolism</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q2_2 - Metabolism]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q2_2 - Metabolism</remote-alias>
+            <ordinal>15</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_1 - Good Job Skills</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_1 - Good Job Skills]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_1 - Good Job Skills</remote-alias>
+            <ordinal>16</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_3 - High Intelligence</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_3 - High Intelligence]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_3 - High Intelligence</remote-alias>
+            <ordinal>17</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_6 - Good Ability to lift heavy objects</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_6 - Good Ability to lift heavy objects]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_6 - Good Ability to lift heavy objects</remote-alias>
+            <ordinal>18</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Q3_7 - Has grace under pressure</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Q3_7 - Has grace under pressure]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Q3_7 - Has grace under pressure</remote-alias>
+            <ordinal>19</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>RespID</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[RespID]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>RespID</remote-alias>
+            <ordinal>20</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>845</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Gender</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Gender]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Gender</remote-alias>
+            <ordinal>21</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>2</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Location</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Location]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Location</remote-alias>
+            <ordinal>22</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Generation</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Generation]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Generation</remote-alias>
+            <ordinal>23</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>4</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Q1 - Yes' datatype='real' name='[Calculation_937593187665391621]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='(COUNTD(IF [Q1 - Vote in the upcoming election?]=&quot;Yes&quot; THEN [RespID] END)&#13;&#10;/ COUNTD([RespID]))' />
+      </column>
+      <column datatype='string' hidden='true' name='[Gender]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Generation]' role='dimension' type='nominal' />
+      <column caption='Q1 - No' datatype='real' name='[Q1 - Yes (copy)_937593187665588230]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='-(COUNTD(IF [Q1 - Vote in the upcoming election?]=&quot;No&quot; THEN [RespID] END)&#13;&#10;/ COUNTD([RespID]))' />
+      </column>
+      <column datatype='string' hidden='true' name='[Q100 - Salary]' role='dimension' type='nominal' />
+      <column caption='Q2 1 - Pulse Rate' datatype='string' name='[Q2_1 - Pulse Rate]' role='dimension' type='nominal' />
+      <column caption='Q2 2 - Metabolism' datatype='string' hidden='true' name='[Q2_2 - Metabolism]' role='dimension' type='nominal' />
+      <column caption='Q2 3 - Blood Pressure' datatype='string' hidden='true' name='[Q2_3 - Blood Pressure]' role='dimension' type='nominal' />
+      <column caption='Q2 4 - Temperature' datatype='string' hidden='true' name='[Q2_4 - Temperature]' role='dimension' type='nominal' />
+      <column caption='Q2 5 - Galvanic Skin Response' datatype='integer' hidden='true' name='[Q2_5 - Galvanic Skin Response]' role='measure' type='quantitative' />
+      <column caption='Q2 6 - Breathing' datatype='string' hidden='true' name='[Q2_6 - Breathing]' role='dimension' type='nominal' />
+      <column caption='Q2 7 - Perspiration' datatype='string' hidden='true' name='[Q2_7 - Perspiration]' role='dimension' type='nominal' />
+      <column caption='Q2 8 - Pupil Dilation' datatype='string' hidden='true' name='[Q2_8 - Pupil Dilation]' role='dimension' type='nominal' />
+      <column caption='Q2 9 - Adrenaline Production' datatype='string' hidden='true' name='[Q2_9 - Adrenaline Production]' role='dimension' type='nominal' />
+      <column caption='Q3 1 - Good Job Skills' datatype='string' hidden='true' name='[Q3_1 - Good Job Skills]' role='dimension' type='nominal' />
+      <column caption='Q3 2 - Good Sense of Humor' datatype='string' hidden='true' name='[Q3_2 - Good Sense of Humor]' role='dimension' type='nominal' />
+      <column caption='Q3 3 - High Intelligence' datatype='string' hidden='true' name='[Q3_3 - High Intelligence]' role='dimension' type='nominal' />
+      <column caption='Q3 4 - Can Play Jazz' datatype='string' hidden='true' name='[Q3_4 - Can Play Jazz]' role='dimension' type='nominal' />
+      <column caption='Q3 5 - Likes the Beatles' datatype='string' hidden='true' name='[Q3_5 - Likes the Beatles]' role='dimension' type='nominal' />
+      <column caption='Q3 6 - Good Ability to lift heavy objects' datatype='string' hidden='true' name='[Q3_6 - Good Ability to lift heavy objects]' role='dimension' type='nominal' />
+      <column caption='Q3 7 - Has grace under pressure' datatype='string' hidden='true' name='[Q3_7 - Has grace under pressure]' role='dimension' type='nominal' />
+      <column caption='Q3 8 - Is Kind to animals' datatype='string' hidden='true' name='[Q3_8 - Is Kind to animals]' role='dimension' type='nominal' />
+      <column caption='Q3 9 - Makes good coffee' datatype='string' hidden='true' name='[Q3_9 - Makes good coffee]' role='dimension' type='nominal' />
+      <column caption='Resp ID' datatype='integer' name='[RespID]' role='dimension' type='ordinal' />
+      <column caption='Extract' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]' role='measure' type='quantitative' />
+      <column-instance column='[Calculation_937593187665391621]' derivation='User' name='[usr:Calculation_937593187665391621:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[Q1 - Yes (copy)_937593187665588230]' derivation='User' name='[usr:Q1 - Yes (copy)_937593187665588230:qk]' pivot='key' type='quantitative' />
+      <folders-common>
+        <folder name='Qs'>
+          <folder-item name='[Q1 - Vote in the upcoming election?]' type='field' />
+          <folder-item name='[Q100 - Salary]' type='field' />
+          <folder-item name='[Q2_1 - Pulse Rate]' type='field' />
+          <folder-item name='[Q2_2 - Metabolism]' type='field' />
+          <folder-item name='[Q2_3 - Blood Pressure]' type='field' />
+          <folder-item name='[Q2_4 - Temperature]' type='field' />
+          <folder-item name='[Q2_5 - Galvanic Skin Response]' type='field' />
+          <folder-item name='[Q2_6 - Breathing]' type='field' />
+          <folder-item name='[Q2_7 - Perspiration]' type='field' />
+          <folder-item name='[Q2_8 - Pupil Dilation]' type='field' />
+          <folder-item name='[Q2_9 - Adrenaline Production]' type='field' />
+          <folder-item name='[Q3_1 - Good Job Skills]' type='field' />
+          <folder-item name='[Q3_2 - Good Sense of Humor]' type='field' />
+          <folder-item name='[Q3_3 - High Intelligence]' type='field' />
+          <folder-item name='[Q3_4 - Can Play Jazz]' type='field' />
+          <folder-item name='[Q3_5 - Likes the Beatles]' type='field' />
+          <folder-item name='[Q3_6 - Good Ability to lift heavy objects]' type='field' />
+          <folder-item name='[Q3_7 - Has grace under pressure]' type='field' />
+          <folder-item name='[Q3_8 - Is Kind to animals]' type='field' />
+          <folder-item name='[Q3_9 - Makes good coffee]' type='field' />
+        </folder>
+        <folder name='Spine Chart'>
+          <folder-item name='[Calculation_937593187665391621]' type='field' />
+          <folder-item name='[Q1 - Yes (copy)_937593187665588230]' type='field' />
+        </folder>
+      </folders-common>
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:13:27 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Survey YN Extract' increment-value='%null%' refresh-type='create' rows-inserted='845' timestamp-start='2026-06-30 20:13:27.538' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Q2_1 - Pulse Rate</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Q2_1 - Pulse Rate]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Q2_1 - Pulse Rate</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>3</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Q1 - Vote in the upcoming election?</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Q1 - Vote in the upcoming election?]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Q1 - Vote in the upcoming election?</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>4</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>RespID</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[RespID]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>RespID</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>845</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Location</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Location]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Location</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='false' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[:Measure Names]' type='palette'>
+            <map to='#4fadff'>
+              <bucket>&quot;[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]&quot;</bucket>
+            </map>
+            <map to='#ff5e5e'>
+              <bucket>&quot;[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk]&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_CE52D121DCD24D379952E412A7CF9CB8'>
+            <properties context=''>
+              <relation connection='hyper.0pmryyg1py3y9611d8u1p0ozfyhc' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window tab-color='#4f779a'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='9' param='[federated.0w7d7y516eho731d703ht1yw6d0w].[:Measure Names]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{EC50498E-CB8E-4043-BDE5-780A9033B01F}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Survey Data (str)' name='federated.0w7d7y516eho731d703ht1yw6d0w' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0w7d7y516eho731d703ht1yw6d0w'>
+        <column caption='Q1 - Yes' datatype='real' name='[Calculation_937593187665391621]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='(COUNTD(IF [Q1 - Vote in the upcoming election?]=&quot;Yes&quot; THEN [RespID] END)&#13;&#10;/ COUNTD([RespID]))' />
+        </column>
+        <column datatype='string' name='[Location]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Q1 - Vote in the upcoming election?]' role='dimension' type='nominal' />
+        <column caption='Q1 - No' datatype='real' name='[Q1 - Yes (copy)_937593187665588230]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='-(COUNTD(IF [Q1 - Vote in the upcoming election?]=&quot;No&quot; THEN [RespID] END)&#13;&#10;/ COUNTD([RespID]))' />
+        </column>
+        <column caption='Q2 1 - Pulse Rate' datatype='string' name='[Q2_1 - Pulse Rate]' role='dimension' type='nominal' />
+        <column caption='Resp ID' datatype='integer' name='[RespID]' role='dimension' type='ordinal' />
+        <column-instance column='[Location]' derivation='None' name='[none:Location:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Q2_1 - Pulse Rate]' derivation='None' name='[none:Q2_1 - Pulse Rate:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_937593187665391621]' derivation='User' name='[usr:Calculation_937593187665391621:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Q1 - Yes (copy)_937593187665588230]' derivation='User' name='[usr:Q1 - Yes (copy)_937593187665588230:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]'>
+        <groupfilter function='except' user:ui-domain='relevant' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[none:Location:nk]' />
+          <groupfilter function='member' level='[none:Location:nk]' member='%null%' />
+        </groupfilter>
+      </filter>
+      <computed-sort column='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]' direction='DESC' using='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]' />
+      <filter class='categorical' column='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Q2_1 - Pulse Rate:nk]'>
+        <groupfilter function='except' user:ui-domain='database' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[none:Q2_1 - Pulse Rate:nk]' />
+          <groupfilter function='member' level='[none:Q2_1 - Pulse Rate:nk]' member='%null%' />
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]</column>
+        <column>[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Q2_1 - Pulse Rate:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]' field-type='quantitative' fold='true' scope='cols' synchronized='true' type='space' />
+        <format attr='display' class='0' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]' scope='cols' value='false' />
+        <format attr='display' class='0' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk]' scope='cols' value='false' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-color' scope='cols' value='#333333' />
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='text-format' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk]' value='*0%;0%' />
+        <format attr='text-format' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]' value='*0%;0%' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-align' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]' value='left' />
+        <format attr='color' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]' value='#333333' />
+        <format attr='font-family' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]' value='Tableau Regular' />
+        <format attr='font-weight' field='[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]' value='normal' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#d4d4d4' />
+        <format attr='line-visibility' value='on' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-size' value='1' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='8' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0w7d7y516eho731d703ht1yw6d0w].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Semibold' fontsize='11'>&lt;[federated.04cqzfd1c87p031d9r1d113h78i6].[usr:F - responses (copy)_937593187657646082:qk]&gt; </run>
+            <run fontname='Tableau Regular' fontsize='11'>of Total Respondents in </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>&lt;[federated.04cqzfd1c87p031d9r1d113h78i6].[none:Location:nk]&gt;</run>
+            <run fontname='Tableau Regular' fontsize='11'> responded </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>NO </run>
+            <run fontname='Tableau Regular' fontsize='11'>to Q1.</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#333333' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#fd996b' />
+            <format attr='mark-transparency' value='111' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='9' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0w7d7y516eho731d703ht1yw6d0w].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Semibold' fontsize='11'>&lt;[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk]&gt; </run>
+            <run fontname='Tableau Regular' fontsize='11'>of Total Respondents in &lt;[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]&gt; responded </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>NO </run>
+            <run fontname='Tableau Regular' fontsize='11'>to Q1.</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#333333' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='mark-transparency' value='111' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ff5e5e' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane id='10' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.0w7d7y516eho731d703ht1yw6d0w].[:Measure Names]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run bold='true' fontname='Tableau Semibold' fontsize='11'>&lt;[federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk]&gt; </run>
+            <run fontname='Tableau Regular' fontsize='11'>of Total Respondents in &lt;[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]&gt; responded </run>
+            <run bold='true' fontname='Tableau Regular' fontsize='11'>YES </run>
+            <run fontname='Tableau Regular' fontsize='11'>to Q1.</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='color' value='#333333' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='1' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='mark-transparency' value='111' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#4fadff' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0w7d7y516eho731d703ht1yw6d0w].[none:Location:nk]</rows>
+    <cols>([federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Q1 - Yes (copy)_937593187665588230:qk] + [federated.0w7d7y516eho731d703ht1yw6d0w].[usr:Calculation_937593187665391621:qk])</cols>
+  </table>
+</bookmark>

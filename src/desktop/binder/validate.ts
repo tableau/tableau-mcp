@@ -1,0 +1,1215 @@
+// Tier-1 fast-path binder — the deterministic validation gate (design doc §2.4).
+//
+// `validateBinding(manifest, proposal, schema)` is PURE (no I/O): it takes a
+// proposed slot→field mapping and either returns the exact `field_mapping` the
+// injector (`replaceFieldReferences`, src/server/tools/templates.ts) needs, or a
+// list of blockers describing why the fast path must escalate. It runs gates 1–7
+// in order:
+//
+//   1. slot coverage        — every required+bindable slot bound exactly once;
+//                             no binding targets an unknown / non-bindable slot.
+//   2. field resolves       — each field resolves to exactly one schema field
+//                             (ambiguous / not_found ⇒ escalate, carrying candidates).
+//   3. kind/role compat     — resolved field's role/type/datatype fits slot.kind.
+//   4. derivation legality  — temporal derivations only on date/datetime;
+//                             aggregations only on numeric; an aggregated calc
+//                             forces `usr` and forbids re-aggregation.
+//   5. base-column consistency — all slots sharing a template_field must resolve
+//                             to the SAME base column, else replaceFieldReferences
+//                             would throw (templates.ts:145-162); pre-fail here.
+//   6. calc dependency closure — every calc's depends_on_slots is a bound slot.
+//   7. emit                 — build the column-instance value FROM the slot's
+//                             derivation (qualified key `Field@deriv` when reused).
+//
+// Field resolution runs against the SchemaSummary (itself derived from
+// `listAvailableFields`, the same source `resolveField` uses), so the gate is a
+// pure function of (manifest, proposal, schema) and every gate has a
+// deterministic fire / no-fire outcome — mirroring the planner's no-guessing
+// block (coordination.ts:185-303) without needing the raw workbook XML.
+
+import Fuse from 'fuse.js';
+
+import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
+import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
+import {
+  optionalFieldPrunesFor,
+  type OptionalFieldPruneSpec,
+} from '../templates/optionalFieldPrune.js';
+import { templateLiveSupportBlocker } from '../templates/templateLiveSupport.js';
+import { cardinalityAdvice, PIE_SLICE_WORKABLE_MAX } from './cardinality.js';
+import {
+  matchAvoidWhen,
+  MAX_CLASSIFIABLE_FIELDS,
+  parseExplicitBoxRolePhrases,
+  resolveEncodingFieldInAsk,
+} from './classify.js';
+import { escapeXml } from './escape.js';
+import type {
+  BlockerCode,
+  CalcSlot,
+  Derivation,
+  SlotSpec,
+  TemplateBindingContract,
+} from './manifest-types.js';
+import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
+import { inferStringTemporal } from './stringTemporal.js';
+
+/**
+ * A proposed template + slot→field mapping (the small-LLM / no-LLM output).
+ *
+ * `derivation` on a binding is an OPTIONAL per-slot override of the manifest's
+ * authored derivation. Manifest derivations are the TEMPLATE's defaults, not the
+ * user's intent — set an override ONLY when the ask explicitly requests an
+ * aggregation/date grain different from the template default (e.g. the ask says
+ * "average" but the template slot is authored as sum). The override is gated for
+ * legality against the resolved field's datatype (gate 4) exactly like a template
+ * default, and emitted in the field_mapping value on success (gate 7).
+ */
+/**
+ * A declarative interactive dimension filter (m7 order-of-operations). `field` is a
+ * NAME from SchemaSummary.fields. `context: true` marks it a CONTEXT filter — Tableau
+ * order-of-operations step 3, which runs BEFORE a Top-N dimension filter (step 4), so a
+ * "top N of A within an interactively-selected B" bind ranks WITHIN the selected B rather
+ * than globally-then-filtering. `values` is OPTIONAL: when the ask names no member (m7:
+ * "let me filter down to one region"), the apply path emits an enumerate-all interactive
+ * control (function="level-members" + user:ui-enumeration="all"), not a member list.
+ */
+export interface FilterSpec {
+  field: string; // a NAME from SchemaSummary.fields
+  values?: string[];
+  context?: boolean;
+}
+
+export interface BindingProposal {
+  template: string;
+  title: string;
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>; // field = a NAME from SchemaSummary.fields
+  sort?: { by: string; direction: 'asc' | 'desc' };
+  top_n?: number;
+  /** Histogram-only positive bin width. Omit to preserve the Tableau-authored default. */
+  bin_size?: number;
+  filters?: FilterSpec[];
+  /** Literal {{KEY}} template substitutions (e.g. date-range {{DATE_MIN}}); reserved
+   *  keys DATASOURCE/field_base_* are stripped before use. */
+  template_parameters?: Record<string, string>;
+  confidence?: number;
+}
+
+/** The gate-specific escalation reasons (design §3.2). */
+export type EscalateReason =
+  | 'template-not-found'
+  | 'not-fast-path'
+  | 'missing-required-slot'
+  | 'ambiguous-field'
+  | 'field-not-found'
+  | 'kind-mismatch'
+  | 'derivation-illegal'
+  | 'aggregation-level-mismatch'
+  | 'base-column-conflict'
+  | 'cross-datasource-binding'
+  | 'calc-dependency-unmet'
+  | 'low-confidence'
+  // M10 Finding 3: the ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
+  // classifier fails closed (never classifies a truncated subset) and escalates to
+  // the general authoring flow rather than risk a silent wrong bind.
+  | 'schema-too-large';
+
+export interface Blocker {
+  code: EscalateReason | BlockerCode;
+  slot_id?: string;
+  detail: string;
+  candidates?: string[];
+}
+
+export type ValidateResult =
+  | {
+      ok: true;
+      datasource: string;
+      field_mapping: Record<string, string>;
+      warnings?: string[];
+      /** temporal_axis_from_string: the apply-side DATEPARSE splice spec, when a temporal
+       * slot accepted a date-like string source (undefined for every normal bind). */
+      dateparse_axis?: DateparseAxisSpec;
+      /** Manifest-approved optional template refs to remove when their slots are unbound. */
+      optional_field_prunes?: OptionalFieldPruneSpec[];
+    }
+  | { ok: false; blockers: Blocker[] };
+
+// Derivation short-forms that are only legal over date/datetime fields.
+const TEMPORAL_DERIVATIONS: ReadonlySet<string> = new Set([
+  'yr',
+  'qr',
+  'mn',
+  'wk',
+  'dy',
+  'hr',
+  'mi',
+  'sc',
+  'tyr',
+  'tqr',
+  'tmn',
+  'tdy',
+]);
+
+// Date-TRUNCATION derivations. Unlike discrete date parts (yr/qr/mn/…), a
+// truncation yields a continuous date value, so its column-instance pivot is
+// always the continuous ':qk' the templates author — independent of the source
+// field's `type` (a top-level date dimension is frequently type="ordinal").
+// Month-Trunc is 'tmn' (the real short-form Tableau writes), not the legacy 'tmo'.
+const TRUNCATION_DERIVATIONS: ReadonlySet<string> = new Set(['tyr', 'tqr', 'tmn', 'tdy']);
+
+// Derivation short-forms whose operations require a numeric measure.
+const NUMERIC_AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
+  'sum',
+  'avg',
+  'med',
+  'min',
+  'max',
+  'std',
+  'stp',
+  'var',
+  'vrp',
+]);
+const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
+
+const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
+const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
+
+// Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
+// real Tableau aggregations (earliest/latest date, a continuous green pill). The other
+// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes only;
+// MIN/MAX on a plain string dimension remains illegal (unchanged).
+const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
+
+// Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
+// tables in hash-gated src/desktop/binder/classify.ts (geoConceptFromSlotId /
+// GEO_SEMANTIC_ROLE_CONCEPT) — they are intentionally not exported because this
+// port must keep lockstep-core bytes unchanged.
+type GeoConcept = 'country' | 'state' | 'city' | 'zip';
+
+const GEO_TOKEN_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  country: 'country',
+  nation: 'country',
+  state: 'state',
+  province: 'state',
+  region: 'state',
+  admin: 'state',
+  city: 'city',
+  zip: 'zip',
+  zipcode: 'zip',
+  postal: 'zip',
+};
+
+const GEO_SEMANTIC_ROLE_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  '[Country].[ISO3166_2]': 'country',
+  '[Country].[Name]': 'country',
+  '[State].[Name]': 'state',
+  '[City].[Name]': 'city',
+  '[ZipCode].[Name]': 'zip',
+};
+
+function geoNameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function geoConceptFromSlotId(slotId: string): GeoConcept | null {
+  for (const t of geoNameTokens(slotId)) {
+    const concept = GEO_TOKEN_CONCEPT[t];
+    if (concept) return concept;
+  }
+  return null;
+}
+
+function geoConceptFromSemanticRole(semanticRole?: string): GeoConcept | null {
+  if (!semanticRole) return null;
+  return GEO_SEMANTIC_ROLE_CONCEPT[semanticRole] ?? null;
+}
+
+/**
+ * A geo slot must not bind a field whose Tableau semantic role names a
+ * DIFFERENT geo concept — a [City].[Name]-tagged field can't fill a
+ * state/province slot no matter what its name suggests. Fires only when BOTH
+ * concepts are known; an untagged field or exotic slot keeps today's
+ * dimension-only acceptance.
+ */
+function geoConceptMismatch(
+  slot: SlotSpec,
+  f: SchemaField,
+): { slotConcept: GeoConcept; fieldConcept: GeoConcept } | null {
+  if (slot.kind !== 'geo') return null;
+  const slotConcept =
+    geoConceptFromSemanticRole(slot.semantic_role) ?? geoConceptFromSlotId(slot.slot_id);
+  const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
+  if (!slotConcept || !fieldConcept || slotConcept === fieldConcept) return null;
+  return { slotConcept, fieldConcept };
+}
+
+/** Column-instance type suffix (field-resolver.ts:107-112 / field-builder.ts:408-410). */
+function typeSuffixFor(type: string): string {
+  if (type === 'quantitative') return 'qk';
+  if (type === 'ordinal') return 'ok';
+  return 'nk';
+}
+
+/** Count results remain quantitative even when the source or authored instance is discrete. */
+export function columnInstanceSuffix(
+  derivation: Derivation,
+  type: string,
+  authoredRole?: 'nk' | 'ok' | 'qk',
+): string {
+  if (COUNT_AGGREGATION_DERIVATIONS.has(derivation)) return 'qk';
+  if (authoredRole) return authoredRole;
+  if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
+  return typeSuffixFor(type);
+}
+
+interface Resolution {
+  kind: 'exact' | 'rewritten' | 'ambiguous' | 'not_found';
+  field?: SchemaField;
+  candidates?: SchemaField[];
+  notes?: string[];
+}
+
+function displayName(f: SchemaField): string {
+  return f.caption ?? bareName(f.columnName);
+}
+
+function numericSuffixParts(name: string): { base: string; suffix: string | null } {
+  const match = name.match(/^(.*?)(\d+)$/);
+  if (!match || match[1].length === 0) return { base: name, suffix: null };
+  return { base: match[1], suffix: match[2] };
+}
+
+function nearDuplicateNote(fields: SchemaField[], chosen: SchemaField): string | undefined {
+  const chosenName = displayName(chosen);
+  const chosenParts = numericSuffixParts(chosenName);
+  const family = fields.filter((candidate) => {
+    if (candidate.datasource !== chosen.datasource) return false;
+    const candidateName = displayName(candidate);
+    const candidateParts = numericSuffixParts(candidateName);
+    return candidateParts.base === chosenParts.base;
+  });
+  if (family.length < 2 || !family.some((candidate) => candidate !== chosen)) return undefined;
+
+  const names = [...new Set(family.map(displayName))].sort((a, b) => {
+    const aSuffix = numericSuffixParts(a).suffix;
+    const bSuffix = numericSuffixParts(b).suffix;
+    if (aSuffix === null && bSuffix !== null) return -1;
+    if (aSuffix !== null && bSuffix === null) return 1;
+    return a.localeCompare(b);
+  });
+  return `dataset has near-duplicate columns ${names.join('/')} - used ${chosenName}; consider cleaning the source`;
+}
+
+function exactWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
+  const note = nearDuplicateNote(fields, field);
+  return { kind: 'exact', field, ...(note ? { notes: [note] } : {}) };
+}
+
+function rewrittenWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
+  const note = nearDuplicateNote(fields, field);
+  return { kind: 'rewritten', field, ...(note ? { notes: [note] } : {}) };
+}
+
+function disambiguateRanked(
+  candidates: SchemaField[],
+  query: string,
+  fields: SchemaField[],
+): Resolution | null {
+  const captionMatches = candidates.filter((f) => f.caption === query);
+  if (captionMatches.length === 1) return exactWithNotes(fields, captionMatches[0]);
+
+  const parts = candidates.map((candidate) => ({
+    candidate,
+    parts: numericSuffixParts(displayName(candidate)),
+  }));
+  const bases = new Set(parts.map(({ parts: p }) => p.base));
+  const unsuffixed = parts.filter(({ parts: p }) => p.suffix === null);
+  const suffixed = parts.filter(({ parts: p }) => p.suffix !== null);
+  if (bases.size === 1 && unsuffixed.length === 1 && suffixed.length > 0) {
+    return exactWithNotes(fields, unsuffixed[0].candidate);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a proposed field NAME against the schema summary. Mirrors
+ * `resolveField`'s outcome semantics (exact → rewritten → ambiguous → not_found)
+ * but returns the matched SchemaField directly, so gates 3/4/7 have the resolved
+ * field's role/type/datatype/isAggregated (which `resolveField` does not expose).
+ */
+export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
+  const q = query.trim();
+  if (!q) return { kind: 'not_found', candidates: [] };
+  const qBare = bareName(q);
+
+  // Exact column_ref is already datasource-qualified, so resolve it before names/captions.
+  const refMatches = s.fields.filter((f) => f.column_ref === q);
+  if (refMatches.length === 1) return exactWithNotes(s.fields, refMatches[0]);
+  if (refMatches.length > 1) return { kind: 'ambiguous', candidates: refMatches };
+  if (COLUMN_REF_REGEX.test(q)) return { kind: 'not_found', candidates: [] };
+
+  // Phase 1: exact (case-sensitive) on friendly name, caption, or bare column name.
+  const exact = s.fields.filter(
+    (f) => f.name === q || f.caption === q || bareName(f.columnName) === qBare,
+  );
+  if (exact.length === 1) return exactWithNotes(s.fields, exact[0]);
+  if (exact.length > 1) {
+    const ranked = disambiguateRanked(exact, q, s.fields);
+    return ranked ?? { kind: 'ambiguous', candidates: exact };
+  }
+
+  // Phase 2: case-insensitive bare match (classifier/agent may vary casing).
+  const qi = q.toLowerCase();
+  const ci = s.fields.filter(
+    (f) =>
+      f.name.toLowerCase() === qi ||
+      (f.caption ? f.caption.toLowerCase() === qi : false) ||
+      bareName(f.columnName).toLowerCase() === qBare.toLowerCase(),
+  );
+  if (ci.length === 1) return rewrittenWithNotes(s.fields, ci[0]);
+  if (ci.length > 1) {
+    const ranked = disambiguateRanked(ci, q, s.fields);
+    return ranked ?? { kind: 'ambiguous', candidates: ci };
+  }
+
+  // Phase 3: fuzzy did-you-mean (mirrors resolveField's Fuse fallback).
+  const fuse = new Fuse(s.fields, {
+    keys: ['name', 'caption', 'columnName'],
+    threshold: 0.4,
+    includeScore: true,
+  });
+  const fuzzy = fuse
+    .search(q)
+    .slice(0, 5)
+    .map((r) => r.item);
+  return { kind: 'not_found', candidates: fuzzy };
+}
+
+/** Does the resolved field satisfy the slot's kind? (design §2.4 gate 3.) */
+function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
+  switch (kind) {
+    case 'quantitative':
+      return f.role === 'measure' || f.isAggregated;
+    case 'categorical':
+      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        f.isAggregated ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
+    case 'temporal':
+      return TEMPORAL_DATATYPES.has(f.datatype);
+    case 'geo':
+      return f.role === 'dimension';
+    // calc / generated / pseudo / parameter are never user-bindable and are
+    // rejected in gate 1 before reaching here.
+    default:
+      return false;
+  }
+}
+
+export function effectiveSlotDerivation(
+  slot: SlotSpec,
+  field: SchemaField,
+  override?: Derivation,
+): Derivation {
+  if (override !== undefined) return override;
+  if (
+    slot.kind === 'quantitative-or-categorical' &&
+    field.role === 'dimension' &&
+    !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation)
+  ) {
+    return 'none';
+  }
+  return slot.derivation;
+}
+
+/**
+ * `ask` is optional advisory context: when provided, avoid_when entries whose
+ * terms overlap the ask are attached to a successful result as `warnings` (never
+ * as blockers). Omitting `ask` leaves the result unchanged (no warnings), so
+ * every existing caller keeps its exact behavior.
+ */
+export function validateBinding(
+  m: TemplateBindingContract,
+  p: BindingProposal,
+  s: SchemaSummary,
+  ask?: string,
+): ValidateResult {
+  const blockers: Blocker[] = [];
+  const resolutionNotes: string[] = [];
+
+  const slotById = new Map<string, SlotSpec>();
+  for (const slot of m.slots) slotById.set(slot.slot_id, slot);
+  const calcById = new Map<string, CalcSlot>();
+  for (const c of m.calcs) calcById.set(c.slot_id, c);
+  const calcInputTemplateFields = new Set<string>();
+  for (const calc of m.calcs) {
+    for (const dep of calc.depends_on_slots) {
+      const depSlot = slotById.get(dep);
+      if (depSlot) calcInputTemplateFields.add(depSlot.template_field);
+    }
+    for (const input of calc.inputs ?? []) {
+      if (input.template_internal || input.slot_id === null) continue;
+      const inputSlot = slotById.get(input.slot_id);
+      if (inputSlot) calcInputTemplateFields.add(inputSlot.template_field);
+    }
+  }
+
+  // Index the proposed bindings by slot_id (last wins if duplicated).
+  const boundBySlot = new Map<string, string>();
+  const overrideBySlot = new Map<string, Derivation>(); // optional per-slot derivation override
+  for (const b of p.bindings) {
+    boundBySlot.set(b.slot_id, b.field);
+    if (b.derivation !== undefined) overrideBySlot.set(b.slot_id, b.derivation);
+  }
+
+  const isRequiredSlot = (slot: SlotSpec): boolean =>
+    slot.required ||
+    (m.template === 'correlation-highlight-table' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('color')) ||
+    (m.template === 'quota-attainment-bullet' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('reference-line') &&
+      !slot.role.includes('cols')) ||
+    (m.template === 'correlation-bubble-chart' &&
+      slot.bindable &&
+      slot.kind === 'quantitative' &&
+      slot.role.includes('size'));
+
+  // ── Gate 1: slot coverage ────────────────────────────────────────
+  for (const slot of m.slots) {
+    if (isRequiredSlot(slot) && slot.bindable && !boundBySlot.has(slot.slot_id)) {
+      blockers.push({
+        code: 'missing-required-slot',
+        slot_id: slot.slot_id,
+        detail:
+          m.template === 'quota-attainment-bullet' && slot.role.includes('reference-line')
+            ? `required bullet target reference-line slot '${slot.slot_id}' (${slot.template_field}) has no binding`
+            : `required slot '${slot.slot_id}' (${slot.template_field}) has no binding`,
+      });
+    }
+  }
+  for (const b of p.bindings) {
+    const slot = slotById.get(b.slot_id);
+    if (!slot) {
+      // Binding to a calc slot or a wholly unknown slot_id.
+      const detail = calcById.has(b.slot_id)
+        ? `slot '${b.slot_id}' is a template-owned calc and is not user-bindable`
+        : `binding names unknown slot_id '${b.slot_id}'`;
+      blockers.push({ code: 'kind-mismatch', slot_id: b.slot_id, detail });
+    } else if (!slot.bindable) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: b.slot_id,
+        detail: `slot '${b.slot_id}' (kind ${slot.kind}) is not user-bindable`,
+      });
+    }
+  }
+
+  // ── Gates 2–4 per bound, bindable slot ───────────────────────────
+  // Track the resolved base column per binding for gates 5 and 7.
+  const resolved = new Map<string, { slot: SlotSpec; field: SchemaField }>();
+  // temporal_axis_from_string: set when a temporal slot accepts a date-like string
+  // via DATEPARSE. The apply-side splice owns that slot's XML, so gate 7 skips its
+  // field_mapping key and the result carries the axis spec to injectTemplateCore.
+  let dateparseAxis: DateparseAxisSpec | undefined;
+  let dateparseAxisSlotId: string | undefined;
+  for (const [slotId, fieldQuery] of boundBySlot) {
+    const slot = slotById.get(slotId);
+    if (!slot || !slot.bindable) continue; // gate 1 already recorded these
+
+    // Gate 2: field resolves.
+    const r = resolveInSummary(s, fieldQuery);
+    if (r.kind === 'ambiguous') {
+      blockers.push({
+        code: 'ambiguous-field',
+        slot_id: slotId,
+        detail: `"${fieldQuery}" matches ${r.candidates?.length ?? 0} fields; disambiguate before binding`,
+        candidates: (r.candidates ?? []).map((c) => c.column_ref),
+      });
+      continue;
+    }
+    if (r.kind === 'not_found' || !r.field) {
+      blockers.push({
+        code: 'field-not-found',
+        slot_id: slotId,
+        detail: `no field named "${fieldQuery}" in datasource(s)`,
+        candidates: (r.candidates ?? []).map((c) => c.column_ref),
+      });
+      continue;
+    }
+    resolutionNotes.push(...(r.notes ?? []));
+    const f = r.field;
+    const override = overrideBySlot.get(slotId);
+    const effDeriv = effectiveSlotDerivation(slot, f, override);
+    const hasCountOverride = override !== undefined && COUNT_AGGREGATION_DERIVATIONS.has(override);
+    const countDimensionInMeasureSlot =
+      (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
+      f.role === 'dimension' &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv);
+    const feedsCalc = m.calcs.some(
+      (calc) =>
+        calc.depends_on_slots.includes(slotId) ||
+        (calc.inputs ?? []).some(
+          (input) => input.slot_id === slotId && input.required && !input.template_internal,
+        ),
+    );
+
+    if (
+      !f.isAggregated &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv) &&
+      slot.kind !== 'quantitative' &&
+      slot.kind !== 'quantitative-or-categorical'
+    ) {
+      const countSource =
+        override !== undefined ? 'requested count override' : 'template count derivation';
+      blockers.push({
+        code: 'derivation-illegal',
+        slot_id: slotId,
+        detail:
+          `${countSource} '${effDeriv}' returns a quantitative value and cannot bind to ` +
+          `${slot.kind} slot '${slotId}'. Use a quantitative or quantitative-or-categorical slot for count/count-distinct.`,
+      });
+      continue;
+    }
+
+    if (hasCountOverride && f.isAggregated) {
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `requested count override '${override}' cannot apply to already aggregated field "${fieldQuery}"; ` +
+          "the binding would emit Tableau's user-aggregate ('usr') derivation instead of the requested count. Bind a row-level field.",
+      });
+      continue;
+    }
+
+    if (
+      (countDimensionInMeasureSlot && feedsCalc) ||
+      (hasCountOverride &&
+        override !== slot.derivation &&
+        calcInputTemplateFields.has(slot.template_field))
+    ) {
+      const countSource =
+        override !== undefined ? 'requested count override' : 'template count derivation';
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' maps template field '${slot.template_field}' used by a template calculation, so ` +
+          `${countSource} '${effDeriv}' would change mapped shelf instances while leaving the calculation's ` +
+          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested count.",
+      });
+      continue;
+    }
+
+    // Gate 3: kind/role compatibility.
+    if (!kindCompatible(slot.kind, f) && !countDimensionInMeasureSlot) {
+      // temporal_axis_from_string: a temporal slot that opted in accepts a date-like
+      // STRING field, which the apply-side DATEPARSE splice turns into a real date
+      // (see dateparseTemporalAxis.ts). Only when the slot opts in AND the string
+      // field's name is date-like (inferStringTemporal, fail-closed) — otherwise the
+      // kind-mismatch stands unchanged.
+      if (slot.kind === 'temporal' && slot.temporal_from_string) {
+        const inf = inferStringTemporal(f);
+        if (inf) {
+          dateparseAxis = {
+            templateField: slot.template_field,
+            sourceField: bareName(f.columnName),
+            format: inf.format,
+          };
+          dateparseAxisSlotId = slotId;
+          resolved.set(slotId, { slot, field: f });
+          continue; // accepted via dateparse — skip the kind-mismatch blocker
+        }
+      }
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' expects ${slot.kind} but "${fieldQuery}" is ` +
+          `role=${f.role}, type=${f.type}, datatype=${f.datatype}`,
+      });
+      continue;
+    }
+
+    // Gate 3b: geo semantic-role concept (red-team GEO-02) — the deterministic
+    // path already enforces this in pickGeoField; the validate leg must too or
+    // a City-tagged field can bind a state slot via Call-2.
+    const geoMismatch = geoConceptMismatch(slot, f);
+    if (geoMismatch) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' expects geo concept ${geoMismatch.slotConcept} but "${fieldQuery}" is tagged ` +
+          `semanticRole=${f.semanticRole} (${geoMismatch.fieldConcept})`,
+      });
+      continue;
+    }
+
+    // Gate 4: derivation legality per datatype, evaluated on the EFFECTIVE
+    // derivation (an optional per-slot override, else the manifest default). An
+    // aggregated calc forces `usr` (handled in gate 7) and bypasses legality
+    // entirely. An illegal override yields a teaching blocker so the caller
+    // knows why the requested aggregation/grain cannot apply.
+    const src = override !== undefined ? 'requested override' : 'template derivation';
+    if (!f.isAggregated) {
+      if (TEMPORAL_DERIVATIONS.has(effDeriv) && !TEMPORAL_DATATYPES.has(f.datatype)) {
+        blockers.push({
+          code: 'derivation-illegal',
+          slot_id: slotId,
+          detail:
+            `date-grain ${src} '${effDeriv}' requires a date/datetime field, but "${fieldQuery}" ` +
+            `is ${f.datatype}. Date parts (year/quarter/month/…) apply only to date/datetime fields — ` +
+            'bind a date field or drop the derivation override.',
+        });
+        continue;
+      }
+      // MIN/MAX over a date/datetime field is legal (earliest/latest date), so the
+      // numeric-measure requirement is waived for that temporal case; every other
+      // aggregation still requires a numeric measure.
+      const temporalMinMaxOk =
+        TEMPORAL_MINMAX_DERIVATIONS.has(effDeriv) && TEMPORAL_DATATYPES.has(f.datatype);
+      if (
+        NUMERIC_AGGREGATION_DERIVATIONS.has(effDeriv) &&
+        !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure') &&
+        !temporalMinMaxOk
+      ) {
+        blockers.push({
+          code: 'derivation-illegal',
+          slot_id: slotId,
+          detail:
+            `aggregation ${src} '${effDeriv}' requires a numeric measure, but "${fieldQuery}" is ` +
+            `role=${f.role}, datatype=${f.datatype}. Numeric aggregations (sum/avg/median/etc.) apply only ` +
+            'to numeric measures (min/max also apply to date/datetime fields; count/count-distinct/ATTR apply to dimensions) — bind a numeric ' +
+            'measure or drop the derivation override.',
+        });
+        continue;
+      }
+    }
+
+    if (f.isAggregated && effDeriv !== 'usr') {
+      if (feedsCalc) {
+        blockers.push({
+          code: 'aggregation-level-mismatch',
+          slot_id: slotId,
+          detail:
+            `slot '${slotId}' feeds a template calculation, but "${fieldQuery}" is already aggregated. ` +
+            'Bind a row-level measure or dimension so the template does not re-aggregate it or mix aggregation levels.',
+        });
+        continue;
+      }
+    }
+
+    resolved.set(slotId, { slot, field: f });
+  }
+
+  if (m.template === 'kpi-text' && ask) {
+    const valueSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('text'),
+    );
+    const boundMeasure = valueSlot ? resolved.get(valueSlot.slot_id)?.field : undefined;
+
+    if (s.fields.length > MAX_CLASSIFIABLE_FIELDS) {
+      blockers.push({
+        code: 'schema-too-large',
+        detail: `schema-too-large: ${s.fields.length} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+      });
+    } else {
+      const namedResolution = resolveEncodingFieldInAsk(ask, 'size', s);
+      const namedMeasures = namedResolution.field
+        ? [namedResolution.field]
+        : namedResolution.candidates;
+
+      if (namedMeasures.length > 1) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: valueSlot?.slot_id,
+          detail:
+            `kpi-text supports one measure per worksheet, but the ask names ${namedMeasures.length}: ` +
+            `${namedMeasures.map((field) => `"${field.name}"`).join(', ')}; create one KPI worksheet per measure`,
+        });
+      } else if (
+        namedMeasures.length === 1 &&
+        boundMeasure &&
+        namedMeasures[0].column_ref !== boundMeasure.column_ref
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: valueSlot?.slot_id,
+          detail: `kpi-text ask names "${namedMeasures[0].name}" but the KPI binds "${boundMeasure.name}"`,
+        });
+      }
+    }
+  }
+
+  // Chart-specific structural invariants belong in this shared validation seam so
+  // Call 1, Call 2, and the eval-only injected proposal path cannot disagree.
+  if (m.template === 'part-to-whole-pie-chart') {
+    const sliceSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('color'),
+    );
+    const slice = sliceSlot ? resolved.get(sliceSlot.slot_id)?.field : undefined;
+    if (slice?.approxCount !== undefined && slice.approxCount > PIE_SLICE_WORKABLE_MAX) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: sliceSlot?.slot_id,
+        detail:
+          `pie slice field "${slice.name}" has ${slice.approxCount} distinct values, above the ` +
+          `workable maximum of ${PIE_SLICE_WORKABLE_MAX}; choose a lower-cardinality dimension`,
+      });
+    }
+    if (ask && /\bdonut\b/i.test(ask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail:
+          'an explicit donut ask requires a distinct live-proven donor; plain pie is not equivalent',
+      });
+    }
+  }
+
+  if (m.template === 'quota-attainment-bullet') {
+    const actualSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('cols'),
+    );
+    const targetSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        slot.kind === 'quantitative' &&
+        slot.role.includes('reference-line') &&
+        !slot.role.includes('cols'),
+    );
+    const actual = actualSlot ? resolved.get(actualSlot.slot_id)?.field : undefined;
+    const target = targetSlot ? resolved.get(targetSlot.slot_id)?.field : undefined;
+    if (
+      actual &&
+      target &&
+      actual.datasource === target.datasource &&
+      bareName(actual.columnName) === bareName(target.columnName)
+    ) {
+      blockers.push({
+        code: 'base-column-conflict',
+        slot_id: targetSlot?.slot_id,
+        detail:
+          'bullet actual and target must resolve to distinct underlying fields; ' +
+          `both bindings resolve to "${actual.name}"`,
+      });
+    }
+  }
+
+  const identityOf = (field: SchemaField): string =>
+    `${field.datasource}\u0000${bareName(field.columnName)}`;
+
+  if (m.template === 'box-plot-chart') {
+    const boxFields = [...resolved.values()].map(({ field }) => field);
+    if (boxFields.length === 3 && new Set(boxFields.map(identityOf)).size !== 3) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail:
+          'box plot measure, category, and record-grain detail must resolve to three distinct underlying fields',
+      });
+    }
+    if (ask) {
+      const measureSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('rows'),
+      );
+      const categorySlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('cols'),
+      );
+      const grainSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('lod'),
+      );
+      const measure = measureSlot ? resolved.get(measureSlot.slot_id)?.field : undefined;
+      const category = categorySlot ? resolved.get(categorySlot.slot_id)?.field : undefined;
+      const grain = grainSlot ? resolved.get(grainSlot.slot_id)?.field : undefined;
+      const clause = parseExplicitBoxRolePhrases(ask);
+      const expectedMeasure = clause ? resolveInSummary(s, clause.measure).field : undefined;
+      const expectedCategory = clause ? resolveInSummary(s, clause.category).field : undefined;
+      const expectedGrain = clause ? resolveInSummary(s, clause.grain).field : undefined;
+      if (
+        !expectedMeasure ||
+        expectedMeasure.role !== 'measure' ||
+        !expectedCategory ||
+        expectedCategory.role !== 'dimension' ||
+        !expectedGrain ||
+        expectedGrain.role !== 'dimension'
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: grainSlot?.slot_id,
+          detail:
+            'box plot requires explicit, verifiable measure, category, and "with <field> detail" roles',
+        });
+      } else if (
+        measure &&
+        category &&
+        grain &&
+        (identityOf(measure) !== identityOf(expectedMeasure) ||
+          identityOf(category) !== identityOf(expectedCategory) ||
+          identityOf(grain) !== identityOf(expectedGrain))
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: grainSlot?.slot_id,
+          detail:
+            `box plot ask requires measure "${expectedMeasure.name}", category "${expectedCategory.name}", ` +
+            `and record grain "${expectedGrain.name}"; proposal mapped measure "${measure.name}", ` +
+            `category "${category.name}", and record grain "${grain.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'gantt-task-rollup-chart') {
+    const startSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'temporal' && slot.role.includes('cols'),
+    );
+    const endSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        slot.kind === 'temporal' &&
+        slot.role.includes('size') &&
+        !slot.role.includes('cols') &&
+        slot.template_field !== startSlot?.template_field,
+    );
+    const start = startSlot ? resolved.get(startSlot.slot_id)?.field : undefined;
+    const end = endSlot ? resolved.get(endSlot.slot_id)?.field : undefined;
+    const taskSlot = m.slots.find(
+      (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('rows'),
+    );
+    const task = taskSlot ? resolved.get(taskSlot.slot_id)?.field : undefined;
+    if (start && end && identityOf(start) === identityOf(end)) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'gantt start and end dates must resolve to distinct underlying fields',
+      });
+    }
+    const phrase = ask?.match(
+      /\bfrom\s+(.+?)\s+to\s+(.+?)(?=\s*(?:[,;.]|colou?r(?:ed)?\s+by\b|with\b|where\b|filter(?:ed)?\s+by\b|$))/i,
+    );
+    const hasRangeCue = ask ? /\bfrom\b[\s\S]*\bto\b/i.test(ask) : false;
+    const taskPhrase = ask?.match(/\bgantt(?:\s+chart)?\s+of\s+(.+?)\s+from\b/i);
+    const expectedTask = taskPhrase ? resolveInSummary(s, taskPhrase[1].trim()).field : undefined;
+    if (ask && (!expectedTask || expectedTask.role !== 'dimension')) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: taskSlot?.slot_id,
+        detail: 'gantt ask requires an explicit, verifiable task field before the from/to dates',
+      });
+    } else if (task && expectedTask && identityOf(task) !== identityOf(expectedTask)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: taskSlot?.slot_id,
+        detail: `gantt ask requires task "${expectedTask.name}"; proposal mapped "${task.name}"`,
+      });
+    }
+    if (hasRangeCue && !phrase) {
+      blockers.push({
+        code: 'kind-mismatch',
+        detail: 'gantt explicit from/to clause could not be verified against start and end fields',
+      });
+    } else if (phrase && start && end) {
+      const expectedStart = resolveInSummary(s, phrase[1].trim()).field;
+      const expectedEnd = resolveInSummary(s, phrase[2].trim()).field;
+      if (
+        !expectedStart?.datatype.match(/^date(?:time)?$/) ||
+        !expectedEnd?.datatype.match(/^date(?:time)?$/)
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'gantt explicit from/to clause could not be verified against date fields',
+        });
+      } else if (
+        identityOf(start) !== identityOf(expectedStart) ||
+        identityOf(end) !== identityOf(expectedEnd)
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail:
+            `gantt ask requires start field "${expectedStart.name}" and end field "${expectedEnd.name}"; ` +
+            `proposal mapped start "${start.name}" and end "${end.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'distribution-histogram') {
+    const histogramFields = [...resolved.values()].map(({ field }) => field);
+    if (histogramFields.length === 2 && new Set(histogramFields.map(identityOf)).size !== 1) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'histogram bin and raw-count slots must resolve to the same underlying measure',
+      });
+    }
+    if (ask) {
+      const clause =
+        /\bhistogram(?:\s+chart)?\s+of\s+(.+?)(?=\s+(?:distribution\b|with\s+bin\s+size\b)|\s*[,;.]|\s*$)/i.exec(
+          ask,
+        );
+      const expected = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      if (!expected || expected.role !== 'measure') {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'histogram ask requires one explicit, verifiable measure',
+        });
+      } else if (histogramFields.some((field) => identityOf(field) !== identityOf(expected))) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: `histogram ask requires measure "${expected.name}"; proposal mapped "${histogramFields[0]?.name}"`,
+        });
+      }
+    }
+  }
+
+  if (m.template === 'correlation-bubble-chart') {
+    const measures = [...resolved.values()]
+      .filter(({ slot }) => slot.kind === 'quantitative')
+      .map(({ field }) => field);
+    if (measures.length === 3 && new Set(measures.map(identityOf)).size !== 3) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail: 'bubble X, Y, and size must resolve to three distinct underlying measures',
+      });
+    }
+    if (ask) {
+      const clause =
+        /\bbubble(?:\s+chart)?\s+of\s+(.+?)\s+(?:versus|vs\.?)\s+(.+?)\s+by\s+(.+?)\s+sized?\s+by\s+(.+?)(?=\s*(?:[,;.]|colou?r(?:ed)?\s+by\b|$))/i.exec(
+          ask,
+        );
+      const expectedX = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      const expectedY = clause ? resolveInSummary(s, clause[2].trim()).field : undefined;
+      const expectedGrain = clause ? resolveInSummary(s, clause[3].trim()).field : undefined;
+      const expectedSize = clause ? resolveInSummary(s, clause[4].trim()).field : undefined;
+      const xSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('cols'),
+      );
+      const ySlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('rows'),
+      );
+      const sizeSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'quantitative' && slot.role.includes('size'),
+      );
+      const grainSlot = m.slots.find(
+        (slot) => slot.bindable && slot.kind === 'categorical' && slot.role.includes('lod'),
+      );
+      const x = xSlot ? resolved.get(xSlot.slot_id)?.field : undefined;
+      const y = ySlot ? resolved.get(ySlot.slot_id)?.field : undefined;
+      const size = sizeSlot ? resolved.get(sizeSlot.slot_id)?.field : undefined;
+      const grain = grainSlot ? resolved.get(grainSlot.slot_id)?.field : undefined;
+      if (!expectedX || !expectedY || !expectedSize || !expectedGrain) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail: 'bubble ask requires explicit, verifiable X, Y, size, and record-grain fields',
+        });
+      } else if (
+        x &&
+        y &&
+        size &&
+        grain &&
+        (identityOf(x) !== identityOf(expectedX) ||
+          identityOf(y) !== identityOf(expectedY) ||
+          identityOf(size) !== identityOf(expectedSize) ||
+          identityOf(grain) !== identityOf(expectedGrain))
+      ) {
+        blockers.push({
+          code: 'kind-mismatch',
+          detail:
+            `bubble ask requires X "${expectedX.name}", Y "${expectedY.name}", size "${expectedSize.name}", ` +
+            `and grain "${expectedGrain.name}"; proposal mapped X "${x.name}", Y "${y.name}", ` +
+            `size "${size.name}", and grain "${grain.name}"`,
+        });
+      }
+    }
+    const colorSlot = m.slots.find(
+      (slot) =>
+        slot.bindable &&
+        !slot.required &&
+        slot.kind === 'categorical' &&
+        slot.derivation === 'attr' &&
+        slot.role.includes('color'),
+    );
+    const color = colorSlot ? resolved.get(colorSlot.slot_id)?.field : undefined;
+    if (color && ask) {
+      const clause = /\bcolou?r(?:ed)?\s+by\s+(.+?)(?=\s*(?:[,;.]|with\b|where\b|$))/i.exec(ask);
+      const expected = clause ? resolveInSummary(s, clause[1].trim()).field : undefined;
+      if (!clause || !expected || identityOf(color) !== identityOf(expected)) {
+        blockers.push({
+          code: 'kind-mismatch',
+          slot_id: colorSlot?.slot_id,
+          detail: 'bubble optional color must match an explicit color-by clause in the ask',
+        });
+      }
+    }
+  }
+
+  // ── Gate 5: base-column consistency ──────────────────────────────
+  // All slots sharing a template_field must resolve to the same base column.
+  const byTemplateField = new Map<string, Set<string>>();
+  for (const { slot, field } of resolved.values()) {
+    const bases = byTemplateField.get(slot.template_field) ?? new Set<string>();
+    bases.add(bareName(field.columnName));
+    byTemplateField.set(slot.template_field, bases);
+  }
+  for (const [templateField, bases] of byTemplateField) {
+    if (bases.size > 1) {
+      blockers.push({
+        code: 'base-column-conflict',
+        detail:
+          `template field '${templateField}' resolves to multiple base columns ` +
+          `(${[...bases].map((b) => `[${b}]`).join(', ')}); all derivations of one ` +
+          'template field must map to the same base column',
+      });
+    }
+  }
+
+  // ── Gate 5b: single-datasource closure ───────────────────────────
+  // The injector substitutes ONE {{DATASOURCE}} and rewrites every mapped field
+  // onto it (templates.ts strips each value's datasource prefix, then step 4/5
+  // rewrite all refs with the single `datasourceName`). If bound fields resolve
+  // to different datasources, the fast path would silently repoint the
+  // secondary-datasource fields onto the primary — fail closed instead.
+  const fieldsByDatasource = new Map<string, string[]>();
+  for (const { field } of resolved.values()) {
+    const list = fieldsByDatasource.get(field.datasource) ?? [];
+    list.push(bareName(field.columnName));
+    fieldsByDatasource.set(field.datasource, list);
+  }
+  if (fieldsByDatasource.size > 1) {
+    const breakdown = [...fieldsByDatasource.entries()]
+      .map(([ds, cols]) => `${ds} (${cols.map((c) => `[${c}]`).join(', ')})`)
+      .join('; ');
+    blockers.push({
+      code: 'cross-datasource-binding',
+      detail:
+        `bound fields resolve to multiple datasources — ${breakdown}. The fast-path ` +
+        'injector substitutes a single {{DATASOURCE}} and rewrites every field onto ' +
+        'it, so a mixed-datasource binding would silently repoint fields to the wrong ' +
+        'datasource. Bind all fields from one datasource, or build a data-model ' +
+        'relationship/blend and bind within the primary datasource.',
+    });
+  }
+
+  // ── Gate 6: calc dependency closure ──────────────────────────────
+  // Prefer the first-class `inputs` contract (H3): each REQUIRED, slot-referencing
+  // input must resolve to a bound bindable slot, else the calc's formula ref would
+  // dangle after rewriteFormulaFieldRefs. Template-INTERNAL inputs (the template
+  // owns the field) are not user-bound and never block here. Legacy/opaque calc
+  // entries with no derived inputs fall back to `depends_on_slots`.
+  for (const calc of m.calcs) {
+    const checkDep = (dep: string, refLabel: string): void => {
+      const depSlot = slotById.get(dep);
+      if (!depSlot || !depSlot.bindable || !resolved.has(dep)) {
+        blockers.push({
+          code: 'calc-dependency-unmet',
+          slot_id: calc.slot_id,
+          detail: `calc '${calc.slot_id}' ${refLabel} resolves to slot '${dep}', which is not bound; ${calc.template_field} would dangle`,
+        });
+      }
+    };
+    if (Array.isArray(calc.inputs) && calc.inputs.length > 0) {
+      for (const input of calc.inputs) {
+        if (!input.required || input.template_internal || input.slot_id === null) continue;
+        checkDep(input.slot_id, `input [${input.ref}]`);
+      }
+    } else {
+      for (const dep of calc.depends_on_slots) checkDep(dep, 'dependency');
+    }
+  }
+
+  const liveSupportBlocker = templateLiveSupportBlocker(m.template);
+  if (liveSupportBlocker !== undefined) {
+    blockers.push({
+      code: 'kind-mismatch',
+      detail: liveSupportBlocker,
+    });
+  }
+
+  if (blockers.length > 0) return { ok: false, blockers };
+
+  // ── Gate 7: emit the field_mapping ───────────────────────────────
+  const field_mapping: Record<string, string> = {};
+  let datasource = s.datasource;
+  let first = true;
+  for (const slot of m.slots) {
+    if (!slot.bindable) continue;
+    // The dateparse-axis slot is resolved entirely by the apply-side splice (it
+    // rewrites the template's temporal base column into a DATEPARSE calc), so it must
+    // NOT emit a field_mapping key — the core rewrite must leave [templateField] alone.
+    if (slot.slot_id === dateparseAxisSlotId) continue;
+    const entry = resolved.get(slot.slot_id);
+    if (!entry) continue; // optional unbound slot
+    const f = entry.field;
+    // Emit the EFFECTIVE derivation in the VALUE: an aggregated calc forces `usr`;
+    // otherwise a legal per-slot override wins over the manifest default. The
+    // qualified KEY stays at the template's AUTHORED derivation (slot.derivation)
+    // so the injector still matches the template instance it identifies — the
+    // override changes the resolved value, not which instance is targeted.
+    const override = overrideBySlot.get(slot.slot_id);
+    const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
+    // Suffix follows the EFFECTIVE derivation, not the field type alone: counts
+    // and date truncations are continuous (':qk') even on discrete source fields.
+    const suffix = columnInstanceSuffix(deriv, f.type, slot.instance_role);
+    const key = slot.qualified_key_required
+      ? `${slot.template_field}@${slot.derivation}`
+      : slot.template_field;
+    // SECURITY (M10 Finding 1): the VALUE is substituted verbatim into a template XML
+    // attribute, and both datasource + column name are workbook-controlled — escape the
+    // five XML metachars EXACTLY ONCE, here at production. The KEY is the manifest's
+    // template_field (trusted, shape-validated) and is NOT escaped. Tableau field-ref
+    // brackets carry no metachars, so a clean value stays byte-identical.
+    field_mapping[key] = escapeXml(
+      `[${f.datasource}].[${deriv}:${bareName(f.columnName)}:${suffix}]`,
+    );
+    if (first) {
+      datasource = f.datasource;
+      first = false;
+    }
+  }
+
+  // Advisory cautions: surface any avoid_when guidance whose terms match the ask
+  // as WARNINGS on the bound result. These NEVER block — the model (or the
+  // no-LLM path that reached here) has already committed to this template; the
+  // warning rides along so the caller sees the anti-pattern it chose.
+  const warnings = [
+    ...resolutionNotes,
+    ...m.slots.flatMap((slot) => {
+      const entry = resolved.get(slot.slot_id);
+      const effectiveDerivation = entry
+        ? entry.field.isAggregated
+          ? 'usr'
+          : effectiveSlotDerivation(slot, entry.field, overrideBySlot.get(slot.slot_id))
+        : undefined;
+      const advice = entry ? cardinalityAdvice(slot, entry.field, effectiveDerivation) : undefined;
+      return advice ? [advice] : [];
+    }),
+    ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
+  ];
+  // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML
+  // attribute), so escape it here at production alongside the field_mapping values —
+  // escaped exactly once (validateAndBuild consumes this value as-is, no re-escape).
+  const escapedDatasource = escapeXml(datasource);
+  // The dateparse splice injects raw sourceField/format into template XML; escaping is
+  // done inside the splice (escapeXmlAttr), so pass the values RAW here. datasource is
+  // not used by the splice (it edits base columns, not qualified refs) but carried for
+  // completeness/debuggability.
+  const optionalFieldPrunes = optionalFieldPrunesFor(m, resolved);
+  const base = {
+    ok: true as const,
+    datasource: escapedDatasource,
+    field_mapping,
+    ...(optionalFieldPrunes.length > 0 ? { optional_field_prunes: optionalFieldPrunes } : {}),
+  };
+  const withAxis = dateparseAxis ? { ...base, dateparse_axis: dateparseAxis } : base;
+  return warnings.length > 0 ? { ...withAxis, warnings } : withAxis;
+}

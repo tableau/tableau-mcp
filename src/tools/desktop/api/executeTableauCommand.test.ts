@@ -1,0 +1,1859 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { Err, Ok } from 'ts-results-es';
+
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
+import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/paramWireRegistry.js';
+import { knownLiveFailureFixFor } from '../../../desktop/guards/commandPolicy.js';
+import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
+import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
+
+vi.mock('../../../desktop/externalApi/discovery.js');
+
+const SESSION = 'session-1';
+const SORT_NESTED_LIVE_500_FIX = knownLiveFailureFixFor('tabdoc:sort-nested')!;
+const TEST_REGISTRY_DIRS: string[] = [];
+
+function makeExtra(
+  executeCommandImpl: (...args: any[]) => any,
+): ReturnType<typeof getMockRequestHandlerExtra> {
+  const extra = getMockRequestHandlerExtra();
+  extra.getExecutor = vi.fn().mockResolvedValue({
+    executeCommand: vi.fn().mockImplementation(executeCommandImpl),
+    getWorkbookDocument: vi.fn(),
+  });
+  return extra;
+}
+
+const ROOT_FILE_CONNECT_ARGS = {
+  DSClass: 'hyper',
+  IsLeafConnection: false,
+  FilePath: '/tmp/coffee-chain.hyper',
+};
+
+function makeRootFileConnectExtra(...datasourceReads: any[]): {
+  extra: ReturnType<typeof getMockRequestHandlerExtra>;
+  executeCommand: ReturnType<typeof vi.fn>;
+} {
+  const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+  const listWorkbookDatasources = vi.fn();
+  for (const read of datasourceReads) {
+    listWorkbookDatasources.mockResolvedValueOnce(read);
+  }
+  const extra = getMockRequestHandlerExtra();
+  extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+  return { extra, executeCommand };
+}
+
+function writeExternalApiRegistry({
+  commands,
+  typeOfParam = {},
+  enumVals = {},
+}: {
+  commands: Record<string, unknown>;
+  typeOfParam?: Record<string, unknown>;
+  enumVals?: Record<string, string[]>;
+}): string {
+  const dir = mkdtempSync(join(process.cwd(), 'external-api-registry-test-'));
+  TEST_REGISTRY_DIRS.push(dir);
+  writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
+  writeFileSync(
+    join(dir, 'codegen_registry.json'),
+    JSON.stringify({ param_name: {}, type_of_param: typeOfParam, enum_vals: enumVals }),
+    'utf-8',
+  );
+  return dir;
+}
+
+function enableExternalApiRegistry(commands: Record<string, unknown>): void {
+  const dir = writeExternalApiRegistry({
+    commands,
+    typeOfParam: { DPI_ShowMeCommandType: { enum_name: 'ShowMeCommandType' } },
+    enumVals: { ShowMeCommandType: ['bars', 'lines'] },
+  });
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
+  _resetExternalApiCommandRegistryForTest();
+}
+
+describe('executeTableauCommandTool', () => {
+  beforeEach(() => {
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    _resetExternalApiCommandRegistryForTest();
+    for (const dir of TEST_REGISTRY_DIRS.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('should create a tool instance with correct properties', () => {
+    const tool = getExecuteTableauCommandTool(new DesktopMcpServer());
+    expect(tool.name).toBe('execute-tableau-command');
+    expect(tool.description).toContain('namespace:command');
+    expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
+      command: expect.any(Object),
+      args: expect.any(Object),
+    });
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false });
+  });
+
+  it('should return error for command missing a colon separator', async () => {
+    const extra = getMockRequestHandlerExtra();
+    const result = await getResult({ session: SESSION, command: 'invalidformat' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError(
+        "Invalid command format. Expected 'namespace:command' (e.g., 'tabdoc:save'), got: invalidformat",
+      ).message,
+    );
+  });
+
+  it('should return error for an unrecognised namespace', async () => {
+    const extra = getMockRequestHandlerExtra();
+    const result = await getResult({ session: SESSION, command: 'badns:some-cmd' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Invalid namespace "badns"');
+  });
+
+  it('should return error for an unknown command before resolving an executor', async () => {
+    // The name guard fails OPEN with no External API registry loaded (a standalone
+    // tableau-mcp without tab-agent-south); enable one here to exercise the
+    // fail-CLOSED path tab-agent-south always runs under in production.
+    enableExternalApiRegistry({ 'tabdoc:save': { agent_can_invoke: true, in_params: [] } });
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn();
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:not-a-command' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Unknown Tableau command "tabdoc:not-a-command"');
+    expect(result.content[0].text).toContain('Did you mean:');
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('fails open on an unrecognized command name when no External API registry is loaded', async () => {
+    // Without tab-agent-south (no materialized registry), the name guard has no
+    // known-command set to check against and lets the call through by name — the
+    // External Client API itself is the backstop for a truly bogus command.
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:not-a-command' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    expect(extra.getExecutor).toHaveBeenCalled();
+  });
+
+  it('should return error for a crash-prone command before resolving an executor', async () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn();
+
+    const result = await getResult(
+      { session: SESSION, command: 'tabdoc:show-parameter-controls' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      'Refusing to execute crash-prone Tableau command "tabdoc:show-parameter-controls".',
+    );
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('should call executeCommand with parsed namespace and command', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'save',
+        args: {},
+      }),
+    );
+  });
+
+  it('waits for an in-flight apply before executing an allowed command', async () => {
+    let markLockHeld!: () => void;
+    const lockHeld = new Promise<void>((resolve) => {
+      markLockHeld = resolve;
+    });
+    let releaseLock!: () => void;
+    const lockReleased = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const blocker = withApplyLock(async () => {
+      markLockHeld();
+      await lockReleased;
+    });
+    await lockHeld;
+
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+    const executor = await extra.getExecutor(SESSION);
+    let provideExecutor!: () => void;
+    const executorReady = new Promise<void>((resolve) => {
+      provideExecutor = resolve;
+    });
+    extra.getExecutor = vi.fn(async () => {
+      await executorReady;
+      return executor;
+    });
+
+    let pending: Promise<CallToolResult> | undefined;
+    try {
+      pending = getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+      provideExecutor();
+      await executorReady;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(executeCommand).not.toHaveBeenCalled();
+    } finally {
+      releaseLock();
+      await blocker;
+    }
+
+    const result = await pending;
+    expect(result.isError).toBeFalsy();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return success with result JSON when command produces data', async () => {
+    const commandResult = { some_key: 'some_value' };
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(new Ok({ command_id: 'c1', result: commandResult }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Command executed successfully');
+    expect(payload.result).toEqual(commandResult);
+  });
+
+  it('truncates oversized command result payloads with an honest byte-count note', async () => {
+    const largeValue = 'x'.repeat(20 * 1024);
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(new Ok({ command_id: 'c1', result: { largeValue } }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('result truncated:');
+    expect(payload.message).toContain('re-run with a narrower command if you need the rest');
+    expect(payload.result).not.toContain(largeValue);
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThan(18 * 1024);
+  });
+
+  it('returns isError=true when command output serialization failed', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(
+      new Ok({
+        command_id: 'c1',
+        result: { ok: true },
+        warnings: [
+          {
+            code: 'output-serialization-failed',
+            message: 'Command output could not be serialized.',
+          },
+        ],
+      }),
+    );
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain(
+      'Command executed, but the requested result cannot be returned',
+    );
+    expect(payload.message).toContain('the command executed; state may have changed');
+    expect(payload.message).toContain('do NOT retry');
+    expect(payload.message).toContain('re-read state instead');
+    expect(payload.message).toContain(
+      'WARNING: output-serialization-failed - Command output could not be serialized.',
+    );
+    expect(payload.message).not.toContain('Command executed successfully');
+    expect(payload.warnings).toEqual([
+      {
+        code: 'output-serialization-failed',
+        message: 'Command output could not be serialized.',
+      },
+    ]);
+  });
+
+  it('is silent about missing output when a command succeeds without result data', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toBe('Command executed successfully.');
+    expect(payload.result).toBeUndefined();
+    expect(payload.message).not.toContain('no result data');
+  });
+
+  it('rejects false success when a root file connection adds no workbook datasource', async () => {
+    const unchanged = new Ok({
+      datasources: [{ id: 'existing', name: 'Sample - Superstore' }],
+    });
+    const { extra } = makeRootFileConnectExtra(unchanged, unchanged);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('no new workbook datasource appeared');
+    expect(result.content[0].text).toContain('inspect workbook datasources before retrying');
+  });
+
+  it('returns the datasource verified after a root file connection', async () => {
+    const existing = { id: 'existing', name: 'Sample - Superstore' };
+    const { extra } = makeRootFileConnectExtra(
+      new Ok({ datasources: [existing] }),
+      new Ok({
+        datasources: [
+          existing,
+          {
+            id: 'connected',
+            luid: null,
+            name: 'coffee-chain Extract',
+            caption: 'coffee-chain Extract',
+          },
+        ],
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      message: 'Command executed successfully and the new workbook datasource was verified.',
+      verification: {
+        status: 'passed',
+        addedDatasources: [
+          {
+            id: 'connected',
+            name: 'coffee-chain Extract',
+            caption: 'coffee-chain Extract',
+          },
+        ],
+      },
+    });
+  });
+
+  it('does not send a root file connection when the datasource baseline cannot be read', async () => {
+    const { extra, executeCommand } = makeRootFileConnectExtra(
+      new Err({
+        type: 'command-failed' as const,
+        error: { code: 'not-found', message: 'datasource route unavailable', recoverable: false },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The command was not sent');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('reports unknown state when datasource readback fails after a root file connection', async () => {
+    const { extra } = makeRootFileConnectExtra(
+      new Ok({ datasources: [] }),
+      new Err({
+        type: 'command-failed' as const,
+        error: { code: 'not-found', message: 'datasource route unavailable', recoverable: false },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: ROOT_FILE_CONNECT_ARGS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('state may have changed');
+    expect(result.content[0].text).toContain('do not retry automatically');
+  });
+
+  it('does not verify a leaf file connection (IsLeafConnection=true skips inventory reads)', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', IsLeafConnection: true, FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not verify a file connection when no leaf flag is provided', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const listWorkbookDatasources = vi.fn();
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabui:data-catalog-connect-to-file',
+        args: { DSClass: 'hyper', FilePath: '/tmp/coffee-chain.hyper' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+    expect(listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces command failure message and tableau-error-code extension', async () => {
+    const commandError = {
+      type: 'command-failed' as const,
+      error: {
+        code: 'ERR',
+        message: 'Desktop reported the real failure',
+        recoverable: false,
+        'tableau-error-code': '0x1234',
+      },
+    };
+    const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      'Desktop reported the real failure\ntableau-error-code: 0x1234',
+    );
+    expect(result.content[0].text).not.toContain('Command execution failed');
+  });
+
+  it('appends the known-live failure fix when mapped command execution fails', async () => {
+    const commandError = {
+      type: 'command-failed' as const,
+      error: { code: 'ERR', message: 'live 500', recoverable: false },
+    };
+    const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabdoc:sort-nested',
+        args: {
+          DimensionToSort: '[Sample - Superstore].[Category]',
+          Worksheet: 'Sheet 1',
+          MeasureName: '[Sample - Superstore].[Sales]',
+          ShelfType: 'rows',
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      new DesktopCommandExecutionError(commandError).message,
+    );
+    expect(result.content[0].text).toContain(SORT_NESTED_LIVE_500_FIX);
+  });
+
+  it('does not append the known-live failure fix when mapped command execution succeeds', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabdoc:sort-nested',
+        args: {
+          DimensionToSort: '[Sample - Superstore].[Category]',
+          Worksheet: 'Sheet 1',
+          MeasureName: '[Sample - Superstore].[Sales]',
+          ShelfType: 'rows',
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('FIX:');
+    expect(result.content[0].text).not.toContain(SORT_NESTED_LIVE_500_FIX);
+  });
+
+  it('should default args to empty object when not provided', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(executeCommand).toHaveBeenCalledWith(expect.objectContaining({ args: {} }));
+  });
+
+  it('should accept tabui namespace', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabui:export-theme' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: 'tabui', command: 'export-theme' }),
+    );
+  });
+
+  describe('param-contract guard', () => {
+    it('refuses raw goto-sheet before resolving an executor even with the formerly live-valid Sheet param', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      // 2026-07-22 live receipt: an unknown Sheet value reaches Desktop and opens modal
+      // 47BF7751, so raw goto-sheet is refused even when the param shape is valid.
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(result.content[0].text).toContain('blocking Tableau Desktop dialog');
+      expect(result.content[0].text).toContain('47BF7751');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses raw goto-sheet before parameter-shape validation', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { WindowLocator: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses raw goto-sheet with missing args before resolving an executor', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses a command flagged opens_blocking_dialog=true in a loaded registry regardless of its param keys', async () => {
+      // Once an External API registry is loaded, guardCommand's registry path
+      // refuses any blockingDialog=true command outright, before inspecting param keys.
+      enableExternalApiRegistry({
+        'tabui:copy-sheet-image-u-i': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: true,
+          modifies_state: 'false',
+          in_params: [{ local: 'Sheet', type: 'DPI_SheetName', required: true, wire: 'sheet' }],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:copy-sheet-image-u-i', args: { SheetName: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(result.content[0].text).toContain('opens_blocking_dialog=true');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('rejects tabdoc:sort before resolving an executor because it drives a blocking dialog', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:sort',
+          args: {
+            FieldName: '[Sample - Superstore].[Category]',
+            Worksheet: 'Sheet 1',
+            Type: 'SortType::Computed',
+            MeasureName: '[Sample - Superstore].[Sales]',
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'tabdoc:sort drives a UI dialog and blocks the screen',
+      );
+      expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
+      expect(result.content[0].text).not.toContain('cached-document');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('rejects tabdoc:sort-nested missing required params before resolving an executor', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:sort-nested',
+          args: {
+            DimensionToSort: '[Sample - Superstore].[Category]',
+            Worksheet: 'Sheet 1',
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
+      );
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('lets generate-viz-from-notional-spec pass through with its NotionalSpecJson/ClearSheet args', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Sales","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+            ClearSheet: true,
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabdoc',
+          command: 'generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Sales","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+            ClearSheet: true,
+          },
+        }),
+      );
+    });
+
+    it('automatically validates the pinned active worksheet after generate-viz succeeds', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
+      const listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              worksheetId: 'sheet-1',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Revenue:qk]',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets,
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Revenue","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+            ClearSheet: true,
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.message).toContain('Command executed successfully, but');
+      expect(payload.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(payload.verification.findings[0]).toMatchObject({
+        source: 'used-field-validity',
+        fieldName: '[none:Revenue:qk]',
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedInstanceId: 'instance-1' }),
+      );
+      expect(listWorksheets).toHaveBeenCalledTimes(2);
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
+        'sheet-1',
+        expect.any(AbortSignal),
+        'instance-1',
+      );
+    });
+
+    it('does not validate or claim completion while generate-viz is still running', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'generate-pending',
+          status: 'running',
+          submitted_at: '2026-09-14T00:00:00Z',
+        }),
+      );
+      const getWorksheetDiagnostics = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"}]}',
+            ClearSheet: true,
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload).toMatchObject({
+        command_id: 'generate-pending',
+        status: 'running',
+        verification: { status: 'skipped' },
+      });
+      expect(payload.message).toContain('still running');
+      expect(payload.message).not.toContain('successfully');
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('leaves an arbitrary valid command call untouched', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:delete-sheet', args: { Sheet: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabdoc',
+          command: 'delete-sheet',
+          args: { Sheet: 'Sheet1' },
+        }),
+      );
+    });
+  });
+
+  describe('external API command registry guard', () => {
+    const SHOW_ME_REGISTRY_ENTRY = {
+      agent_can_invoke: true,
+      opens_blocking_dialog: false,
+      modifies_state: 'false',
+      in_params: [
+        {
+          local: 'WorksheetName',
+          type: 'DPI_Worksheet',
+          required: true,
+          wire: 'worksheet',
+        },
+        {
+          local: 'ShowMeType',
+          type: 'DPI_ShowMeCommandType',
+          required: true,
+          wire: 'show-me-command-type',
+        },
+      ],
+    };
+    const ROOT_FILE_REGISTRY_ENTRY = {
+      agent_can_invoke: true,
+      opens_blocking_dialog: false,
+      modifies_state: 'true',
+      in_params: [
+        { local: 'DSClass', type: 'UPI_DSClass', required: true, wire: 'dsclass' },
+        {
+          local: 'IsLeafConnection',
+          type: 'UPI_IsLeafConnection',
+          required: false,
+          wire: 'is-leaf-connection-ui',
+        },
+        { local: 'FilePath', type: 'UPI_FilePath', required: true, wire: 'filepath' },
+      ],
+    };
+
+    it('reports unknown scope instead of guessing when a mutator has multiple worksheet params', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:compare-sheets': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            { local: 'Left', type: 'DPI_Worksheet', required: true, wire: 'left' },
+            { local: 'Right', type: 'DPI_Worksheet', required: true, wire: 'right' },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'compare-1',
+          status: 'completed',
+          submitted_at: '2026-09-14T00:00:00Z',
+        }),
+      );
+      const getWorksheetDiagnostics = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn(),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:compare-sheets',
+          args: { Left: 'Sheet 1', Right: 'Sheet 2' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({
+        status: 'skipped',
+        findings: [expect.objectContaining({ reason: 'target-unproven' })],
+      });
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('rewrites one stable worksheet-id parameter and validates that exact target without retrying', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'mutate-1', status: 'completed', submitted_at: '2026-09-15T00:00:00Z' }),
+        );
+      const listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+            { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+          ],
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            {
+              worksheetId: 'target-id',
+              status: 'complete',
+              invalidFields: [
+                {
+                  fieldName: '[none:Missing:nk]',
+                  shelf: 'rows',
+                  marksSpecificationId: 'marks-1',
+                  encodingType: 'text',
+                  reason: 'Field is unavailable.',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets,
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.verification).toMatchObject({
+        ok: false,
+        status: 'failed',
+        findings: [
+          expect.objectContaining({
+            source: 'used-field-validity',
+            worksheetId: 'target-id',
+            fieldName: '[none:Missing:nk]',
+          }),
+        ],
+      });
+      expect(payload.message).toContain('do not retry the command automatically');
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { 'worksheetdoc-id': 'target-id' },
+          expectedInstanceId: 'instance-1',
+        }),
+      );
+      expect(listWorksheets).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
+        'target-id',
+        expect.any(AbortSignal),
+        'instance-1',
+      );
+    });
+
+    it('prefers inline partial diagnostics for the exact stable target and reports known invalid fields', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const diagnostics = {
+        worksheets: [
+          {
+            worksheetId: 'target-id',
+            status: 'partial' as const,
+            invalidFields: [
+              {
+                fieldName: '[none:Missing:nk]',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'Field is unavailable.',
+              },
+            ],
+            message: 'Some fields could not be checked.',
+          },
+        ],
+      };
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-inline',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnostics,
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [
+              { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+              { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+            ],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.verification).toMatchObject({
+        ok: false,
+        status: 'failed',
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            source: 'used-field-validity',
+            worksheetId: 'target-id',
+            fieldName: '[none:Missing:nk]',
+          }),
+          expect.objectContaining({ reason: 'diagnostics-partial', severity: 'warning' }),
+        ]),
+      });
+      expect(payload.message).toContain('do not retry the command automatically');
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('treats a present aggregate without the stable target as unknown without another GET', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-inline-missing-target',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnostics: {
+            worksheets: [{ worksheetId: 'decoy-id', status: 'complete', invalidFields: [] }],
+          },
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [
+              { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+              { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+            ],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'diagnostics-target-missing' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('falls back to one pinned worksheet diagnostics GET only when inline diagnostics are absent', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-no-inline-diagnostics',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi.fn().mockResolvedValue(
+          Ok({
+            worksheets: [{ id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false }],
+          }),
+        ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({
+        ok: true,
+        status: 'passed',
+      });
+      expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
+        'target-id',
+        expect.any(AbortSignal),
+        'instance-1',
+      );
+    });
+
+    it('does not retry diagnostics when a completed command marks its inline diagnostics invalid', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'mutate-malformed-inline-diagnostics',
+          status: 'completed',
+          submitted_at: '2026-09-15T00:00:00Z',
+          diagnosticsInvalid: true,
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }],
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ worksheets: [{ id: 'target-id', name: 'Target', hidden: false }] }),
+          ),
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'target-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'diagnostics-invalid' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('skips validation when a generic stable worksheet id is absent from inventory', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'WorksheetId',
+              type: 'DPI_WorksheetSimpleID',
+              required: true,
+              wire: 'worksheetdoc-id',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'mutate-1', status: 'completed', submitted_at: '2026-09-15T00:00:00Z' }),
+        );
+      const listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: 'active-id', name: 'missing-id', hidden: false, isActiveSheet: true }],
+        }),
+      );
+      const getWorksheetDiagnostics = vi.fn();
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets,
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { WorksheetId: 'missing-id' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'target-unproven' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { 'worksheetdoc-id': 'missing-id' },
+          expectedInstanceId: 'instance-1',
+        }),
+      );
+      expect(listWorksheets).toHaveBeenCalledTimes(1);
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('does not claim a name-only worksheet parameter proves the command target', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:mutate-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'true',
+          in_params: [
+            {
+              local: 'worksheet',
+              type: 'DPI_Worksheet',
+              required: true,
+              wire: 'worksheet',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'mutate-1', status: 'completed', submitted_at: '2026-09-15T00:00:00Z' }),
+        );
+      const listWorksheets = vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [
+            { id: 'target-id', name: 'Target', hidden: false, isActiveSheet: false },
+            { id: 'decoy-id', name: 'Decoy', hidden: false, isActiveSheet: true },
+          ],
+        }),
+      );
+      const getWorksheetDiagnostics = vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ worksheets: [{ worksheetId: 'target-id', status: 'complete', invalidFields: [] }] }),
+        );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({
+        desktopInstanceId: 'instance-1',
+        desktopApiVersion: '0.2.16',
+        executeCommand,
+        listWorksheets,
+        getWorksheetDiagnostics,
+      });
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:mutate-sheet',
+          args: { worksheet: 'Target' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        verification: {
+          status: 'skipped',
+          findings: [expect.objectContaining({ reason: 'target-unproven' })],
+        },
+      });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { worksheet: 'Target' },
+          expectedInstanceId: 'instance-1',
+        }),
+      );
+      expect(listWorksheets).not.toHaveBeenCalled();
+      expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+    });
+
+    it('rejects a generate-viz worksheet id before dispatch', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"}]}',
+            ClearSheet: true,
+            WorksheetId: 'target-id',
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Unknown parameter "WorksheetId"');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('keeps existing behavior when TABLEAU_COMMANDS_REGISTRY_DIR is unset', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        }),
+      );
+    });
+
+    it('refuses commands marked not invocable before resolving an executor', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:show-me': {
+          ...SHOW_ME_REGISTRY_ENTRY,
+          agent_can_invoke: false,
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('agent_can_invoke=false');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses live-observed dialog commands before resolving an executor', async () => {
+      enableExternalApiRegistry({
+        'tabui:workgroup-change-site': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(result.content[0].text).toContain('switch sites in Desktop');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses live-observed dialog commands whenever a valid registry is enabled', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY,
+        // Present so the name guard recognizes it; the static dialog blocklist
+        // (commandPolicy.ts) still fires unconditionally ahead of the registry's
+        // own agent_can_invoke/opens_blocking_dialog flags.
+        'tabui:workgroup-change-site': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses raw goto-sheet before resolving an executor even with a safe registry entry', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:goto-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [{ local: 'Sheet', type: 'DPI_Worksheet', required: true, wire: 'sheet' }],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Missing Sheet' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(result.content[0].text).toContain('blocking Tableau Desktop dialog');
+      expect(result.content[0].text).toContain('47BF7751');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('rewrites local parameter names to their registry wire names before dispatch', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { worksheet: 'Sheet 1', 'show-me-command-type': 'bars' },
+        }),
+      );
+    });
+
+    it('verifies a root file connection after registry parameter rewriting', async () => {
+      enableExternalApiRegistry({
+        'tabui:data-catalog-connect-to-file': ROOT_FILE_REGISTRY_ENTRY,
+      });
+      const { extra, executeCommand } = makeRootFileConnectExtra(
+        new Ok({ datasources: [] }),
+        new Ok({ datasources: [{ id: 'connected', name: 'coffee-chain Extract' }] }),
+      );
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:data-catalog-connect-to-file',
+          args: ROOT_FILE_CONNECT_ARGS,
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).verification).toMatchObject({ status: 'passed' });
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: {
+            dsclass: 'hyper',
+            'is-leaf-connection-ui': false,
+            filepath: '/tmp/coffee-chain.hyper',
+          },
+        }),
+      );
+    });
+
+    it('rejects enum values that are not legal serialized values', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'pie' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Invalid value for Tableau command "tabdoc:show-me" parameter "show-me-command-type"',
+      );
+      expect(result.content[0].text).toContain('Legal values: bars, lines');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses missing registry-required parameters by wire name', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:show-me": show-me-command-type',
+      );
+      expect(result.content[0].text).toContain('context-filled');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('does not require registry-required workspace params that Desktop fills from context', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:show-metrics-indicator': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [
+            {
+              local: 'Workspace',
+              type: 'UPI_Workspace',
+              required: true,
+              wire: 'workspace',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:show-metrics-indicator', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ namespace: 'tabdoc', command: 'show-metrics-indicator' }),
+      );
+    });
+
+    it('passes through unknown registry keys and warns about the bare-500 failure mode', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars', TypoParam: 'oops' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { worksheet: 'Sheet 1', 'show-me-command-type': 'bars', TypoParam: 'oops' },
+        }),
+      );
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).message).toContain(
+        'key "TypoParam" is not in the command registry',
+      );
+      expect(JSON.parse(result.content[0].text).message).toContain('bare 500');
+    });
+  });
+
+  describe('deleted command refusal', () => {
+    // These commands no longer exist in Desktop, so a real materialized registry
+    // (tab-agent-south's live command_param_registry.json) would never contain
+    // them; enabling one here exercises that fail-CLOSED production path rather
+    // than the no-registry fail-open default.
+    beforeEach(() => {
+      enableExternalApiRegistry({ 'tabdoc:save': { agent_can_invoke: true, in_params: [] } });
+    });
+
+    it('rejects the deleted document load command before dispatching it', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: '<workbook />' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
+      );
+      expect(executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('still refuses the deleted document load command when the payload matches the current document', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: '<workbook><worksheets><worksheet name="A" /></worksheets></workbook>' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
+      );
+      expect(executeCommand).not.toHaveBeenCalled();
+    });
+  });
+});
+async function getResult(
+  { session, command, args }: { session: string; command: string; args?: Record<string, unknown> },
+  extra: ReturnType<typeof getMockRequestHandlerExtra>,
+): Promise<CallToolResult> {
+  const tool = getExecuteTableauCommandTool(new DesktopMcpServer());
+  const callback = await Provider.from(tool.callback);
+  return await callback({ session, command, args }, extra);
+}

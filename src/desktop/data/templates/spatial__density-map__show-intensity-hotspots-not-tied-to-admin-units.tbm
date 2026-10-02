@@ -1,0 +1,751 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <Heatmap />
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SpatialFileLayer />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <preferences />
+  <datasources>
+    <datasource caption='Mapping: London Crimes' inline='true' name='federated.1jzs8720grz7zz1bdtv5w02zxx3y' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='London Summer Crimes' name='textscan.0bgc35p13q8ct9176ae8j1l1oe6v'>
+            <connection class='textscan' directory='' workgroup-auth-mode='as-is' />
+          </named-connection>
+          <named-connection caption='London_Borough_Excluding_MHW' name='ogrdirect.0nikyp9102p8jk15nslh016jp2oa'>
+            <connection class='ogrdirect' directory='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation join='inner' type='join'>
+          <clause type='join'>
+            <expression op='Intersects'>
+              <expression op='MAKEPOINT([London Summer Crimes.csv].[Latitude],[London Summer Crimes.csv].[Longitude])' />
+              <expression op='[London_Borough_Excluding_MHW.shp].[Geometry]' />
+            </expression>
+          </clause>
+          <relation connection='textscan.0bgc35p13q8ct9176ae8j1l1oe6v' name='London Summer Crimes.csv' table='[London Summer Crimes#csv]' type='table'>
+            <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+              <column datatype='string' name='Crime ID' ordinal='0' />
+              <column datatype='string' name='Month' ordinal='1' />
+              <column datatype='string' name='Reported by' ordinal='2' />
+              <column datatype='string' name='Falls within' ordinal='3' />
+              <column datatype='real' name='Longitude' ordinal='4' />
+              <column datatype='real' name='Latitude' ordinal='5' />
+              <column datatype='string' name='Location' ordinal='6' />
+              <column datatype='string' name='LSOA code' ordinal='7' />
+              <column datatype='string' name='LSOA name' ordinal='8' />
+              <column datatype='string' name='Crime type' ordinal='9' />
+              <column datatype='string' name='Last outcome category' ordinal='10' />
+              <column datatype='string' name='Context' ordinal='11' />
+            </columns>
+          </relation>
+          <relation connection='ogrdirect.0nikyp9102p8jk15nslh016jp2oa' name='London_Borough_Excluding_MHW.shp' table='[London_Borough_Excluding_MHW.shp]' type='table'>
+            <columns>
+              <column datatype='string' name='NAME' ordinal='0' />
+              <column datatype='string' name='GSS_CODE' ordinal='1' />
+              <column datatype='real' name='HECTARES' ordinal='2' />
+              <column datatype='real' name='NONLD_AREA' ordinal='3' />
+              <column datatype='string' name='ONS_INNER' ordinal='4' />
+              <column datatype='string' name='SUB_2009' ordinal='5' />
+              <column datatype='string' name='SUB_2006' ordinal='6' />
+              <column datatype='spatial' name='Geometry' ordinal='7' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='currency'>&quot;£&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Crime ID</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Crime ID]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Crime ID</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Month</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Month]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Month</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Reported by</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Reported by]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Reported by</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Falls within</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Falls within]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Falls within</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Longitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Longitude]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Longitude</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Latitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Latitude]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Latitude</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Location</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Location]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Location</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>LSOA code</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[LSOA code]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>LSOA code</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>LSOA name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[LSOA name]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>LSOA name</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Crime type</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Crime type]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Crime type</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Last outcome category</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Last outcome category]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Last outcome category</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Context</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Context]</local-name>
+            <parent-name>[London Summer Crimes.csv]</parent-name>
+            <remote-alias>Context</remote-alias>
+            <ordinal>11</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>1</approx-count>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>NAME</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[NAME]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>NAME</remote-alias>
+            <ordinal>12</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>GSS_CODE</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[GSS_CODE]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>GSS_CODE</remote-alias>
+            <ordinal>13</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>HECTARES</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[HECTARES]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>HECTARES</remote-alias>
+            <ordinal>14</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>NONLD_AREA</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[NONLD_AREA]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>NONLD_AREA</remote-alias>
+            <ordinal>15</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>ONS_INNER</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[ONS_INNER]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>ONS_INNER</remote-alias>
+            <ordinal>16</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>SUB_2009</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[SUB_2009]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>SUB_2009</remote-alias>
+            <ordinal>17</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>SUB_2006</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[SUB_2006]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>SUB_2006</remote-alias>
+            <ordinal>18</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[London_Borough_Excluding_MHW.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>19</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Crime Location' datatype='spatial' name='[Calculation_3464112593488449540]' role='measure' type='nominal'>
+        <calculation class='tableau' formula='MAKEPOINT([Latitude],[Longitude])' />
+      </column>
+      <column datatype='string' hidden='true' name='[Context]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Crime type]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Falls within]' role='dimension' type='nominal' />
+      <column caption='Gss Code' datatype='string' hidden='true' name='[GSS_CODE]' role='dimension' type='nominal' />
+      <column datatype='spatial' hidden='true' name='[Geometry]' role='measure' type='nominal' />
+      <column caption='Hectares' datatype='real' hidden='true' name='[HECTARES]' role='measure' type='quantitative' />
+      <column datatype='string' hidden='true' name='[LSOA code]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[LSOA name]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Last outcome category]' role='dimension' type='nominal' />
+      <column aggregation='Avg' datatype='real' name='[Latitude]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative' />
+      <column datatype='string' hidden='true' name='[Location]' role='dimension' type='nominal' />
+      <column aggregation='Avg' datatype='real' name='[Longitude]' role='measure' semantic-role='[Geographical].[Longitude]' type='quantitative' />
+      <column datatype='string' hidden='true' name='[Month]' role='dimension' type='nominal' />
+      <column caption='Name' datatype='string' hidden='true' name='[NAME]' role='dimension' type='nominal' />
+      <column caption='Nonld Area' datatype='real' hidden='true' name='[NONLD_AREA]' role='measure' type='quantitative' />
+      <column caption='Ons Inner' datatype='string' hidden='true' name='[ONS_INNER]' role='dimension' type='nominal' />
+      <column datatype='string' hidden='true' name='[Reported by]' role='dimension' type='nominal' />
+      <column caption='Sub 2006' datatype='string' hidden='true' name='[SUB_2006]' role='dimension' type='nominal' />
+      <column caption='Sub 2009' datatype='string' hidden='true' name='[SUB_2009]' role='dimension' type='nominal' />
+      <column caption='London Summer Crimes.csv' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:14:50 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='London Summer Crimes.csv+ (Multiple Connections)' increment-value='%null%' refresh-type='create' rows-inserted='93153' timestamp-start='2026-06-30 20:14:46.169' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Crime ID</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Crime ID]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Crime ID</remote-alias>
+              <ordinal>0</ordinal>
+              <family>London Summer Crimes.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>76995</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RGB' />
+              <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Longitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Longitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Longitude</remote-alias>
+              <ordinal>1</ordinal>
+              <family>London Summer Crimes.csv</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>26756</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Latitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Latitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Latitude</remote-alias>
+              <ordinal>2</ordinal>
+              <family>London Summer Crimes.csv</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>26244</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='London Summer Crimes.csv' id='London Summer Crimes.csv_1A139DDCBAE641B8B4A2C34FBA7FC9C4'>
+            <properties context=''>
+              <relation join='inner' type='join'>
+                <clause type='join'>
+                  <expression op='Intersects'>
+                    <expression op='MAKEPOINT([London Summer Crimes.csv].[Latitude],[London Summer Crimes.csv].[Longitude])' />
+                    <expression op='[London_Borough_Excluding_MHW.shp].[Geometry]' />
+                  </expression>
+                </clause>
+                <relation connection='textscan.0bgc35p13q8ct9176ae8j1l1oe6v' name='London Summer Crimes.csv' table='[London Summer Crimes#csv]' type='table'>
+                  <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+                    <column datatype='string' name='Crime ID' ordinal='0' />
+                    <column datatype='string' name='Month' ordinal='1' />
+                    <column datatype='string' name='Reported by' ordinal='2' />
+                    <column datatype='string' name='Falls within' ordinal='3' />
+                    <column datatype='real' name='Longitude' ordinal='4' />
+                    <column datatype='real' name='Latitude' ordinal='5' />
+                    <column datatype='string' name='Location' ordinal='6' />
+                    <column datatype='string' name='LSOA code' ordinal='7' />
+                    <column datatype='string' name='LSOA name' ordinal='8' />
+                    <column datatype='string' name='Crime type' ordinal='9' />
+                    <column datatype='string' name='Last outcome category' ordinal='10' />
+                    <column datatype='string' name='Context' ordinal='11' />
+                  </columns>
+                </relation>
+                <relation connection='ogrdirect.0nikyp9102p8jk15nslh016jp2oa' name='London_Borough_Excluding_MHW.shp' table='[London_Borough_Excluding_MHW.shp]' type='table'>
+                  <columns>
+                    <column datatype='string' name='NAME' ordinal='0' />
+                    <column datatype='string' name='GSS_CODE' ordinal='1' />
+                    <column datatype='real' name='HECTARES' ordinal='2' />
+                    <column datatype='real' name='NONLD_AREA' ordinal='3' />
+                    <column datatype='string' name='ONS_INNER' ordinal='4' />
+                    <column datatype='string' name='SUB_2009' ordinal='5' />
+                    <column datatype='string' name='SUB_2006' ordinal='6' />
+                    <column datatype='spatial' name='Geometry' ordinal='7' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <simple-id uuid='{03A37488-8CCA-45A7-9934-98E3E7EE272A}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Mapping: London Crimes' name='federated.1jzs8720grz7zz1bdtv5w02zxx3y' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.1jzs8720grz7zz1bdtv5w02zxx3y'>
+        <column caption='Crime Location' datatype='spatial' name='[Calculation_3464112593488449540]' role='measure' type='nominal'>
+          <calculation class='tableau' formula='MAKEPOINT([Latitude],[Longitude])' />
+        </column>
+        <column datatype='string' name='[Crime ID]' role='dimension' type='nominal' />
+        <column aggregation='Avg' datatype='real' name='[Latitude]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative' />
+        <column aggregation='Avg' datatype='real' name='[Longitude]' role='measure' semantic-role='[Geographical].[Longitude]' type='quantitative' />
+        <column-instance column='[Calculation_3464112593488449540]' derivation='Collect' name='[clct:Calculation_3464112593488449540:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Crime ID]' derivation='None' name='[none:Crime ID:nk]' pivot='key' type='nominal' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='hillshade_highlight_bright' value='true' />
+        <format attr='enabled' id='hillshade_highlight_med' value='true' />
+        <format attr='enabled' id='hillshade_shadow_faint' value='true' />
+        <format attr='enabled' id='hillshade_shadow_med' value='true' />
+        <format attr='enabled' id='hillshade_shadow_dark' value='true' />
+        <format attr='enabled' id='hillshade_shadow_extreme' value='true' />
+        <format attr='enabled' id='building' value='true' />
+        <format attr='enabled' id='building-line' value='true' />
+        <format attr='enabled' id='tunnel-service-link-track-case' value='true' />
+        <format attr='enabled' id='tunnel-street_limited-case' value='true' />
+        <format attr='enabled' id='tunnel-street-case' value='true' />
+        <format attr='enabled' id='tunnel-secondary-tertiary-case' value='true' />
+        <format attr='enabled' id='tunnel-primary-case' value='true' />
+        <format attr='enabled' id='tunnel-trunk_link-case' value='true' />
+        <format attr='enabled' id='tunnel-motorway_link-case' value='true' />
+        <format attr='enabled' id='tunnel-trunk-case' value='true' />
+        <format attr='enabled' id='tunnel-motorway-case' value='true' />
+        <format attr='enabled' id='tunnel-trunk_link' value='true' />
+        <format attr='enabled' id='tunnel-motorway_link' value='true' />
+        <format attr='enabled' id='tunnel-service-link-track' value='true' />
+        <format attr='enabled' id='tunnel-street_limited' value='true' />
+        <format attr='enabled' id='tunnel-street' value='true' />
+        <format attr='enabled' id='tunnel-tertiary' value='true' />
+        <format attr='enabled' id='tunnel-secondary' value='true' />
+        <format attr='enabled' id='tunnel-primary' value='true' />
+        <format attr='enabled' id='tunnel-trunk' value='true' />
+        <format attr='enabled' id='tunnel-motorway' value='true' />
+        <format attr='enabled' id='road-street-low' value='true' />
+        <format attr='enabled' id='road-street_limited-low' value='true' />
+        <format attr='enabled' id='road-pedestrian-case' value='true' />
+        <format attr='enabled' id='road-service-link-track-case' value='true' />
+        <format attr='enabled' id='road-street_limited-case' value='true' />
+        <format attr='enabled' id='road-street-case' value='true' />
+        <format attr='enabled' id='road-tertiary-case' value='true' />
+        <format attr='enabled' id='road-secondary-case' value='true' />
+        <format attr='enabled' id='road-primary-case' value='true' />
+        <format attr='enabled' id='road-motorway_link-case' value='true' />
+        <format attr='enabled' id='road-trunk_link-case' value='true' />
+        <format attr='enabled' id='road-trunk-case' value='true' />
+        <format attr='enabled' id='road-motorway-case' value='true' />
+        <format attr='enabled' id='road-trunk_link' value='true' />
+        <format attr='enabled' id='road-motorway_link' value='true' />
+        <format attr='enabled' id='road-path' value='true' />
+        <format attr='enabled' id='road-pedestrian' value='true' />
+        <format attr='enabled' id='road-polygon' value='true' />
+        <format attr='enabled' id='road-service-link-track' value='true' />
+        <format attr='enabled' id='road-street_limited' value='true' />
+        <format attr='enabled' id='road-street' value='true' />
+        <format attr='enabled' id='road-tertiary' value='true' />
+        <format attr='enabled' id='road-secondary' value='true' />
+        <format attr='enabled' id='road-primary' value='true' />
+        <format attr='enabled' id='road-trunk' value='true' />
+        <format attr='enabled' id='road-motorway' value='true' />
+        <format attr='enabled' id='road-rail' value='true' />
+        <format attr='enabled' id='road-rail-tracks' value='true' />
+        <format attr='enabled' id='bridge-street-low' value='true' />
+        <format attr='enabled' id='bridge-street_limited-low' value='true' />
+        <format attr='enabled' id='bridge-pedestrian-case' value='true' />
+        <format attr='enabled' id='bridge-service-link-track-case' value='true' />
+        <format attr='enabled' id='bridge-street_limited-case' value='true' />
+        <format attr='enabled' id='bridge-street-case' value='true' />
+        <format attr='enabled' id='bridge-tertiary-case' value='true' />
+        <format attr='enabled' id='bridge-secondary-case' value='true' />
+        <format attr='enabled' id='bridge-primary-case' value='true' />
+        <format attr='enabled' id='bridge-trunk_link-case' value='true' />
+        <format attr='enabled' id='bridge-motorway_link-case' value='true' />
+        <format attr='enabled' id='bridge-trunk-case' value='true' />
+        <format attr='enabled' id='bridge-motorway-case' value='true' />
+        <format attr='enabled' id='bridge-trunk_link' value='true' />
+        <format attr='enabled' id='bridge-motorway_link' value='true' />
+        <format attr='enabled' id='bridge-path' value='true' />
+        <format attr='enabled' id='bridge-pedestrian' value='true' />
+        <format attr='enabled' id='bridge-service-link-track' value='true' />
+        <format attr='enabled' id='bridge-street_limited' value='true' />
+        <format attr='enabled' id='bridge-street' value='true' />
+        <format attr='enabled' id='bridge-tertiary' value='true' />
+        <format attr='enabled' id='bridge-secondary' value='true' />
+        <format attr='enabled' id='bridge-primary' value='true' />
+        <format attr='enabled' id='bridge-trunk' value='true' />
+        <format attr='enabled' id='bridge-motorway' value='true' />
+        <format attr='enabled' id='bridge-rail' value='true' />
+        <format attr='enabled' id='bridge-rail-tracks' value='true' />
+        <format attr='enabled' id='bridge-trunk_link-2-case' value='true' />
+        <format attr='enabled' id='bridge-motorway_link-2-case' value='true' />
+        <format attr='enabled' id='bridge-trunk-2-case' value='true' />
+        <format attr='enabled' id='bridge-motorway-2-case' value='true' />
+        <format attr='enabled' id='bridge-trunk_link-2' value='true' />
+        <format attr='enabled' id='bridge-motorway_link-2' value='true' />
+        <format attr='enabled' id='bridge-trunk-2' value='true' />
+        <format attr='enabled' id='bridge-motorway-2' value='true' />
+        <format attr='enabled' id='road-shields-2-white' value='true' />
+        <format attr='enabled' id='road-shields-2-black' value='true' />
+        <format attr='enabled' id='road-shields-1-white' value='true' />
+        <format attr='enabled' id='road-shields-1-black' value='true' />
+        <format attr='enabled' id='road-label-small' value='true' />
+        <format attr='enabled' id='road-label-big' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries-bg' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries-dispute' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries-bg-sub' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-supress-bg' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-sm-parents-bg' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-md-parents-bg' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-lg-parents-bg' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries-dispute-sub' value='true' />
+        <format attr='enabled' id='light-admin-0-boundaries-sub' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-supress' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-sm-parents' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-md-parents' value='true' />
+        <format attr='enabled' id='light-admin-1-boundaries-lg-parents' value='true' />
+        <format attr='enabled' id='light-admin1-water-lines-usa-tableau' value='true' />
+        <format attr='enabled' id='light-9-dash-line-casing' value='true' />
+        <format attr='enabled' id='light-9-dash-line' value='true' />
+        <format attr='enabled' id='marine-label-sm-ln' value='true' />
+        <format attr='enabled' id='marine-label-sm-pt' value='true' />
+        <format attr='enabled' id='marine-label-md-ln' value='true' />
+        <format attr='enabled' id='marine-label-md-pt' value='true' />
+        <format attr='enabled' id='marine-label-lg-ln' value='true' />
+        <format attr='enabled' id='marine-label-lg-pt' value='true' />
+        <format attr='enabled' id='water-label' value='true' />
+        <format attr='enabled' id='place-village' value='true' />
+        <format attr='enabled' id='place-town' value='true' />
+        <format attr='enabled' id='place-islands' value='true' />
+        <format attr='enabled' id='place-islands-2' value='true' />
+        <format attr='enabled' id='place-city-sm' value='true' />
+        <format attr='enabled' id='place-city-md-s' value='true' />
+        <format attr='enabled' id='place-city-md-n' value='true' />
+        <format attr='enabled' id='place-city-lg-s' value='true' />
+        <format attr='enabled' id='place-city-lg-n' value='true' />
+        <format attr='enabled' id='place-capital-s' value='true' />
+        <format attr='enabled' id='place-capital-n' value='true' />
+        <format attr='enabled' id='light-admin-1-label-9th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-8th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-7th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-6th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-5th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-4th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-3rd-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-2nd-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-1st-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-3rd-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-2nd-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-1st-tier' value='true' />
+        <format attr='enabled' id='light-admin-0-label-5th-tier' value='true' />
+        <format attr='enabled' id='light-admin-0-label-4th-tier' value='true' />
+        <format attr='enabled' id='light-admin-0-label-3rd-tier' value='true' />
+        <format attr='enabled' id='light-admin-0-label-2nd-tier' value='true' />
+        <format attr='enabled' id='light-admin-0-label-1st-tier' value='true' />
+        <format attr='enabled' id='b01002_001e' value='false' />
+        <format attr='enabled' id='b01002_002e' value='false' />
+        <format attr='enabled' id='b01002_003e' value='false' />
+        <format attr='enabled' id='dp02_0001e' value='false' />
+        <format attr='enabled' id='dp02_0015e' value='false' />
+        <format attr='enabled' id='dp03_0027e_plus_dp03_0029e' value='false' />
+        <format attr='enabled' id='dp03_0028e' value='false' />
+        <format attr='enabled' id='dp03_0030e_plus_dp03_0031e' value='false' />
+        <format attr='enabled' id='dp03_0062e' value='false' />
+        <format attr='enabled' id='dp03_0088e' value='false' />
+        <format attr='enabled' id='dp04_0001e' value='false' />
+        <format attr='enabled' id='dp04_0046e' value='false' />
+        <format attr='enabled' id='dp04_0047e' value='false' />
+        <format attr='enabled' id='dp04_0089e' value='false' />
+        <format attr='enabled' id='dp05_0001e' value='false' />
+        <format attr='enabled' id='dp05_0002e_div_dp05_0003e' value='false' />
+        <format attr='enabled' id='dp05_0032e' value='false' />
+        <format attr='enabled' id='dp05_0033e' value='false' />
+        <format attr='enabled' id='dp05_0034e' value='false' />
+        <format attr='enabled' id='dp05_0039e' value='false' />
+        <format attr='enabled' id='dp05_0047e' value='false' />
+        <format attr='enabled' id='dp05_0053e' value='false' />
+        <format attr='enabled' id='dp05_0066e' value='false' />
+        <format attr='enabled' id='dp05_0077e' value='false' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.41999998688697815' />
+        <format attr='map-style' value='light' />
+        <format attr='wrap' value='false' />
+      </style-rule>
+      <style-rule element='map-data-layer'>
+        <format attr='palette' value='tableau-map-blue-green-light' />
+        <format attr='geo-area-type' value='State' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Heatmap' />
+        <encodings>
+          <lod column='[federated.1jzs8720grz7zz1bdtv5w02zxx3y].[clct:Calculation_3464112593488449540:nk]' />
+          <lod column='[federated.1jzs8720grz7zz1bdtv5w02zxx3y].[none:Crime ID:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='density-intensity' value='0.29020214080810547' />
+            <encoding attr='density-color' palette='sunrise_sunset_diverging_10_0' type='interpolated' />
+            <format attr='mark-transparency' value='175' />
+            <format attr='density-kernel-size' value='1' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1jzs8720grz7zz1bdtv5w02zxx3y].[Latitude (generated)]</rows>
+    <cols>[federated.1jzs8720grz7zz1bdtv5w02zxx3y].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

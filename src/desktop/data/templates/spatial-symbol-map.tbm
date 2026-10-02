@@ -1,0 +1,75 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='spatial-symbol-map'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Location]' role='dimension' semantic-role='[Geographical].[Name]' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Location]' derivation='None' name='[none:Location:nk]' pivot='key' type='nominal' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+        <format attr='map-snap-zoom' value='true' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <size column='[Sample - Superstore].[sum:Sales:qk]' />
+          <lod column='[Sample - Superstore].[none:Location:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-transparency' value='170' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#b4b4b4' />
+            <format attr='size' value='1.5932043790817261' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[Latitude (generated)]</rows>
+    <cols>[Sample - Superstore].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

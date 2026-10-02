@@ -76,7 +76,7 @@ async function connectOAuthClient({
       fillSiteName: env.FILL_SITE_NAME,
     });
 
-    await consentFlow.grantConsentIfNecessary();
+    await consentFlow.grantConsentIfNecessary(codeCallbackPromise);
 
     const request = await codeCallbackPromise;
     const url = new URL(request.url());

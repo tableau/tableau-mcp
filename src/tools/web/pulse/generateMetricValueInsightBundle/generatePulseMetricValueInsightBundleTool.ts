@@ -12,10 +12,23 @@ import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
+import { slimBundle } from './slimBundle.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
   bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
+  verbosity: z
+    .enum(['full', 'slim'])
+    .optional()
+    .describe(
+      'full (default): returns the response verbatim, including viz. slim: strips the large viz ' +
+        '(Vega chart-spec) blobs from every insight and summary result.',
+    ),
+  slim: z
+    .optional(z.boolean())
+    .describe(
+      'Deprecated: use verbosity=slim. When both are provided, verbosity takes precedence.',
+    ),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
@@ -35,6 +48,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     - time_zone: 'UTC'
     - language: 'LANGUAGE_EN_US'
     - locale: 'LOCALE_EN_US'
+    - now (optional): anchors the analysis to a specific date instead of the current date, so the bundle can target a past whole period rather than only today-relative windows. Format 'YYYY-MM-DD' (or 'YYYY-MM-DD HH:MM:SS', 24-hr). To analyze a specific past month, set \`now\` to the LAST day of that month with \`measurement_period.range = 'RANGE_CURRENT_PARTIAL'\` and \`granularity = 'GRANULARITY_BY_MONTH'\` (e.g. \`now: '2026-05-31'\` yields the full month of May 2026); note that \`RANGE_LAST_COMPLETE\` targets the period BEFORE the anchor's period, not the anchor's own. This shifts only the whole-period window; for an arbitrary date range use \`specific_period\` (below). When set, \`time_zone\` is ignored. Omit it (or use an empty string) for today-relative analysis.
+    - specific_period (optional): to target an explicit period or an arbitrary date range, set \`measurement_period.range\` to \`'RANGE_BY_CONFIG'\` and provide \`measurement_period.specific_period\`. This is the ONLY way to analyze a custom span (e.g. April 15-20); \`specific_period\` is IGNORED unless range is \`'RANGE_BY_CONFIG'\`, and cannot be combined with \`now\`.
+      - \`{ "date": "YYYY-MM-DD" }\` — the single period (at the chosen \`granularity\`) that contains that date. E.g. granularity \`GRANULARITY_BY_MONTH\` + \`date: '2026-05-10'\` = the month of May 2026.
+      - \`{ "date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD" }\` — a span from the start of \`date\`'s period through the end of \`end_date\`'s period. E.g. granularity \`GRANULARITY_BY_DAY\` + \`date: '2026-04-15'\`, \`end_date: '2026-04-20'\` = April 15-20, 2026.
+    - last_x_period (optional): to target a service-supported rolling window, set \`measurement_period.range\` to \`'RANGE_BY_CONFIG'\` and provide \`measurement_period.last_x_period\`. Supported configurations are exactly:
+      - Rolling days: \`period\` 7, 14, 30, 60, or 90; \`period_type: 'GRANULARITY_BY_DAY'\`; \`include_current_period: true\`; and measurement-period \`granularity: 'GRANULARITY_BY_DAY'\`.
+      - Trailing year by month: \`period: 1\`; \`period_type: 'GRANULARITY_BY_YEAR'\`; \`include_current_period: false\`; and measurement-period \`granularity: 'GRANULARITY_BY_MONTH'\`.
+      - For an unsupported rolling count, use \`specific_period\` only when the caller explicitly intends a fixed exact-date snapshot. If a supported \`last_x_period\` request is rejected, do not silently convert it to \`specific_period\`; that would change a rolling window into a fixed snapshot.
     - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID) and accepts an optional \`id_type\`:
       - Omit \`id_type\` for standard published datasources (default behavior).
       - Use \`'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'\` when the metric is based on an embedded workbook datasource rather than a published datasource.
@@ -43,6 +64,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
   - 'basic' - Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data.
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
+  - 'exploration' - Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.
+- \`verbosity\` (optional): 'full' returns the response verbatim, including \`viz\`. 'slim' strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result. Defaults to 'full'.
+- \`slim\` (optional): Deprecated: use \`verbosity=slim\`.
 
 **Example Usage:**
 - Generate the default insight bundle for the Pulse metric:
@@ -136,6 +160,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 - Generate the detail insight bundle for the Pulse metric:
     bundleType: 'detail',
     bundleRequest: (See default example above)
+- Generate the exploration insight bundle for the Pulse metric:
+    bundleType: 'exploration',
+    bundleRequest: (See default example above)
 `,
     paramsSchema,
     annotations: {
@@ -145,10 +172,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { bundleRequest, bundleType, verbosity, slim },
+      extra,
+    ): Promise<CallToolResult> => {
+      const useSlim = verbosity ? verbosity === 'slim' : Boolean(slim);
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
-        args: { bundleRequest, bundleType },
+        args: { bundleRequest, bundleType, verbosity, slim },
         callback: async () => {
           const validationError = validateBundleRequest(bundleRequest);
           if (validationError) {
@@ -184,7 +215,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         constrainSuccessResult: (insightBundle) => {
           return {
             type: 'success',
-            result: insightBundle,
+            result: useSlim ? slimBundle(insightBundle) : insightBundle,
           };
         },
       });

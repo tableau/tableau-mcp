@@ -16,9 +16,17 @@ export class BaseConfig {
   logLevel: LogLevel;
   loggers: Set<LoggerType>;
   fileLoggerDirectory: string;
+  episodeEventsEnabled: boolean;
+  episodeEventsDirectory: string;
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
+  /**
+   * Which tool registration profile to use. Normalized (trim + lowercase). '' (unset) and
+   * 'full' keep the eager/default tool surface; variant-specific profiles ('demo' on
+   * desktop, 'combined-lean' on the combined build) narrow or lazy-load parts of it.
+   */
+  toolProfile: string;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -28,9 +36,12 @@ export class BaseConfig {
       LOG_LEVEL: logLevel,
       ENABLED_LOGGERS: logging,
       FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
+      EPISODE_EVENTS: episodeEvents,
+      EPISODE_EVENTS_DIR: episodeEventsDirectory,
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
+      TOOL_PROFILE: toolProfile,
     } = cleansedVars;
 
     this.transport = isTransport(transport) ? transport : 'stdio';
@@ -38,6 +49,8 @@ export class BaseConfig {
     this.logLevel = parseLogLevel(logLevel);
     this.loggers = parseLoggerTypes(logging);
     this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
+    this.episodeEventsEnabled = episodeEvents === 'on';
+    this.episodeEventsDirectory = episodeEventsDirectory || this.fileLoggerDirectory;
     this.disableLogMasking = disableLogMasking === 'true';
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
       defaultValue: milliseconds.fromMinutes(10),
@@ -48,6 +61,7 @@ export class BaseConfig {
       defaultValue: 8192,
       minValue: 1,
     });
+    this.toolProfile = (toolProfile ?? '').trim().toLowerCase();
   }
 }
 

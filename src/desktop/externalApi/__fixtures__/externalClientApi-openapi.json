@@ -1,0 +1,3716 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tableau External Client API",
+    "version": "0.2.20",
+    "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The Tableau Desktop loopback origin. The bound port is published in the per-user discovery file."
+    }
+  ],
+  "paths": {
+    "/.well-known/oauth-protected-resource": {
+      "get": {
+        "summary": "Get protected-resource metadata",
+        "description": "Returns the RFC 9728 OAuth Protected Resource Metadata document.",
+        "operationId": "getOAuthProtectedResource",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the RFC 9728 OAuth Protected Resource Metadata document.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProtectedResourceMetadata" }
+              }
+            }
+          },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get the OpenAPI document",
+        "description": "Returns the OpenAPI 3.1 description of this API.",
+        "operationId": "getOpenApi",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the OpenAPI 3.1 description of this API.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/v0/": {
+      "get": {
+        "summary": "Get the API root",
+        "description": "Returns the API and application versions and the link map to available resources.",
+        "operationId": "getRoot",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the API and application versions and the link map to available resources.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ApiRoot" } }
+            }
+          },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app": {
+      "get": {
+        "summary": "Get application info",
+        "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), and isPresentationMode (whether presentation mode is on).",
+        "operationId": "getApp",
+        "responses": {
+          "200": {
+            "description": "Returns the running Tableau Desktop application version, build, edition, operating system, locale, and repository/log paths, plus live UI state: isStartPageVisible (whether the Start Page is showing; it can be visible even while a workbook is open), isDataSourcePageActive (whether the Data Source page is the active tab), and isPresentationMode (whether presentation mode is on).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/AppInfo" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app/dialogs": {
+      "get": {
+        "summary": "List active dialogs",
+        "description": "Returns the current visible modal dialogs that require a user decision. Actions and dialog identity fields are exact values for a subsequent POST /v0/app:invokeDialogAction request. Self-clearing progress windows are excluded.",
+        "operationId": "listActiveDialogs",
+        "responses": {
+          "200": {
+            "description": "Returns the current visible modal dialogs that require a user decision. Actions and dialog identity fields are exact values for a subsequent POST /v0/app:invokeDialogAction request. Self-clearing progress windows are excluded.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DialogList" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app/state": {
+      "get": {
+        "summary": "Get application blocking state",
+        "description": "Returns one bounded app-wide snapshot of Desktop activity, modal state, and visible blocking content without dispatching a command. state is IDLE only after a complete UI snapshot observes no blocking signal. blockedBy precedence is MODAL_DIALOG, the first active native activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE. Window arrays are not attributed to an operation.",
+        "operationId": "getAppState",
+        "responses": {
+          "200": {
+            "description": "Returns one bounded app-wide snapshot of Desktop activity, modal state, and visible blocking content without dispatching a command. state is IDLE only after a complete UI snapshot observes no blocking signal. blockedBy precedence is MODAL_DIALOG, the first active native activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE. Window arrays are not attributed to an operation.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/AppState" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app:invokeDialogAction": {
+      "post": {
+        "summary": "Invoke an active dialog action",
+        "description": "Selects one current actionable dialog by exact objectName, title, and className, then invokes one visible enabled action copied from the dialog's actions array. Labeled buttons preserve their exact text; recognized unlabeled controls use semantic actions such as close. The response reports whether the dialog was dismissed, remains afterward, or no actionable dialog was present. A rejected request never invokes an action.",
+        "operationId": "invokeDialogAction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/InvokeDialogActionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Selects one current actionable dialog by exact objectName, title, and className, then invokes one visible enabled action copied from the dialog's actions array. Labeled buttons preserve their exact text; recognized unlabeled controls use semantic actions such as close. The response reports whether the dialog was dismissed, remains afterward, or no actionable dialog was present. A rejected request never invokes an action.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InvokeDialogActionResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app:openFile": {
+      "post": {
+        "summary": "Open a file",
+        "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. An extension Tableau cannot open is rejected before dispatch. Note: opening a workbook when one is already open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original, not the newly opened one.",
+        "operationId": "openFile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/OpenFileRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Opens a local file by path. A .twb/.twbx opens as a workbook; a datasource file (Excel, text, spatial, extract, .tds, and the like) attaches to the open workbook, creating one if none is open. An extension Tableau cannot open is rejected before dispatch. Note: opening a workbook when one is already open launches it in a NEW Desktop window, and this API session stays bound to the workbook it started with -- GET /v0/workbook continues to report the original, not the newly opened one.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/app:toggleStartPage": {
+      "post": {
+        "summary": "Set start page visibility",
+        "description": "Sets whether the Tableau Desktop start page is visible and returns the resulting visibility. Repeated requests for the same visibility have no additional effect.",
+        "operationId": "toggleStartPage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/StartPageVisibility" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sets whether the Tableau Desktop start page is visible and returns the resulting visibility. Repeated requests for the same visibility have no additional effect.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StartPageVisibility" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/datasources/{id}:refreshData": {
+      "post": {
+        "summary": "Refresh a datasource's data",
+        "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources) the way the toolbar Refresh Data Source does: it lowers the query-cache timestamp and clears the mapped-image cache, then re-fetches the datasource from its source. This is NOT an extract refresh -- if the datasource is backed by an extract, the data stays fresh only through the extract's metadata date. A datasource with no data connection to refresh is a no-op SUCCEEDED Operation.",
+        "operationId": "refreshData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refreshes the live data for the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources) the way the toolbar Refresh Data Source does: it lowers the query-cache timestamp and clears the mapped-image cache, then re-fetches the datasource from its source. This is NOT an extract refresh -- if the datasource is backed by an extract, the data stays fresh only through the extract's metadata date. A datasource with no data connection to refresh is a no-op SUCCEEDED Operation.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/datasources/{id}:refreshExtract": {
+      "post": {
+        "summary": "Refresh a datasource extract",
+        "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract supports it; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation.",
+        "operationId": "refreshExtract",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshExtractRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Kicks off an extract refresh on the datasource resolved by {id} (its internal name from GET /v0/workbook/datasources). By default the refresh is incremental when the extract supports it; send isFullRefresh=true to force a full refresh. A datasource that has no refreshable extract is a no-op SUCCEEDED Operation.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/health": {
+      "get": {
+        "summary": "Check API liveness",
+        "operationId": "getHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The requested representation.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Health" } }
+            }
+          },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/operations": {
+      "get": {
+        "summary": "List operations",
+        "description": "Lists in-flight and recently-completed async operations.",
+        "operationId": "listOperations",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Return only operations in this state (an OperationState value); an unrecognized value matches nothing.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Return only operations of this command kind.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lists in-flight and recently-completed async operations.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OperationList" } }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/operations/{id}": {
+      "get": {
+        "summary": "Get an operation",
+        "description": "Returns the current state of a single async operation by id. This is a non-blocking snapshot: an unfinished operation is returned in its current non-terminal state (QUEUED, RUNNING, or AWAITING_USER). Poll until state is terminal (SUCCEEDED, FAILED, or CANCELLED).",
+        "operationId": "getOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the current state of a single async operation by id. This is a non-blocking snapshot: an unfinished operation is returned in its current non-terminal state (QUEUED, RUNNING, or AWAITING_USER). Poll until state is terminal (SUCCEEDED, FAILED, or CANCELLED).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/site": {
+      "get": {
+        "summary": "Get the connected site",
+        "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
+        "operationId": "getSite",
+        "responses": {
+          "200": {
+            "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Site" } } }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/site/datasources": {
+      "get": {
+        "summary": "List published datasources",
+        "description": "Lists datasources published to the connected site.",
+        "operationId": "listSiteDatasources",
+        "responses": {
+          "200": {
+            "description": "Lists datasources published to the connected site.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SiteDatasourceList" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/site/workbooks": {
+      "get": {
+        "summary": "List published workbooks",
+        "description": "Lists workbooks published to the connected site.",
+        "operationId": "listSiteWorkbooks",
+        "responses": {
+          "200": {
+            "description": "Lists workbooks published to the connected site.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SiteWorkbookList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook": {
+      "get": {
+        "summary": "Get the open workbook",
+        "description": "Returns metadata and the sheet inventory of the open workbook.",
+        "operationId": "getWorkbook",
+        "responses": {
+          "200": {
+            "description": "Returns metadata and the sheet inventory of the open workbook.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorkbookInventory" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards": {
+      "get": {
+        "summary": "List dashboards",
+        "description": "Lists the dashboards in the open workbook.",
+        "operationId": "listDashboards",
+        "responses": {
+          "200": {
+            "description": "Lists the dashboards in the open workbook.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DashboardList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}": {
+      "get": {
+        "summary": "Get a dashboard",
+        "description": "Returns metadata for a single dashboard by id.",
+        "operationId": "getDashboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single dashboard by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DashboardItem" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}/document": {
+      "get": {
+        "summary": "Get a dashboard document",
+        "description": "Returns a single dashboard as a Tableau XML subtree.",
+        "operationId": "getDashboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single dashboard as a Tableau XML subtree.",
+            "content": { "application/xml": { "schema": { "type": "string" } } },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "summary": "Apply a dashboard document",
+        "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a story, <dashboard type='storyboard'>, where the target is a dashboard). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+        "operationId": "applyDashboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The dashboard's Tableau XML -- either the bare <dashboard> element returned by GET .../dashboards/{id}/document, or that element inside a <workbook> envelope. Only the dashboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied dashboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a story, <dashboard type='storyboard'>, where the target is a dashboard). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "422": { "$ref": "#/components/responses/UnprocessableContent" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}/image": {
+      "get": {
+        "summary": "Export a dashboard image",
+        "description": "Renders a single dashboard (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path. The id must resolve to a dashboard: an id that matches no sheet returns 404, and an id that resolves to a non-dashboard sheet or to a dashboard that is not yet renderable returns 409.",
+        "operationId": "exportDashboardImage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "required": false,
+            "description": "Path to write the image to. Must be absolute and name a file; a directory, a trailing slash, or any '.'/'..' path segment is rejected with a 400. When set, the response projects this path instead of inline base64; when omitted, the image is returned as base64.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "mimeType",
+            "in": "query",
+            "required": false,
+            "description": "Requested image MIME type (e.g. image/png, image/jpeg). The effective type is returned in the response.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renders a single dashboard (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path. The id must resolve to a dashboard: an id that matches no sheet returns 404, and an id that resolves to a non-dashboard sheet or to a dashboard that is not yet renderable returns 409.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ImageExport" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:delete": {
+      "post": {
+        "summary": "Delete a dashboard",
+        "description": "Deletes a single dashboard by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+        "operationId": "deleteDashboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletes a single dashboard by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:pauseAutoUpdates": {
+      "post": {
+        "summary": "Pause dashboard auto-updates",
+        "description": "Pauses automatic query execution for a dashboard so several edits can be batched before the next refresh.",
+        "operationId": "pauseDashboardAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pauses automatic query execution for a dashboard so several edits can be batched before the next refresh.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:refreshNow": {
+      "post": {
+        "summary": "Refresh a dashboard now",
+        "description": "Runs pending automatic updates for a dashboard immediately.",
+        "operationId": "refreshDashboardNow",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs pending automatic updates for a dashboard immediately.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/Operation" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "$ref": "#/components/schemas/DashboardRefreshOutcome"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:rename": {
+      "post": {
+        "summary": "Rename a dashboard",
+        "description": "Renames a dashboard identified by id.",
+        "operationId": "renameDashboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/RenameSheetRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renames a dashboard identified by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}:resumeAutoUpdates": {
+      "post": {
+        "summary": "Resume dashboard auto-updates",
+        "description": "Resumes automatic query execution for a dashboard.",
+        "operationId": "resumeDashboardAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumes automatic query execution for a dashboard.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/dashboards:new": {
+      "post": {
+        "summary": "Add a blank dashboard",
+        "description": "Creates a single blank dashboard with a generated name. Any request body is ignored.",
+        "operationId": "addDashboard",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "0-based tab position at which the new dashboard(s) are inserted, shifting the existing tab at that position (and beyond) to the right. index=0 inserts before the first tab. To append at the end (make it the last tab), omit the parameter or use a value >=n (where n is the current number of tabs). Negative values also append at the end.",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creates a single blank dashboard with a generated name. Any request body is ignored.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/datasources": {
+      "get": {
+        "summary": "List workbook datasources",
+        "description": "Lists the datasources used by the open workbook.",
+        "operationId": "listWorkbookDatasources",
+        "responses": {
+          "200": {
+            "description": "Lists the datasources used by the open workbook.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DatasourceList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}": {
+      "get": {
+        "summary": "Get a workbook datasource",
+        "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+        "operationId": "getWorkbookDatasource",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single datasource by its URL-encoded inventory id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DatasourceItem" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/datasources/{id}/document": {
+      "get": {
+        "summary": "Get a datasource document",
+        "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+        "operationId": "getDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the datasource's local workbook representation as a Tableau XML subtree.",
+            "content": { "application/xml": { "schema": { "type": "string" } } },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "summary": "Apply a datasource document",
+        "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+        "operationId": "applyDatasourceDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The datasource's Tableau XML -- either the bare <datasource> element returned by GET .../datasources/{id}/document, or that element inside a <datasources> or <workbook> envelope. The payload must contain exactly one datasource whose internal name matches {id}.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces one datasource's local workbook representation with the submitted Tableau XML, leaving all other datasources and sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. Malformed or invalid workbook XML is rejected with 422. The payload must contain exactly one datasource whose internal name matches {id}; a mismatch is rejected with 409. The apply is unconditional last-writer-wins and does not publish changes to a server-side datasource.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "422": { "$ref": "#/components/responses/UnprocessableContent" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/diagnostics": {
+      "get": {
+        "summary": "Get workbook diagnostics",
+        "description": "Checks the fields statically used by every real worksheet. This static used-field diagnostic does not verify query execution or rendering; each worksheet reports whether its stored state was checked completely.",
+        "operationId": "getWorkbookDiagnostics",
+        "responses": {
+          "200": {
+            "description": "Checks the fields statically used by every real worksheet. This static used-field diagnostic does not verify query execution or rendering; each worksheet reports whether its stored state was checked completely.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorkbookDiagnostics" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/document": {
+      "get": {
+        "summary": "Get the workbook document",
+        "description": "Returns the full open workbook as Tableau XML.",
+        "operationId": "getWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the full open workbook as Tableau XML.",
+            "content": { "application/xml": { "schema": { "type": "string" } } },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "summary": "Apply a workbook document",
+        "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422 (a Problem Details response with code operation-failed carrying the underlying tableauErrorCode). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation (HTTP 200 with state FAILED and an error). The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+        "operationId": "applyWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces the open workbook with the submitted Tableau XML. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422 (a Problem Details response with code operation-failed carrying the underlying tableauErrorCode). The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits. A payload that would leave the workbook with no sheets is rejected as a failed operation (HTTP 200 with state FAILED and an error). The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "422": { "$ref": "#/components/responses/UnprocessableContent" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/document:validate": {
+      "post": {
+        "summary": "Validate a workbook document",
+        "description": "Validates the submitted Tableau XML against the schema without applying it.",
+        "operationId": "validateWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validates the submitted Tableau XML against the schema without applying it.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ValidationResult" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards": {
+      "get": {
+        "summary": "List storyboards",
+        "description": "Lists the storyboards in the open workbook.",
+        "operationId": "listStoryboards",
+        "responses": {
+          "200": {
+            "description": "Lists the storyboards in the open workbook.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/StoryboardList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}": {
+      "get": {
+        "summary": "Get a storyboard",
+        "description": "Returns metadata for a single storyboard by id.",
+        "operationId": "getStoryboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single storyboard by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/StoryboardItem" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}/document": {
+      "get": {
+        "summary": "Get a storyboard document",
+        "description": "Returns a single storyboard as a Tableau XML subtree.",
+        "operationId": "getStoryboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single storyboard as a Tableau XML subtree.",
+            "content": { "application/xml": { "schema": { "type": "string" } } },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "summary": "Apply a storyboard document",
+        "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a plain <dashboard> where the target is a story, <dashboard type='storyboard'>). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+        "operationId": "applyStoryboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The storyboard's Tableau XML -- either the bare <dashboard> element (storyboards serialize as <dashboard type='storyboard'>) returned by GET .../storyboards/{id}/document, or that element inside a <workbook> envelope. Only the storyboard whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied storyboard's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 when the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document -- or when the name-matching payload element is the wrong sheet subtype (a plain <dashboard> where the target is a story, <dashboard type='storyboard'>). A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "422": { "$ref": "#/components/responses/UnprocessableContent" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}/image": {
+      "get": {
+        "summary": "Export a storyboard image",
+        "description": "Renders a storyboard's active story point (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+        "operationId": "exportStoryboardImage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "required": false,
+            "description": "Path to write the image to. Must be absolute and name a file; a directory, a trailing slash, or any '.'/'..' path segment is rejected with a 400. When set, the response projects this path instead of inline base64; when omitted, the image is returned as base64.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "mimeType",
+            "in": "query",
+            "required": false,
+            "description": "Requested image MIME type (e.g. image/png, image/jpeg). The effective type is returned in the response.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renders a storyboard's active story point (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ImageExport" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}:delete": {
+      "post": {
+        "summary": "Delete a storyboard",
+        "description": "Deletes a single storyboard by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+        "operationId": "deleteStoryboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletes a single storyboard by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}:rename": {
+      "post": {
+        "summary": "Rename a storyboard",
+        "description": "Renames a storyboard identified by id.",
+        "operationId": "renameStoryboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/RenameSheetRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renames a storyboard identified by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}:refreshNow": {
+      "post": {
+        "summary": "Refresh a storyboard now",
+        "description": "Runs pending automatic updates for a storyboard's current point immediately.",
+        "operationId": "refreshStoryboardNow",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs pending automatic updates for a storyboard's current point immediately.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/storyboards:new": {
+      "post": {
+        "summary": "Add a blank storyboard",
+        "description": "Creates a single blank storyboard with a generated name. Any request body is ignored.",
+        "operationId": "addStoryboard",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "0-based tab position at which the new storyboard(s) are inserted, shifting the existing tab at that position (and beyond) to the right. index=0 inserts before the first tab. To append at the end (make it the last tab), omit the parameter or use a value >=n (where n is the current number of tabs). Negative values also append at the end.",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creates a single blank storyboard with a generated name. Any request body is ignored.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets": {
+      "get": {
+        "summary": "List worksheets",
+        "description": "Lists the worksheets in the open workbook.",
+        "operationId": "listWorksheets",
+        "responses": {
+          "200": {
+            "description": "Lists the worksheets in the open workbook.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorksheetList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}": {
+      "get": {
+        "summary": "Get a worksheet",
+        "description": "Returns metadata for a single worksheet by id.",
+        "operationId": "getWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single worksheet by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorksheetItem" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/diagnostics": {
+      "get": {
+        "summary": "Get worksheet diagnostics",
+        "description": "Checks the fields statically used by the addressed worksheet with Tableau's native shelf validator. This static used-field diagnostic does not verify query execution or rendering; status reports whether stored state was checked completely.",
+        "operationId": "getWorksheetDiagnostics",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checks the fields statically used by the addressed worksheet with Tableau's native shelf validator. This static used-field diagnostic does not verify query execution or rendering; status reports whether stored state was checked completely.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorkbookDiagnostics" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/document": {
+      "get": {
+        "summary": "Get a worksheet document",
+        "description": "Returns a single worksheet as a Tableau XML subtree.",
+        "operationId": "getWorksheetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single worksheet as a Tableau XML subtree.",
+            "content": { "application/xml": { "schema": { "type": "string" } } },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Customer-facing Tableau product version the document was served as. On the async poll the JSON Operation envelope is returned instead of the XML, so a polled document carries this value as result.payloadVersion rather than this header.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
+      "post": {
+        "summary": "Apply a worksheet document",
+        "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+        "operationId": "applyWorksheetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Reserved for future Tableau payload (file-format) version negotiation. Currently accepted but ignored: documents are always served and applied at the running product version.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The worksheet's Tableau XML -- either the bare <worksheet> element returned by GET .../worksheets/{id}/document, or that element inside a <workbook> envelope. Only the worksheet whose name matches the target sheet's name is applied, and any other sheets in the payload are ignored. Top-level <datasources> definitions in the payload are ignored, but the applied worksheet's datasource references must still resolve to a datasource already present in the open workbook -- a reference to an absent datasource is rejected with 409.",
+          "content": {
+            "application/xml": { "schema": { "type": "string" } },
+            "text/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. A missing or empty body is rejected with 400 and a non-XML Content-Type with 415. A non-empty XML body that is not well-formed, or that the product cannot load into a valid workbook, is rejected with 422. The payload is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. The apply is rejected with 409 if the submitted payload's sheet name does not match the target sheet's current name -- for example, if you renamed the sheet in the payload, or another editor renamed it after you read the document. A client error returns a Problem Details response with code operation-failed carrying the underlying tableauErrorCode. The 4xx rejection applies when the apply completes synchronously; an apply that returns 202 instead reports the same failure through the polled operation (HTTP 200 with state FAILED and the error).",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "422": { "$ref": "#/components/responses/UnprocessableContent" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/image": {
+      "get": {
+        "summary": "Export a worksheet image",
+        "description": "Renders a single worksheet (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path. The id must resolve to a worksheet: an id that matches no sheet returns 404, and an id that resolves to a non-worksheet sheet or to a worksheet that is not yet renderable returns 409.",
+        "operationId": "exportWorksheetImage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "required": false,
+            "description": "Path to write the image to. Must be absolute and name a file; a directory, a trailing slash, or any '.'/'..' path segment is rejected with a 400. When set, the response projects this path instead of inline base64; when omitted, the image is returned as base64.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "mimeType",
+            "in": "query",
+            "required": false,
+            "description": "Requested image MIME type (e.g. image/png, image/jpeg). The effective type is returned in the response.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renders a single worksheet (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path. The id must resolve to a worksheet: an id that matches no sheet returns 404, and an id that resolves to a non-worksheet sheet or to a worksheet that is not yet renderable returns 409.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ImageExport" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/logicalTables": {
+      "get": {
+        "summary": "List worksheet logical tables",
+        "description": "Lists the logical table ids and captions available for a worksheet's underlying data.",
+        "operationId": "listWorksheetLogicalTables",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lists the logical table ids and captions available for a worksheet's underlying data.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/LogicalTableList" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/logicalTables/{logicalTableId}/data": {
+      "get": {
+        "summary": "Get worksheet underlying data",
+        "description": "Returns the underlying data for one logical table of a worksheet as JSON.",
+        "operationId": "getWorksheetUnderlyingData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "logicalTableId",
+            "in": "path",
+            "required": true,
+            "description": "Logical table id from the worksheet's logicalTables list.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "maxRows",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of data rows to return, capped at a configurable maximum (10000 rows by default). A positive value returns at most that many rows; 0 or an omitted value returns up to the maximum.",
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "ignoreAliases",
+            "in": "query",
+            "required": false,
+            "description": "Return underlying values instead of display aliases.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "ignoreSelection",
+            "in": "query",
+            "required": false,
+            "description": "Return all data rather than only the current selection.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeAllColumns",
+            "in": "query",
+            "required": false,
+            "description": "Include every column rather than only the referenced columns.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "columnsToIncludeByFieldName",
+            "in": "query",
+            "required": false,
+            "description": "Restricts the returned columns. Each value is a base source-column name qualified by the datasource caption (e.g. \"[Sample - Superstore].[Sales]\"). A value that matches no column is silently ignored. Repeat the parameter to name several; values are not comma-split, so a name may contain a comma.",
+            "schema": { "type": "array", "items": { "type": "string" } }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the underlying data for one logical table of a worksheet as JSON.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SummaryData" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/showMe": {
+      "get": {
+        "summary": "Get Show Me options for a worksheet",
+        "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context.",
+        "operationId": "getWorksheetShowMeOptions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dataSource",
+            "in": "query",
+            "required": false,
+            "description": "Datasource used to evaluate Show Me requirements.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "fieldsSelectedInSchemaViewer",
+            "in": "query",
+            "required": false,
+            "description": "A fully qualified field name used to evaluate Show Me requirements. Repeat this parameter to preserve selected-field order. Supplying fields implies explicit selection unless selectionMode=ambient, which is invalid.",
+            "schema": { "type": "array", "items": { "type": "string" } }
+          },
+          {
+            "name": "selectionMode",
+            "in": "query",
+            "required": false,
+            "description": "Controls selected-field context. ambient uses the current schema-viewer selection and cannot be combined with fieldsSelectedInSchemaViewer. explicit uses the supplied fields; with no fields it evaluates an explicit empty selection.",
+            "schema": { "type": "string", "enum": ["ambient", "explicit"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns Tableau's context-sensitive Show Me choices in native order, including whether each choice is applicable for the worksheet and selected-field context.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ShowMeOptions" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/summaryData": {
+      "get": {
+        "summary": "Get worksheet summary data",
+        "description": "Returns the summary (logical table) data for a worksheet as JSON.",
+        "operationId": "getWorksheetSummaryData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "maxRows",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of data rows to return, capped at a configurable maximum (10000 rows by default). A positive value returns at most that many rows; 0 or an omitted value returns up to the maximum.",
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "ignoreAliases",
+            "in": "query",
+            "required": false,
+            "description": "Return underlying values instead of display aliases.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "ignoreSelection",
+            "in": "query",
+            "required": false,
+            "description": "Return all data rather than only the current selection.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "columnsToIncludeByFieldName",
+            "in": "query",
+            "required": false,
+            "description": "Restricts the returned columns. Each value is a field-instance name qualified by its datasource caption, in the form [Datasource Caption].[field-instance] (e.g. \"[Sample - Superstore].[none:Ship Mode:nk]\"). A value that matches no column is silently ignored. Repeat the parameter to name several; values are not comma-split, so a name may contain a comma.",
+            "schema": { "type": "array", "items": { "type": "string" } }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the summary (logical table) data for a worksheet as JSON.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SummaryData" } }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:delete": {
+      "post": {
+        "summary": "Delete a worksheet",
+        "description": "Deletes a single worksheet by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+        "operationId": "deleteWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deletes a single worksheet by id. Unlike the Tableau UI, this endpoint does not guard the workbook's last visible sheet; do not delete it, as removing it can leave the workbook with no visible sheets.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:pauseAutoUpdates": {
+      "post": {
+        "summary": "Pause worksheet auto-updates",
+        "description": "Pauses automatic query execution for a worksheet so several edits can be batched before the next refresh.",
+        "operationId": "pauseWorksheetAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pauses automatic query execution for a worksheet so several edits can be batched before the next refresh.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:refreshNow": {
+      "post": {
+        "summary": "Refresh a worksheet now",
+        "description": "Runs pending automatic updates for a worksheet immediately.",
+        "operationId": "refreshWorksheetNow",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs pending automatic updates for a worksheet immediately.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:rename": {
+      "post": {
+        "summary": "Rename a worksheet",
+        "description": "Renames a worksheet identified by id.",
+        "operationId": "renameWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/RenameSheetRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renames a worksheet identified by id.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:resumeAutoUpdates": {
+      "post": {
+        "summary": "Resume worksheet auto-updates",
+        "description": "Resumes automatic query execution for a worksheet.",
+        "operationId": "resumeWorksheetAutoUpdates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumes automatic query execution for a worksheet.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:showMe": {
+      "post": {
+        "summary": "Apply Show Me to a worksheet",
+        "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context.",
+        "operationId": "showMeWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ShowMeRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Applies a concrete Show Me visualization type to a worksheet using optional datasource and fully qualified selected-field context.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:sort": {
+      "post": {
+        "summary": "Sort a worksheet",
+        "description": "Applies a sort by field, direction, and type to a worksheet without opening the sort dialog.",
+        "operationId": "sortWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SortRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Applies a sort by field, direction, and type to a worksheet without opening the sort dialog.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}:validateCalculatedField": {
+      "post": {
+        "summary": "Validate a calculated-field formula",
+        "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. On a worksheet with more than one data source, a formula that does not qualify its fields with a data source is validated against the worksheet's active data source.",
+        "operationId": "validateWorksheetCalculatedField",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The resource's stable id as returned in its list or GET response, not its display name or caption.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ValidateCalculatedFieldRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validates a calculated-field formula against a worksheet's data model without adding or changing any field. On a worksheet with more than one data source, a formula that does not qualify its fields with a data source is validated against the worksheet's active data source.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidateCalculatedFieldResponse" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook/worksheets:new": {
+      "post": {
+        "summary": "Add a blank worksheet",
+        "description": "Creates a single blank worksheet with a generated name. Any request body is ignored.",
+        "operationId": "addWorksheet",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "0-based tab position at which the new worksheet(s) are inserted, shifting the existing tab at that position (and beyond) to the right. index=0 inserts before the first tab. To append at the end (make it the last tab), omit the parameter or use a value >=n (where n is the current number of tabs). Negative values also append at the end.",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creates a single blank worksheet with a generated name. Any request body is ignored.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:exportAs": {
+      "post": {
+        "summary": "Export the workbook",
+        "description": "Exports the open workbook to a non-native format, leaving the open document unchanged. Both filePath and format are required. format selects what to produce: \"pdf\" (a PDF of every sheet), \"powerpoint\" (a .pptx with one slide per sheet), \"packaged-workbook\" (a .twbx bundling the workbook and its data), or \"prior-version\" (a down-saved copy for an older Tableau release). filePath must end in the extension that format produces (.pdf, .pptx, .twbx, or .twb/.twbx respectively) or the request is rejected. For \"prior-version\", also supply targetVersion as the customer-facing release string (e.g. \"2024.1\"); an unrecognized version is rejected. The export always writes to the supplied filePath and never opens a dialog, so it is fully headless.",
+        "operationId": "exportWorkbook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExportAsWorkbookRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exports the open workbook to a non-native format, leaving the open document unchanged. Both filePath and format are required. format selects what to produce: \"pdf\" (a PDF of every sheet), \"powerpoint\" (a .pptx with one slide per sheet), \"packaged-workbook\" (a .twbx bundling the workbook and its data), or \"prior-version\" (a down-saved copy for an older Tableau release). filePath must end in the extension that format produces (.pdf, .pptx, .twbx, or .twb/.twbx respectively) or the request is rejected. For \"prior-version\", also supply targetVersion as the customer-facing release string (e.g. \"2024.1\"); an unrecognized version is rejected. The export always writes to the supplied filePath and never opens a dialog, so it is fully headless.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:goToSheet": {
+      "post": {
+        "summary": "Go to a sheet",
+        "description": "Makes the identified worksheet, dashboard, or storyboard the active sheet.",
+        "operationId": "goToSheet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/GoToSheetRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Makes the identified worksheet, dashboard, or storyboard the active sheet.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:publish": {
+      "post": {
+        "summary": "Publish the workbook",
+        "description": "Publishes the open workbook to the connected Tableau site by opening the Publish Workbook dialog. Because the dialog is interactive, a terminal SUCCEEDED reports that the flow finished, not that a publish landed: dismissing or cancelling the dialog also resolves to SUCCEEDED. Returns 404 when not signed in to a site.",
+        "operationId": "publish",
+        "responses": {
+          "200": {
+            "description": "Publishes the open workbook to the connected Tableau site by opening the Publish Workbook dialog. Because the dialog is interactive, a terminal SUCCEEDED reports that the flow finished, not that a publish landed: dismissing or cancelling the dialog also resolves to SUCCEEDED. Returns 404 when not signed in to a site.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:redo": {
+      "post": {
+        "summary": "Redo the last undone change",
+        "description": "Reapplies the change most recently undone on the open workbook, equivalent to Edit > Redo.",
+        "operationId": "redo",
+        "responses": {
+          "200": {
+            "description": "Reapplies the change most recently undone on the open workbook, equivalent to Edit > Redo.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:save": {
+      "post": {
+        "summary": "Save the workbook",
+        "description": "Saves the open workbook. Supply a filePath to save a copy to that path, or omit it to save the workbook in place at the path it already has. filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds. Supply filePath to keep the save headless.",
+        "operationId": "saveWorkbook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SaveWorkbookRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saves the open workbook. Supply a filePath to save a copy to that path, or omit it to save the workbook in place at the path it already has. filePath must end in .twb or .twbx: save writes workbook content verbatim without converting, so any other extension is rejected rather than writing a mislabeled file. The save is headless whenever the workbook has a writable path to save to -- a supplied filePath, or the existing path of an already-saved workbook whose file can be written. It cannot be headless when there is no writable existing path and no filePath is supplied: a workbook that has never been saved, a workbook whose existing file is read-only, or a workbook recovered from an autosave draft. In those cases the product opens its native Save As dialog, which blocks until a person responds. Supply filePath to keep the save headless.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/v0/workbook:undo": {
+      "post": {
+        "summary": "Undo the last change",
+        "description": "Reverses the most recent change to the open workbook, equivalent to Edit > Undo.",
+        "operationId": "undo",
+        "responses": {
+          "200": {
+            "description": "Reverses the most recent change to the open workbook, equivalent to Edit > Undo.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": { "type": "string" }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
+          "500": { "$ref": "#/components/responses/ServerError" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 Problem Details. Structured extension members, such as tableauErrorCode, may appear as additional top-level fields.",
+        "required": ["code", "status", "instance"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable error identity clients branch on.",
+            "x-extensible-enum": [
+              "api-disabled",
+              "host-not-allowed",
+              "origin-not-allowed",
+              "unauthenticated",
+              "missing-user-agent",
+              "invalid-request-body",
+              "unsupported-content-type",
+              "missing-payload-version",
+              "payload-version-unsupported",
+              "not-found",
+              "datasource-not-found",
+              "sheet-not-found",
+              "logical-table-not-found",
+              "operation-not-found",
+              "operation-pending",
+              "dialog-not-found",
+              "dialog-ambiguous",
+              "dialog-action-not-found",
+              "dialog-action-ambiguous",
+              "dialog-action-disabled",
+              "method-not-allowed",
+              "not-implemented",
+              "command-not-found",
+              "invalid-command-parameter",
+              "invalid-query-parameter",
+              "unsupported-file-type",
+              "unsupported-target-version",
+              "file-not-found",
+              "show-me-not-applicable",
+              "show-me-unavailable",
+              "operation-failed"
+            ]
+          },
+          "status": { "type": "integer" },
+          "title": { "type": "string" },
+          "instance": { "type": "string" }
+        },
+        "additionalProperties": true
+      },
+      "Operation": {
+        "type": "object",
+        "description": "The state of a dispatched operation.",
+        "required": ["id", "kind", "state", "createdAt", "updatedAt", "warnings"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "state": {
+            "type": "string",
+            "x-extensible-enum": [
+              "QUEUED",
+              "RUNNING",
+              "AWAITING_USER",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED"
+            ]
+          },
+          "createdAt": { "type": "string" },
+          "updatedAt": { "type": "string" },
+          "completedAt": { "type": "string" },
+          "error": { "$ref": "#/components/schemas/OperationError" },
+          "result": { "type": "object" },
+          "diagnostics": { "$ref": "#/components/schemas/WorkbookDiagnostics" },
+          "warnings": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/OperationWarning" }
+          },
+          "blockingWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          },
+          "progressWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          }
+        }
+      },
+      "WindowInfo": {
+        "type": "object",
+        "description": "A visible modal Qt top-level window observed at read time. Whether a client must act on it is conveyed by the containing response: dialogs and blockingWindows contain windows that need a human decision, while progressWindows contains self-clearing windows. The content fields (messageText, informativeText, detailedText, iconLevel, buttons, actions) are best-effort: QMessageBox exposes them precisely, while generic dialogs scrape visible QLabel, read-only QTextEdit, and QAbstractButton descendants and may include incidental labels.",
+        "required": ["objectName", "title", "className"],
+        "properties": {
+          "objectName": { "type": "string" },
+          "title": { "type": "string" },
+          "className": { "type": "string" },
+          "messageText": { "type": "string" },
+          "informativeText": { "type": "string" },
+          "detailedText": {
+            "type": "string",
+            "maxLength": 1048576,
+            "description": "Diagnostic text capped to 1048576 UTF-8 bytes (1 MiB). When shortened, detailedTextTruncated is true."
+          },
+          "detailedTextTruncated": { "type": "boolean" },
+          "iconLevel": {
+            "type": "string",
+            "x-extensible-enum": ["critical", "warning", "information", "question"]
+          },
+          "buttons": { "type": "array", "items": { "type": "string" } },
+          "actions": { "type": "array", "items": { "$ref": "#/components/schemas/DialogAction" } }
+        }
+      },
+      "DialogAction": {
+        "description": "An exact visible dialog action. Text buttons use kind button and preserve their label; recognized unlabeled window controls use a semantic kind such as close.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "label"],
+            "properties": {
+              "kind": { "type": "string", "const": "button" },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind"],
+            "properties": { "kind": { "type": "string", "const": "close" }, "label": false }
+          }
+        ]
+      },
+      "OperationError": {
+        "type": "object",
+        "required": ["code"],
+        "properties": { "code": { "type": "string" }, "message": { "type": "string" } },
+        "additionalProperties": true
+      },
+      "OperationWarning": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": { "code": { "type": "string" }, "message": { "type": "string" } }
+      },
+      "DialogIdentity": {
+        "type": "object",
+        "description": "Exact current-dialog identity copied from objectName, title, and className in a DialogList item.",
+        "required": ["objectName", "title", "className"],
+        "properties": {
+          "objectName": { "type": "string" },
+          "title": { "type": "string" },
+          "className": { "type": "string" }
+        }
+      },
+      "DialogList": {
+        "type": "object",
+        "description": "Current visible modal windows that require a user decision.",
+        "required": ["dialogs"],
+        "properties": {
+          "dialogs": { "type": "array", "items": { "$ref": "#/components/schemas/WindowInfo" } }
+        }
+      },
+      "InvokeDialogActionRequest": {
+        "description": "Selects one current actionable dialog and one visible action by exact values from DialogList.",
+        "type": "object",
+        "required": ["dialog", "action"],
+        "properties": {
+          "dialog": { "$ref": "#/components/schemas/DialogIdentity" },
+          "action": { "$ref": "#/components/schemas/DialogAction" }
+        }
+      },
+      "InvokeDialogActionResult": {
+        "description": "The post-action dialog snapshot. An invoked outcome echoes the exact selected dialog and action; no-active-dialog performs no action.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["outcome", "dialogs"],
+            "properties": {
+              "outcome": { "type": "string", "const": "no-active-dialog" },
+              "dialogs": { "type": "array", "items": { "$ref": "#/components/schemas/WindowInfo" } }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["outcome", "dialog", "action", "dialogs"],
+            "properties": {
+              "outcome": { "type": "string", "const": "dismissed" },
+              "dialog": { "$ref": "#/components/schemas/DialogIdentity" },
+              "action": { "$ref": "#/components/schemas/DialogAction" },
+              "dialogs": { "type": "array", "items": { "$ref": "#/components/schemas/WindowInfo" } }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["outcome", "dialog", "action", "dialogs"],
+            "properties": {
+              "outcome": { "type": "string", "const": "action-invoked-dialog-remains" },
+              "dialog": { "$ref": "#/components/schemas/DialogIdentity" },
+              "action": { "$ref": "#/components/schemas/DialogAction" },
+              "dialogs": { "type": "array", "items": { "$ref": "#/components/schemas/WindowInfo" } }
+            }
+          }
+        ]
+      },
+      "WorksheetItem": {
+        "type": "object",
+        "description": "A worksheet in the open workbook.",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "hidden",
+          "isActiveSheet",
+          "index",
+          "isAutoUpdatesPaused",
+          "datasources"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
+          },
+          "hidden": { "type": "boolean" },
+          "isActiveSheet": { "type": "boolean" },
+          "index": {
+            "type": ["integer", "null"],
+            "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
+          },
+          "isAutoUpdatesPaused": { "type": "boolean" },
+          "datasources": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "DashboardItem": {
+        "type": "object",
+        "description": "A dashboard in the open workbook.",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "hidden",
+          "isActiveSheet",
+          "index",
+          "isAutoUpdatesPaused",
+          "containedSheets"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
+          },
+          "hidden": { "type": "boolean" },
+          "isActiveSheet": { "type": "boolean" },
+          "index": {
+            "type": ["integer", "null"],
+            "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
+          },
+          "isAutoUpdatesPaused": { "type": "boolean" },
+          "containedSheets": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "StoryboardItem": {
+        "type": "object",
+        "description": "A storyboard in the open workbook.",
+        "required": ["id", "name", "type", "hidden", "isActiveSheet", "index", "storyPointCount"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": ["WORKSHEET", "DASHBOARD", "STORYBOARD"]
+          },
+          "hidden": { "type": "boolean" },
+          "isActiveSheet": { "type": "boolean" },
+          "index": {
+            "type": ["integer", "null"],
+            "description": "The sheet's workbook-wide tab position, or null when the sheet is hidden."
+          },
+          "storyPointCount": {
+            "type": ["integer", "null"],
+            "description": "The number of story points in the storyboard, or null when unavailable."
+          }
+        }
+      },
+      "WorkbookInventory": {
+        "type": "object",
+        "description": "Metadata and sheet inventory of the open workbook.",
+        "required": [
+          "title",
+          "location",
+          "unsavedChanges",
+          "worksheets",
+          "dashboards",
+          "storyboards"
+        ],
+        "properties": {
+          "title": { "type": "string" },
+          "location": { "type": ["string", "null"] },
+          "unsavedChanges": { "type": "boolean" },
+          "worksheets": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorksheetItem" }
+          },
+          "dashboards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DashboardItem" }
+          },
+          "storyboards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/StoryboardItem" }
+          }
+        }
+      },
+      "WorksheetList": {
+        "type": "object",
+        "required": ["worksheets"],
+        "properties": {
+          "worksheets": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorksheetItem" }
+          }
+        }
+      },
+      "DashboardList": {
+        "type": "object",
+        "required": ["dashboards"],
+        "properties": {
+          "dashboards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DashboardItem" }
+          }
+        }
+      },
+      "DashboardRefreshOutcome": {
+        "type": "object",
+        "required": ["outcome", "refreshed", "failed"],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": ["COMPLETE", "PARTIAL", "FAILED"]
+          },
+          "refreshed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["worksheetId", "worksheetName"],
+              "properties": {
+                "worksheetId": { "type": "string" },
+                "worksheetName": { "type": "string" }
+              }
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["worksheetId", "worksheetName", "code", "message"],
+              "properties": {
+                "worksheetId": { "type": "string" },
+                "worksheetName": { "type": "string" },
+                "code": { "type": "string" },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "StoryboardList": {
+        "type": "object",
+        "required": ["storyboards"],
+        "properties": {
+          "storyboards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/StoryboardItem" }
+          }
+        }
+      },
+      "WorksheetInvalidField": {
+        "type": "object",
+        "description": "One invalid field used by a worksheet and its native location.",
+        "required": ["fieldName", "shelf", "marksSpecificationId", "encodingType", "reason"],
+        "properties": {
+          "fieldName": { "type": "string" },
+          "fieldCaption": { "type": "string" },
+          "shelf": { "type": "string" },
+          "marksSpecificationId": { "type": "string" },
+          "encodingType": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "WorksheetDiagnostics": {
+        "type": "object",
+        "description": "Native used-field diagnostics for one worksheet. Status reports coverage: complete includes an invalidFields list, while partial or unavailable must not be treated as a clean result.",
+        "required": ["worksheetId", "status"],
+        "properties": {
+          "worksheetId": { "type": "string" },
+          "status": { "type": "string", "enum": ["complete", "partial", "unavailable"] },
+          "invalidFields": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorksheetInvalidField" }
+          },
+          "message": { "type": "string" }
+        }
+      },
+      "WorkbookDiagnostics": {
+        "type": "object",
+        "required": ["worksheets"],
+        "properties": {
+          "worksheets": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorksheetDiagnostics" }
+          }
+        }
+      },
+      "OperationList": {
+        "type": "object",
+        "description": "Async operations. List entries omit each operation's `result` and per-operation `blockingWindows`: fetch GET /v0/operations/{id} for an operation's `result`, and read blocking-window state once from the top-level `blockingWindows` here.",
+        "required": ["operations"],
+        "properties": {
+          "operations": { "type": "array", "items": { "$ref": "#/components/schemas/Operation" } },
+          "blockingWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          },
+          "progressWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          }
+        }
+      },
+      "DatasourceItem": {
+        "type": "object",
+        "description": "A datasource used by the open workbook.",
+        "required": [
+          "id",
+          "luid",
+          "name",
+          "caption",
+          "type",
+          "isExtract",
+          "hasDownloadFilePermission"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "luid": { "type": ["string", "null"] },
+          "name": { "type": "string" },
+          "caption": { "type": "string" },
+          "type": {
+            "type": "string",
+            "description": "The datasource's backend kind, independent of whether it is an extract (see isExtract).",
+            "x-extensible-enum": ["relational", "cube", "parameters", "federated"]
+          },
+          "isExtract": {
+            "type": "boolean",
+            "description": "True if the datasource is currently backed by an extract rather than a live connection."
+          },
+          "hasDownloadFilePermission": {
+            "type": ["boolean", "null"],
+            "description": "Whether the current user has server permission to download the published datasource file (the Download/Save a Copy permission). Not whether the data can be queried or extracted. null for a datasource that is not published, where the permission does not apply."
+          }
+        }
+      },
+      "DatasourceList": {
+        "type": "object",
+        "required": ["datasources"],
+        "properties": {
+          "datasources": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DatasourceItem" }
+          }
+        }
+      },
+      "SiteWorkbookItem": {
+        "type": "object",
+        "description": "A workbook published to the connected site.",
+        "required": ["id", "luid", "name", "project"],
+        "properties": {
+          "id": { "type": "string" },
+          "luid": { "type": "string" },
+          "name": { "type": "string" },
+          "project": { "type": "string" }
+        }
+      },
+      "SiteWorkbookList": {
+        "type": "object",
+        "required": ["workbooks"],
+        "properties": {
+          "workbooks": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SiteWorkbookItem" }
+          }
+        }
+      },
+      "SiteDatasourceItem": {
+        "type": "object",
+        "description": "A datasource published to the connected site.",
+        "required": ["id", "luid", "name", "caption", "project"],
+        "properties": {
+          "id": { "type": "string" },
+          "luid": { "type": "string" },
+          "name": { "type": "string" },
+          "caption": { "type": "string" },
+          "project": { "type": "string" }
+        }
+      },
+      "SiteDatasourceList": {
+        "type": "object",
+        "required": ["datasources"],
+        "properties": {
+          "datasources": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SiteDatasourceItem" }
+          }
+        }
+      },
+      "ImageExport": {
+        "type": "object",
+        "description": "The result of exporting a sheet as an image.",
+        "required": ["width", "height"],
+        "properties": {
+          "imageBase64": { "type": "string" },
+          "filePath": { "type": "string" },
+          "effectiveMimeType": { "type": "string" },
+          "width": { "type": "integer" },
+          "height": { "type": "integer" }
+        }
+      },
+      "SummaryData": {
+        "type": "object",
+        "description": "Tabular worksheet data as columns and rows. Returned by both the summary-data and underlying-data endpoints; the shape is identical for each.",
+        "required": ["columns", "rows"],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "name": { "type": "string" }, "dataType": { "type": "string" } }
+            }
+          },
+          "rows": { "type": "array", "items": { "type": "array" } }
+        }
+      },
+      "LogicalTableItem": {
+        "type": "object",
+        "description": "A logical table available for a worksheet's data.",
+        "required": ["id", "caption"],
+        "properties": { "id": { "type": "string" }, "caption": { "type": "string" } }
+      },
+      "LogicalTableList": {
+        "type": "object",
+        "required": ["tables"],
+        "properties": {
+          "tables": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LogicalTableItem" }
+          }
+        }
+      },
+      "ValidationResult": {
+        "type": "object",
+        "description": "The outcome of validating a workbook document.",
+        "required": ["isValid", "validationIssues"],
+        "properties": {
+          "isValid": { "type": "boolean" },
+          "validationIssues": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "GoToSheetRequest": {
+        "type": "object",
+        "description": "Selects the sheet to activate.",
+        "required": ["id"],
+        "properties": { "id": { "type": "string" } }
+      },
+      "RenameSheetRequest": {
+        "type": "object",
+        "description": "The sheet's new name.",
+        "required": ["name"],
+        "properties": { "name": { "type": "string" } }
+      },
+      "ShowMeRequest": {
+        "type": "object",
+        "description": "The Show Me visualization to apply to a worksheet.",
+        "additionalProperties": false,
+        "required": ["showMeType"],
+        "properties": {
+          "showMeType": {
+            "type": "string",
+            "description": "The serialized Show Me visualization type to apply.",
+            "enum": [
+              "text",
+              "heat",
+              "spot-table",
+              "bar-horiz",
+              "bar-stack",
+              "bar-side",
+              "bar-measure",
+              "o-line",
+              "qi-line",
+              "o-area",
+              "qi-area",
+              "circle",
+              "circle-side",
+              "gantt",
+              "scatter",
+              "scatter-matrix",
+              "histogram",
+              "maps",
+              "filled-maps",
+              "pies",
+              "dual-bar-line",
+              "dual-line",
+              "bullet",
+              "treemap",
+              "bubble",
+              "box-plot"
+            ]
+          },
+          "dataSource": {
+            "type": "string",
+            "description": "Optional internal datasource name used to resolve selected fields."
+          },
+          "fieldsSelectedInSchemaViewer": {
+            "type": "array",
+            "description": "Optional fully qualified encoded field names, each with at least a datasource and field component. An explicit empty array supplies an empty field selection; omission preserves ambient selection.",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "ValidateCalculatedFieldRequest": {
+        "type": "object",
+        "description": "The calculated-field formula to validate on a worksheet.",
+        "additionalProperties": false,
+        "required": ["formula"],
+        "properties": {
+          "formula": {
+            "type": "string",
+            "description": "The calculated-field formula text to validate."
+          }
+        }
+      },
+      "CalculatedFieldValidationError": {
+        "type": "object",
+        "description": "A validation error located within the calculated-field formula.",
+        "required": ["position", "length", "message"],
+        "properties": {
+          "position": { "type": "integer" },
+          "length": { "type": "integer" },
+          "message": { "type": "string" }
+        }
+      },
+      "ValidateCalculatedFieldResponse": {
+        "type": "object",
+        "description": "The outcome of validating a calculated-field formula.",
+        "required": ["isValid", "errors"],
+        "properties": {
+          "isValid": { "type": "boolean" },
+          "errors": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CalculatedFieldValidationError" }
+          }
+        }
+      },
+      "ShowMeOptions": {
+        "type": "object",
+        "description": "Context-sensitive Show Me options from Tableau's current native model. Options preserve native order and feature gating.",
+        "required": ["worksheet", "options"],
+        "properties": {
+          "worksheet": { "$ref": "#/components/schemas/ShowMeWorksheet" },
+          "options": {
+            "type": "array",
+            "description": "Every option offered by the current native Show Me model, in native order, including inapplicable options.",
+            "items": { "$ref": "#/components/schemas/ShowMeOption" }
+          }
+        }
+      },
+      "ShowMeWorksheet": {
+        "type": "object",
+        "description": "The worksheet evaluated by the native Show Me model.",
+        "required": ["id", "name"],
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+      },
+      "ShowMeOption": {
+        "type": "object",
+        "description": "A visualization option from the current native Show Me model.",
+        "required": [
+          "showMeType",
+          "isApplicable",
+          "vizHasRequiredFields",
+          "dataSourceHasRequiredFields",
+          "helpUrl"
+        ],
+        "properties": {
+          "showMeType": {
+            "type": "string",
+            "description": "The runtime visualization token from Tableau's current native Show Me model. The offered token set remains governed by native feature gating."
+          },
+          "isApplicable": {
+            "type": "boolean",
+            "description": "Whether the native Show Me model can apply this option to the worksheet and selected fields."
+          },
+          "vizHasRequiredFields": {
+            "type": "boolean",
+            "description": "Whether the current visualization supplies the fields required by this option."
+          },
+          "dataSourceHasRequiredFields": {
+            "type": "boolean",
+            "description": "Whether the current datasource supplies the fields required by this option."
+          },
+          "helpUrl": {
+            "type": "string",
+            "description": "The help URL supplied by the current native Show Me model."
+          }
+        }
+      },
+      "SortRequest": {
+        "type": "object",
+        "description": "The sort to apply to a field on the worksheet.",
+        "required": ["fieldName"],
+        "properties": {
+          "fieldName": {
+            "type": "string",
+            "description": "The on-shelf field to sort, given as its field-instance name qualified by its datasource caption, in the form [Datasource Caption].[field-instance] (e.g. \"[Sample - Superstore].[none:Ship Mode:nk]\"). The base column name (e.g. \"[Sample - Superstore].[Ship Mode]\") will not match any field on the view and the sort is silently ignored."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Sort direction; defaults to 'asc' when omitted. Only the listed values are accepted; any other value is rejected with a 400.",
+            "enum": ["asc", "desc"]
+          },
+          "sortType": {
+            "type": "string",
+            "description": "Sort type; defaults to 'data-source-order' when omitted. Only the listed values are accepted; any other value is rejected with a 400.",
+            "enum": ["data-source-order", "alpha"]
+          },
+          "clearSort": {
+            "type": "boolean",
+            "description": "When true, removes the existing sort on `fieldName` instead of applying one; `fieldName` is still required."
+          }
+        }
+      },
+      "OpenFileRequest": {
+        "type": "object",
+        "description": "The local file to open.",
+        "required": ["filePath"],
+        "properties": { "filePath": { "type": "string" } }
+      },
+      "StartPageVisibility": {
+        "type": "object",
+        "description": "Whether the Tableau Desktop start page is visible.",
+        "required": ["isStartPageVisible"],
+        "properties": { "isStartPageVisible": { "type": "boolean" } }
+      },
+      "SaveWorkbookRequest": {
+        "type": "object",
+        "description": "Where to save the workbook.",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Path to save a copy to; must end in .twb or .twbx. Omit to save the workbook in place at its current path."
+          }
+        }
+      },
+      "ExportAsWorkbookRequest": {
+        "type": "object",
+        "description": "What to export and where to write it.",
+        "required": ["filePath", "format"],
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Path to write the export to. Must be absolute and name a file; a directory, a trailing slash, or any '.'/'..' path segment is rejected with a 400. Its extension must match format: .pdf for pdf, .pptx for powerpoint, .twbx for packaged-workbook, and .twb or .twbx for prior-version."
+          },
+          "format": {
+            "type": "string",
+            "description": "The export format that selects what file to produce. Only the listed values are accepted; any other value is rejected with a 400.",
+            "enum": ["pdf", "powerpoint", "packaged-workbook", "prior-version"]
+          },
+          "targetVersion": {
+            "type": "string",
+            "description": "Required when format is prior-version: the customer-facing Tableau release to down-save to (e.g. \"2024.1\"). Ignored for other formats."
+          }
+        }
+      },
+      "RefreshExtractRequest": {
+        "type": "object",
+        "description": "Options for the extract refresh.",
+        "properties": {
+          "isFullRefresh": {
+            "type": "boolean",
+            "description": "Force a full refresh instead of an incremental one. Defaults to false: incremental when the extract supports it, otherwise a full refresh."
+          }
+        }
+      },
+      "ApiRoot": {
+        "type": "object",
+        "description": "API versions and the resource link map.",
+        "required": ["apiVersion", "applicationVersion", "links"],
+        "properties": {
+          "apiVersion": { "type": "string" },
+          "applicationVersion": { "type": "string" },
+          "links": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      },
+      "AppInfo": {
+        "type": "object",
+        "description": "Running Tableau Desktop process information.",
+        "required": [
+          "applicationVersion",
+          "edition",
+          "build",
+          "os",
+          "locale",
+          "repositoryLocation",
+          "logLocation",
+          "isStartPageVisible",
+          "isDataSourcePageActive",
+          "isPresentationMode"
+        ],
+        "properties": {
+          "applicationVersion": { "type": "string" },
+          "edition": { "type": "string" },
+          "build": { "type": "string" },
+          "os": { "type": "string" },
+          "locale": { "type": "string" },
+          "repositoryLocation": { "type": "string" },
+          "logLocation": { "type": "string" },
+          "isStartPageVisible": { "type": "boolean" },
+          "isDataSourcePageActive": { "type": "boolean" },
+          "isPresentationMode": { "type": "boolean" }
+        }
+      },
+      "AppState": {
+        "type": "object",
+        "description": "One app-wide point-in-time snapshot of Desktop activity and modal state. Window arrays are not attributed to an operation. When state is BLOCKED, blockedBy reports the strongest observed signal in precedence order: MODAL_DIALOG, the first active activity in canonical order, PROGRESS_DIALOG, MODAL_LOOP, then UI_UNRESPONSIVE.",
+        "required": ["state", "uiSnapshotAvailable", "activeActivities"],
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "IDLE only after a complete UI snapshot observes no activity, modal loop, or modal window; otherwise BLOCKED.",
+            "x-extensible-enum": ["IDLE", "BLOCKED"]
+          },
+          "blockedBy": {
+            "type": "string",
+            "description": "Present when state is BLOCKED and identifies the strongest observed signal.",
+            "x-extensible-enum": [
+              "MODAL_DIALOG",
+              "LOADING",
+              "QUERYING",
+              "EXTRACT_REFRESH",
+              "DOWNLOADING",
+              "SERVER_COMMUNICATION",
+              "PROGRESS_DIALOG",
+              "MODAL_LOOP",
+              "UI_UNRESPONSIVE"
+            ]
+          },
+          "uiSnapshotAvailable": {
+            "type": "boolean",
+            "description": "Whether modal-loop and window evidence was captured within the bounded UI probe interval. A false value never produces IDLE and window arrays are omitted."
+          },
+          "activeActivities": {
+            "type": "array",
+            "description": "All active native activities in canonical order: LOADING, QUERYING, EXTRACT_REFRESH, DOWNLOADING, SERVER_COMMUNICATION.",
+            "items": {
+              "type": "string",
+              "x-extensible-enum": [
+                "LOADING",
+                "QUERYING",
+                "EXTRACT_REFRESH",
+                "DOWNLOADING",
+                "SERVER_COMMUNICATION"
+              ]
+            }
+          },
+          "blockingWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          },
+          "progressWindows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WindowInfo" }
+          }
+        }
+      },
+      "Site": {
+        "type": "object",
+        "description": "The connected Tableau site.",
+        "required": ["siteId", "authenticatedUserId"],
+        "properties": {
+          "siteId": { "type": "string" },
+          "authenticatedUserId": { "type": "string" }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "description": "Liveness probe result.",
+        "required": ["status"],
+        "properties": { "status": { "type": "string" } }
+      },
+      "ProtectedResourceMetadata": {
+        "type": "object",
+        "description": "RFC 9728 OAuth Protected Resource Metadata.",
+        "required": ["authorization_servers", "bearer_methods_supported"],
+        "properties": {
+          "authorization_servers": { "type": "array", "items": { "type": "string" } },
+          "bearer_methods_supported": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "Unauthorized": {
+        "description": "The bearer token was missing or invalid. The response carries a WWW-Authenticate challenge.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "Forbidden": {
+        "description": "The request origin was not permitted.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "NotFound": {
+        "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The path exists but does not support this HTTP method.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "Conflict": {
+        "description": "The request conflicts with the current state, such as an unsupported payload version.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The request Content-Type is not accepted by this endpoint.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "MisdirectedRequest": {
+        "description": "The request Host header was not a loopback address.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "UnprocessableContent": {
+        "description": "The request was well-formed but semantically invalid and could not be applied, such as a document whose structure the product rejects. The code field identifies the specific problem.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "ServerError": {
+        "description": "An unexpected error occurred.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "The External Client API is disabled or shutting down.",
+        "content": {
+          "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "Accepted": {
+        "description": "The command did not settle within the synchronous window. The body is the pending operation; poll the Location URL until it reaches a terminal state.",
+        "headers": {
+          "Location": {
+            "description": "Relative URL of the operation to poll.",
+            "schema": { "type": "string" }
+          },
+          "Retry-After": {
+            "description": "Seconds to wait before polling.",
+            "schema": { "type": "string" }
+          },
+          "X-Tableau-Operation-Id": {
+            "description": "Id of the created operation.",
+            "schema": { "type": "string" }
+          },
+          "X-Tableau-Application-Version": {
+            "description": "Running Tableau Desktop build.",
+            "schema": { "type": "string" }
+          }
+        },
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }]
+}

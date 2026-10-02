@@ -1,0 +1,307 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MapAttribution2 />
+    <MapboxVectorBuiltInAndUserStyles />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <SpatialFileLayer />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Grid-based data values mapped with an intensity colour scale. As choropleth map – but not snapped to an admin/political unit.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Rats Sightings HeatMap' inline='true' name='federated.1a5qkzd06a8nie14hjbdp12e6af9' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Rats Sightings HeatMap' name='ogrdirect.0mtoh1e0aufgd619k5o080qhk7dd'>
+            <connection class='ogrdirect' directory='' ogr-grid-shift-folder='' tablename='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='ogrdirect.0mtoh1e0aufgd619k5o080qhk7dd' name='Rats Sightings HeatMap.shp' table='[Rats Sightings HeatMap.shp]' type='table'>
+          <columns>
+            <column datatype='integer' name='Tile_Num' ordinal='0' />
+            <column datatype='string' name='Tile_Name' ordinal='1' />
+            <column datatype='spatial' name='Geometry' ordinal='2' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Tile_Num</remote-name>
+            <remote-type>3</remote-type>
+            <local-name>[Tile_Num]</local-name>
+            <parent-name>[Rats Sightings HeatMap.shp]</parent-name>
+            <remote-alias>Tile_Num</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Tile_Name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Tile_Name]</local-name>
+            <parent-name>[Rats Sightings HeatMap.shp]</parent-name>
+            <remote-alias>Tile_Name</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='measure'>
+            <remote-name>Geometry</remote-name>
+            <remote-type>8</remote-type>
+            <local-name>[Geometry]</local-name>
+            <parent-name>[Rats Sightings HeatMap.shp]</parent-name>
+            <remote-alias>Geometry</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Tile Name' datatype='string' name='[Tile_Name]' role='dimension' type='nominal' />
+      <column caption='Tile Num' datatype='integer' name='[Tile_Num]' role='dimension' type='ordinal' />
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column-instance column='[Tile_Name]' derivation='None' name='[none:Tile_Name:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/14/2018 07:09:33 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='5' timestamp-start='2018-07-14 19:09:33.332' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Tile_Num</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Tile_Num]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Tile_Num</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Rats Sightings HeatMap.shp</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Tile_Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Tile_Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Tile_Name</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Rats Sightings HeatMap.shp</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Geometry</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[Geometry]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Geometry</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Rats Sightings HeatMap.shp</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <default-sorts>
+        <manual-sort column='[none:Tile_Name:nk]' direction='ASC'>
+          <dictionary>
+            <bucket>&quot;Extremely Low (Below 0.01975)&quot;</bucket>
+            <bucket>&quot;Low (0.01975 to 0.455)&quot;</bucket>
+            <bucket>&quot;Below Average (0.455 to 10.5)&quot;</bucket>
+            <bucket>&quot;Average (10.5 to 242.5)&quot;</bucket>
+            <bucket>&quot;Above Average (242.5 to 5600)&quot;</bucket>
+          </dictionary>
+        </manual-sort>
+      </default-sorts>
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='ogrdirect.0mtoh1e0aufgd619k5o080qhk7dd' name='Rats Sightings HeatMap.shp' table='[Rats Sightings HeatMap.shp]' type='table'>
+                <columns>
+                  <column datatype='integer' name='Tile_Num' ordinal='0' />
+                  <column datatype='string' name='Tile_Name' ordinal='1' />
+                  <column datatype='spatial' name='Geometry' ordinal='2' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <mapsources>
+    <mapsource inline='true' name='Light Grey' source-platform='mac' version='18.1'>
+      <connection api-key='' class='CustomMapbox' offline='' port='443' server='https://api.mapbox.com' url='styles/v1' url-format='/styles/v1/vizwiz/{L}/tiles/{Z}/{X}/{Y}{D}?access_token=' username='vizwiz' wait-tile-color='#dddddd' />
+      <languages />
+      <layers>
+        <layer display-name='B&amp;W-copy' name='cj94lowku0fkb2spplo6m3s92' show-ui='true' type='features' />
+      </layers>
+      <properties />
+      <map-styles>
+        <map-style display-name='Light Grey' name='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' wait-tile-color='#dddddd'>
+          <map-layer-style name='B&amp;W-copy' request-string='cj94lowku0fkb2spplo6m3s92' />
+        </map-style>
+      </map-styles>
+      <mapsource-defaults version='18.1'>
+        <style>
+          <style-rule element='map'>
+            <format attr='washout' value='0' />
+            <format attr='map-style' value='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' />
+          </style-rule>
+        </style>
+      </mapsource-defaults>
+      <map-attribution copyright-string='© %1 Mapbox' copyright-url='https://mapbox.com/about/maps' short-copyright-string='' />
+      <map-attribution2 copyright-string='©OpenStreetMap' copyright-url='https://mapbox.com/about/maps' short-copyright-string='©OSM' />
+    </mapsource>
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.076gplu1ir2fb11aymn51116xv34].[none:DM:qk]</field>
+          <field>[federated.1a5qkzd06a8nie14hjbdp12e6af9].[none:Tile_Name:nk]</field>
+          <field>[federated.1a5qkzd06a8nie14hjbdp12e6af9].[none:Tile_Num:qk]</field>
+        </color-one-way>
+      </highlight>
+      <default-map-tool-selection tool='2' />
+    </viewpoint>
+    <simple-id uuid='{69F3F367-BD43-4C7F-98DB-3D372AF183BA}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Rats Sightings HeatMap' name='federated.1a5qkzd06a8nie14hjbdp12e6af9' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Light Grey' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.1a5qkzd06a8nie14hjbdp12e6af9'>
+        <column datatype='spatial' name='[Geometry]' role='measure' type='nominal' />
+        <column caption='Tile Name' datatype='string' name='[Tile_Name]' role='dimension' type='nominal' />
+        <column caption='Tile Num' datatype='integer' name='[Tile_Num]' role='dimension' type='ordinal' />
+        <column-instance column='[Geometry]' derivation='Collect' name='[clct:Geometry:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Tile_Name]' derivation='None' name='[none:Tile_Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Tile_Num]' derivation='None' name='[none:Tile_Num:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.1a5qkzd06a8nie14hjbdp12e6af9].[none:Tile_Num:qk]' min='-3' symmetric='false' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#080a10</color>
+            <color>#141823</color>
+            <color>#232937</color>
+            <color>#373e4d</color>
+            <color>#4e5665</color>
+            <color>#6a7180</color>
+            <color>#dcbeb7</color>
+            <color>#dfa394</color>
+            <color>#e28870</color>
+            <color>#e56b4b</color>
+            <color>#e94e25</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='cj94lowku0fkb2spplo6m3s92' value='true' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0' />
+        <format attr='map-style' value='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[federated.1a5qkzd06a8nie14hjbdp12e6af9].[none:Tile_Num:qk]' />
+          <lod column='[federated.1a5qkzd06a8nie14hjbdp12e6af9].[none:Tile_Name:nk]' />
+          <lod column='[federated.1a5qkzd06a8nie14hjbdp12e6af9].[clct:Geometry:nk]' />
+          <geometry column='[federated.1a5qkzd06a8nie14hjbdp12e6af9].[clct:Geometry:nk]' />
+        </encodings>
+        <customized-tooltip show-buttons='false'>
+          <formatted-text>
+            <run fontcolor='#787878'>DM:&#9;</run>
+          </formatted-text>
+        </customized-tooltip>
+      </pane>
+    </panes>
+    <rows>[federated.1a5qkzd06a8nie14hjbdp12e6af9].[Latitude (generated)]</rows>
+    <cols>[federated.1a5qkzd06a8nie14hjbdp12e6af9].[Longitude (generated)]</cols>
+    <tooltip-style tooltip-mode='none' />
+  </table>
+</bookmark>

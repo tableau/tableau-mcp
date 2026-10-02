@@ -79,7 +79,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List workbooks with the name "Superstore" in the "Finance" project and created after January 1, 2023:
       filter: "name:eq:Superstore,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
-      
+
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
   The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.

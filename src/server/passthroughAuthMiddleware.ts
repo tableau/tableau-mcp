@@ -37,6 +37,14 @@ export function passthroughAuthMiddleware(): RequestHandler {
       getHeader(req, X_TABLEAU_AUTH_HEADER) || getCookie(req, 'workgroup_session_id');
 
     if (!tableauAccessToken) {
+      if (config.auth === 'passthrough') {
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description:
+            'Missing token: provide an X-Tableau-Auth header or workgroup_session_id cookie',
+        });
+        return;
+      }
       next();
       return;
     }

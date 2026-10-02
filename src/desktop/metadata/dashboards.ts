@@ -1,0 +1,256 @@
+import { xmlNamesEqual } from '../xmlElement.js';
+import {
+  carryNamespaceDeclarations,
+  generateUUID,
+  normalizeArray,
+  parseXML,
+  serializeXML,
+} from './parser.js';
+import type { ParsedDashboard, ParsedWindow, ParsedWorkbook } from './types.js';
+
+type SizingMode =
+  | 'auto'
+  | 'fixed'
+  | 'min'
+  | 'max'
+  | 'range'
+  | 'fit-width'
+  | 'fit-height'
+  | 'vscroll';
+
+function createValidSize(
+  sizingMode: SizingMode,
+  width?: number,
+  height?: number,
+): Record<string, string> {
+  const w = width || 1000;
+  const h = height || 800;
+  const sizeObj: Record<string, string> = { '@_sizing-mode': sizingMode };
+
+  switch (sizingMode) {
+    case 'fixed':
+      sizeObj['@_minwidth'] = String(w);
+      sizeObj['@_minheight'] = String(h);
+      sizeObj['@_maxwidth'] = String(w);
+      sizeObj['@_maxheight'] = String(h);
+      break;
+    case 'min':
+      sizeObj['@_minwidth'] = String(w);
+      sizeObj['@_minheight'] = String(h);
+      break;
+    case 'max':
+      sizeObj['@_maxwidth'] = String(w);
+      sizeObj['@_maxheight'] = String(h);
+      break;
+    case 'range':
+      sizeObj['@_minwidth'] = String(Math.floor(w * 0.7));
+      sizeObj['@_minheight'] = String(Math.floor(h * 0.7));
+      sizeObj['@_maxwidth'] = String(w);
+      sizeObj['@_maxheight'] = String(h);
+      break;
+    case 'fit-width':
+      sizeObj['@_minheight'] = String(h);
+      sizeObj['@_maxheight'] = String(h);
+      sizeObj['@_minwidth'] = String(Math.floor(w * 0.7));
+      sizeObj['@_maxwidth'] = String(w);
+      break;
+    case 'fit-height':
+      sizeObj['@_minwidth'] = String(w);
+      sizeObj['@_maxwidth'] = String(w);
+      sizeObj['@_minheight'] = String(Math.floor(h * 0.7));
+      sizeObj['@_maxheight'] = String(h);
+      break;
+    case 'vscroll':
+      sizeObj['@_minheight'] = String(h);
+      sizeObj['@_maxheight'] = String(h);
+      break;
+  }
+  return sizeObj;
+}
+
+function findDashboard(workbook: ParsedWorkbook, dashboardName: string): ParsedDashboard | null {
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  return (
+    dashboards.find((db) => db['@_name'] && xmlNamesEqual(db['@_name'], dashboardName)) || null
+  );
+}
+
+export function addDashboard(workbookXml: string, dashboardName: string): string {
+  const workbook = parseXML(workbookXml);
+
+  if (findDashboard(workbook, dashboardName)) {
+    throw new Error(`Dashboard "${dashboardName}" already exists`);
+  }
+
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.dashboards) workbook.workbook.dashboards = {};
+
+  const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
+
+  const newDashboard: ParsedDashboard = {
+    '@_enable-sort-zone-taborder': 'true',
+    '@_name': dashboardName,
+    style: {},
+    size: createValidSize('fixed', 1000, 800),
+    zones: {
+      zone: {
+        '@_h': '100000',
+        '@_id': '2',
+        '@_type-v2': 'layout-basic',
+        '@_w': '100000',
+        '@_x': '0',
+        '@_y': '0',
+      },
+    },
+    'simple-id': { '@_uuid': generateUUID() },
+  };
+
+  dashboards.push(newDashboard);
+  workbook.workbook.dashboards.dashboard = dashboards.length === 1 ? dashboards[0] : dashboards;
+
+  if (!workbook.workbook.windows) workbook.workbook.windows = {};
+
+  const windows = normalizeArray(workbook.workbook.windows.window);
+  const newWindow: ParsedWindow = {
+    '@_class': 'dashboard',
+    '@_name': dashboardName,
+    viewpoints: {},
+    active: { '@_id': '-1' },
+    'simple-id': { '@_uuid': generateUUID() },
+  };
+
+  windows.push(newWindow);
+  workbook.workbook.windows.window = windows.length === 1 ? windows[0] : windows;
+
+  return serializeXML(workbook);
+}
+
+export function deleteDashboard(workbookXml: string, dashboardName: string): string {
+  const workbook = parseXML(workbookXml);
+
+  if (!findDashboard(workbook, dashboardName)) {
+    throw new Error(`Dashboard "${dashboardName}" does not exist`);
+  }
+
+  if (workbook.workbook?.dashboards) {
+    const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
+    const filtered = dashboards.filter(
+      (db) => !db['@_name'] || !xmlNamesEqual(db['@_name'], dashboardName),
+    );
+    if (filtered.length === 0) {
+      delete workbook.workbook.dashboards.dashboard;
+    } else if (filtered.length === 1) {
+      workbook.workbook.dashboards.dashboard = filtered[0];
+    } else {
+      workbook.workbook.dashboards.dashboard = filtered;
+    }
+  }
+
+  if (workbook.workbook?.windows) {
+    const windows = normalizeArray(workbook.workbook.windows.window);
+    const filtered = windows.filter(
+      (win) =>
+        !(
+          win['@_name'] &&
+          xmlNamesEqual(win['@_name'], dashboardName) &&
+          win['@_class'] === 'dashboard'
+        ),
+    );
+    if (filtered.length === 0) {
+      delete workbook.workbook.windows.window;
+    } else if (filtered.length === 1) {
+      workbook.workbook.windows.window = filtered[0];
+    } else {
+      workbook.workbook.windows.window = filtered;
+    }
+  }
+
+  return serializeXML(workbook);
+}
+
+export function listWorkbookDashboards(workbookXml: string): string[] {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
+}
+
+export function dashboardFragmentSimpleId(dashboardFragmentXml: string): string | null {
+  const parsed = parseXML(dashboardFragmentXml);
+  const dashboard = normalizeArray(parsed.dashboard as ParsedDashboard | undefined)[0];
+  return dashboard?.['simple-id']?.['@_uuid']?.trim() || null;
+}
+
+// `id` is each dashboard's own `<simple-id uuid>` — the same value the External Client API returns
+// as the dashboard id.
+export function listDashboardRefs(workbookXml: string): Array<{ id: string; name: string }> {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  return dashboards.flatMap((db) => {
+    const id = db['simple-id']?.['@_uuid']?.trim();
+    const name = db['@_name'];
+    return id && name ? [{ id, name }] : [];
+  });
+}
+
+// Match a caller's ref against the dashboard's `<simple-id uuid>` (its External Client API id)
+// first, then its display name. Name stays the fallback because the .twb cross-references
+// dashboards by name (window definitions, story points), so the returned name is what the
+// name-keyed surgery in this module keys off.
+export function resolveDashboardRef(
+  workbookXml: string,
+  ref: string,
+): { id?: string; name: string } | null {
+  const workbook = parseXML(workbookXml);
+  const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
+  const trimmed = ref.trim();
+  const matched =
+    dashboards.find((db) => db['simple-id']?.['@_uuid']?.trim() === trimmed) ??
+    dashboards.find((db) => db['@_name'] && xmlNamesEqual(db['@_name'], ref)) ??
+    null;
+  if (!matched?.['@_name']) return null;
+  const id = matched['simple-id']?.['@_uuid'];
+  return { ...(id ? { id } : {}), name: matched['@_name'] };
+}
+
+// Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
+export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
+  const workbook = parseXML(workbookXml);
+  const dashboard = findDashboard(workbook, dashboardName);
+  if (!dashboard) {
+    return null;
+  }
+  carryNamespaceDeclarations(workbook.workbook, dashboard);
+  return serializeXML({ dashboard });
+}
+
+// The External Client API's whole-workbook POST route treats the posted document as authoritative
+// and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook (worksheets
+// included — the dashboard's zones reference them by name) with only this dashboard swapped in;
+// anything omitted would be pruned. Upsert by name: replace the matching dashboard, or append it if
+// absent. Windows are left intact. This is the create path; the per-sheet route is replace-only.
+export function upsertDashboardIntoWorkbook(
+  workbookXml: string,
+  dashboardName: string,
+  editedDashboardXml: string,
+): string {
+  const workbook = parseXML(workbookXml);
+  const editedParsed = parseXML(editedDashboardXml);
+  const editedDashboard = normalizeArray(editedParsed.dashboard as ParsedDashboard | undefined)[0];
+  if (!editedDashboard || editedDashboard['@_name'] !== dashboardName) {
+    throw new Error(`Edited XML does not contain a <dashboard name="${dashboardName}">`);
+  }
+
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.dashboards) workbook.workbook.dashboards = {};
+
+  const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
+  const index = dashboards.findIndex((db) => db['@_name'] === dashboardName);
+  if (index === -1) {
+    dashboards.push(editedDashboard);
+  } else {
+    dashboards[index] = editedDashboard;
+  }
+  workbook.workbook.dashboards.dashboard = dashboards.length === 1 ? dashboards[0] : dashboards;
+
+  return serializeXML(workbook);
+}

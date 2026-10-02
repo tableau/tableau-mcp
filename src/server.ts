@@ -1,5 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  McpServer,
+  ReadResourceTemplateCallback,
+  ResourceTemplate,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ErrorCode, InitializeRequest, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readFileSync } from 'fs';
 
 import { getFeatureGate } from './features/init.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
@@ -10,6 +15,13 @@ export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
 export abstract class Server {
   readonly mcpServer: McpServer;
+  /**
+   * True when this instance created its own McpServer (single-variant entrypoints).
+   * False when one was passed in (the combined variant shares one McpServer across
+   * the web and desktop halves) — a shared server means no variant may take sole
+   * ownership of protocol handlers like tools/list.
+   */
+  readonly ownsMcpServer: boolean;
   readonly name: string;
   readonly version: string;
 
@@ -53,14 +65,12 @@ export abstract class Server {
     clientId?: string;
     serverName: string;
     serverVersion: string;
-    // Optional server-level instructions surfaced in the MCP `initialize` result. Composed by
-    // subclasses (e.g. WebMcpServer) so the shared base does not hardcode deployment-specific
-    // guidance. Emitted by the SDK only when set.
+    /** MCP server instructions surfaced to every connecting client at initialize. */
     instructions?: string;
   }) {
     const description =
       'When opening local .twb/.twbx files, derive the full Tableau Desktop app path and choose the newest installed version when multiple are present.';
-
+    this.ownsMcpServer = mcpServer === undefined;
     this.mcpServer =
       mcpServer ??
       new McpServer(
@@ -82,17 +92,16 @@ export abstract class Server {
     // Guard against silently dropping instructions on the provided-mcpServer path. The SDK reads
     // `instructions` ONLY from the McpServer constructor options and never exposes a setter, so when
     // a caller supplies its own McpServer (e.g. index.combined.ts) it MUST have built that McpServer
-    // WITH the composed instructions (see buildWebInstructions()). We can't set them here after the
-    // fact, so we assert the supplied server already carries them rather than let the discoverability
-    // guidance no-op. `_instructions` is the SDK's internal field (underscore, not truly private).
+    // with this variant's instruction block. A shared server may compose multiple variants, so require
+    // containment rather than whole-string equality. `_instructions` is the SDK's internal field.
     if (mcpServer && instructions) {
       const suppliedInstructions = (mcpServer.server as unknown as { _instructions?: string })
         ._instructions;
       invariant(
-        suppliedInstructions === instructions,
-        'The supplied McpServer was constructed without the expected server instructions. ' +
-          'Construct it with `{ instructions: buildWebInstructions() }` so the initialize handshake ' +
-          'advertises the same guidance as the default path.',
+        suppliedInstructions?.includes(instructions),
+        "The supplied McpServer was constructed without this server variant's instructions. " +
+          "Compose every shared variant's instructions when constructing the McpServer so the " +
+          'initialize handshake advertises the same guidance as each standalone path.',
       );
     }
 
@@ -144,5 +153,60 @@ export abstract class Server {
     return userAgentParts.join(' ');
   }
 
+  abstract registerResources: () => Promise<void>;
   abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
+
+  registerResource = (
+    args:
+      | {
+          name: string;
+          title: string;
+          description: string;
+          uri: string;
+          path: string;
+          mimeType: string;
+        }
+      | {
+          name: string;
+          title: string;
+          description: string;
+          uri: string;
+          text: string;
+          mimeType: string;
+        }
+      | {
+          name: string;
+          title: string;
+          description: string;
+          template: ResourceTemplate;
+          readTemplateCallback: ReadResourceTemplateCallback;
+        },
+  ): void => {
+    if ('text' in args) {
+      const { name, title, description, uri, text, mimeType } = args;
+      this.mcpServer.registerResource(name, uri, { title, description, mimeType }, (uri) => {
+        return { contents: [{ uri: uri.href, mimeType, text }] };
+      });
+    } else if ('path' in args) {
+      const { name, title, description, uri, path, mimeType } = args;
+      if (!existsSync(path)) {
+        throw new McpError(ErrorCode.InternalError, `File not found: ${path}`);
+      }
+      const text = readFileSync(path, 'utf-8');
+      this.mcpServer.registerResource(name, uri, { title, description, mimeType }, (uri) => {
+        return { contents: [{ uri: uri.href, mimeType, text }] };
+      });
+    } else {
+      const { name, title, description, template, readTemplateCallback } = args;
+      this.mcpServer.registerResource(
+        name,
+        template,
+        {
+          title,
+          description,
+        },
+        readTemplateCallback,
+      );
+    }
+  };
 }

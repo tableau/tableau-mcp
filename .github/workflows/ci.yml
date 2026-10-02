@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+      - feature/desktop
+      - 'claude/**'
+      - 'codex/**'
 
 jobs:
   build:
@@ -36,6 +39,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      # --dirty: the plain build:desktop CLEANS ./build first, deleting the
+      # build/index.js the default build just produced — the e2e suites spawn
+      # `node build/index.js` children, which then die pre-handshake
+      # ("Connection closed") until server.test.ts happens to rebuild it
+      # mid-pool. Root-caused 2026-07-15 on the resync PR (#504).
+      - name: Build desktop variant
+        run: npm run build:desktop:dirty
+
       - name: Build Docker image
         run: npm run build:docker
 
@@ -43,6 +54,15 @@ jobs:
         run: npm pack
 
       - name: Tests
+        run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
+
+      # Coverage is informational (fail_below_min is false below). Vitest 3 can exit 1
+      # after every test passes when its fixed worker watchdog fires during coverage;
+      # the required test step above remains authoritative, and the report step still
+      # fails if this command does not produce the Cobertura artifact.
+      - name: Generate coverage report
+        if: matrix.node-version == '>=22.7.5 <23'
+        continue-on-error: true
         run: npm run coverage
 
       - name: E2E Tests

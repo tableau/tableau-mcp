@@ -1,0 +1,56 @@
+{
+  "_description": "Add an average reference line to a worksheet axis. The reference-line node goes inside a pane in the panes section.",
+  "_feature": "reference-line",
+  "reference_line_average": {
+    "_description": "Average reference line on a quantitative axis. Place inside the pane node in panes.",
+    "_placement": "worksheet > table > panes > pane > reference-line",
+    "type": "reference-line",
+    "attrs": {
+      "type": "average",
+      "column": "[federated.XXXX].[sum:Sales:qk]"
+    },
+    "children": [
+      {
+        "type": "label",
+        "attrs": {
+          "label-type": "value",
+          "format": "#,##0"
+        }
+      }
+    ]
+  },
+  "reference_line_constant": {
+    "_description": "Constant reference line at a fixed value",
+    "type": "reference-line",
+    "attrs": {
+      "type": "constant",
+      "value": "10000",
+      "column": "[federated.XXXX].[sum:Sales:qk]"
+    },
+    "children": [
+      {
+        "type": "label",
+        "attrs": {
+          "label-type": "custom",
+          "label": "Target"
+        }
+      }
+    ]
+  },
+  "reference_line_parameter": {
+    "_description": "Reference line using a parameter value",
+    "type": "reference-line",
+    "attrs": {
+      "type": "constant",
+      "column": "[federated.XXXX].[sum:Sales:qk]",
+      "param-column": "[Parameters].[Parameter 1]"
+    }
+  },
+  "notes": {
+    "placement": "reference-line is a direct child of pane (inside panes section), NOT inside view",
+    "type_values_ReferenceLineType-ST": ["constant", "average", "median", "minimum", "maximum", "sum", "percentile", "quantile"],
+    "column_format": "[datasourceId].[column-instance-name] — same format as shelf references",
+    "label_type_values": ["value", "custom", "none"],
+    "scope": "One pane corresponds to one measure; add reference-line to the correct pane for the target measure"
+  }
+}

@@ -315,6 +315,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TOOL_PROFILE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tool Profile',
+    description:
+      "Tool registration profile: unset/'dynamic-authoring' registers the lean native-authoring surface (bind-template + guarded artifacts + author-* verbs), 'full' registers every Desktop tool, 'demo' the slim Desktop set, 'combined-lean' the full Desktop set plus a lazy web-tool loader.",
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
@@ -619,6 +628,23 @@ const envVars = {
     title: 'Latency Metric Name',
     description:
       'The histogram metric name used to record HTTP request latency for tool calls. Defaults to "http_server_1agg1_request_duration".',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events',
+    description: 'Set to "on" to emit Desktop eval episode JSONL events. Defaults to off.',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS_DIR: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events Directory',
+    description:
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY.',
     required: false,
     sensitive: false,
   },
