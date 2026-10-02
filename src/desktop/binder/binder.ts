@@ -1,5 +1,3 @@
-// src/binder/binder.ts
-//
 // Tier-1 fast-path binder — the orchestrator (design doc §3, with the two-call
 // protocol correction).
 //

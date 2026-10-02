@@ -1,5 +1,3 @@
-// src/binder/schema-summary.ts
-//
 // Tier-1 fast-path binder — schema summary (design doc §3.1, §3.2).
 //
 // `summarizeSchema(workbookXml)` is the "cached schema summary" the binder

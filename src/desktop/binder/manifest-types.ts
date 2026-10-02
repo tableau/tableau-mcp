@@ -1,5 +1,3 @@
-// src/binder/manifest-types.ts
-//
 // In-memory template descriptor consumed by deterministic binding. The descriptor
 // may be inferred from a TBM at runtime; these types do not imply a static sidecar.
 

@@ -20,7 +20,6 @@ export function injectViewpoints(
   });
   const doc = parser.parseFromString(workbookXml.trim(), 'text/xml');
 
-  // Find the <window class="dashboard" name="<dashboardName>"> element
   const windows = doc.getElementsByTagName('window');
   let dashboardWindow: XmlElement | null = null;
   for (let i = 0; i < windows.length; i++) {
@@ -41,7 +40,6 @@ export function injectViewpoints(
     return workbookXml;
   }
 
-  // Build new <viewpoints> element
   const viewpointsEl = doc.createElement('viewpoints');
   for (const name of worksheetNames) {
     const vp = doc.createElement('viewpoint');

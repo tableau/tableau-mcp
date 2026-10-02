@@ -1,5 +1,3 @@
-// src/binder/validate.ts
-//
 // Tier-1 fast-path binder — the deterministic validation gate (design doc §2.4).
 //
 // `validateBinding(manifest, proposal, schema)` is PURE (no I/O): it takes a

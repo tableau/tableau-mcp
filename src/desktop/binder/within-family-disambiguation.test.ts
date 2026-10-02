@@ -1,5 +1,3 @@
-// src/binder/within-family-disambiguation.test.ts
-//
 // STAGE 2b WITHIN-FAMILY DISAMBIGUATION (measured scale breakpoints). Two rules
 // added to classifyNoLlm's template selection, each pinned here:
 //

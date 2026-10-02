@@ -85,6 +85,40 @@ describe('aggregate-calc-derivation rule', () => {
     expect(issues).toHaveLength(0);
   });
 
+  it('does not fire when aggregate-looking text appears only in strings, comments, or field names', () => {
+    const issues = aggregateCalcDerivationRule.validate(
+      calcWithCi(
+        'IF [SUM( Label]] //] = &quot;SUM(&quot; THEN [Sales] ELSE 0 END /* AVG([Profit]) */',
+        'None',
+        '[none:Calculation_1:qk]',
+      ),
+    );
+
+    expect(issues).toHaveLength(0);
+  });
+
+  it.each([
+    ['two-argument MIN', 'MIN([Sales], [Profit])'],
+    ['two-argument MAX with whitespace', 'max ( [Sales] , [Profit] )'],
+    ['FIXED LOD', '{ FIXED [Customer ID] : SUM([Sales]) }'],
+  ])('does not fire on a row-level %s expression', (_label, formula) => {
+    expect(
+      aggregateCalcDerivationRule.validate(calcWithCi(formula, 'None', '[none:Calculation_1:qk]')),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ['one-argument MIN', 'min ( [Sales] )'],
+    ['one-argument MAX', 'MAX([Profit])'],
+    ['nested aggregate', 'ZN(IFNULL(SUM([Sales]), 0))'],
+    ['spatial COLLECT', 'COLLECT([Geometry])'],
+    ['RAWSQL aggregate', 'RAWSQLAGG_REAL(&quot;SUM(%1)&quot;, [Sales])'],
+  ])('fires on a true %s expression', (_label, formula) => {
+    expect(
+      aggregateCalcDerivationRule.validate(calcWithCi(formula, 'None', '[none:Calculation_1:qk]')),
+    ).toHaveLength(1);
+  });
+
   it('blocks validation when registered and an aggregate calc uses none:', () => {
     const result = runValidation(
       calcWithCi('COUNTD([Order ID])', 'None', '[none:Calculation_1:qk]'),

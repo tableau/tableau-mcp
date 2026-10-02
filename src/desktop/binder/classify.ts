@@ -1,5 +1,3 @@
-// src/binder/classify.ts
-//
 // Tier-1 fast-path binder — no-LLM classification + LLM-input construction
 // (design doc §3.3, §3.5).
 //
