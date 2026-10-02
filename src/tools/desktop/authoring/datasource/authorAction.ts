@@ -6,11 +6,8 @@ import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-sum
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';

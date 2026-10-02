@@ -1,6 +1,7 @@
 import { Result } from 'ts-results-es';
 
-import { DesktopCommandExecutionError, McpToolError } from '../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { ExecuteCommandError } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import {

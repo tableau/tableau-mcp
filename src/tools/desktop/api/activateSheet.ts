@@ -9,7 +9,8 @@ import {
 } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import {

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import z from 'zod';
 
 import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { notifier } from '../../../../logging/notification.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
@@ -66,7 +67,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
   - 'exploration' - Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.
 - \`verbosity\` (optional): 'full' returns the response verbatim, including \`viz\`. 'slim' strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result. Defaults to 'full'.
-- \`slim\` (optional): Deprecated: use \`verbosity=slim\`.
+- \`slim\` (optional): Deprecated: use \`verbosity=slim\`. When both are supplied, \`verbosity\` takes precedence; conflicting values emit a warning.
 
 **Example Usage:**
 - Generate the default insight bundle for the Pulse metric:
@@ -177,6 +178,13 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       extra,
     ): Promise<CallToolResult> => {
       const useSlim = verbosity ? verbosity === 'slim' : Boolean(slim);
+      if (verbosity !== undefined && slim !== undefined && (verbosity === 'slim') !== slim) {
+        void notifier.warning(
+          server.mcpServer,
+          `Both verbosity=${verbosity} and deprecated slim=${slim} were supplied; using verbosity=${verbosity}.`,
+          { requestId: extra.requestId },
+        );
+      }
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
         args: { bundleRequest, bundleType, verbosity, slim },

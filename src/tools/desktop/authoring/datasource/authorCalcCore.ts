@@ -10,11 +10,8 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveUniqueDatasourceName } from '../../../../desktop/metadata/field-resolver.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import { prettyPrintFormula } from './prettyPrintFormula.js';
 

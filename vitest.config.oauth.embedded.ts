@@ -9,7 +9,6 @@ export default mergeConfig(
       dir: 'tests/oauth/embedded-authz',
       setupFiles: './tests/oauth/embedded-authz/testSetup.ts',
       fileParallelism: false,
-      outputFile: 'junit/oauth-embedded.xml',
     },
   }),
 );

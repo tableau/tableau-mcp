@@ -6,7 +6,7 @@ import * as getDashboardXmlModule from '../../../desktop/wrappers/getDashboardXm
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';

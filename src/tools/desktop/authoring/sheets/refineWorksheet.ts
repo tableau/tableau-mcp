@@ -54,13 +54,12 @@ import {
   READBACK_POLL_MAX_ATTEMPTS,
 } from '../../../../desktop/wrappers/pollReadback.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
   IncompleteOperationError,
-  UnknownError,
   WorksheetXmlLoadFailedError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 

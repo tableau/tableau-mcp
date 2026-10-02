@@ -964,7 +964,8 @@ describe('Config', () => {
     beforeEach(() => {
       vi.stubEnv('AUTH', 'passthrough');
       vi.stubEnv('TRANSPORT', 'http');
-      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
+      vi.stubEnv('OAUTH_ISSUER', undefined);
       vi.stubEnv('PAT_NAME', undefined);
       vi.stubEnv('PAT_VALUE', undefined);
     });
@@ -973,6 +974,16 @@ describe('Config', () => {
       const config = new Config();
       expect(config.auth).toBe('passthrough');
       expect(config.server).toBe('https://my-tableau-server.com');
+      expect(config.oauth.enabled).toBe(false);
+    });
+
+    it('should keep OAuth disabled when AUTH=passthrough and OAUTH_ISSUER is stale', () => {
+      vi.stubEnv('OAUTH_ISSUER', 'https://stale-issuer.example.com');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('passthrough');
+      expect(config.oauth.enabled).toBe(false);
     });
 
     it('should imply enablePassthroughAuth=true when AUTH=passthrough', () => {
@@ -1001,6 +1012,20 @@ describe('Config', () => {
       vi.stubEnv('SERVER', undefined);
 
       expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+    });
+
+    it('should preserve optional passthrough fallback when AUTH=pat', () => {
+      vi.stubEnv('AUTH', 'pat');
+      vi.stubEnv('TRANSPORT', 'stdio');
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+      vi.stubEnv('PAT_NAME', 'sponge');
+      vi.stubEnv('PAT_VALUE', 'bob');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('pat');
+      expect(config.enablePassthroughAuth).toBe(true);
+      expect(config.oauth.enabled).toBe(false);
     });
   });
 });

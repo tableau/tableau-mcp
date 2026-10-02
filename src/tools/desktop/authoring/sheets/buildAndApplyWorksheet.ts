@@ -37,11 +37,13 @@ import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
+  DesktopCommandExecutionError,
+  WorksheetXmlLoadFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
   ArgsValidationError,
   CacheSessionMismatchError,
-  DesktopCommandExecutionError,
   FileNotFoundError,
-  WorksheetXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';

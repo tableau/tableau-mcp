@@ -7,7 +7,7 @@ import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookX
 import * as injectViewpointsModule from '../../../../desktop/wrappers/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../../desktop/wrappers/loadDashboardXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

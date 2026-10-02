@@ -9,6 +9,8 @@ import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
   McpToolError,
   UnknownError,
   WorksheetNotFoundError,

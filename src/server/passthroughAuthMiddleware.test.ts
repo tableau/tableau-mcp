@@ -64,15 +64,19 @@ describe('passthroughAuthMiddleware', () => {
       vi.unstubAllEnvs();
       stubDefaultEnvVars();
       vi.stubEnv('TRANSPORT', 'http');
-      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
     });
 
     afterEach(() => {
       vi.unstubAllEnvs();
     });
 
-    it('should return 401 when config.auth is passthrough and no token present', async () => {
+    it.each([
+      ['without an OAuth issuer', undefined],
+      ['with a stale OAuth issuer', 'https://stale-issuer.example.com'],
+    ])('should return 401 in pure passthrough mode %s', async (_scenario, oauthIssuer) => {
       vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('OAUTH_ISSUER', oauthIssuer);
       vi.stubEnv('PAT_NAME', undefined);
       vi.stubEnv('PAT_VALUE', undefined);
       vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
@@ -103,6 +107,7 @@ describe('passthroughAuthMiddleware', () => {
 
     it('should call next() when config.auth is pat and no token present', async () => {
       vi.stubEnv('AUTH', 'pat');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
       vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
 
       await import('../config.js');

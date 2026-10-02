@@ -2,11 +2,6 @@ name: Build and Test
 
 on:
   pull_request:
-    branches:
-      - main
-      - feature/desktop
-      - 'claude/**'
-      - 'codex/**'
 
 jobs:
   build:
@@ -141,6 +136,5 @@ jobs:
           if-no-files-found: error
           path: |
             build/
-            junit/
             playwright-report/
             tableau-mcp.mcpb

@@ -88,10 +88,10 @@ import {
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';

@@ -4,7 +4,7 @@ import type { MockedFunction } from 'vitest';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
-import { serverName, WebMcpServer } from './server.web.js';
+import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -110,8 +110,20 @@ describe('server', () => {
   function getServer(opts?: {
     capabilities?: ClientCapabilitiesWithUiExtension;
     clientId?: string;
+    shared?: boolean;
   }): WebMcpServer {
+    const mcpServer = opts?.shared
+      ? new McpServer(
+          { name: 'combined-test', version: '0.0.0' },
+          { capabilities: { tools: {} }, instructions: buildWebInstructions() },
+        )
+      : undefined;
+    if (mcpServer) {
+      (mcpServer.server as unknown as { _instructions?: string })._instructions =
+        buildWebInstructions();
+    }
     const server = new WebMcpServer({
+      mcpServer,
       capabilities: opts?.capabilities,
       clientId: opts?.clientId,
     });
@@ -709,7 +721,7 @@ describe('server', () => {
         (featureName: string) => featureName === 'mcp-apps',
       );
 
-      const server = getServer({ clientId });
+      const server = getServer({ clientId, shared: true });
       const mockAppTool = createMockAppTool({ name: 'delete-content' });
       vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 

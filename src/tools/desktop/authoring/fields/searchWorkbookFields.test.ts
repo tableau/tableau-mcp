@@ -5,7 +5,7 @@ import { z } from 'zod';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

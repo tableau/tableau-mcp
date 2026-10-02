@@ -6,7 +6,7 @@ import * as getWorksheetXmlModule from '../../../desktop/wrappers/getWorksheetXm
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';

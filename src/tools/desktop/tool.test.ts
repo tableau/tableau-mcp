@@ -7,6 +7,7 @@ import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
+import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
@@ -33,6 +34,7 @@ function readEvents(dir: string): Array<Record<string, unknown>> {
 }
 
 afterEach(() => {
+  if (vi.isMockFunction(loggerModule.log)) vi.mocked(loggerModule.log).mockRestore();
   resetEpisodeEventsForTests();
   sessionRouteState.clear();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -116,6 +118,7 @@ describe('DesktopTool episode telemetry', () => {
         episodeEventsDirectory: dir,
       },
     };
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
 
     const result = await tool.logAndExecute({
       extra,
@@ -123,6 +126,13 @@ describe('DesktopTool episode telemetry', () => {
       callback: async () => {
         throw new Error('boom');
       },
+    });
+
+    expect(logSpy).toHaveBeenCalledWith({
+      message: 'Tool execution failed',
+      level: 'error',
+      logger: 'tool',
+      data: expect.objectContaining({ message: 'boom' }),
     });
 
     await vi.waitFor(() => {

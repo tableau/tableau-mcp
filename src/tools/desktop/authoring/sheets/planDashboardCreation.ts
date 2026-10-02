@@ -7,10 +7,8 @@ import { resolveField } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';

@@ -75,7 +75,10 @@ describe('episode event writer', () => {
       },
     ]);
     expect(events[0].ts).toEqual(expect.any(String));
-    expect(readdirSync(dir)[0]).toMatch(/^episodes-.*\.jsonl$/);
+    const [episodeFile] = readdirSync(dir);
+    expect(episodeFile).toMatch(/^episodes-.*\.jsonl$/);
+    expect(episodeFile).not.toMatch(/[<>:"/\\|?*]/);
+    expect(readFileSync(join(dir, episodeFile), 'utf-8')).toContain('"tool":"apply-worksheet"');
   });
 
   it('writes only bounded metadata for startup, Desktop RPC, and batch events', async () => {
