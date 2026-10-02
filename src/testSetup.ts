@@ -19,6 +19,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
         getClientCapabilities: vi.fn().mockReturnValue(undefined),
       },
       registerTool: vi.fn(),
+      registerResource: vi.fn(),
       connect: vi.fn(),
       close: vi.fn(),
     })),
