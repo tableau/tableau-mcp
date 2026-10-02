@@ -165,11 +165,10 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    // Lazy loading is meaningless on stateless HTTP: the per-request server is
-    // discarded as the response closes, so tools hydrated by the loader would
-    // register on a corpse. Fall back to the eager surface there.
+    // Only a shared combined server can retain tools loaded after startup.
     const statelessHttp = config.transport === 'http' && config.disableSessionManagement;
-    if (config.toolProfile === 'combined-lean' && !statelessHttp) {
+    const sharedStatefulServer = !this.ownsMcpServer && !statelessHttp;
+    if (config.toolProfile === 'combined-lean' && sharedStatefulServer) {
       this._registerLoadWebToolsTool();
     } else {
       for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {

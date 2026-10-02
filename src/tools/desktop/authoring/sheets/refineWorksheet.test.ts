@@ -10,10 +10,10 @@ import * as applyRoundedStackedBarModule from '../../../../desktop/wrappers/appl
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
-  ArgsValidationError,
   GetWorksheetXmlFailedError,
   WorksheetXmlLoadFailedError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';

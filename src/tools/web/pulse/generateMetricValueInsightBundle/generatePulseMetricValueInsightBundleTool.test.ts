@@ -7,6 +7,8 @@ import {
   PulseNotAvailableError,
 } from '../../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
+import * as loggerModule from '../../../../logging/logger.js';
+import { notifier } from '../../../../logging/notification.js';
 import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
@@ -169,6 +171,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   afterEach(() => {
+    if (vi.isMockFunction(loggerModule.log)) vi.mocked(loggerModule.log).mockRestore();
+    if (vi.isMockFunction(notifier.warning)) vi.mocked(notifier.warning).mockRestore();
     vi.unstubAllEnvs();
   });
 
@@ -244,20 +248,36 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        data: expect.objectContaining({ message: errorMessage }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('should return an error for missing bundleRequest', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(
       new Error('bundleRequest is required'),
     );
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('bundleRequest');
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        data: expect.objectContaining({ message: 'bundleRequest is required' }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('should return Tableau Server error for bare 404 without error code', async () => {
@@ -386,6 +406,67 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toEqual(mockPopulatedResponse);
+  });
+
+  it.each([
+    ['full', true],
+    ['slim', false],
+  ] as const)(
+    'warns when verbosity=%s conflicts with deprecated slim=%s while preserving verbosity precedence',
+    async (verbosity, slim) => {
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+        new Ok(mockPopulatedResponse),
+      );
+      const warningSpy = vi.spyOn(notifier, 'warning').mockResolvedValue();
+
+      const result = await getToolResult('ban', slim, verbosity);
+
+      expect(warningSpy).toHaveBeenCalledOnce();
+      expect(warningSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        `Both verbosity=${verbosity} and deprecated slim=${slim} were supplied; using verbosity=${verbosity}.`,
+        expect.objectContaining({ requestId: expect.anything() }),
+      );
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      if (verbosity === 'slim') {
+        expect(parsed).not.toEqual(mockPopulatedResponse);
+        expect(
+          parsed.bundle_response.result.insight_groups[0].insights[0].result,
+        ).not.toHaveProperty('viz');
+      } else {
+        expect(parsed).toEqual(mockPopulatedResponse);
+      }
+    },
+  );
+
+  it.each([
+    ['full', false],
+    ['slim', true],
+  ] as const)(
+    'does not warn when verbosity=%s agrees with deprecated slim=%s',
+    async (verbosity, slim) => {
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+        new Ok(mockPopulatedResponse),
+      );
+      const warningSpy = vi.spyOn(notifier, 'warning').mockResolvedValue();
+
+      await getToolResult('ban', slim, verbosity);
+
+      expect(warningSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not warn when only one response-size control is supplied', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+    const warningSpy = vi.spyOn(notifier, 'warning').mockResolvedValue();
+
+    await getToolResult('ban', undefined, 'slim');
+    await getToolResult('ban', true);
+
+    expect(warningSpy).not.toHaveBeenCalled();
   });
 
   it('returns viz verbatim when slim is omitted or false', async () => {

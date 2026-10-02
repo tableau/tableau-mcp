@@ -81,6 +81,15 @@ describe('renderInteractiveVizTool', () => {
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
+    it('should be disabled when AUTH=passthrough, even with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
     it('should be disabled when AUTH=oauth with embedded authz server, even with mcp-apps enabled', async () => {
       vi.stubEnv('AUTH', 'oauth');
       vi.stubEnv('OAUTH_ISSUER', 'https://sso.online.tableau.com');

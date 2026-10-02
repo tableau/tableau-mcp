@@ -18,11 +18,10 @@ import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerpr
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
-  FileReadError,
   WorksheetXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';

@@ -45,9 +45,11 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 - Possible values: `pat`, `direct-trust`, `oauth`, or `passthrough`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
-- Setting `passthrough` implies [`ENABLE_PASSTHROUGH_AUTH`](authentication/passthrough.md#enable_passthrough_auth)
-  is `true` and requires every request to carry an `X-Tableau-Auth` token (there is no fallback auth
-  method). See [Passthrough Authentication](authentication/passthrough).
+- Setting `passthrough` implies
+  [`ENABLE_PASSTHROUGH_AUTH`](authentication/passthrough.md#enable_passthrough_auth) is `true` and
+  requires every request to carry an `X-Tableau-Auth` token (there is no fallback auth method).
+  OAuth stays disabled in this mode, even when `OAUTH_ISSUER` is set. See
+  [Passthrough Authentication](authentication/passthrough).
 
 <hr />
 

@@ -48,6 +48,7 @@ export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeo
       async () =>
         !(await getFeatureGate().isFeatureEnabled('mcp-apps')) ||
         config.auth === 'pat' ||
+        config.auth === 'passthrough' ||
         (config.auth === 'oauth' && config.oauth.embeddedAuthzServer),
     ),
     callback: async ({ luid, objectType }, extra): Promise<CallToolResult> => {

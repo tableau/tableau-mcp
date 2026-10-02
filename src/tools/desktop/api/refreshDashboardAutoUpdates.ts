@@ -13,7 +13,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { attachNextAction, prefillNextAction } from '../structuredContent.js';

@@ -1,4 +1,4 @@
-import { DesktopCommandExecutionError, ImageExportTimeoutError } from './mcpToolError.js';
+import { DesktopCommandExecutionError, ImageExportTimeoutError } from './mcpToolError.desktop.js';
 
 describe('DesktopCommandExecutionError', () => {
   it('forbids invented causes for a bare command failure', () => {

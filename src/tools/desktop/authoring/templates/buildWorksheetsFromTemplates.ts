@@ -12,10 +12,8 @@ import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
 } from '../../../../desktop/templates/templateArtifactStore.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';

@@ -27,6 +27,7 @@ jobs:
             const releasesToClean = sortedReleases.slice(10);
             const preservedAssetNames = new Set([
               'tableau-mcp.zip',
+              'tableau-mcp.tar.gz',
               'tableau-mcp-macos-arm64.tar.gz',
               'tableau-mcp-macos-x64.tar.gz'
             ]);

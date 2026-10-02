@@ -1,6 +1,7 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
+import { buildWebInstructions, LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolGroups } from './tools/web/toolName.js';
@@ -15,8 +16,18 @@ type RegisterToolCall = [
   (args: any, extra: any) => Promise<CallToolResult>,
 ];
 
-function getWebServer(): WebMcpServer {
-  const server = new WebMcpServer();
+function getWebServer({ shared = false }: { shared?: boolean } = {}): WebMcpServer {
+  const mcpServer = shared
+    ? new McpServer(
+        { name: 'combined-test', version: '0.0.0' },
+        { capabilities: { tools: {} }, instructions: buildWebInstructions() },
+      )
+    : undefined;
+  if (mcpServer) {
+    (mcpServer.server as unknown as { _instructions?: string })._instructions =
+      buildWebInstructions();
+  }
+  const server = new WebMcpServer({ mcpServer });
   server.mcpServer.registerTool = vi.fn();
   return server;
 }
@@ -47,9 +58,29 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
     vi.unstubAllEnvs();
   });
 
-  it('registers exactly one web tool — the loader — instead of the eager web surface', async () => {
+  it('keeps standalone Web eager even when TOOL_PROFILE=combined-lean', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
     const server = getWebServer();
+    await server.registerTools();
+
+    const names = registeredNames(server);
+    expect(names).toContain('list-datasources');
+    expect(names).not.toContain(LOAD_WEB_TOOLS_TOOL_NAME);
+  });
+
+  it('registers only the loader for a stateful shared combined server', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    const server = getWebServer({ shared: true });
+    await server.registerTools();
+
+    expect(registeredNames(server)).toEqual([LOAD_WEB_TOOLS_TOOL_NAME]);
+  });
+
+  it('ignores a stale DISABLE_SESSION_MANAGEMENT flag on shared stdio', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('TRANSPORT', 'stdio');
+    vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'true');
+    const server = getWebServer({ shared: true });
     await server.registerTools();
 
     expect(registeredNames(server)).toEqual([LOAD_WEB_TOOLS_TOOL_NAME]);
@@ -71,7 +102,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
 
   it('load-web-tools registers the pulse group on demand and is idempotent', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
-    const server = getWebServer();
+    const server = getWebServer({ shared: true });
     await server.registerTools();
 
     const loaderCall = registerToolCalls(server).find(
@@ -104,7 +135,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
 
   it('concurrent loader calls for the same group do not double-register (serialized)', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
-    const server = getWebServer();
+    const server = getWebServer({ shared: true });
     await server.registerTools();
 
     const loaderCallback = registerToolCalls(server).find(
@@ -129,7 +160,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
     vi.stubEnv('TRANSPORT', 'http');
     vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'true');
     vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
-    const server = getWebServer();
+    const server = getWebServer({ shared: true });
     await server.registerTools();
 
     const names = registeredNames(server);
@@ -140,7 +171,7 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
   it('load-web-tools respects EXCLUDE_TOOLS scoping when hydrating a group', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
     vi.stubEnv('EXCLUDE_TOOLS', 'list-pulse-metric-subscriptions');
-    const server = getWebServer();
+    const server = getWebServer({ shared: true });
     await server.registerTools();
 
     const loaderCallback = registerToolCalls(server).find(

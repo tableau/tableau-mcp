@@ -27,12 +27,11 @@ import {
   resolveCanonicalWorksheetName,
 } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-  McpToolError,
   WorksheetXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { resolveWorksheetSimpleId } from '../authoring/fields/worksheetCache.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';

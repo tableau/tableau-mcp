@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/wrappers/getWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';

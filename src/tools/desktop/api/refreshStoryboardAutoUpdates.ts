@@ -7,10 +7,10 @@ import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.j
 import { StoryboardRefreshOutcome } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { attachNextAction, prefillNextAction } from '../structuredContent.js';

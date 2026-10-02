@@ -1,12 +1,14 @@
 # Tableau Desktop Authoring MCP
 
-The **desktop** build variant of `@tableau/mcp-server`. Where the default variant talks to
-Tableau Cloud/Server over REST, this variant exposes a **local authoring** tool surface that
-drives a running **Tableau Desktop** instance — inspect a workbook, list/inject chart
-templates, and bind fields into worksheets — over MCP (stdio).
+The `@tableau/mcp-server` npm package is Web-only. This repository's **desktop** build variant
+exposes a **local authoring** tool surface that drives a running **Tableau Desktop** instance —
+inspect a workbook, list/inject chart templates, and bind fields into worksheets — over MCP
+(stdio).
 
-This document is a from-source quickstart. The desktop variant is **not** yet built by the
-publish pipeline (see [Known gaps](#known-gaps)); build it from a clone.
+Use the Desktop server from a source build or a standalone Desktop executable. This document
+covers the source path. For a published GitHub Release, the `upload-binaries` workflow is configured
+to put the Web and Desktop executables in each platform archive; releases that predate that workflow
+may not have those archives.
 
 ## The template tool surface
 
@@ -36,10 +38,11 @@ npm ci
 npm run build:desktop
 ```
 
-The build emits the desktop entry point at **`build/index.desktop.js`** (the default
-variant's `build/index.js` is not produced by this command). It also stages the bundled
-authoring data under `build/desktop/data/` — this staging happens **only** for the desktop
-and combined variants.
+The build emits the desktop entry point at **`build/index.desktop.js`** (the default variant's
+`build/index.js` is not produced by this command). It also stages the bundled authoring data under
+`build/desktop/data/`. Desktop search and reference tools resolve those package-relative assets;
+the standalone Desktop executable embeds the same assets. The Web npm package contains neither
+the Desktop entry point nor the Desktop data.
 
 Point an MCP client at the entry over stdio:
 
@@ -64,20 +67,9 @@ Point an MCP client at the entry over stdio:
 
 ## Template content
 
-- Templates ship as **TBM bookmark files** bundled inside the package
-  (`src/desktop/data/templates/`, staged into the build) — **133** templates today. File
-  names include descriptive `<family>__<chart>__<intent>.tbm` forms and shorter stable IDs
-  such as `box-plot-chart.tbm`.
+- Templates ship as **TBM bookmark files** with the Desktop build
+  (`src/desktop/data/templates/`, staged into the build). File names include descriptive
+  `<family>__<chart>__<intent>.tbm` forms and shorter stable IDs such as
+  `box-plot-chart.tbm`.
 - Template slot contracts are **inferred from the TBM content** at load time; a rewritten
   bookmark re-infers on its changed bytes.
-
-## Known gaps
-
-Stated honestly so nobody is surprised:
-
-- The **search tools** (`search-examples`, `search-commands`, `search-workbook-examples`,
-  `lookup-workbook-schema`) resolve their data **relative to the current working directory**,
-  so they are effectively **dev-only** (run from a repo checkout) and are not reachable from
-  a packaged install.
-- The **publish pipeline does not yet build this variant** — the desktop authoring server is
-  **from-source only** for now.

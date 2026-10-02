@@ -7,8 +7,8 @@ import { loadDashboardXml } from '../../../desktop/wrappers/loadDashboardXml.js'
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';

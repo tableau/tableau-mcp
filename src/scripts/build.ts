@@ -102,28 +102,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   );
   console.log('✅ features.json copied successfully');
 
-  // Stage the bundled authoring data into the build output. esbuild bundles CODE
-  // only — these files are read at runtime via fs, so a published / npm-installed
-  // server has no data unless we copy them. The target `build/desktop/data` is the
-  // path server.desktop.ts resolves package-relative as DATA_ROOT (`__dirname/desktop/data`,
-  // where __dirname === build/ in the bundle); the search library reads its inputs through it.
-  //
-  // AUTHORITATIVE ALLOWLIST, not a blanket copy (Lane M5 tarball scoping + TR1 fix): stage
-  // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
-  // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
-  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds a shipped
-  // search tool: twb_2026.2.0.xsd (lookup-workbook-schema), corpus.json +
-  // examples/ (search-examples / search-workbook-examples), and twb-example-index.json —
-  // the committed TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this
-  // dir at src/desktop/data-source/ and is never staged. search-commands (and the name/param
-  // guards) no longer read a bundled snapshot here — commandsReference.ts synthesizes their
-  // document from tab-agent-south's live External API registry (TABLEAU_COMMANDS_REGISTRY_DIR)
-  // at runtime, which is why there is no tableau-desktop-commands-reference.json entry below.
-  //
-  // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
-  // ever resolves `build/desktop/data` at runtime. The `default` variant's server
-  // (src/index.ts) never reads it — and `default` is the ONLY variant the publish pipeline
-  // builds via `npm run build` — so staging is skipped there to keep the default package lean.
+  // Stage only allowlisted Desktop assets; Desktop-capable builds need them, while Web npm does not.
   if (variant === 'desktop' || variant === 'combined') {
     console.log('🏗️ Staging desktop data (allowlist)...');
     const desktopDataSrc = './src/desktop/data';

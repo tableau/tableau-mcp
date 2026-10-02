@@ -6,8 +6,8 @@ import { getDashboardXml, isRouteMissing } from '../../../desktop/wrappers/getDa
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
 import { DesktopTool } from '../tool.js';

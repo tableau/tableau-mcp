@@ -54,11 +54,14 @@ In versions of Tableau older than 2026.2, the JWT must also contain the `tableau
 
 :::warning
 
-If [`OAuth`](oauth.md) is enabled, **all** requests to the MCP server must include the
-`X-Tableau-Auth` header, otherwise the client will be considered unauthorized and will be forced to
-authenticate using OAuth. This even includes MCP lifecycle requests like the
+When passthrough is enabled as an option with `ENABLE_PASSTHROUGH_AUTH` and [`OAuth`](oauth.md) is
+the primary `AUTH` method, **all** requests to the MCP server must include the `X-Tableau-Auth`
+header or authenticate using OAuth. This includes MCP lifecycle requests like the
 [Initialization request](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization),
 even though it does not make any downstream Tableau REST API calls.
+
+With `AUTH=passthrough`, OAuth is disabled and there is no OAuth fallback, even if `OAUTH_ISSUER`
+remains set from another deployment.
 
 :::
 
@@ -85,6 +88,8 @@ for more details.
 - Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
 - Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the token is
   absent.
+- Does not require `OAUTH_ISSUER` or `DANGEROUSLY_DISABLE_OAUTH`; a configured `OAUTH_ISSUER` does
+  not enable OAuth in this mode.
 
 <hr />
 

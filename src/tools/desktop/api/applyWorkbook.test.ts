@@ -8,9 +8,9 @@ import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerpr
 import * as loadWorkbookXmlModule from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
-  FileReadError,
   WorkbookXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';

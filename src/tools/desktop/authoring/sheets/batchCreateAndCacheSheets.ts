@@ -17,7 +17,7 @@ import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
   WorkbookXmlLoadFailedError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { sessionParam } from '../../params.js';

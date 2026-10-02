@@ -6,9 +6,9 @@ import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
-  UnknownError,
   WorkbookXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../structuredContent.js';
