@@ -8,11 +8,9 @@ import {
   ArgsValidationError,
   FeatureDisabledError,
   McpToolError,
-  ProjectNotAllowedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
-import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
@@ -26,6 +24,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
+import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -394,18 +393,6 @@ function mapPersonalSpacePublishError(error: unknown): FeatureDisabledError | nu
     );
   }
   return null;
-}
-
-function assertProjectAllowedByBoundedContext(
-  projectId: string,
-  boundedContext: BoundedContext,
-): void {
-  const { projectIds } = boundedContext;
-  if (projectIds && !projectIds.has(projectId)) {
-    throw new ProjectNotAllowedError(
-      `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
-    );
-  }
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {
