@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
 
-import { type ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, McpError, type ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getFeatureGate } from '../features/init.js';
 import { log } from '../logging/logger.js';
 import { type Server } from '../server.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getSkillRegistry } from './registry.js';
 
 const LOGGER = 'skills';
@@ -54,7 +55,23 @@ export async function registerSkills(server: Server): Promise<void> {
   for (const { uri, path, mimeType } of files) {
     // The URI is unique per file, so it doubles as the resource's registration name.
     mcp.registerResource(uri, uri, { mimeType }, async (): Promise<ReadResourceResult> => {
-      const bytes = await readFile(path);
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(path);
+      } catch (error) {
+        // If the file is moved/removed after the skillRegistry is created, log the details
+        // server-side; the client only sees the skill:// URI, never the absolute path.
+        log({
+          level: 'warning',
+          message: `Failed to read skill resource ${uri} at ${path}: ${getExceptionMessage(error)}`,
+          logger: LOGGER,
+        });
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          // Same code and message the SDK uses for an unknown resource URI.
+          throw new McpError(ErrorCode.InvalidParams, `Resource ${uri} not found`);
+        }
+        throw new McpError(ErrorCode.InternalError, `Failed to read skill resource ${uri}`);
+      }
       return {
         contents: [
           isTextMimeType(mimeType)

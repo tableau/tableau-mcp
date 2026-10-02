@@ -3,9 +3,14 @@ import { type Dirent, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
 import { lookup } from 'mime-types';
+import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../logging/logger.js';
-import { type SkillEntry as SkillData, type SkillResource } from './types.js';
+import {
+  type SkillEntry as SkillData,
+  SkillFrontmatterSchema,
+  type SkillResource,
+} from './types.js';
 
 /** Representation of a single skill file */
 export type SkillFile = {
@@ -34,7 +39,8 @@ function mimeTypeFor(filePath: string): string {
 }
 
 // TODO W-24281166: Skills currently live under `src/skills/mockSkills` until we can read from
-// the public repository.
+// the public repository. Once skills are synced from there, the sync must also refresh the cached
+// registry (`resetSkillRegistry`) and re-register resources, or reads will hit stale paths.
 function getSkillsDir(): string {
   return resolve(process.cwd(), 'src', 'skills', 'mockSkills');
 }
@@ -71,10 +77,14 @@ function parseFrontmatter(content: string): Record<string, unknown> {
   return frontmatter;
 }
 
-/** Recursively collect every file (not directory) under `dir`, as absolute paths. */
+/** Recursively collect every non-dotfile (not directory) under `dir`, as absolute paths. */
 function walkFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // Skip dotfiles and dot-directories (.DS_Store, .git, .*.swp, ...)
+    if (entry.name.startsWith('.')) {
+      continue;
+    }
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkFiles(full));
@@ -128,7 +138,7 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
   const files: SkillFile[] = [];
 
   for (const directory of directories) {
-    if (!directory.isDirectory()) {
+    if (!directory.isDirectory() || directory.name.startsWith('.')) {
       continue;
     }
 
@@ -149,11 +159,12 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
       continue;
     }
 
-    const frontmatter = parseFrontmatter(manifest);
-    if (typeof frontmatter.name !== 'string' || typeof frontmatter.description !== 'string') {
+    // Validate the required "name" and "description" frontmatter before collecting any files
+    const frontmatter = SkillFrontmatterSchema.safeParse(parseFrontmatter(manifest));
+    if (!frontmatter.success) {
       log({
         level: 'warning',
-        message: `Skill "${name}" ${SKILL_MANIFEST} is missing required frontmatter "name" and/or "description"; skipping.`,
+        message: `Skill "${name}" ${SKILL_MANIFEST} has invalid frontmatter; skipping. ${fromError(frontmatter.error).toString()}`,
         logger: LOGGER,
       });
       continue;
@@ -171,7 +182,7 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
     // Add information from a single skill into the list of skillData
     skillData.push({
       uri: `skill://${name}/${SKILL_MANIFEST}`,
-      frontmatter,
+      frontmatter: frontmatter.data,
       resources: skillResources,
     });
   }

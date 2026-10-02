@@ -111,10 +111,29 @@ describe('registry', () => {
     it('skips a skill whose SKILL.md is missing required frontmatter', () => {
       createSkillManifest('test-skill', manifest({ name: 'test-skill' }, body('test-skill'))); // no description
 
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills).toHaveLength(0);
+      // An invalid skill contributes no files to be served as resources either.
+      expect(registry.files()).toHaveLength(0);
+      const { message } = mockLogs('warning')[0];
+      expect(message).toContain('has invalid frontmatter');
+      expect(message).toContain('"description"');
+    });
+
+    it('keeps extra frontmatter keys beyond name and description', () => {
+      createSkillManifest(
+        'test-skill',
+        manifest({ name: 'test-skill', description: DESCRIPTION, license: 'MIT' }),
+      );
+
       const { skills } = buildSkillRegistry(skillsDir).list();
 
-      expect(skills).toHaveLength(0);
-      expect(mockLogs('warning')[0].message).toContain('missing required frontmatter');
+      expect(skills[0].frontmatter).toEqual({
+        name: 'test-skill',
+        description: DESCRIPTION,
+        license: 'MIT',
+      });
     });
 
     it('skips a skill with no frontmatter block at all', () => {
@@ -212,6 +231,42 @@ describe('registry', () => {
 
       expect(registry.get('skill://test-skill/SKILL.md')?.uri).toBe('skill://test-skill/SKILL.md');
       expect(registry.get('skill://nope/SKILL.md')).toBeUndefined();
+    });
+  });
+
+  describe('ignored files', () => {
+    const REAL_URIS = [
+      'skill://test-skill/README.md',
+      'skill://test-skill/SKILL.md',
+      'skill://test-skill/skill-expertise/list-workbooks.md',
+    ];
+
+    it('skips dotfiles and dot-directories within a skill', () => {
+      writeTestSkill('test-skill', {
+        '.DS_Store': 'finder metadata',
+        '.git/config': '[core]',
+        'skill-expertise/.list-workbooks.md.swp': 'vim swap',
+      });
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.files().map((f) => f.uri)).toEqual(REAL_URIS);
+      expect(
+        registry
+          .get('skill://test-skill/SKILL.md')!
+          .resources.map((r) => r.uri)
+          .sort(),
+      ).toEqual(REAL_URIS);
+    });
+
+    it('skips dot-directories at the skills root without warning', () => {
+      writeTestSkill('test-skill');
+      writeMockFile('.git/HEAD', 'ref: refs/heads/main');
+
+      const registry = buildSkillRegistry(skillsDir);
+
+      expect(registry.list().skills.map((s) => s.uri)).toEqual(['skill://test-skill/SKILL.md']);
+      expect(mockLogs('warning')).toHaveLength(0);
     });
   });
 

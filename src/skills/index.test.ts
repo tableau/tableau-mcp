@@ -1,3 +1,4 @@
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -163,10 +164,15 @@ describe('registerSkills', () => {
 
   describe('resource read callback', () => {
     // Registers a single file, then invokes the read callback the registry handed to registerResource.
-    async function readSingleFile(file: SkillFile, bytes: Buffer): Promise<unknown> {
+    // Pass an Error instead of bytes to make readFile reject with it.
+    async function readSingleFile(file: SkillFile, bytes: Buffer | Error): Promise<unknown> {
       mocks.mockFeatureGate.isFeatureEnabled.mockResolvedValue(true);
       setRegistryFiles([file]);
-      mocks.mockReadFile.mockResolvedValue(bytes);
+      if (bytes instanceof Error) {
+        mocks.mockReadFile.mockRejectedValue(bytes);
+      } else {
+        mocks.mockReadFile.mockResolvedValue(bytes);
+      }
       const { server, registerResource } = makeServer();
 
       await registerSkills(server);
@@ -197,6 +203,39 @@ describe('registerSkills', () => {
       expect(result).toEqual({
         contents: [{ uri: pngFile.uri, mimeType: 'image/png', blob: pngBytes.toString('base64') }],
       });
+    });
+
+    // Node-style fs error, e.g. ENOENT for a file deleted/moved after the registry snapshot.
+    const fsError = (code: string): NodeJS.ErrnoException =>
+      Object.assign(new Error(`${code}: open '${MARKDOWN_FILE.path}'`), { code });
+
+    it('throws a not-found McpError without the absolute path when the file is missing', async () => {
+      const error = (await readSingleFile(MARKDOWN_FILE, fsError('ENOENT')).catch(
+        (e: unknown) => e,
+      )) as McpError;
+
+      expect(error).toBeInstanceOf(McpError);
+      expect(error.code).toBe(ErrorCode.InvalidParams);
+      expect(error.message).toContain(`Resource ${MARKDOWN_FILE.uri} not found`);
+      expect(error.message).not.toContain(MARKDOWN_FILE.path);
+      expect(mocks.mockLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(MARKDOWN_FILE.path),
+        }),
+      );
+    });
+
+    it('throws an internal McpError for other read failures', async () => {
+      const error = (await readSingleFile(MARKDOWN_FILE, fsError('EACCES')).catch(
+        (e: unknown) => e,
+      )) as McpError;
+
+      expect(error).toBeInstanceOf(McpError);
+      expect(error.code).toBe(ErrorCode.InternalError);
+      expect(error.message).toContain(`Failed to read skill resource ${MARKDOWN_FILE.uri}`);
+      expect(error.message).not.toContain(MARKDOWN_FILE.path);
+      expect(mocks.mockLog).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
     });
   });
 });
