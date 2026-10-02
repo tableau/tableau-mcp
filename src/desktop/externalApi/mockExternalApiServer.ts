@@ -465,7 +465,6 @@ export async function startMockExternalApiServer(
           'app-dialogs': '/v0/app/dialogs',
           'app-state': '/v0/app/state',
           workbook: '/v0/workbook',
-          site: '/v0/site',
         },
       });
       return;
@@ -879,14 +878,6 @@ export async function startMockExternalApiServer(
         return;
       }
       sendImageExport(res, searchParams, 1600, 900);
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
-      sendJson(res, 200, {
-        siteId: 'site-sales',
-        authenticatedUserId: 'user-author',
-      });
       return;
     }
 

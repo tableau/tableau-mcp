@@ -73,10 +73,8 @@ import {
   ShowMeOptionsQuery,
   ShowMeOptionsResult,
   showMeOptionsResultSchema,
-  Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
-  siteSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
   StartPageVisibility,
@@ -395,12 +393,6 @@ export class ExternalApiToolExecutor {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
     }
     return Ok(result.value);
-  }
-
-  async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal),
-    );
   }
 
   async listSiteWorkbooks(

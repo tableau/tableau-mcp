@@ -16,7 +16,6 @@ import {
   sheetActionRoute,
   showMeOptionsResultSchema,
   siteDatasourceListSchema,
-  siteSchema,
   siteWorkbookListSchema,
   startPageVisibilitySchema,
   storyboardDocumentRoute,
@@ -526,20 +525,6 @@ describe('ExternalApiHttp', () => {
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/site/workbooks');
-  });
-
-  it('gets the connected site from GET /v0/site', async () => {
-    const result = await http.getJson(EXTERNAL_API_ROUTES.site, siteSchema);
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toMatchObject({
-      siteId: 'site-sales',
-      authenticatedUserId: 'user-author',
-    });
-
-    const last = server.requests.at(-1);
-    expect(last?.method).toBe('GET');
-    expect(last?.path).toBe('/v0/site');
   });
 
   it('gets a worksheet by id from GET /v0/workbook/worksheets/{id}', async () => {

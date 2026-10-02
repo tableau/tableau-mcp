@@ -1263,17 +1263,6 @@ describe('ExternalApiToolExecutor', () => {
       expect(request?.path).toBe('/v0/workbook:publish');
     });
 
-    it('gets the connected site', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.getSite(signal);
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().siteId).toBe('site-sales');
-      expect(server.requests.at(-1)?.path).toBe('/v0/site');
-    });
-
     it('gets a worksheet item by id', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

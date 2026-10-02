@@ -70,7 +70,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
-  site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
@@ -493,15 +492,6 @@ export const healthSchema = z
     status: z.string().optional(),
   })
   .passthrough();
-
-/** Connected Tableau site returned by `GET /v0/site`. */
-export const siteSchema = z
-  .object({
-    siteId: z.string().optional(),
-    authenticatedUserId: z.string().optional(),
-  })
-  .passthrough();
-export type Site = z.infer<typeof siteSchema>;
 
 /** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
 export const protectedResourceMetadataSchema = z
