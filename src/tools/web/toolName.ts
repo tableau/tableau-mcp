@@ -9,6 +9,7 @@ export const webToolNames = [
   'request-workbook-upload',
   'publish-workbook',
   'list-projects',
+  'list-destination-projects',
   'list-views',
   'list-custom-views',
   'list-flows',
@@ -81,7 +82,7 @@ export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
   authoring: ['request-workbook-upload', 'publish-workbook'],
-  project: ['list-projects'],
+  project: ['list-projects', 'list-destination-projects'],
   view: [
     'list-views',
     'list-custom-views',

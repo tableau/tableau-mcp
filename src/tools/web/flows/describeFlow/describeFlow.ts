@@ -16,9 +16,9 @@ import { Flow } from '../../../../sdks/tableau/types/flow.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { DESCRIBE_FLOW_API_SCOPES } from '../../../../server/oauth/scopes.js';
-import { isAxiosError } from '../../../../utils/axios.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
+import { getTableauErrorCode } from '../../../../utils/getTableauErrorCode.js';
 import { Provider } from '../../../../utils/provider.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
@@ -38,28 +38,6 @@ const paramsSchema = {
 // Tableau error code returned by the flow-document endpoint when the
 // experimental `GetFlowDocumentRestApi` feature flag is OFF. Verified live.
 const FLOW_DOCUMENT_API_DISABLED_CODE = '403200';
-
-/**
- * Reads the Tableau REST error code (e.g. "403200") from an Axios error. Tableau
- * serializes REST errors as `{ error: { code, summary, detail } }` in the body
- * and also echoes the code in the `tableau_error_code` response header, so we
- * check both. Used to distinguish the feature-flag-off 403 (code 403200) from an
- * ordinary forbidden / insufficient-permission 403.
- */
-function getTableauErrorCode(error: unknown): string | undefined {
-  if (!isAxiosError(error)) {
-    return undefined;
-  }
-  const bodyCode = error.response?.data?.error?.code;
-  if (typeof bodyCode === 'string' && bodyCode.length > 0) {
-    return bodyCode;
-  }
-  const headerCode = error.response?.headers?.tableau_error_code;
-  if (typeof headerCode === 'string' && headerCode.length > 0) {
-    return headerCode;
-  }
-  return undefined;
-}
 
 export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();

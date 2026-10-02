@@ -11,6 +11,7 @@ const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
+const destinationProjectsEnabled = Boolean(features['destination-projects']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
@@ -118,6 +119,13 @@ describe('server', () => {
       // Filter out data-app tools if they are not enabled (data-apps feature flag)
       if (!tableauDataAppsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Filter out list-destination-projects unless enabled (destination-projects feature flag)
+      if (!destinationProjectsEnabled) {
+        expectedToolNames = expectedToolNames.filter(
+          (name) => name !== 'list-destination-projects',
+        );
       }
 
       // Filter out content-mutating flow tools unless explicitly enabled.
@@ -324,6 +332,13 @@ describe('server', () => {
       // Filter out data-app tools if they are not enabled (data-apps feature flag)
       if (!tableauDataAppsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Filter out list-destination-projects unless enabled (destination-projects feature flag)
+      if (!destinationProjectsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => name !== 'list-destination-projects',
+        );
       }
 
       // Filter out content-mutating flow tools unless explicitly enabled.
