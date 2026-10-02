@@ -525,6 +525,30 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:create');
     });
 
+    it('should exclude tableau:workbooks:update when data-apps is disabled even if authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).not.toContain('tableau:workbooks:update');
+    });
+
+    it('should include tableau:workbooks:update when data-apps is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'data-apps';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).toContain('tableau:workbooks:update');
+    });
+
     it('should require base publish scopes plus content read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
@@ -532,6 +556,14 @@ describe('scopes', () => {
         'tableau:workbooks:create',
         'tableau:file_uploads:create',
         'tableau:content:read',
+      ]);
+    });
+
+    it('should require workbooks update plus resource access scopes for move-workbook', () => {
+      expect(getRequiredApiScopesForTool('move-workbook')).toEqual([
+        'tableau:workbooks:update',
+        'tableau:content:read',
+        'tableau:mcp_site_settings:read',
       ]);
     });
 
