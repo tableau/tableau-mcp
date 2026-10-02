@@ -3,8 +3,7 @@
 /**
  * Reproducible trim for `src/desktop/data/twb-example-index.json`.
  *
- * WHY: the full index is ~10.3 MB and (once the desktop variant is published)
- * rides into the npm tarball via `build.ts` copying `src/desktop/data`. Only the
+ * WHY: Desktop source builds stage this index and Desktop SEA builds embed it. Only the
  * `search-workbook-examples` tool consumes it, through
  * `src/desktop/search/searchLibrary.ts::searchWorkbookExamples`, which:
  *   - scores each entry on its `features` tags (exact +10 / partial +5),
@@ -22,11 +21,12 @@
  * K=`maxPerFeature` quota then adds breadth on top. See the source-vs-trimmed
  * regression test at `src/desktop/search/trimmedTwbIndex.regression.test.ts`.
  *
- * INPUT (kept OUT of the tarball): src/desktop/data-source/twb-example-index.source.json.gz
+ * INPUT (kept OUT of Desktop builds and executables):
+ *   src/desktop/data-source/twb-example-index.source.json.gz
  *   — a gzip of the untrimmed original (the 10 MB uncompressed twin is not
  *   committed). It is not under `src/desktop/data`, so `build.ts` never copies it,
- *   and `.npmignore` publishes only `build/**`. `.gz` inputs are gunzipped in-memory.
- * OUTPUT (the committed, shipped file): src/desktop/data/twb-example-index.json
+ *   and the SEA builder never embeds it. `.gz` inputs are gunzipped in-memory.
+ * OUTPUT (the committed Desktop asset): src/desktop/data/twb-example-index.json
  *
  * Re-generate with:  npx tsx src/scripts/trimTwbExampleIndex.ts
  * Tune with flags:   --max-per-feature <N>  --keep-json  --in <path>  --out <path>  --pretty

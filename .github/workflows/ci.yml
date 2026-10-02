@@ -46,7 +46,9 @@ jobs:
         run: npm run build:docker
 
       - name: Build NPM package
-        run: npm pack
+        run: |
+          npm pack --json > npm-pack.json
+          npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
 
       - name: Tests
         run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
@@ -138,3 +140,4 @@ jobs:
             build/
             playwright-report/
             tableau-mcp.mcpb
+            tableau-mcp-server-*.tgz
