@@ -44,6 +44,12 @@ vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 
+const removedDesktopSiteToolNames = [
+  'get-site-info',
+  'list-site-workbooks',
+  'list-site-datasources',
+] as const;
+
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
@@ -381,6 +387,35 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   const allTools = (): Array<DesktopTool<any>> =>
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
+  it('excludes retired site tools from names, factories, profile groups, and every selection', () => {
+    const tools = allTools();
+    const surfaces = [
+      desktopToolNames,
+      tools.map((tool) => tool.name),
+      [...DEMO_TOOL_PROFILE],
+      [...DYNAMIC_AUTHORING_TOOL_PROFILE],
+      [...SPEC_LOOP_TOOL_PROFILE],
+      ...[
+        '',
+        'dynamic-authoring',
+        'demo',
+        'spec-loop',
+        'full',
+        'combined-lean',
+        'unknown-profile',
+      ].map((profile) => selectToolsForProfile(tools, profile).map((tool) => tool.name)),
+    ];
+
+    for (const names of surfaces) {
+      for (const removedName of removedDesktopSiteToolNames) {
+        expect(names).not.toContain(removedName);
+      }
+    }
+    expect(selectToolsForProfile(tools, 'full')).toBe(tools);
+    expect(selectToolsForProfile(tools, 'combined-lean')).toBe(tools);
+    expect(selectToolsForProfile(tools, 'unknown-profile')).toBe(tools);
+  });
+
   it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
     'keeps field listing and the repair read registered in profile "%s"',
     (profile) => {
@@ -551,21 +586,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       ]) {
         expect(selected.map((t) => t.name)).toContain(verb);
       }
-      // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
+      // Keep unrelated info/validation and legacy template tools out. The six scoped and
       // whole-workbook fallbacks above are the complete XML surface added to this profile.
       for (const banished of [
         'build-and-apply-worksheet',
         'validate-workbook-xml',
         'validate-worksheet-xml',
         'inject-template',
-        'list-site-datasources',
-        'list-site-workbooks',
         'get-app-info',
         'get-health',
         'get-worksheet-info',
         'list-storyboards',
         'get-api-root',
-        'get-site-info',
         'get-dashboard-info',
         'get-storyboard-info',
         'list-knowledge-resources',
@@ -1046,16 +1078,23 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     expect(new Set(registeredNames)).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
   });
 
-  it('registers the full set when TOOL_PROFILE=full is explicit', async () => {
-    vi.stubEnv('TOOL_PROFILE', 'full');
-    const server = getServer();
-    await server.registerTools();
+  it.each(['full', 'combined-lean'])(
+    'registers the complete Desktop set without retired site tools for TOOL_PROFILE=%s',
+    async (profile) => {
+      vi.stubEnv('TOOL_PROFILE', profile);
+      const server = getServer();
+      await server.registerTools();
 
-    const registeredNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length);
-  });
+      const registeredNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      expect(registeredNames.length).toBe(desktopToolFactories.length);
+      expect(registeredNames).toContain('list-instances');
+      for (const removedName of removedDesktopSiteToolNames) {
+        expect(registeredNames).not.toContain(removedName);
+      }
+    },
+  );
 
   it('keeps published-site content operations out of the Desktop server even with TOOL_PROFILE=full', async () => {
     vi.stubEnv('TOOL_PROFILE', 'full');
@@ -1065,12 +1104,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    for (const webOwnedOperation of [
-      'list-site-datasources',
-      'list-site-workbooks',
-      'open-publish-workbook-dialog',
-      'publish-workbook',
-    ]) {
+    for (const webOwnedOperation of ['open-publish-workbook-dialog', 'publish-workbook']) {
       expect(registeredNames).not.toContain(webOwnedOperation);
     }
   });
