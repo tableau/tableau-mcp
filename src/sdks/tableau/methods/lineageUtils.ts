@@ -488,6 +488,45 @@ export function getDatasourceDownstreamByLuid(
   );
 }
 
+const datasourceTagsResponseSchema = z.object({
+  data: z.object({
+    publishedDatasourcesConnection: z.object({
+      nodes: z.array(
+        z.object({
+          luid: z.string(),
+          tags: z.array(z.object({ name: z.string() })).nullish(),
+        }),
+      ),
+    }),
+  }),
+});
+
+export function getDatasourceTagsQuery(datasourceLuids: Array<string>): string {
+  return `
+    query datasourceTags {
+      publishedDatasourcesConnection(filter: { luidWithin: ${toGraphqlStringArray(datasourceLuids)} }) {
+        nodes {
+          luid
+          tags {
+            name
+          }
+        }
+      }
+    }
+  `;
+}
+
+/** Maps each published data source LUID in the response to its tag names. */
+export function getDatasourceTagsByLuid(response: unknown): Map<string, Array<string>> {
+  const parsed = datasourceTagsResponseSchema.parse(response);
+  return new Map(
+    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [
+      node.luid,
+      (node.tags ?? []).map((tag) => tag.name),
+    ]),
+  );
+}
+
 function normalizeDownstreamContents(
   contents: Array<z.infer<typeof downstreamNodeSchema>> | null | undefined,
 ): Array<DownstreamContent> {
