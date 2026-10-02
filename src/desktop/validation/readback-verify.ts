@@ -555,9 +555,9 @@ export function formatReadbackVerificationError(findings: ReadbackFinding[]): st
   const errors = findings.filter((finding) => finding.severity === 'error');
   if (errors.length === 0) return '';
   return (
-    `apply succeeded but Tableau silently dropped: ${errors.map(formatReadbackFinding).join(', ')}. ` +
-    'The rendered chart does NOT match the intent — likely an invalid/unsupported node. ' +
-    'Fix the worksheet XML to use Tableau-supported shelf, mark, filter, and encoding nodes, then re-apply.'
+    `apply succeeded but a node isn't present in the rendered worksheet: ${errors.map(formatReadbackFinding).join(', ')}. ` +
+    'Before rewriting the XML, check whether the apply was blocked by an open Tableau dialog and whether every ' +
+    'field reference resolved - these are the most common causes.'
   );
 }
 
