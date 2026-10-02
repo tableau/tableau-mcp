@@ -189,6 +189,37 @@ describe('listProjectsTool', () => {
     expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
   });
 
+  it('should pass the capability through to the REST API', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    const result = await getToolResult({ filter: 'name:eq:Samples', capability: 'Write' });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
+    expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Samples',
+      capability: 'Write',
+      pageSize: 1000,
+      pageNumber: 1,
+    });
+  });
+
+  it('should not send a capability when none is requested', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    await getToolResult({ filter: 'name:eq:Samples' });
+    expect(mocks.mockQueryProjects.mock.calls[0][0].capability).toBeUndefined();
+  });
+
+  it('should explain an empty result when no projects can be published to', async () => {
+    mocks.mockQueryProjects.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 0 },
+      projects: [],
+    });
+    const result = await getToolResult({ capability: 'Write' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('No projects were found that you can publish to.');
+  });
+
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryProjects.mockRejectedValue(new Error(errorMessage));
@@ -214,6 +245,25 @@ describe('listProjectsTool', () => {
       invariant(result.type === 'empty');
       expect(result.message).toBe(
         'No projects were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return a publish-specific empty result when filtering on Write', () => {
+      const result = constrainProjects({
+        projects: [],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
+        capability: 'Write',
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No projects were found that you can publish to. You do not have Write permission on any matching project.',
       );
     });
 
@@ -272,7 +322,8 @@ describe('listProjectsTool', () => {
 });
 
 async function getToolResult(params: {
-  filter: string;
+  filter?: string;
+  capability?: 'Write';
   pageNumber?: number;
   limit?: number;
   maxResultLimit?: number;
@@ -290,7 +341,12 @@ async function getToolResult(params: {
   }
 
   return await callback(
-    { filter: params.filter, pageNumber: params.pageNumber, limit: params.limit },
+    {
+      filter: params.filter,
+      capability: params.capability,
+      pageNumber: params.pageNumber,
+      limit: params.limit,
+    },
     extra,
   );
 }

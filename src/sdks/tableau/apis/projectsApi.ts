@@ -24,6 +24,13 @@ const queryProjectsEndpoint = makeEndpoint({
       description:
         'An expression that lets you specify a subset of projects to return. You can filter on predefined fields such as name, ownerName, parentProjectId, and updatedAt. You can include multiple filter expressions.',
     },
+    {
+      name: 'capability',
+      type: 'Query',
+      schema: z.enum(['Write']).optional(),
+      description:
+        'Returns only projects the authenticated user has this effective capability on. The only supported value is Write, which returns projects the user can publish or create content into.',
+    },
   ],
   response: z.object({
     pagination: paginationSchema,

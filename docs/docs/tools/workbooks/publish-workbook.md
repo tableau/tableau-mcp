@@ -6,7 +6,7 @@ sidebar_position: 5
 
 Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide
 `projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md)
-to discover project IDs), or omit it to publish into your Personal Space when the site supports
+with `capability: "Write"` to discover the projects you can publish to), or omit it to publish into your Personal Space when the site supports
 direct-to-personal-space publishing.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any
@@ -69,7 +69,9 @@ Example: `/path/to/Superstore.twbx`
 ### `projectId`
 
 The Tableau project LUID to publish the workbook into. Use
-[List Projects](../projects/list-projects.md) to discover available project IDs.
+[List Projects](../projects/list-projects.md) with
+[`capability: "Write"`](../projects/list-projects.md#capability) to discover the projects you can
+publish to.
 
 `projectId` is optional and controls where the workbook lands:
 

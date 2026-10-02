@@ -53,7 +53,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs. If omitted, the workbook is published to your Personal Space when the site supports it; an explicit value always takes precedence.',
+      'The Tableau project LUID to publish the workbook into. Use list-projects with capability "Write" to discover the projects the user can publish to. If omitted, the workbook is published to your Personal Space when the site supports it; an explicit value always takes precedence.',
     ),
   overwrite: z
     .boolean()
@@ -90,7 +90,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to a Tableau project. Provide projectId to choose the target project (use list-projects to discover IDs); omit it to publish to your Personal Space when the site supports it, otherwise projectId is required. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to a Tableau project. Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to); omit it to publish to your Personal Space when the site supports it, otherwise projectId is required. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
     paramsSchema,
     annotations: {
       title: 'Publish Workbook',
