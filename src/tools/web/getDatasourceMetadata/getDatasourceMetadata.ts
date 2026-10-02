@@ -10,6 +10,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -20,7 +21,7 @@ import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
 import {
   combineFields,
-  FieldsResult,
+  DatasourceType,
   simplifyReadMetadataResult,
 } from './datasourceMetadataUtils.js';
 
@@ -197,38 +198,15 @@ export const getGetDatasourceMetadataTool = (
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
-              // Resolve published vs embedded. A publishedDatasources match (Metadata API) is
-              // authoritative and free. Otherwise probe the REST datasources endpoint, which only
-              // lists published data sources — so Ok there means published and a not-found means
-              // embedded. 'error' (permissions/transient) is non-authoritative, so the type is left
-              // unset; labeling is best-effort and must never break the metadata response. Run on
-              // every path so the type is resolved even when the Metadata API is disabled or throws.
-              const resolveDatasourceType = async (
-                hasPublishedMatch: boolean,
-              ): Promise<FieldsResult['datasourceType']> => {
-                if (hasPublishedMatch) {
-                  return 'published';
-                }
-                const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
-                  siteId: restApi.siteId,
-                  datasourceId: datasourceLuid,
-                });
-                if (restLookup.isOk()) {
-                  return 'published';
-                }
-                if (restLookup.error === 'not-found') {
-                  return 'embedded';
-                }
-                return undefined;
-              };
-
+              // Resolve the type on every path so it's set even when the Metadata API is disabled or
+              // throws, not only on the publishedDatasources-match path.
               if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
                 return Ok(
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
-                    await resolveDatasourceType(false),
+                    await resolveDatasourceType(restApi, datasourceLuid, false),
                   ),
                 );
               }
@@ -244,12 +222,14 @@ export const getGetDatasourceMetadataTool = (
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
-                    await resolveDatasourceType(false),
+                    await resolveDatasourceType(restApi, datasourceLuid, false),
                   ),
                 );
               }
 
               const datasourceType = await resolveDatasourceType(
+                restApi,
+                datasourceLuid,
                 !!listFieldsResult.data.publishedDatasources?.[0],
               );
 
@@ -277,6 +257,30 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
+
+// A publishedDatasources match (Metadata API) is authoritative and free. Otherwise probe the REST
+// datasources endpoint, which is published-only: Ok ⇒ published, not-found (404) ⇒ embedded, any
+// other error ⇒ leave unset (best-effort; must never break the metadata response).
+async function resolveDatasourceType(
+  restApi: RestApi,
+  datasourceLuid: string,
+  hasPublishedMatch: boolean,
+): Promise<DatasourceType | undefined> {
+  if (hasPublishedMatch) {
+    return 'published';
+  }
+  const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
+    siteId: restApi.siteId,
+    datasourceId: datasourceLuid,
+  });
+  if (restLookup.isOk()) {
+    return 'published';
+  }
+  if (restLookup.error === 'not-found') {
+    return 'embedded';
+  }
+  return undefined;
+}
 
 function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
   return getResultForTableauVersion({

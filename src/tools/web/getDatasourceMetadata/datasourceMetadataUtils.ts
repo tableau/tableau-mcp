@@ -91,15 +91,18 @@ export const datasourceModelSchema = z.object({
   ),
 });
 
+// Published vs embedded (workbook) data source, resolved authoritatively by the caller (see
+// getDatasourceMetadata): 'published' when the REST datasources collection knows the LUID,
+// 'embedded' when it doesn't (that endpoint only lists published data sources). Left undefined only
+// when it can't be determined — e.g. the REST lookup failed for a non-authoritative reason
+// (permissions/transient) or the enrichment step was skipped. Mirrors the datasourceType
+// discriminator on lineageContentSchema.
+export const datasourceTypeSchema = z.enum(['published', 'embedded']);
+export type DatasourceType = z.infer<typeof datasourceTypeSchema>;
+
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  // Published vs embedded (workbook) data source, resolved authoritatively by the caller (see
-  // getDatasourceMetadata): 'published' when the REST datasources collection knows the LUID,
-  // 'embedded' when it doesn't (that endpoint only lists published data sources). Left undefined
-  // only when it can't be determined — e.g. the REST lookup failed for a non-authoritative reason
-  // (permissions/transient) or the enrichment step was skipped. Mirrors the datasourceType
-  // discriminator on lineageContentSchema.
-  datasourceType: z.enum(['published', 'embedded']).optional(),
+  datasourceType: datasourceTypeSchema.optional(),
   datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
@@ -113,7 +116,7 @@ export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 export function simplifyReadMetadataResult(
   readMetadataResult: MetadataResponse,
   datasourceModelResult?: DatasourceModelResponse,
-  datasourceType?: FieldsResult['datasourceType'],
+  datasourceType?: DatasourceType,
 ): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
@@ -189,7 +192,7 @@ export function combineFields(
   readMetadataResult: MetadataResponse,
   listFieldsResult: GraphQLResponse,
   datasourceModelResult?: DatasourceModelResponse,
-  datasourceType?: FieldsResult['datasourceType'],
+  datasourceType?: DatasourceType,
 ): FieldsResult {
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results

@@ -838,6 +838,19 @@ describe('getDatasourceMetadataTool', () => {
     expect(responseData.datasourceType).toBe('published');
   });
 
+  it('should leave datasourceType unset when listFields throws and the REST lookup fails non-authoritatively', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('error'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData).not.toHaveProperty('datasourceType');
+  });
+
   it('should handle when both APIs fail', async () => {
     const readMetadataError = 'ReadMetadata API Error';
     const graphqlError = 'GraphQL API Error';
