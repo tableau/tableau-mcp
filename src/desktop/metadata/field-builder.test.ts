@@ -179,6 +179,52 @@ describe('listAvailableFields', () => {
     expect(profitRatio?.formula).toBeDefined();
   });
 
+  it('advertises chained aggregate aliases as User within each datasource only', () => {
+    const xml = `<workbook><datasources>
+      <datasource name="Aggregate DS">
+        <column name="[Base]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="SUM([Sales])" />
+        </column>
+        <column name="[Alias]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ABS([Base])" />
+        </column>
+        <column name="[Two Hop]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ZN([Alias])" />
+        </column>
+      </datasource>
+      <datasource name="Row DS">
+        <column name="[Base]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="[Sales] * 2" />
+        </column>
+        <column name="[Alias]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ABS([Base])" />
+        </column>
+      </datasource>
+    </datasources></workbook>`;
+
+    const fields = listAvailableFields(xml);
+    expect(
+      fields.find(
+        (field) => field.datasource === 'Aggregate DS' && field.columnName === '[Two Hop]',
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: true,
+        derivation: AggregationType.User,
+        columnInstanceName: '[usr:Two Hop:qk]',
+      }),
+    );
+    expect(
+      fields.find((field) => field.datasource === 'Row DS' && field.columnName === '[Alias]'),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: false,
+        derivation: AggregationType.Sum,
+        columnInstanceName: '[sum:Alias:qk]',
+      }),
+    );
+  });
+
   it('does not classify aggregate-looking text in a string literal as an aggregate calc', () => {
     const xml = `<workbook><datasources><datasource name="DS">
       <column name="[Display Value]" role="measure" type="quantitative" datatype="real">

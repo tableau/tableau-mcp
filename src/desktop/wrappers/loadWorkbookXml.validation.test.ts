@@ -247,6 +247,49 @@ describe('loadWorkbookXml validation preflight', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledOnce();
   });
 
+  it('allows adding an aggregate calc to one datasource without blocking another datasource field', async () => {
+    const workbook = (datasourceACalculation: string): string => `<?xml version='1.0'?>
+<workbook>
+  <datasources>
+    <datasource name='A'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      ${datasourceACalculation}
+    </datasource>
+    <datasource name='B'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Shared]' role='measure' type='quantitative' datatype='real'>
+        <calculation formula='[Sales] * 2' />
+      </column>
+    </datasource>
+  </datasources>
+  <worksheets><worksheet name='Sheet 1'><table><view>
+    <datasource-dependencies datasource='B'>
+      <column-instance name='[none:Shared:qk]' column='[Shared]' derivation='None' pivot='key' type='quantitative' />
+    </datasource-dependencies>
+  </view></table></worksheet></worksheets>
+  <windows><window class='worksheet' name='Sheet 1' /></windows>
+</workbook>`;
+    const baselineXml = workbook('');
+    const candidateXml = workbook(
+      "<column name='[Shared]' role='measure' type='quantitative' datatype='real'><calculation formula='SUM([Sales])' /></column>",
+    );
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
   it('rejects a blocking issue introduced relative to the baseline', async () => {
     const baselineXml =
       "<?xml version='1.0'?><workbook>" +

@@ -2,7 +2,7 @@
  * Field builder utilities for constructing column references from user-friendly names
  */
 
-import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
+import { createCalculationAggregationResolver } from '../formulaAggregation.js';
 import { normalizeArray, parseXML } from './parser.js';
 import {
   AggregationType,
@@ -383,12 +383,19 @@ export function listAvailableFields(
 
     // 1. Get top-level columns from datasource (these have role, type metadata)
     const topLevelColumns = normalizeArray(datasource.column);
+    const calculationFormulas = new Map<string, string>();
     for (const column of topLevelColumns) {
       const columnName = column['@_name'];
       if (columnName) {
         columnMap.set(columnName, { column, source: 'top-level' });
+        const calculationFormula = column.calculation?.['@_formula'];
+        if (typeof calculationFormula === 'string') {
+          calculationFormulas.set(columnName, calculationFormula);
+        }
       }
     }
+    const calculationRequiresUserDerivation =
+      createCalculationAggregationResolver(calculationFormulas);
 
     // 2. Get columns from connection relations (raw table columns), at any depth
     if (datasource.connection) {
@@ -490,7 +497,7 @@ export function listAvailableFields(
         const calculationFormula = column.calculation?.['@_formula'];
         if (calculationFormula) {
           formula = calculationFormula;
-          isAggregated = formulaRequiresUserDerivation(calculationFormula);
+          isAggregated = calculationRequiresUserDerivation(columnName);
         }
 
         if (column['@_hidden'] === 'true') continue;
