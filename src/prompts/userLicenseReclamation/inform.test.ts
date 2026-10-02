@@ -34,6 +34,27 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('read-only');
   });
 
+  it('passes an explicit Step-1 limit and requires a truncation completeness check (no false "paginates automatically" claim)', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    // Step 1 now passes an explicit limit — exactly 1000 (the list-users ceiling), not the
+    // 10000 used by the VDS ts-events/ts-users queries.
+    expect(text).toMatch(/"limit": 1000(?!\d)/);
+    // The old, false "paginates automatically" / complete-inventory claim is gone.
+    expect(text).not.toContain('paginates automatically');
+    // The model must confirm the result was not truncated before treating candidates as complete.
+    expect(text).toContain('Completeness check (required');
+    expect(text).toContain('mcp.resultInfo.truncated');
+    // Narrowing the filter does not always converge (e.g. an overflow of never-signed-in users
+    // in a single role matches every lastLogin:lt window) — the model must stop and report
+    // PARTIAL rather than loop indefinitely.
+    expect(text).toContain('STOP retrying');
+  });
+
   it('uses default inactiveDays of 90 and roles of Creator,Explorer', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});

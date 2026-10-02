@@ -12,7 +12,7 @@
   <preferences />
   <datasources />
   <worksheets>
-    <worksheet name='Sheet 1'>
+    <worksheet name='TODO Sheet Name'>
       <repository-location id='Sheet1' path='/workbooks/template' revision='' />
       <table>
         <view>
@@ -41,7 +41,7 @@
     </worksheet>
   </worksheets>
   <windows>
-    <window class='worksheet' maximized='true' name='Sheet 1'>
+    <window class='worksheet' maximized='true' name='TODO Sheet Name'>
       <cards>
         <edge name='left'>
           <strip size='160'>
@@ -95,7 +95,7 @@
         </worksheet-extension>
       </manifest>
       <referenced-views>
-        <referenced-view instances='1' viewId='Sheet 1' />
+        <referenced-view instances='1' viewId='TODO Sheet Name' />
       </referenced-views>
     </referenced-extension>
   </referenced-extensions>

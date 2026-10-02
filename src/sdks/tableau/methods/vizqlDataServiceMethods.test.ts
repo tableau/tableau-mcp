@@ -161,6 +161,67 @@ describe('VizqlDataServiceMethods.queryDatasource', () => {
   });
 });
 
+describe('VizqlDataServiceMethods.readMetadata', () => {
+  // The gate arrives as an HTTP 403; readMetadataEndpoint must declare a matching (default) error so
+  // isErrorFromAlias recognizes it and the message-based gate detection runs. Without it the 403
+  // slips past the alias check and rethrows, and get-datasource-metadata falls back to the generic
+  // VizQL-disabled message instead of the actionable workbook opt-in guidance.
+  it('maps the gate response (HTTP 403, flag in message) to workbook-datasource-not-enabled', async () => {
+    const methods = makeMethods();
+    stubTransport(methods, () => Promise.reject(axiosError(403, gateErrorBody, '/read-metadata')));
+
+    expect(unwrapErr(await methods.readMetadata(request))).toBe('workbook-datasource-not-enabled');
+  });
+
+  it('detects the gate independent of HTTP status, even when it arrives as a 404', async () => {
+    // Ordering guard: the gate check runs before the 404 -> feature-disabled branch, so a body
+    // carrying the flag identifier is never mislabeled as VizQL-disabled.
+    const methods = makeMethods();
+    stubTransport(methods, () => Promise.reject(axiosError(404, gateErrorBody, '/read-metadata')));
+
+    expect(unwrapErr(await methods.readMetadata(request))).toBe('workbook-datasource-not-enabled');
+  });
+
+  it('maps an unrelated 404 to feature-disabled', async () => {
+    const methods = makeMethods();
+    stubTransport(methods, () => Promise.reject(axiosError(404, {}, '/read-metadata')));
+
+    expect(unwrapErr(await methods.readMetadata(request))).toBe('feature-disabled');
+  });
+
+  it('rethrows a non-gate 403 (readMetadata classifies only the gate and 404)', async () => {
+    // Unlike queryDatasource, readMetadata does not map arbitrary API errors; anything that is not
+    // the gate or a 404 propagates for the caller to handle generically.
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.reject(
+        axiosError(
+          403,
+          { errorCode: '403800', message: 'API access permission denied' },
+          '/read-metadata',
+        ),
+      ),
+    );
+
+    await expect(methods.readMetadata(request)).rejects.toBeDefined();
+  });
+
+  it('returns the metadata output on success', async () => {
+    const output = {
+      data: [{ fieldCaption: 'Category', dataType: 'STRING', columnClass: 'COLUMN' }],
+    };
+    const methods = makeMethods();
+    stubTransport(methods, () =>
+      Promise.resolve({ data: output, status: 200, headers: {}, config: {} }),
+    );
+
+    const result = await methods.readMetadata(request);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(output);
+  });
+});
+
 describe('VizqlDataServiceMethods.userHasQueryPermissions', () => {
   it('returns Ok with the API result when the user has permission', async () => {
     const methods = makeMethods();

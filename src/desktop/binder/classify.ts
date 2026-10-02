@@ -2143,9 +2143,10 @@ function augmentGeoConceptMatches(
  * against "Country/Region" and fail closed, rather than being silently mis-bound.
  *
  * W60 GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
- * THAT slot's pool to the full schema's dimensions (`schemaDims`) and binds the unique
- * name-affine field there — BUT only when at least one OTHER geo slot was satisfied from
- * the ask-named pool (the ask demonstrated geographic intent by naming ≥1 geo field).
+ * THAT slot's pool to the schema dimensions not already consumed by another slot and
+ * binds the unique name-affine field there — BUT only when at least one OTHER geo slot
+ * was satisfied from the ask-named pool (the ask demonstrated geographic intent by
+ * naming ≥1 geo field).
  * The unique-max + distinctness rules still hold over the widened pool, so a schema with
  * two country-affine fields (a tie) or none still fails closed; an ask that names NO geo
  * field at all keeps the pre-W60 fail-closed behavior. A `tie` in the ASK-NAMED pool
@@ -2156,7 +2157,7 @@ function augmentGeoConceptMatches(
 function resolveGeoSlots(
   geoSlots: TemplateManifest['slots'],
   pool: SchemaField[],
-  schemaDims: SchemaField[],
+  availableSchemaDims: SchemaField[],
 ): { picks: Map<string, SchemaField>; autoCompleted: Map<string, SchemaField> } | null {
   const picks = new Map<string, SchemaField>();
   const zeroSlots: TemplateManifest['slots'] = [];
@@ -2174,13 +2175,13 @@ function resolveGeoSlots(
     }
   }
 
-  // Phase 2 — widen each zero-candidate slot to the full schema, but ONLY when the ask
-  // named ≥1 geo field. No ask-named geo slot ⇒ no geographic intent ⇒ fail closed.
+  // Phase 2 — widen each zero-candidate slot to unused schema dimensions, but ONLY
+  // when the ask named ≥1 geo field. No ask-named geo slot ⇒ no geographic intent ⇒ fail closed.
   const autoCompleted = new Map<string, SchemaField>();
   if (zeroSlots.length > 0) {
     if (!anyAskNamed) return null;
     for (const slot of zeroSlots) {
-      const widened = pickGeoField(schemaDims, slot);
+      const widened = pickGeoField(availableSchemaDims, slot);
       if (widened.kind !== 'ok') return null; // still zero, or now ambiguous → fail closed
       picks.set(slot.slot_id, widened.field);
       autoCompleted.set(slot.slot_id, widened.field);
@@ -2507,11 +2508,12 @@ function roleGreedyBind(
         // already consumed by the non-geo slots (which precede geo in every eligible
         // template). Name affinity replaces "first unused dimension", so a geo slot
         // binds only a name-matching field or fails closed — never a silent swap. A
-        // required geo slot the ask does not name widens to the full schema's
-        // dimensions (`schemaDims`) when another geo slot IS named (W60).
+        // required geo slot the ask does not name widens to unused schema dimensions
+        // when another geo slot IS named (W60).
         if (!geoResolved) {
           const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
-          const resolved = resolveGeoSlots(geoSlots, pool, schemaDims);
+          const availableSchemaDims = schemaDims.filter((f) => !used.has(f));
+          const resolved = resolveGeoSlots(geoSlots, pool, availableSchemaDims);
           if (resolved) {
             geoPicks = resolved.picks;
             geoAutoCompleted = resolved.autoCompleted;

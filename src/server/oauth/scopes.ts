@@ -165,6 +165,19 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 
 /**
+ * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
+ * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
+ * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * simplicity over narrowing the blast radius.
+ */
+export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:workbooks:create',
+  'tableau:file_uploads:create',
+  'tableau:content:read',
+];
+
+/**
  * Validates that a scope string is a valid MCP scope
  */
 export async function isValidScope(scope: string, clientId?: string): Promise<boolean> {
@@ -239,7 +252,7 @@ const toolScopeMap: Record<
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
+    api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],

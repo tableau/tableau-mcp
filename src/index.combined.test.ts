@@ -1,7 +1,7 @@
 const startupState = vi.hoisted(() => ({
   activeFeatureGateProvider: 'server',
   providerAtWebToolRegistration: undefined as string | undefined,
-  sessionStoreInitialized: false,
+  serverInfoPromise: Promise.resolve({}),
   sessionStoreConnected: false,
   sessionStoreConnectedAtWebToolRegistration: undefined as boolean | undefined,
   sessionStoreDisconnected: false,
@@ -64,7 +64,7 @@ vi.mock('./features/init.js', () => ({
 }));
 
 vi.mock('./getTableauServerInfo.js', () => ({
-  getTableauServerInfo: vi.fn(async () => undefined),
+  getTableauServerInfo: vi.fn(() => startupState.serverInfoPromise),
 }));
 
 vi.mock('./logging/fileLogger.js', () => ({
@@ -87,9 +87,7 @@ vi.mock('./sdks/tableau/restApi.js', () => ({
 }));
 
 vi.mock('./sessionStore/init.js', () => ({
-  initializeSessionStore: vi.fn(() => {
-    startupState.sessionStoreInitialized = true;
-  }),
+  initializeSessionStore: vi.fn(),
   connectSessionStore: vi.fn(async () => {
     startupState.sessionStoreConnected = true;
   }),
@@ -117,55 +115,85 @@ vi.mock('./server.desktop.js', () => ({
       mcpServer,
       registerTools: vi.fn(async () => undefined),
       registerResources: vi.fn(async () => {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        await Promise.resolve();
         startupState.resourcesRegistered = true;
       }),
     };
   }),
 }));
 
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { initializeFeatureGate } from './features/init.js';
+import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { connectSessionStore } from './sessionStore/init.js';
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('combined entrypoint startup', () => {
   let processOnceSpy: { mockRestore(): void };
+  let processExitSpy: { mockRestore(): void };
 
-  beforeAll(async () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    startupState.activeFeatureGateProvider = 'server';
+    startupState.providerAtWebToolRegistration = undefined;
+    startupState.serverInfoPromise = Promise.resolve({});
+    startupState.sessionStoreConnected = false;
+    startupState.sessionStoreConnectedAtWebToolRegistration = undefined;
+    startupState.sessionStoreDisconnected = false;
+    startupState.shutdownHandlers.clear();
+    startupState.resourcesRegistered = false;
+    startupState.resourcesAvailableAtConnect = undefined;
     processOnceSpy = vi.spyOn(process, 'once').mockImplementation(((signal, listener) => {
       startupState.shutdownHandlers.set(String(signal), listener as () => Promise<void>);
       return process;
     }) as typeof process.once);
-    await import('./index.combined.js');
-    await vi.waitFor(() => {
-      expect(startupState.resourcesAvailableAtConnect).not.toBeUndefined();
-    });
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
   });
 
-  afterAll(() => {
+  afterEach(() => {
     processOnceSpy.mockRestore();
+    processExitSpy.mockRestore();
   });
 
-  it('initializes the configured feature gate before registering web tools', () => {
+  it('waits for Web readiness before registering and connecting the combined stdio server', async () => {
+    const serverInfo = deferred<object>();
+    startupState.serverInfoPromise = serverInfo.promise;
+
+    await import('./index.combined.js');
+    await vi.waitFor(() => expect(getTableauServerInfo).toHaveBeenCalledOnce());
+
+    expect(initializeFeatureGate).toHaveBeenCalledOnce();
+    expect(connectSessionStore).toHaveBeenCalledOnce();
+    expect(McpServer).not.toHaveBeenCalled();
+
+    serverInfo.resolve({});
+    await vi.waitFor(() => expect(startupState.resourcesAvailableAtConnect).toBe(true));
+
     expect(startupState.providerAtWebToolRegistration).toBe('custom');
-  });
-
-  it('connects the configured session store before registering web tools', () => {
-    expect(startupState.sessionStoreInitialized).toBe(true);
     expect(startupState.sessionStoreConnectedAtWebToolRegistration).toBe(true);
-  });
-
-  it('makes Desktop resources available before connecting the shared server', () => {
     expect(startupState.resourcesAvailableAtConnect).toBe(true);
+    expect(processOnceSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('disconnects the session store on shutdown', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    try {
-      const shutdown = startupState.shutdownHandlers.get('SIGTERM');
-      expect(shutdown).toBeDefined();
-      await shutdown!();
+  it('uses the shared shutdown handlers', async () => {
+    await import('./index.combined.js');
+    await vi.waitFor(() => expect(startupState.resourcesAvailableAtConnect).toBe(true));
 
-      expect(startupState.sessionStoreDisconnected).toBe(true);
-      expect(exitSpy).toHaveBeenCalledWith(0);
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await startupState.shutdownHandlers.get('SIGTERM')!();
+
+    expect(startupState.sessionStoreDisconnected).toBe(true);
+    expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 });

@@ -5,73 +5,19 @@ import dotenv from 'dotenv';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { initializeFeatureGate } from './features/init.js';
-import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
-import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
-import {
-  connectSessionStore,
-  disconnectSessionStore,
-  initializeSessionStore,
-} from './sessionStore/init.js';
+import { initializeWebRuntime } from './server/webRuntime.js';
 
 const serverVersion = pkg.version;
-
-// Minimal shutdown hook: release the session store's backend resources on termination signals.
-// Intentionally NOT a general graceful-drain (no in-flight request draining, no Express close) --
-// this only closes the session store, matching the scope of the lifecycle-hook fix.
-function registerSessionStoreShutdown(): void {
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(signal, async () => {
-      try {
-        await disconnectSessionStore();
-        process.exit(0);
-      } catch (error) {
-        log({
-          message: 'Error closing session store during shutdown',
-          level: 'error',
-          logger: 'shutdown',
-          data: error,
-        });
-        process.exit(1);
-      }
-    });
-  }
-}
 
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
-
-  RestApi.host = config.server;
-
-  // Initialize feature gate provider
-  initializeFeatureGate();
-
-  // Initialize session store provider, then prove a custom backend is reachable before serving.
-  // A rejection here is fatal via the top-level startServer().catch, matching other boot failures.
-  initializeSessionStore();
-  await connectSessionStore();
-  registerSessionStoreShutdown();
-
-  // Start fetching server info immediately but don't block the port from opening.
-  // Any failure here is fatal and logged explicitly -- no silent failures.
-  // For http transport, the port opens first so health checks can succeed,
-  // then we await this before declaring the server ready.
-  // For stdio transport, there are no health checks, but we still await before serving.
-  const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
-    log({
-      message: 'Fatal error initializing server info',
-      level: 'error',
-      logger: 'startup',
-      data: error,
-    });
-    process.exit(1);
-  });
+  const { serverInfoReady } = await initializeWebRuntime(config);
 
   log({
     message: `Config resolved: transport=${config.transport}, auth=${config.auth}, server=${config.server}`,

@@ -8,41 +8,15 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { getConfig } from './config.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
-import { initializeFeatureGate } from './features/init.js';
-import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
-import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
 import { buildWebInstructions, WebMcpServer } from './server.web.js';
-import {
-  connectSessionStore,
-  disconnectSessionStore,
-  initializeSessionStore,
-} from './sessionStore/init.js';
+import { initializeWebRuntime } from './server/webRuntime.js';
 
 const serverName = 'tableau-combined-mcp';
 const serverVersion = pkg.version;
-
-function registerSessionStoreShutdown(): void {
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(signal, async () => {
-      try {
-        await disconnectSessionStore();
-        process.exit(0);
-      } catch (error) {
-        log({
-          message: 'Error closing session store during shutdown',
-          level: 'error',
-          logger: 'shutdown',
-          data: error,
-        });
-        process.exit(1);
-      }
-    });
-  }
-}
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -52,27 +26,7 @@ async function startServer(): Promise<void> {
     throw new Error('Transport must be stdio for Desktop server');
   }
 
-  RestApi.host = config.server;
-
-  initializeFeatureGate();
-  initializeSessionStore();
-  await connectSessionStore();
-  registerSessionStoreShutdown();
-
-  // Start fetching server info immediately but don't block the port from opening.
-  // Any failure here is fatal and logged explicitly -- no silent failures.
-  // For http transport, the port opens first so health checks can succeed,
-  // then we await this before declaring the server ready.
-  // For stdio transport, there are no health checks, but we still await before serving.
-  const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
-    log({
-      message: 'Fatal error initializing server info',
-      level: 'error',
-      logger: 'startup',
-      data: error,
-    });
-    process.exit(1);
-  });
+  const { serverInfoReady } = await initializeWebRuntime(config);
 
   const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
     ? config.defaultNotificationLevel

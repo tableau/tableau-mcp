@@ -29,7 +29,10 @@ const listUsersResultSchema = z.object({
       resultInfo: z.object({
         returnedCount: z.number(),
         truncated: z.boolean(),
-        truncationReason: z.enum(['requested-limit', 'admin-cap']).optional(),
+        truncationReason: z
+          .enum(['requested-limit', 'admin-cap', 'default-limit', 'max-limit'])
+          .optional(),
+        summary: z.string(),
       }),
     })
     .optional(),
@@ -143,42 +146,125 @@ describe('list-users', () => {
       return;
     }
 
-    // THE BUG: `limit` was applied to the FETCH before the client-side filter
-    // ran. On the live site (~18,008 users) the first `limit` fetched rows are
-    // typically active admins/service accounts that FAIL an inactivity filter,
-    // so `limit:5` + `lastLogin:lt:<recent cutoff>` returned 0 users even though
-    // thousands matched. After the fix `limit` bounds POST-filter matches: the
-    // tool pages until it has 5 filter-matches, so this returns exactly 5 users.
-    //
-    // Use a large pageSize so the 5 matches are found in as few sequential REST
-    // calls as possible. The cutoff is recent (2026-07-01) so the vast majority
-    // of the 18,008 users — anyone who has not logged in since then, plus every
-    // never-logged-in user — match; 5 matches are found on the very first page.
-    const result = await client.callTool('list-users', {
+    const cutoff = '2026-07-01T00:00:00Z';
+    const inactivityFilter = `lastLogin:lt:${cutoff}`;
+    const witness = await client.callTool('list-users', {
       schema: listUsersResultSchema,
-      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:lt:2026-07-01T00:00:00Z' },
+      toolArgs: { pageSize: 1000, limit: 6, filter: inactivityFilter },
     });
 
-    // The regression assertion: NON-empty, and exactly `limit` matching users.
-    expect(result.users.length).toBe(5);
-
-    // Every returned user actually satisfies the filter: either an inactive
-    // lastLogin strictly before the cutoff, or a never-logged-in user (no
-    // lastLogin — the most-inactive class, which MUST match `lt`).
-    const cutoff = new Date('2026-07-01T00:00:00Z').getTime();
-    for (const user of result.users) {
+    expect(
+      witness.users.length,
+      'This E2E site needs at least two inactive users to witness requested-limit truncation.',
+    ).toBeGreaterThanOrEqual(2);
+    const witnessIds = witness.users.map((user) => user.id);
+    expect(new Set(witnessIds).size).toBe(witnessIds.length);
+    const cutoffTime = new Date(cutoff).getTime();
+    for (const user of witness.users) {
       if (user.lastLogin === undefined) {
-        continue; // never-logged-in: correctly included by lt
+        continue;
       }
-      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoff);
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
     }
 
-    // resultInfo must report the limit-truncation honestly: far more than 5
-    // users match on an 18,008-user site, so truncated:true with
-    // truncationReason 'requested-limit' (the caller's own limit was binding).
-    expect(result.mcp?.resultInfo.returnedCount).toBe(5);
+    const requestedLimit = witnessIds.length - 1;
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: {
+        pageSize: 1000,
+        limit: requestedLimit,
+        filter: `id:in:${witnessIds.join('|')},${inactivityFilter}`,
+      },
+    });
+
+    const resultIds = result.users.map((user) => user.id);
+    expect(resultIds).toHaveLength(requestedLimit);
+    expect(new Set(resultIds).size).toBe(requestedLimit);
+    expect(resultIds.every((id) => witnessIds.includes(id))).toBe(true);
+    for (const user of result.users) {
+      if (user.lastLogin === undefined) {
+        continue;
+      }
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
+    }
+    expect(result.mcp?.resultInfo.returnedCount).toBe(requestedLimit);
     expect(result.mcp?.resultInfo.truncated).toBe(true);
     expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
+  });
+
+  it('W-23757370: an unbounded call is bounded by a default limit and flagged default-limit, not paged over the whole site', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // No limit and no filter. Before the fix this paged the entire ~27k-user
+    // site into one multi-MB payload that overflows the transport. Now the tool
+    // injects a default cap so the response is bounded and readable, and the
+    // result is explicitly flagged as a partial page the caller did not limit.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: {},
+    });
+
+    // Bounded to the default cap (100), never the full population — on any site size.
+    expect(result.users.length).toBeGreaterThan(0);
+    expect(result.users.length).toBeLessThanOrEqual(100);
+
+    // The default-cap truncation can only fire when the site actually has MORE than the default
+    // limit (100) of users. On a small site (e.g. the shared CI test site, which has far fewer)
+    // the cap does not bind, so the unbounded call correctly returns the COMPLETE list
+    // un-truncated — asserting that here proves the default cap never OVER-truncates a small site.
+    // The truncation branch itself is covered deterministically by the unit tests (which mock a
+    // large population), so this leg does not need a large live site to be meaningful.
+    const siteTotal = result.totalAvailable;
+    if (siteTotal !== undefined && siteTotal > 100) {
+      expect(result.users.length).toBe(100);
+      expect(result.mcp?.resultInfo.truncated).toBe(true);
+      expect(result.mcp?.resultInfo.truncationReason).toBe('default-limit');
+      // The partial-list signal is spelled out in the data, not just a boolean.
+      expect(result.mcp?.resultInfo.summary).toContain('default cap');
+    } else {
+      console.warn(
+        `Skipping default-limit truncation assertion — site reports ${siteTotal ?? result.users.length} users (<=100), so the default cap cannot bind. Unit tests cover the truncation path.`,
+      );
+      expect(result.mcp?.resultInfo.truncated).toBe(false);
+    }
+  });
+
+  it('W-23757370: an explicit limit above the per-call ceiling (1000) is clamped and flagged max-limit', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // A model told "pass a higher limit" to escape truncation must not be able to
+    // re-trigger the multi-MB overflow. An over-ceiling limit is clamped to the
+    // hard per-call maximum (1000) and the truncation is reported as max-limit, so
+    // the caller learns a single call cannot return more.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 50000 },
+    });
+
+    // The over-ceiling limit is clamped to the hard per-call maximum (1000). The clamp only
+    // TRUNCATES when the site has more than 1000 users; on a smaller site (e.g. the shared CI
+    // test site) fewer than 1000 exist, so the whole population comes back un-truncated — which
+    // still proves the clamp never fabricates rows or over-truncates. The max-limit truncation
+    // branch is covered deterministically by the unit tests (which mock a >1000-user population).
+    const siteTotal = result.totalAvailable;
+    if (siteTotal !== undefined && siteTotal > 1000) {
+      expect(result.users.length).toBe(1000);
+      expect(result.mcp?.resultInfo.returnedCount).toBe(1000);
+      expect(result.mcp?.resultInfo.truncated).toBe(true);
+      expect(result.mcp?.resultInfo.truncationReason).toBe('max-limit');
+      expect(result.mcp?.resultInfo.summary).toContain('per-call maximum of 1000');
+    } else {
+      console.warn(
+        `Skipping max-limit clamp assertion — site reports ${siteTotal ?? result.users.length} users (<=1000), so the 1000 ceiling cannot bind. Unit tests cover the clamp path.`,
+      );
+      // Never more than the ceiling, and no truncation flagged when the site fits under it.
+      expect(result.users.length).toBeLessThanOrEqual(1000);
+      expect(result.mcp?.resultInfo.truncated).toBe(false);
+    }
   });
 
   it('should reject a filter on a now-removed field (authSetting) with an enum error, not silent-empty', async () => {

@@ -24,7 +24,11 @@ const paramsSchema = {
       'full (default): returns the response verbatim, including viz. slim: strips the large viz ' +
         '(Vega chart-spec) blobs from every insight and summary result.',
     ),
-  slim: z.optional(z.boolean()).describe('Deprecated: use verbosity=slim.'),
+  slim: z
+    .optional(z.boolean())
+    .describe(
+      'Deprecated: use verbosity=slim. When both are provided, verbosity takes precedence.',
+    ),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (

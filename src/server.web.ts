@@ -50,6 +50,7 @@ import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
+import { readSeaAssetText, runningAsSea } from './utils/sea.js';
 
 export const serverName = 'tableau-mcp';
 
@@ -320,6 +321,9 @@ export class WebMcpServer extends Server {
         },
         getConfigWithOverrides: async () =>
           getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
+        // Keep tool callback behavior aligned with the registration path: clients forced onto the
+        // plain-tool fallback must receive text results even when the global MCP Apps flag is on.
+        mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
       };
 
       return tableauToolCallback(args, tableauRequestHandlerExtra);
@@ -522,7 +526,12 @@ export class WebMcpServer extends Server {
         mimeType: RESOURCE_MIME_TYPE,
       },
       async (): Promise<ReadResourceResult> => {
-        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+        const htmlContent = runningAsSea()
+          ? readSeaAssetText(htmlPath)
+          : await readFile(join(__dirname, htmlPath), 'utf-8');
+        if (htmlContent === null) {
+          throw new Error(`SEA app resource '${htmlPath}' is missing or unreadable`);
+        }
 
         return {
           contents: [
