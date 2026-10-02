@@ -116,7 +116,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * Seventy-five tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
  * first-class workbook/data reads/navigation, scoped datasource/dashboard/story cached-XML
  * fallbacks, dialog inspection and action handling, and a narrow whole-workbook cached-XML
- * fallback. Standalone validation and unrelated info/site tools stay out. This is the
+ * fallback. Standalone validation and unrelated info tools stay out. This is the
  * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
  * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
@@ -213,7 +213,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
  * Config: trim + lowercase). '' (unset) → the lean {@link DYNAMIC_AUTHORING_TOOL_PROFILE}
  * native surface: the Desktop authoring server SINGS in native Tableau by default, no
- * env var required. 'full' → every tool, including unrelated info/site/validation tools.
+ * env var required. 'full' → every registered tool, including unrelated info/validation tools.
  * 'demo' / 'spec-loop' → their named subsets;
  * 'combined-lean' → the full desktop surface (its lean half is the web side, handled by
  * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
