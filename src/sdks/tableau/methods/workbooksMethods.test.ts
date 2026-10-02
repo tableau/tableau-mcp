@@ -91,6 +91,38 @@ describe('WorkbooksMethods', () => {
     });
   });
 
+  describe('updateWorkbook', () => {
+    it('PUTs the new project id and returns the partial updated workbook', async () => {
+      const mockUpdateWorkbook = vi.fn().mockResolvedValue({
+        workbook: { id: 'wb-1', project: { id: 'project-2', name: 'Target Project' } },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        updateWorkbook: mockUpdateWorkbook,
+      };
+
+      const result = await workbooksMethods.updateWorkbook({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+        projectId: 'project-2',
+      });
+
+      expect(result).toEqual({ id: 'wb-1', project: { id: 'project-2', name: 'Target Project' } });
+      expect(mockUpdateWorkbook).toHaveBeenCalledWith(
+        { workbook: { project: { id: 'project-2' } } },
+        {
+          params: { siteId: 'site-1', workbookId: 'wb-1' },
+          headers: { Authorization: 'Bearer test' },
+        },
+      );
+    });
+  });
+
   describe('publishWorkbook', () => {
     it('POSTs a single-part multipart/mixed body containing the tsRequest XML', async () => {
       const mockPost = vi.fn().mockResolvedValue({
@@ -210,6 +242,92 @@ describe('WorkbooksMethods', () => {
 
       const body = mockPost.mock.calls[0][1];
       expect(body.toString('utf-8')).toContain('<workbook name="O&#39;Brien&#39;s Sales">');
+    });
+
+    it('emits a <location type="PersonalSpace"/> element when publishing to a personal space', async () => {
+      const mockPost = vi.fn().mockResolvedValue({
+        data: {
+          workbook: {
+            id: 'wb-1',
+            name: 'My Workbook',
+            contentUrl: 'MyWorkbook',
+            showTabs: false,
+            tags: {},
+            location: { id: 'ps-luid', type: 'PersonalSpace' },
+          },
+        },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: {
+          post: mockPost,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+
+      const result = await workbooksMethods.publishWorkbook({
+        siteId: 'site-1',
+        uploadSessionId: 'session-1',
+        workbookType: 'twbx',
+        name: 'My Workbook',
+        location: 'ps-luid',
+      });
+
+      expect(result.location).toEqual({ id: 'ps-luid', type: 'PersonalSpace' });
+      const body = mockPost.mock.calls[0][1];
+      expect(body.toString('utf-8')).toContain(
+        '<tsRequest><workbook name="My Workbook"><location id="ps-luid" type="PersonalSpace"/></workbook></tsRequest>',
+      );
+      expect(body.toString('utf-8')).not.toContain('<project');
+    });
+
+    it('throws when both projectId and location are provided', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: { post: vi.fn(), defaults: { baseURL: 'http://test' } } as unknown as AxiosInstance,
+      };
+
+      await expect(
+        workbooksMethods.publishWorkbook({
+          siteId: 'site-1',
+          uploadSessionId: 'session-1',
+          workbookType: 'twbx',
+          name: 'My Workbook',
+          projectId: 'project-1',
+          location: 'ps-luid',
+        }),
+      ).rejects.toThrow('exactly one of `projectId` or `location`');
+    });
+
+    it('throws when neither projectId nor location is provided', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: { post: vi.fn(), defaults: { baseURL: 'http://test' } } as unknown as AxiosInstance,
+      };
+
+      await expect(
+        workbooksMethods.publishWorkbook({
+          siteId: 'site-1',
+          uploadSessionId: 'session-1',
+          workbookType: 'twbx',
+          name: 'My Workbook',
+        }),
+      ).rejects.toThrow('exactly one of `projectId` or `location`');
     });
 
     it('passes overwrite through as a query param when provided', async () => {

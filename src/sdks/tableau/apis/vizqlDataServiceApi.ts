@@ -436,10 +436,28 @@ export const userHasQueryPermissionsRequestSchema = z
   })
   .passthrough();
 
-// Only hasQueryPermission is consumed; passthrough keeps the diagnostic fields (datasourceType,
-// resources, capabilities) available for logging without over-modeling a shape HBI may still change.
+const queryPermissionCapabilitySchema = z
+  .object({
+    name: z.string(),
+    mode: z.enum(['Allow', 'Deny']),
+  })
+  .passthrough();
+
+const queryPermissionResourceSchema = z
+  .object({
+    resourceType: z.string().optional(),
+    luid: z.string().optional(),
+    capabilities: z.array(queryPermissionCapabilitySchema).optional(),
+  })
+  .passthrough();
+
+// resources/datasourceType explain a denial (used to build get-workbook's queryability reason).
 export const queryPermissionsOutputSchema = z
-  .object({ hasQueryPermission: z.boolean() })
+  .object({
+    hasQueryPermission: z.boolean(),
+    datasourceType: z.string().optional(),
+    resources: z.array(queryPermissionResourceSchema).optional(),
+  })
   .passthrough();
 
 // Exported Types
@@ -469,6 +487,7 @@ export type DatasourceModelResponse = z.infer<typeof datasourceModelResponseSche
 
 export type UserHasQueryPermissionsRequest = z.infer<typeof userHasQueryPermissionsRequestSchema>;
 export type QueryPermissionsOutput = z.infer<typeof queryPermissionsOutputSchema>;
+export type QueryPermissionResource = z.infer<typeof queryPermissionResourceSchema>;
 
 export type TableauError = z.infer<typeof tableauErrorSchema>;
 
@@ -515,6 +534,13 @@ const readMetadataEndpoint = makeEndpoint({
   ],
   response: metadataOutputSchema,
   errors: [
+    // The workbook opt-in gate (VDSForWorkbookDatasources) arrives as HTTP 403; declare a default
+    // error so isErrorFromAlias recognizes it and readMetadata can classify it (mirrors
+    // queryDatasource). Without this the 403 slips past the alias check and rethrows.
+    {
+      status: 'default',
+      schema: tableauErrorSchema,
+    },
     {
       status: 404,
       schema: z.any(),

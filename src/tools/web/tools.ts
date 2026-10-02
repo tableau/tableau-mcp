@@ -35,6 +35,7 @@ import { getRecordEventTool } from './recordEvent/recordEvent.js';
 import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderInteractiveViz.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
+import { getScaffoldDataAppTool } from './scaffoldDataApp/scaffoldDataApp.js';
 import { getListUsersTool } from './users/listUsers.js';
 import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
@@ -47,6 +48,7 @@ import { getListViewsTool } from './views/listViews.js';
 import { getDownloadWorkbookTool } from './workbooks/downloadWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
+import { getMoveWorkbookTool } from './workbooks/moveWorkbook.js';
 import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
@@ -87,6 +89,7 @@ export const webToolFactories = [
   getGetWorkbookTool,
   getRequestWorkbookUploadTool,
   getPublishWorkbookTool,
+  getMoveWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
@@ -102,4 +105,5 @@ export const webToolFactories = [
   getQueryAdminInsightsTool,
   getDeleteContentTool,
   getConfirmDeleteContentTool,
+  getScaffoldDataAppTool,
 ];

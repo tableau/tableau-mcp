@@ -79,6 +79,7 @@ export default [
       'docs/build/**',
       '.claude/**',
       '.worktrees/**',
+      'src/templates/**',
     ],
   },
   {

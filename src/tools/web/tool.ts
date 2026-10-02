@@ -181,6 +181,8 @@ export class WebTool<
         message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
         level: 'debug',
         logger: 'tool',
+        tool_name: this.name,
+        request_id: requestId.toString(),
       },
       extra,
     );
@@ -249,6 +251,8 @@ export class WebTool<
           message: 'Tool execution failed',
           level: 'error',
           logger: 'tool',
+          tool_name: this.name,
+          request_id: requestId.toString(),
           data: error,
         },
         extra,

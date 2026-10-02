@@ -67,12 +67,20 @@ describe('query permissions output schema', () => {
         {
           resourceType: 'Workbook',
           luid: 'wb-1',
-          capabilities: [{ name: 'Connect', mode: 'Allow' }],
+          capabilities: [
+            { name: 'Read', mode: 'Allow' },
+            { name: 'Connect', mode: 'Allow' },
+            { name: 'VizqlDataApiAccess', mode: 'Allow' },
+          ],
         },
         {
           resourceType: 'Datasource',
           luid: 'upstream-pds-1',
-          capabilities: [{ name: 'Connect', mode: 'Deny' }],
+          capabilities: [
+            { name: 'Read', mode: 'Deny' },
+            { name: 'Connect', mode: 'Deny' },
+            { name: 'VizqlDataApiAccess', mode: 'Deny' },
+          ],
         },
       ],
     };
@@ -90,6 +98,14 @@ describe('query permissions output schema', () => {
 
   it('rejects a non-boolean hasQueryPermission', () => {
     expect(() => queryPermissionsOutputSchema.parse({ hasQueryPermission: 'yes' })).toThrow();
+  });
+
+  it('rejects a capability whose mode is not Allow or Deny', () => {
+    const data = {
+      hasQueryPermission: false,
+      resources: [{ capabilities: [{ name: 'Connect', mode: 'Maybe' }] }],
+    };
+    expect(() => queryPermissionsOutputSchema.parse(data)).toThrow();
   });
 });
 

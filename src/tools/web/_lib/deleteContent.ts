@@ -73,15 +73,34 @@ export type DeleteExtractRefreshTaskConfirmPanel = {
  * - `datasource` — TagEvidence + isDatasourceAllowed + downstream warning.
  * - `extract-refresh-task` — RegistryEvidence nonce.
  *
- * Two-phase (preview → confirm):
- * - Flag OFF (`mcp-apps`): preview tags/mints-nonce; confirm re-verifies evidence and deletes.
- * - Flag ON: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
+ * Two-phase (preview → confirm). The branch is chosen by whether an MCP-Apps card can ACTUALLY
+ * render for THIS client (`extra.mcpAppToolsRenderable` — the feature is on AND the client advertised
+ * the UI capability AND it is not a known-incompatible renderer), NOT by the `mcp-apps` flag alone:
+ * - Not app-renderable (flag off, OR flag on but an app-incapable client): preview tags
+ *   (workbook/datasource) or mints a nonce (extract-refresh-task) and returns a readable TEXT
+ *   preview; confirm re-verifies that evidence and deletes. This is the path an app-incapable client
+ *   takes even with `mcp-apps` on, so it never receives an unrenderable app-card payload (W-24212898).
+ * - App-renderable: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
  *   MCP-Apps iframe. The iframe's Confirm button calls the separate app-only
  *   `confirm-delete-content` tool (visibility:['app'], model-invisible). Model-driven `confirm:true`
- *   on THIS tool is unconditionally rejected with PreviewNotRunError when mcp-apps is enabled.
+ *   on THIS tool is unconditionally rejected with PreviewNotRunError only when the card can render.
  */
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
+
+/**
+ * Human phrase for a target's containing project. `target.project` is the project NAME resolved from
+ * the content's REST response (getWorkbook / queryDatasource), which returns a `<project id name>`
+ * element for project-resident content and OMITS it entirely for content that has no project — e.g. a
+ * workbook in a user's Personal Space (verified live: the same getWorkbook call returns the project
+ * name for a project-resident workbook and no project at all for a Personal-Space one). This
+ * distinguishes a named project from a genuinely project-less item, instead of the previous
+ * misleading "unknown project" wording (which read as a lookup failure when the item simply has no
+ * project). Shared by delete-content and confirm-delete-content so both surfaces phrase it identically.
+ */
+export function formatProjectPhrase(project: string | undefined): string {
+  return project ? `in project '${project}'` : 'in no project (e.g. a Personal Space item)';
+}
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
 
@@ -185,11 +204,17 @@ permanent.
               return new ArgsValidationError(uuidCheck.error.issues[0].message).toErr();
             }
           }
+          // Whether an MCP-Apps confirm card can ACTUALLY render for THIS client — not merely whether
+          // the `mcp-apps` flag is on. A flag-on-but-app-incapable client is registered as a PLAIN
+          // tool, so returning the app-card payload here would degrade to an unreadable raw JSON blob
+          // (W-24212898). Keying the app path on this signal makes such a client fall through to the
+          // readable text/token flow instead. Defaults to false when the signal is absent.
+          const appRenderable = extra.mcpAppToolsRenderable ?? false;
           return await useRestApi({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              if (confirm && mcpAppsEnabled) {
+              if (confirm && appRenderable) {
                 return new PreviewNotRunError(
                   renderConfirmClosedMessage({
                     actionPhrase: `deleting a ${resourceType}`,
@@ -207,7 +232,7 @@ permanent.
                     workbookId: resourceId,
                     confirm,
                     tag,
-                    mcpAppsEnabled,
+                    appRenderable,
                   });
                 case 'datasource':
                   return await runDatasourceBranch({
@@ -216,7 +241,7 @@ permanent.
                     datasourceId: resourceId,
                     confirm,
                     tag,
-                    mcpAppsEnabled,
+                    appRenderable,
                     disableMetadataApiRequests: configWithOverrides.disableMetadataApiRequests,
                   });
                 case 'extract-refresh-task':
@@ -226,7 +251,7 @@ permanent.
                     taskId: resourceId,
                     confirm,
                     confirmationToken,
-                    mcpAppsEnabled,
+                    appRenderable,
                   });
               }
             },
@@ -246,14 +271,14 @@ async function runWorkbookBranch({
   workbookId,
   confirm,
   tag,
-  mcpAppsEnabled,
+  appRenderable,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
   workbookId: string;
   confirm: boolean | undefined;
   tag: string | undefined;
-  mcpAppsEnabled: boolean;
+  appRenderable: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
   const pendingTag = tag?.trim() || DEFAULT_PENDING_DELETION_TAG;
@@ -300,7 +325,7 @@ async function runWorkbookBranch({
     return guardResult.error.toErr();
   }
   const { target, recordOutcome } = guardResult.value;
-  const projectName = target.project ?? 'unknown project';
+  const projectPhrase = formatProjectPhrase(target.project);
   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
   if (confirm) {
@@ -312,13 +337,13 @@ async function runWorkbookBranch({
     }
     recordOutcome({ ok: true });
     return new Ok<DeleteContentResult>(
-      `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+      `Deleted workbook '${target.name}' (id ${workbookId}) ${projectPhrase}, ${ownerText}. ` +
         `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a limited ` +
         'time before permanent removal.',
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
@@ -341,7 +366,7 @@ async function runWorkbookBranch({
   }
 
   return new Ok<DeleteContentResult>(
-    `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+    `Preview — workbook '${target.name}' (id ${workbookId}) ${projectPhrase}, ${ownerText}. ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
       renderTagDeleteNextStep({
         subject: 'show this workbook (name, project, owner)',
@@ -358,7 +383,7 @@ async function runDatasourceBranch({
   datasourceId,
   confirm,
   tag,
-  mcpAppsEnabled,
+  appRenderable,
   disableMetadataApiRequests,
 }: {
   restApi: RestApi;
@@ -366,7 +391,7 @@ async function runDatasourceBranch({
   datasourceId: string;
   confirm: boolean | undefined;
   tag: string | undefined;
-  mcpAppsEnabled: boolean;
+  appRenderable: boolean;
   disableMetadataApiRequests: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
@@ -414,7 +439,7 @@ async function runDatasourceBranch({
     return guardResult.error.toErr();
   }
   const { target, recordOutcome } = guardResult.value;
-  const projectName = target.project ?? 'unknown project';
+  const projectPhrase = formatProjectPhrase(target.project);
   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
   if (confirm) {
@@ -426,14 +451,14 @@ async function runDatasourceBranch({
     }
     recordOutcome({ ok: true });
     return new Ok<DeleteContentResult>(
-      `Deleted data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+      `Deleted data source '${target.name}' (id ${datasourceId}) ${projectPhrase}, ${ownerText}. ` +
         `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
         'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
         'Dependent workbooks and flows were not deleted but no longer have this data source.',
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
@@ -462,7 +487,7 @@ async function runDatasourceBranch({
   });
 
   return new Ok<DeleteContentResult>(
-    `Preview — data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+    `Preview — data source '${target.name}' (id ${datasourceId}) ${projectPhrase}, ${ownerText}. ` +
       `${dependencyWarning} ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
       renderTagDeleteNextStep({
@@ -480,14 +505,14 @@ async function runExtractRefreshTaskBranch({
   taskId,
   confirm,
   confirmationToken,
-  mcpAppsEnabled,
+  appRenderable,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
   taskId: string;
   confirm: boolean | undefined;
   confirmationToken: string | undefined;
-  mcpAppsEnabled: boolean;
+  appRenderable: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
 
@@ -554,7 +579,7 @@ async function runExtractRefreshTaskBranch({
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,

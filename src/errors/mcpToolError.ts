@@ -355,3 +355,9 @@ export class FileReadError extends McpToolError {
     });
   }
 }
+
+export class DataAppTemplateUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
+  }
+}
