@@ -73,10 +73,6 @@ import {
   ShowMeOptionsQuery,
   ShowMeOptionsResult,
   showMeOptionsResultSchema,
-  SiteDatasourceList,
-  siteDatasourceListSchema,
-  SiteWorkbookList,
-  siteWorkbookListSchema,
   StartPageVisibility,
   startPageVisibilitySchema,
   storyboardDocumentRoute,
@@ -393,22 +389,6 @@ export class ExternalApiToolExecutor {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
     }
     return Ok(result.value);
-  }
-
-  async listSiteWorkbooks(
-    signal: AbortSignal,
-  ): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal),
-    );
-  }
-
-  async listSiteDatasources(
-    signal: AbortSignal,
-  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal),
-    );
   }
 
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {

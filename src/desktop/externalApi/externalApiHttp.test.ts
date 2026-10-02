@@ -15,8 +15,6 @@ import {
   logicalTableListSchema,
   sheetActionRoute,
   showMeOptionsResultSchema,
-  siteDatasourceListSchema,
-  siteWorkbookListSchema,
   startPageVisibilitySchema,
   storyboardDocumentRoute,
   storyboardItemSchema,
@@ -507,24 +505,6 @@ describe('ExternalApiHttp', () => {
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/workbook/datasources');
-  });
-
-  it('lists published site workbooks from GET /v0/site/workbooks', async () => {
-    const result = await http.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema);
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().workbooks).toEqual([
-      expect.objectContaining({
-        id: 'wb-regional-sales',
-        luid: 'luid-regional-sales',
-        name: 'Regional Sales Analysis',
-      }),
-      expect.objectContaining({ id: 'wb-ops-scorecard', name: 'Ops Scorecard' }),
-    ]);
-
-    const last = server.requests.at(-1);
-    expect(last?.method).toBe('GET');
-    expect(last?.path).toBe('/v0/site/workbooks');
   });
 
   it('gets a worksheet by id from GET /v0/workbook/worksheets/{id}', async () => {
@@ -1089,27 +1069,6 @@ describe('ExternalApiHttp', () => {
       }
     },
   );
-
-  it('lists published site datasources from GET /v0/site/datasources', async () => {
-    const result = await http.getJson(
-      EXTERNAL_API_ROUTES.siteDatasources,
-      siteDatasourceListSchema,
-    );
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().datasources).toEqual([
-      expect.objectContaining({
-        id: 'ds-superstore',
-        luid: 'luid-superstore',
-        name: 'Sample - Superstore',
-      }),
-      expect.objectContaining({ id: 'ds-quota', luid: 'luid-quota', name: 'Quota Targets' }),
-    ]);
-
-    const last = server.requests.at(-1);
-    expect(last?.method).toBe('GET');
-    expect(last?.path).toBe('/v0/site/datasources');
-  });
 
   it('surfaces a 401 as an unauthorized error when the token is stale', async () => {
     const staleHttp = new ExternalApiHttp(makeInstance(server.baseUrl, 'stale-token'));

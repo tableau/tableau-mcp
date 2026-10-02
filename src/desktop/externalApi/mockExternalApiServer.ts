@@ -193,38 +193,6 @@ const DEFAULT_LOGICAL_TABLES = [
   { id: 'lt-orders', caption: 'Orders' },
   { id: 'lt-returns', caption: 'Returns' },
 ];
-const DEFAULT_SITE_DATASOURCES = [
-  {
-    id: 'ds-superstore',
-    luid: 'luid-superstore',
-    name: 'Sample - Superstore',
-    caption: 'Sample - Superstore',
-    project: 'Samples',
-    contentUrl: 'sample-superstore',
-  },
-  {
-    id: 'ds-quota',
-    luid: 'luid-quota',
-    name: 'Quota Targets',
-    caption: 'Quota Targets',
-    project: 'Sales',
-    contentUrl: 'quota-targets',
-  },
-];
-const DEFAULT_SITE_WORKBOOKS = [
-  {
-    id: 'wb-regional-sales',
-    luid: 'luid-regional-sales',
-    name: 'Regional Sales Analysis',
-    project: 'Sales',
-  },
-  {
-    id: 'wb-ops-scorecard',
-    luid: 'luid-ops-scorecard',
-    name: 'Ops Scorecard',
-    project: 'Operations',
-  },
-];
 const DEFAULT_DIALOGS: DialogList['dialogs'] = [
   {
     objectName: 'saveChangesDialog',
@@ -878,16 +846,6 @@ export async function startMockExternalApiServer(
         return;
       }
       sendImageExport(res, searchParams, 1600, 900);
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteDatasources) {
-      sendJson(res, 200, { datasources: DEFAULT_SITE_DATASOURCES });
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteWorkbooks) {
-      sendJson(res, 200, { workbooks: DEFAULT_SITE_WORKBOOKS });
       return;
     }
 

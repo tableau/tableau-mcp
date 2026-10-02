@@ -42,8 +42,6 @@ export function makeExecutorMock(
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
       .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
-    listSiteWorkbooks: vi.fn(),
-    listSiteDatasources: vi.fn(),
     getWorkbook: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),
