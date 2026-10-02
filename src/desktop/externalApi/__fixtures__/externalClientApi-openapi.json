@@ -419,72 +419,6 @@
         }
       }
     },
-    "/v0/site": {
-      "get": {
-        "summary": "Get the connected site",
-        "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
-        "operationId": "getSite",
-        "responses": {
-          "200": {
-            "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Site" } } }
-          },
-          "202": { "$ref": "#/components/responses/Accepted" },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
-          "500": { "$ref": "#/components/responses/ServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
-        }
-      }
-    },
-    "/v0/site/datasources": {
-      "get": {
-        "summary": "List published datasources",
-        "description": "Lists datasources published to the connected site.",
-        "operationId": "listSiteDatasources",
-        "responses": {
-          "200": {
-            "description": "Lists datasources published to the connected site.",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SiteDatasourceList" }
-              }
-            }
-          },
-          "202": { "$ref": "#/components/responses/Accepted" },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
-          "500": { "$ref": "#/components/responses/ServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
-        }
-      }
-    },
-    "/v0/site/workbooks": {
-      "get": {
-        "summary": "List published workbooks",
-        "description": "Lists workbooks published to the connected site.",
-        "operationId": "listSiteWorkbooks",
-        "responses": {
-          "200": {
-            "description": "Lists workbooks published to the connected site.",
-            "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/SiteWorkbookList" } }
-            }
-          },
-          "202": { "$ref": "#/components/responses/Accepted" },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
-          "500": { "$ref": "#/components/responses/ServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
-        }
-      }
-    },
     "/v0/workbook": {
       "get": {
         "summary": "Get the open workbook",
@@ -3184,49 +3118,6 @@
           }
         }
       },
-      "SiteWorkbookItem": {
-        "type": "object",
-        "description": "A workbook published to the connected site.",
-        "required": ["id", "luid", "name", "project"],
-        "properties": {
-          "id": { "type": "string" },
-          "luid": { "type": "string" },
-          "name": { "type": "string" },
-          "project": { "type": "string" }
-        }
-      },
-      "SiteWorkbookList": {
-        "type": "object",
-        "required": ["workbooks"],
-        "properties": {
-          "workbooks": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/SiteWorkbookItem" }
-          }
-        }
-      },
-      "SiteDatasourceItem": {
-        "type": "object",
-        "description": "A datasource published to the connected site.",
-        "required": ["id", "luid", "name", "caption", "project"],
-        "properties": {
-          "id": { "type": "string" },
-          "luid": { "type": "string" },
-          "name": { "type": "string" },
-          "caption": { "type": "string" },
-          "project": { "type": "string" }
-        }
-      },
-      "SiteDatasourceList": {
-        "type": "object",
-        "required": ["datasources"],
-        "properties": {
-          "datasources": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/SiteDatasourceItem" }
-          }
-        }
-      },
       "ImageExport": {
         "type": "object",
         "description": "The result of exporting a sheet as an image.",
@@ -3592,15 +3483,6 @@
             "type": "array",
             "items": { "$ref": "#/components/schemas/WindowInfo" }
           }
-        }
-      },
-      "Site": {
-        "type": "object",
-        "description": "The connected Tableau site.",
-        "required": ["siteId", "authenticatedUserId"],
-        "properties": {
-          "siteId": { "type": "string" },
-          "authenticatedUserId": { "type": "string" }
         }
       },
       "Health": {

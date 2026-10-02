@@ -61,6 +61,8 @@ import {
  * include that producer addition.
  * The storyboard `:refreshNow` path and 0.2.20 version were projected from the
  * W-24165695 monolith producer contract because no live 0.2.20 capture was available.
+ * The fixture excludes connected-site paths and response schemas after removal of their
+ * Desktop MCP tools; it is not a complete inventory of the producer's endpoints.
  */
 
 type SpecProperty = {
