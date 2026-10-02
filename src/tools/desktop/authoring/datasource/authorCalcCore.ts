@@ -15,6 +15,7 @@ import {
   DesktopCommandExecutionError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
+import invariant from '../../../../utils/invariant.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import { prettyPrintFormula } from './prettyPrintFormula.js';
 
@@ -68,6 +69,7 @@ export interface CalcSpec {
   formula: string;
   role: CalcRole;
   datatype: CalcDatatype;
+  defaultFormat?: 'p0%';
 }
 
 // The batch handed to the core. The whole batch shares one datasource.
@@ -89,56 +91,6 @@ export type AuthoredCalcOutcome =
   | { status: 'failed'; caption: string; failure: CalcFailureKind; message: string };
 
 type AuthorCalcError = ArgsValidationError | DesktopCommandExecutionError | XmlModificationError;
-
-export async function authorCalculationsInWorkbook({
-  workbookXml,
-  calcs,
-  datasource,
-  executor,
-  signal,
-  labelErrors = true,
-  resolveLooseReferences = false,
-}: {
-  workbookXml: string;
-  calcs: AuthorCalcInput[];
-  datasource?: string;
-  labelErrors?: boolean;
-  resolveLooseReferences?: boolean;
-} & WithExecutorAndAbortSignal): Promise<Result<AuthorCalculationsResult, AuthorCalcError>> {
-  const prepared = prepareCalculationsInWorkbook({
-    workbookXml,
-    calcs,
-    datasource,
-    labelErrors,
-    resolveLooseReferences,
-  });
-  if (prepared.isErr()) {
-    return prepared;
-  }
-
-  // A calc is not something the user looks at, and this helper also runs as an early leg of
-  // bind-template, where the apply that follows names the chart it built.
-  const outcome = await applyAndVerify({
-    xml: prepared.value.workbookXml,
-    baselineXml: workbookXml,
-    settled: (xml) =>
-      prepared.value.authoredCalcs.every((calc) =>
-        hasColumnNameAndCaptionInDatasource(xml, calc.datasource, calc.calcName, calc.caption),
-      ),
-    executor,
-    signal,
-  });
-  if (outcome.status === 'failed') {
-    return outcome.error.toErr();
-  }
-  if (outcome.status === 'not-applied') {
-    return new XmlModificationError(
-      'load completed but did not apply: readback did not contain the new column name and caption',
-    ).toErr();
-  }
-
-  return new Ok({ workbookXml: outcome.workbookXml, authoredCalcs: prepared.value.authoredCalcs });
-}
 
 export interface CalcDependencyLayering {
   // Dependency layers, each a list of indices into the input `calcs`. A calc in layer k
@@ -350,6 +302,40 @@ export async function authorCalculationsWithValidation({
   }
 
   let liveXml = workbookXml;
+  // Tracks only genuinely new writes this call (not idempotent reuse), so a rollback below
+  // never touches calcs that already existed before this call started.
+  const createdThisRun: Array<{ calcName: string; caption: string }> = [];
+
+  // Reverts every calc created so far this call. A batch applies layer by layer as it
+  // validates, so any exit below this point — not just the final "some calc failed" check —
+  // can follow a prior layer's genuinely-written calc. Every such exit must roll back through
+  // here first, or the caller's "every calc created or nothing changed" guarantee is false.
+  const rollbackCreatedThisRun = async (): Promise<Result<void, AuthorCalcError>> => {
+    if (createdThisRun.length === 0) {
+      return new Ok(undefined);
+    }
+    const rollback = await applyAndVerify({
+      xml: workbookXml,
+      baselineXml: liveXml,
+      settled: (xml) =>
+        createdThisRun.every(
+          (calc) =>
+            !hasColumnNameAndCaptionInDatasource(xml, datasourceName, calc.calcName, calc.caption),
+        ),
+      executor,
+      signal,
+    });
+    if (rollback.status === 'failed') {
+      return rollback.error.toErr();
+    }
+    if (rollback.status === 'not-applied') {
+      return new XmlModificationError(
+        'a calc in this batch failed, and the calc(s) already written could not be rolled back — the datasource may now contain a partial batch',
+      ).toErr();
+    }
+    return new Ok(undefined);
+  };
+
   for (const layer of layering.layers) {
     const pending: number[] = [];
     for (const index of layer) {
@@ -409,6 +395,10 @@ export async function authorCalculationsWithValidation({
         // failure, not a verdict on this formula. Abort with the typed execution error rather than
         // reporting invalid-formula, so the agent is never told to "fix" a correct formula. Matches
         // the set-active-datasource activation abort above.
+        const rollbackResult = await rollbackCreatedThisRun();
+        if (rollbackResult.isErr()) {
+          return rollbackResult;
+        }
         return validation.error.toErr();
       }
       if (validation.status === 'invalid') {
@@ -434,6 +424,10 @@ export async function authorCalculationsWithValidation({
       const calc = specs[item.index];
       const target = selectTargetDatasource(editedXml, datasourceName);
       if (target.isErr()) {
+        const rollbackResult = await rollbackCreatedThisRun();
+        if (rollbackResult.isErr()) {
+          return rollbackResult;
+        }
         return target.error.toErr();
       }
       const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml, editedXml);
@@ -444,6 +438,7 @@ export async function authorCalculationsWithValidation({
         role: calc.role,
         datatype: calc.datatype,
         calcName,
+        defaultFormat: calc.defaultFormat,
       });
       editedXml = spliceColumnIntoDatasource(editedXml, target.value, columnXml);
       created.push({ index: item.index, calcName, caption: calc.caption });
@@ -451,6 +446,10 @@ export async function authorCalculationsWithValidation({
 
     const guard = validateWorkbookDocumentApply(editedXml, liveXml);
     if (!guard.ok) {
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return new ArgsValidationError(guard.message).toErr();
     }
 
@@ -465,9 +464,22 @@ export async function authorCalculationsWithValidation({
       signal,
     });
     if (applied.status === 'failed') {
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return applied.error.toErr();
     }
     if (applied.status === 'not-applied') {
+      // The POST may have actually landed even though the readback poll timed out before
+      // seeing it. Use the readback's own value as the rollback baseline (truth), not the
+      // stale pre-layer liveXml — otherwise a write that silently succeeded looks like drift
+      // to the rollback's own expected-XML check and the rollback is wrongly rejected.
+      liveXml = applied.workbookXml;
+      const rollbackResult = await rollbackCreatedThisRun();
+      if (rollbackResult.isErr()) {
+        return rollbackResult;
+      }
       return new XmlModificationError(
         'load completed but did not apply: readback did not contain the new column name and caption',
       ).toErr();
@@ -483,6 +495,7 @@ export async function authorCalculationsWithValidation({
         calcName: calc.calcName,
         datasource: datasourceName,
       };
+      createdThisRun.push({ calcName: calc.calcName, caption: calc.caption });
     }
   }
 
@@ -497,6 +510,28 @@ export async function authorCalculationsWithValidation({
     }
     finalized.push(outcome);
   }
+
+  // A batch with dependent or independent calcs applies layer by layer as it validates (a
+  // later layer's formula can only be validated against a calc that already exists live), so a
+  // failure discovered partway through can leave earlier layers' calcs genuinely written. A
+  // caller that reports only the failure (as bind-template does) would otherwise leave an
+  // orphaned calc behind while claiming nothing happened. Roll back to the pre-call XML whenever
+  // this run wrote something AND the batch didn't fully succeed, so the only two outcomes for a
+  // caller are "every calc created" or "nothing changed."
+  const hasFailure = finalized.some((outcome) => outcome.status === 'failed');
+  if (hasFailure && createdThisRun.length > 0) {
+    const rollbackResult = await rollbackCreatedThisRun();
+    if (rollbackResult.isErr()) {
+      return rollbackResult;
+    }
+    const failedOutcome = finalized.find((outcome) => outcome.status === 'failed');
+    invariant(failedOutcome?.status === 'failed');
+    return new ArgsValidationError(
+      `calc "${failedOutcome.caption}" failed validation: ${failedOutcome.message}; ` +
+        'the whole batch was rolled back, no calculations were kept.',
+    ).toErr();
+  }
+
   return new Ok(finalized);
 }
 
@@ -620,9 +655,11 @@ function findErrorMessagesNode(node: unknown): string[] | undefined {
 
 /**
  * Pure calculation-authoring seam for a trusted caller that composes datasource
- * calculations and a worksheet into one workbook mutation. The ordinary
- * author-calc path still uses {@link authorCalculationsInWorkbook}, which applies
- * and verifies immediately.
+ * calculations and a worksheet into one workbook mutation without applying —
+ * used by bind-template's atomic-apply fast path, which folds the calc edit and
+ * the worksheet inject into a single apply. Both `author-calc` and bind-template's
+ * ordinary (non-atomic) path use {@link authorCalculationsWithValidation} instead,
+ * which validates each formula before writing it and applies immediately.
  */
 export function prepareCalculationsInWorkbook({
   workbookXml,
@@ -768,13 +805,13 @@ function calculationDatatypesMatch(existing: string, requested: Datatype, role: 
 }
 
 // An existing column is an idempotent match for a requested calc when its stored definition is
-// identical: same normalized formula, same role, a compatible numeric datatype, and no extra
-// default format (the validation path never sets one). Mirrors prepareCalculationBatch's check so
-// author-calc retries behave the same on both authoring paths.
+// identical: same normalized formula, same role, a compatible numeric datatype, and the same
+// default format. Mirrors prepareCalculationBatch's check so author-calc retries behave the same
+// on both authoring paths.
 function existingCalcMatches(
   existingColumn: string,
   resolvedFormula: string,
-  calc: Pick<CalcSpec, 'role' | 'datatype'>,
+  calc: Pick<CalcSpec, 'role' | 'datatype' | 'defaultFormat'>,
 ): boolean {
   const existingFormula = getAttr(existingColumn, 'formula');
   if (existingFormula === undefined) {
@@ -787,7 +824,7 @@ function existingCalcMatches(
     normalizeFormula(unescapeXml(existingFormula)) === normalizeFormula(resolvedFormula) &&
     existingRole === calc.role &&
     calculationDatatypesMatch(existingDatatype, calc.datatype, calc.role) &&
-    existingDefaultFormat === ''
+    existingDefaultFormat === (calc.defaultFormat ?? '')
   );
 }
 

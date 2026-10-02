@@ -113,7 +113,7 @@ import { DesktopTool } from '../../tool.js';
 import type { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 import {
   type AuthorCalcInput,
-  authorCalculationsInWorkbook,
+  authorCalculationsWithValidation,
   type AuthoredCalc,
   datatypeSchema,
   hasColumnNameAndCaptionInDatasource,
@@ -3297,9 +3297,13 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               workbookXml = prepared.value.workbookXml;
               atomicCalcs = prepared.value.authoredCalcs;
             } else {
-              const authored = await authorCalculationsInWorkbook({
+              const authored = await authorCalculationsWithValidation({
                 workbookXml,
-                calcs: authoredCalcInputs,
+                calcs: authoredCalcInputs.map((calc) => ({
+                  ...calc,
+                  role: calc.role ?? 'measure',
+                  datatype: calc.datatype ?? 'real',
+                })),
                 datasource,
                 executor,
                 signal: extra.signal,
@@ -3308,8 +3312,24 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               if (authored.isErr()) {
                 return authored.error.toErr();
               }
-              workbookXml = authored.value.workbookXml;
-              authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
+              const failed = authored.value.find((outcome) => outcome.status === 'failed');
+              if (failed !== undefined && failed.status === 'failed') {
+                return new ArgsValidationError(
+                  `calc "${failed.caption}" failed validation: ${failed.message}`,
+                ).toErr();
+              }
+
+              // authorCalculationsWithValidation applies directly to the live document as it
+              // validates, so the in-memory workbookXml above is now stale — re-read it before
+              // any further offset-based edits (e.g. target_worksheet resolution) run against it.
+              const rereadXml = await getWorkbookXml({ executor, signal: extra.signal });
+              if (rereadXml.isErr()) {
+                return new DesktopCommandExecutionError(rereadXml.error).toErr();
+              }
+              workbookXml = rereadXml.value;
+              authoredCalcCaptions = authored.value
+                .filter((outcome) => outcome.status === 'created')
+                .map((outcome) => outcome.caption);
             }
           }
 
