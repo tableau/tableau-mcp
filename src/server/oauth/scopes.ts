@@ -74,7 +74,8 @@ export type TableauApiScope =
   | 'tableau:users:update'
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:projects:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -260,6 +261,12 @@ const toolScopeMap: Record<
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  // The experimental Query Destination Projects endpoint is gated on `tableau:projects:read`, not
+  // `tableau:content:read` like Query Projects.
+  'list-destination-projects': {
+    mcp: ['tableau:mcp:content:read'],
+    api: new Set(['tableau:projects:read', 'tableau:mcp_site_settings:read']),
   },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
@@ -517,6 +524,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
+  const destinationProjectsEnabled = await featureGate.isFeatureEnabled('destination-projects');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -575,6 +583,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
     enabledTools.delete('move-workbook');
+  }
+
+  if (!destinationProjectsEnabled) {
+    enabledTools.delete('list-destination-projects');
   }
 
   return enabledTools;

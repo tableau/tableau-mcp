@@ -38,3 +38,39 @@ export const projectSchema = z.object({
 });
 
 export type Project = z.infer<typeof projectSchema>;
+
+export const destinationProjectContentTypeSchema = z.enum([
+  'workbook',
+  'datasource',
+  'flow',
+  'project',
+]);
+
+export type DestinationProjectContentType = z.infer<typeof destinationProjectContentTypeSchema>;
+
+export const destinationProjectStatusSchema = z.enum([
+  'VALID',
+  'INSUFFICIENT_PERMISSIONS',
+  'STRUCTURALLY_INVALID',
+]);
+
+export const destinationProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  parentProjectId: z.string().optional(),
+  topLevelProject: tableauBoolean.optional(),
+  isDefaultProject: tableauBoolean.optional(),
+  childProjectCount: z.coerce.number().optional(),
+  status: destinationProjectStatusSchema.optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  owner: z
+    .object({
+      id: z.string(),
+      name: z.string().optional(),
+    })
+    .optional(),
+});
+
+export type DestinationProject = z.infer<typeof destinationProjectSchema>;

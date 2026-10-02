@@ -21,6 +21,7 @@ import { getListJobsTool } from './jobs/listJobs.js';
 import { getInspectKnowledgeContextTool } from './knowledge/inspectKnowledgeContext.js';
 import { getManageKnowledgeContextTool } from './knowledge/manageKnowledgeContext.js';
 import { getQueryKnowledgeContextTool } from './knowledge/queryKnowledgeContext.js';
+import { getListDestinationProjectsTool } from './projects/listDestinationProjects.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -95,6 +96,7 @@ export const webToolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getListProjectsTool,
+  getListDestinationProjectsTool,
   getListViewsTool,
   getListCustomViewsTool,
   getGetCustomViewDataTool,

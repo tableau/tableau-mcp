@@ -549,6 +549,35 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:update');
     });
 
+    it('should exclude tableau:projects:read when destination-projects is disabled', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).not.toContain('tableau:projects:read');
+    });
+
+    it('should include tableau:projects:read when destination-projects is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'destination-projects';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).toContain('tableau:projects:read');
+    });
+
+    it('should require projects read plus site settings scopes for list-destination-projects', () => {
+      expect(getRequiredApiScopesForTool('list-destination-projects')).toEqual([
+        'tableau:projects:read',
+        'tableau:mcp_site_settings:read',
+      ]);
+    });
+
     it('should require base publish scopes plus content read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 

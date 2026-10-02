@@ -16,6 +16,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import DestinationProjectsMethods from './methods/destinationProjectsMethods.js';
 import FlowDocumentMethods from './methods/flowDocumentMethods.js';
 import FlowsMethods from './methods/flowsMethods.js';
 import JobsMethods from './methods/jobsMethods.js';
@@ -175,6 +176,18 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, datasourcesMethods.interceptors);
     return datasourcesMethods;
+  }
+
+  get destinationProjectsMethods(): DestinationProjectsMethods {
+    // Experimental endpoint lives under `/api/exp`, not the versioned `/api/3.x`
+    // path used by Query Projects.
+    const baseUrl = `${RestApi.host}/api/exp`;
+    const destinationProjectsMethods = new DestinationProjectsMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, destinationProjectsMethods.interceptors);
+    return destinationProjectsMethods;
   }
 
   get flowsMethods(): FlowsMethods {

@@ -128,6 +128,12 @@ export class FlowDocumentApiDisabledError extends McpToolError {
   }
 }
 
+export class DestinationProjectsApiDisabledError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'destination-projects-api-disabled', message, statusCode: 403 });
+  }
+}
+
 /**
  * The caller is not authorized to download the requested flow's document.
  *
