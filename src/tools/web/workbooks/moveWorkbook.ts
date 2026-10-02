@@ -7,7 +7,6 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -44,11 +43,7 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
       idempotentHint: true,
       openWorldHint: true,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
-    ),
+    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('data-apps'))),
     callback: async ({ workbookId, projectId }, extra): Promise<CallToolResult> => {
       return await moveWorkbookTool.logAndExecute<MoveWorkbookResult>({
         extra,

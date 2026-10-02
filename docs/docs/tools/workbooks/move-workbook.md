@@ -7,7 +7,9 @@ sidebar_position: 6
 Moves a workbook from its current Tableau project to a different project.
 
 :::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+This tool is gated behind the `data-apps` feature flag, which defaults to `false` in
+`features.json`. It is unavailable unless an administrator enables `data-apps`. See
+[Feature Flags](../../developers/feature-flags.md).
 :::
 
 Related tools: [List Projects](../projects/list-projects.md), [List Workbooks](list-workbooks.md)

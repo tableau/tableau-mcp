@@ -77,28 +77,20 @@ describe('moveWorkbookTool', () => {
     expect(tool.minRequiredRole).toBe(SiteRole.EXPLORER_CAN_PUBLISH);
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled when the data-apps flag is ON', async () => {
     const tool = getMoveWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when the data-apps flag is ON and there is no OAuth client id (stdio)', async () => {
     const tool = getMoveWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
-    const tool = getMoveWorkbookTool(
-      new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
-    );
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
+  it('is disabled when the data-apps feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getMoveWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));

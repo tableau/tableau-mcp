@@ -570,11 +570,11 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
-    enabledTools.delete('move-workbook');
   }
 
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
+    enabledTools.delete('move-workbook');
   }
 
   return enabledTools;
