@@ -78,12 +78,14 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
   };
 
   /**
-   * Result-returning variant of {@link queryDatasource} for classifying a data source: resolves to
-   * the published DataSource, or `Err('not-found')` when the REST datasources collection has no such
-   * LUID. Because this endpoint only knows *published* data sources, a not-found for a LUID that VDS
-   * can otherwise resolve is an authoritative signal that the LUID is an embedded (workbook) data
-   * source. Any other failure (permissions, transient) returns `Err('error')` instead of throwing,
-   * so callers using this purely to classify don't break on non-authoritative errors.
+   * Result-returning variant of {@link queryDatasource} for classifying a data source. Resolves to
+   * the DataSource on success — callers classify published vs embedded from its shape, since
+   * WBDS-enabled servers return embedded (workbook) data sources here too (HTTP 200, with
+   * `parentType: "Workbook"` and no `project`). Older servers that don't serve embedded data sources
+   * via REST return 404 instead, mapped to `Err('not-found')`; for a LUID VDS can otherwise resolve,
+   * that too means embedded. Any other failure (permissions, transient) returns `Err('error')`
+   * instead of throwing, so callers using this purely to classify don't break on non-authoritative
+   * errors.
    *
    * Required scopes: `tableau:content:read`
    *

@@ -183,7 +183,11 @@ export function constrainDatasources({
 
   const { projectIds, datasourceIds, tags } = boundedContext;
   if (projectIds) {
-    datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
+    // list-datasources returns published data sources only, so `project` is always present here;
+    // the optional chain is just for the now-optional type.
+    datasources = datasources.filter((datasource) =>
+      datasource.project ? projectIds.has(datasource.project.id) : false,
+    );
   }
 
   if (datasourceIds) {

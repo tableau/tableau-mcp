@@ -22,7 +22,11 @@ export const dataSourceSchema = z.object({
   // datasource is certified and older than any user clone.
   createdAt: z.string().optional(),
   isCertified: tableauBoolean.optional(),
-  project: projectSchema,
+  // Optional because WBDS-enabled servers return embedded (workbook) data sources from Query Data
+  // Source too: those carry `parentType: "Workbook"` and NO `project` (they belong to a workbook,
+  // not a project). Published data sources always carry a `project`.
+  project: projectSchema.optional(),
+  parentType: z.string().optional(),
   owner: z
     .object({
       id: z.string(),

@@ -259,7 +259,10 @@ export const getGetDatasourceMetadataTool = (
 };
 
 // A publishedDatasources match (Metadata API) is authoritative and free. Otherwise probe the REST
-// datasources endpoint, which is published-only: Ok ⇒ published, not-found (404) ⇒ embedded, any
+// Query Data Source endpoint and classify on the returned shape: WBDS-enabled servers return
+// embedded (workbook) data sources here too (HTTP 200) — those carry `parentType: "Workbook"` and no
+// `project`, while published ones carry a `project`. A 404 means the server doesn't serve this LUID
+// via REST at all; since the LUID is already VizQL-resolvable, that too is an embedded signal. Any
 // other error ⇒ leave unset (best-effort; must never break the metadata response).
 async function resolveDatasourceType(
   restApi: RestApi,
@@ -274,7 +277,8 @@ async function resolveDatasourceType(
     datasourceId: datasourceLuid,
   });
   if (restLookup.isOk()) {
-    return 'published';
+    const datasource = restLookup.value;
+    return datasource.parentType === 'Workbook' || !datasource.project ? 'embedded' : 'published';
   }
   if (restLookup.error === 'not-found') {
     return 'embedded';
