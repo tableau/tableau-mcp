@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
 import * as configModule from '../../../../config.desktop.js';
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -11,9 +12,11 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 vi.mock('../../../../desktop/cache.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
-vi.mock('fs');
-
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof cachePathModule>()),
+  readContainedCacheTextFile: vi.fn(),
+  writeContainedCacheTextFile: vi.fn(),
+}));
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
@@ -49,7 +52,15 @@ describe('writeCachedXmlTool', () => {
     setupCacheMock();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
-    vi.mocked(writeFileSync).mockImplementation(() => {});
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+      ok: true,
+      path: CACHED_FILE,
+      text: VALID_XML,
+    });
+    vi.mocked(cachePathModule.writeContainedCacheTextFile).mockReturnValue({
+      ok: true,
+      path: CACHED_FILE,
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -72,10 +83,13 @@ describe('writeCachedXmlTool', () => {
     expect(result.content[0].text).toContain(`${VALID_XML.length} bytes`);
   });
 
-  it('should call writeFileSync with correct args', async () => {
+  it('should call the contained writer with the resolved path and content', async () => {
     await getResult(CACHED_FILE, VALID_XML);
 
-    expect(writeFileSync).toHaveBeenCalledWith(resolve(CACHED_FILE), VALID_XML, 'utf-8');
+    expect(cachePathModule.writeContainedCacheTextFile).toHaveBeenCalledWith(
+      resolve(CACHED_FILE),
+      VALID_XML,
+    );
   });
 
   it('writes a fingerprint sidecar after writing the cache file', async () => {
@@ -111,7 +125,7 @@ describe('writeCachedXmlTool', () => {
     expect(result.content[0].text).toContain(SESSION);
     expect(result.content[0].text).toContain('list-instances');
     expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
   });
 
   it('should return error for malformed XML without writing', async () => {
@@ -120,7 +134,7 @@ describe('writeCachedXmlTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('validation failed');
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
   });
 
   it('should return security error for path outside cache directory', async () => {
@@ -131,7 +145,7 @@ describe('writeCachedXmlTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Security error');
     expect(result.content[0].text).toContain(outsidePath);
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
   });
 
   it('should reject a sibling path that shares the cache-dir prefix', async () => {
@@ -143,7 +157,7 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Security error');
     }
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
   });
 
   it('should mention apply-* tools in success message', async () => {
@@ -153,9 +167,11 @@ describe('writeCachedXmlTool', () => {
     expect(result.content[0].text).toContain('apply-');
   });
 
-  it('should return error when writeFileSync throws', async () => {
-    vi.mocked(writeFileSync).mockImplementation(() => {
-      throw new Error('Disk full');
+  it('should return error when the contained write fails', async () => {
+    vi.mocked(cachePathModule.writeContainedCacheTextFile).mockReturnValue({
+      ok: false,
+      issue: 'write-error',
+      error: new Error('Disk full'),
     });
 
     const result = await getResult(CACHED_FILE, VALID_XML);
@@ -173,8 +189,11 @@ describe('writeCachedXmlTool', () => {
       '</worksheets></workbook>';
 
     beforeEach(() => {
-      vi.mocked(existsSync).mockReturnValue(true);
-      vi.mocked(readFileSync).mockReturnValue(WORKBOOK);
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text: WORKBOOK,
+      });
     });
 
     it('splices the replacement element into the file, leaving siblings intact', async () => {
@@ -184,7 +203,7 @@ describe('writeCachedXmlTool', () => {
       const result = await getResult(CACHED_FILE, modified, { worksheet: 'Sales' });
 
       expect(result.isError).toBeFalsy();
-      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      const written = vi.mocked(cachePathModule.writeContainedCacheTextFile).mock.calls[0][1];
       expect(written).toContain('[Sales Modified]');
       expect(written).toContain('[Profit]');
       expect(written).not.toContain('[Sales]</rows>');
@@ -197,7 +216,7 @@ describe('writeCachedXmlTool', () => {
       const result = await getResult(CACHED_FILE, modified, { worksheetName: 'Sales' });
 
       expect(result.isError).toBeFalsy();
-      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      const written = vi.mocked(cachePathModule.writeContainedCacheTextFile).mock.calls[0][1];
       expect(written).toContain('[Sales Modified]');
       expect(written).toContain('[Profit]');
     });
@@ -213,7 +232,7 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('worksheetName ("Sales")');
       expect(result.content[0].text).toContain('Pass one of them.');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('errors (without writing) when the element to splice is absent', async () => {
@@ -224,7 +243,7 @@ describe('writeCachedXmlTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Nope');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('rejects a malformed replacement fragment without writing', async () => {
@@ -235,7 +254,7 @@ describe('writeCachedXmlTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('validation failed');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('rejects (without writing) when the fragment name does not match the selector', async () => {
@@ -251,7 +270,7 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Sales');
       expect(result.content[0].text).toContain('Profit');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('rejects (without writing) when the fragment tag does not match the selector', async () => {
@@ -264,7 +283,7 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('worksheet');
       expect(result.content[0].text).toContain('dashboard');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('rejects worksheet + dashboard selectors together, naming both, without writing', async () => {
@@ -278,13 +297,15 @@ describe('writeCachedXmlTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('worksheet');
       expect(result.content[0].text).toContain('dashboard');
-      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 
     it('leaves the single dashboard selector path unchanged', async () => {
-      vi.mocked(readFileSync).mockReturnValue(
-        "<workbook><dashboards><dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard></dashboards></workbook>",
-      );
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text: "<workbook><dashboards><dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard></dashboards></workbook>",
+      });
       const result = await getResult(
         CACHED_FILE,
         "<dashboard name='Main'><zones><zone name='Profit'/></zones></dashboard>",
@@ -292,16 +313,19 @@ describe('writeCachedXmlTool', () => {
       );
 
       expect(result.isError).toBeFalsy();
-      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      const written = vi.mocked(cachePathModule.writeContainedCacheTextFile).mock.calls[0][1];
       expect(written).toContain("<zone name='Profit'/>");
     });
 
     it('splices when an entity-escaped fragment name matches a plain-text selector', async () => {
-      vi.mocked(readFileSync).mockReturnValue(
-        '<workbook><worksheets>' +
+      vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
+        ok: true,
+        path: CACHED_FILE,
+        text:
+          '<workbook><worksheets>' +
           '<worksheet name="Sales &amp; Profit"><rows>[old]</rows></worksheet>' +
           '</worksheets></workbook>',
-      );
+      });
       const result = await getResult(
         CACHED_FILE,
         '<worksheet name="Sales &amp; Profit"><rows>[new]</rows></worksheet>',
@@ -309,7 +333,7 @@ describe('writeCachedXmlTool', () => {
       );
 
       expect(result.isError).toBeFalsy();
-      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      const written = vi.mocked(cachePathModule.writeContainedCacheTextFile).mock.calls[0][1];
       expect(written).toContain('[new]');
       expect(written).not.toContain('[old]');
     });
