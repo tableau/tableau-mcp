@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import { LookupFunction } from 'net';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
@@ -126,8 +127,12 @@ describe('clientIdMetadataDocuments', () => {
     });
 
     expect(mockAxios.get).toHaveBeenCalledWith(
-      'https://1.2.3.4/.well-known/oauth/client-metadata.json',
-      expect.any(Object),
+      constants.FAKE_CLIENT_METADATA_URL,
+      expect.objectContaining({
+        maxRedirects: 0,
+        lookup: expect.any(Function),
+        headers: { Accept: 'application/json' },
+      }),
     );
 
     expect(response.status).toBe(302);
@@ -177,7 +182,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({
       resolve4: () => [],
-      resolve6: () => ['[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]'],
+      resolve6: () => ['fedc:ba98:7654:3210:fedc:ba98:7654:3210'],
     });
     mockAxios.get.mockResolvedValue(mocks.MOCK_AXIOS_GET_RESPONSE);
 
@@ -192,9 +197,16 @@ describe('clientIdMetadataDocuments', () => {
     });
 
     expect(mockAxios.get).toHaveBeenCalledWith(
-      'https://[fedc:ba98:7654:3210:fedc:ba98:7654:3210]/.well-known/oauth/client-metadata.json',
-      expect.any(Object),
+      constants.FAKE_CLIENT_METADATA_URL,
+      expect.objectContaining({ lookup: expect.any(Function) }),
     );
+    const lookup = mockAxios.get.mock.calls[0][1]?.lookup as LookupFunction;
+    const lookupCallback = vi.fn();
+    lookup(new URL(constants.FAKE_CLIENT_METADATA_URL).hostname, { all: true }, lookupCallback);
+    await new Promise((resolve) => process.nextTick(resolve));
+    expect(lookupCallback).toHaveBeenCalledWith(null, [
+      { address: 'fedc:ba98:7654:3210:fedc:ba98:7654:3210', family: 6 },
+    ]);
 
     expect(response.status).toBe(302);
   });

@@ -273,7 +273,9 @@ The passphrase for the private key if it is encrypted.
 
 The Tableau MCP server supports MCP clients that register using a Client ID Metadata Document (CIMD)
 URL. Part of this process requires resolving the IP address of the host of the document to protect
-against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
+against DNS rebinding and Server-Side Request Forgery (SSRF) attacks. If the document is fetched
+through a proxy, such as one set with `HTTPS_PROXY`, the resolved address is still checked, but the
+proxy resolves the host itself and decides which address it connects to.
 
 By default, the MCP server will use
 [Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1 and
