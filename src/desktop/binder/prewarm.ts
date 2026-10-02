@@ -1,5 +1,3 @@
-// src/binder/prewarm.ts
-//
 // SCHEMA PRE-WARM — compute a datasource's summary + per-family candidate
 // shortlists AHEAD of the first ask, so the first real bind is already warm.
 //

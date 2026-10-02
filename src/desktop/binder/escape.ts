@@ -1,5 +1,3 @@
-// src/binder/escape.ts
-//
 // XML-attribute escaping for the bind OUTPUT pipeline (Lane M10, Finding 1).
 //
 // `bindTemplate()` returns `title` (proposal/caller-controlled), the

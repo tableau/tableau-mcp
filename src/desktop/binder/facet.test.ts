@@ -1,5 +1,3 @@
-// src/binder/facet.test.ts
-//
 // OPTIONAL SMALL-MULTIPLES FACET (W23-SM1 / W25-C), ported to tmcp.
 //
 // The facet is a PURELY ADDITIVE bind appended to classifyNoLlm's result: after

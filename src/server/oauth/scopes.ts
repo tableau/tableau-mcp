@@ -35,6 +35,7 @@ export type McpScope =
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
+  | 'tableau:mcp:workbook:write'
   | 'tableau:mcp:knowledge:read'
   | 'tableau:mcp:knowledge:write';
 
@@ -71,6 +72,7 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
+  | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write';
 
@@ -90,6 +92,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
+  'tableau:mcp:workbook:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:flow:read',
@@ -341,6 +344,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
+  'move-workbook': {
+    mcp: ['tableau:mcp:workbook:write'],
+    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -567,6 +574,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
+    enabledTools.delete('move-workbook');
   }
 
   return enabledTools;

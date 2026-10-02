@@ -367,6 +367,36 @@ describe('addFieldToRows aggregate correction consistency (regression)', () => {
     // or the rows shelf points at a pill that does not exist in the datasource-deps.
     expect(rowsField?.column).toBe(`[Sample].${writtenInstanceName}`);
   });
+
+  it('keeps a row-level calc on the requested Sum derivation when a string contains SUM(', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Display Value]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="IF [Label] = &quot;SUM(&quot; THEN [Sales] ELSE 0 END"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[sum:Display Value:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    expect(modified).toContain(
+      '<column-instance name="[sum:Display Value:qk]" column="[Display Value]" derivation="Sum"',
+    );
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Display Value'),
+      )?.column,
+    ).toBe('[Sample].[sum:Display Value:qk]');
+    expect(modified).not.toContain('[usr:Display Value:qk]');
+  });
 });
 
 describe('addFieldToEncoding aggregate correction consistency (regression)', () => {

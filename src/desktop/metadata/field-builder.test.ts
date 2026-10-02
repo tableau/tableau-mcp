@@ -179,6 +179,50 @@ describe('listAvailableFields', () => {
     expect(profitRatio?.formula).toBeDefined();
   });
 
+  it('does not classify aggregate-looking text in a string literal as an aggregate calc', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column name="[Display Value]" role="measure" type="quantitative" datatype="real">
+        <calculation class="tableau" formula="IF [Label] = &quot;SUM(&quot; THEN [Sales] ELSE 0 END" />
+      </column>
+    </datasource></datasources></workbook>`;
+
+    const field = listAvailableFields(xml).find(
+      (candidate) => candidate.columnName === '[Display Value]',
+    );
+
+    expect(field).toEqual(
+      expect.objectContaining({
+        isAggregated: false,
+        derivation: AggregationType.Sum,
+        columnInstanceName: '[sum:Display Value:qk]',
+        formula: 'IF [Label] = "SUM(" THEN [Sales] ELSE 0 END',
+      }),
+    );
+  });
+
+  it.each([
+    ['COLLECT([Geometry])', '[usr:Calculated Aggregate:qk]'],
+    ['RAWSQLAGG_REAL(&quot;SUM(%1)&quot;, [Sales])', '[usr:Calculated Aggregate:qk]'],
+  ])('advertises %s as an already-aggregated calculated field', (formula, columnInstanceName) => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column name="[Calculated Aggregate]" role="measure" type="quantitative" datatype="real">
+        <calculation class="tableau" formula="${formula}" />
+      </column>
+    </datasource></datasources></workbook>`;
+
+    expect(
+      listAvailableFields(xml).find(
+        (candidate) => candidate.columnName === '[Calculated Aggregate]',
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: true,
+        derivation: AggregationType.User,
+        columnInstanceName,
+      }),
+    );
+  });
+
   it('projects encoded numeric-entity literals as semantic formula text without markers', () => {
     const xml = `<workbook><datasources><datasource name="DS">
       <column name="[Literal]" role="dimension" type="nominal" datatype="string">

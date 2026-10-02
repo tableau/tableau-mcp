@@ -2,6 +2,7 @@
  * Field builder utilities for constructing column references from user-friendly names
  */
 
+import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
 import { normalizeArray, parseXML } from './parser.js';
 import {
   AggregationType,
@@ -486,23 +487,10 @@ export function listAvailableFields(
 
         isGroup = column.calculation?.['@_class'] === 'categorical-bin';
 
-        if (column.calculation && column.calculation['@_formula']) {
-          formula = column.calculation['@_formula'];
-          const aggFunctions = [
-            'SUM(',
-            'AVG(',
-            'MIN(',
-            'MAX(',
-            'COUNT(',
-            'COUNTD(',
-            'STDEV(',
-            'STDEVP(',
-            'VAR(',
-            'VARP(',
-            'MEDIAN(',
-            'PERCENTILE(',
-          ];
-          isAggregated = aggFunctions.some((fn) => formula!.toUpperCase().includes(fn));
+        const calculationFormula = column.calculation?.['@_formula'];
+        if (calculationFormula) {
+          formula = calculationFormula;
+          isAggregated = formulaRequiresUserDerivation(calculationFormula);
         }
 
         if (column['@_hidden'] === 'true') continue;

@@ -4,6 +4,7 @@
  */
 
 import { resolveDerivation } from '../derivations.js';
+import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
 import {
   forEachRelationColumn,
   inferFieldTypeFromType,
@@ -776,27 +777,10 @@ function ensureColumnInstanceInDependencies(
   // If it's a calculated field with aggregation, we need to use usr prefix
   if (existingBaseColumn?.calculation?.['@_formula']) {
     const formula = existingBaseColumn.calculation['@_formula'];
-    const aggFunctions = [
-      'SUM(',
-      'AVG(',
-      'MIN(',
-      'MAX(',
-      'COUNT(',
-      'COUNTD(',
-      'STDEV(',
-      'STDEVP(',
-      'VAR(',
-      'VARP(',
-      'MEDIAN(',
-      'PERCENTILE(',
-    ];
-    const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
+    const hasAggregation = formulaRequiresUserDerivation(formula);
 
     if (hasAggregation && parsed.derivation !== 'User') {
       correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
-      console.error(
-        `[DEBUG] Correcting column reference for calculated field with aggregation: ${columnInstanceName} -> ${correctedInstanceName}`,
-      );
       emitFieldRewrite({
         requested: columnInstanceName,
         applied: correctedInstanceName,
@@ -833,19 +817,6 @@ function ensureColumnInstanceInDependencies(
     if (!columnExists) {
       // Try to get full column definition from workbook (includes calculations, etc.)
       const workbookColumn = getColumnFromWorkbook(workbookXml, datasource, parsedCorrected.column);
-
-      // Debug logging
-      if (!workbookColumn) {
-        if (workbookXml) {
-          console.error(
-            `[DEBUG] Failed to find column in workbook. Datasource: ${datasource}, Column: ${parsedCorrected.column}, Parsed derivation: ${parsedCorrected.derivation}`,
-          );
-        } else {
-          console.warn(
-            `[DEBUG] No workbook XML provided. Cannot look up column definition for: ${parsedCorrected.column}, Using derivation: ${parsedCorrected.derivation}`,
-          );
-        }
-      }
 
       if (workbookColumn) {
         // Copy the full column definition from workbook, including any calculation elements
@@ -931,31 +902,13 @@ function ensureColumnInstanceInDependencies(
     let actualColumnInstanceName = correctedInstanceName;
     if (baseColumn?.calculation?.['@_formula']) {
       const formula = baseColumn.calculation['@_formula'];
-      const aggFunctions = [
-        'SUM(',
-        'AVG(',
-        'MIN(',
-        'MAX(',
-        'COUNT(',
-        'COUNTD(',
-        'STDEV(',
-        'STDEVP(',
-        'VAR(',
-        'VARP(',
-        'MEDIAN(',
-        'PERCENTILE(',
-      ];
-      const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
+      const hasAggregation = formulaRequiresUserDerivation(formula);
 
       if (hasAggregation && parsedCorrected.derivation !== 'User') {
         // This calculated field already has aggregation - use User derivation to prevent double aggregation
-        console.error(
-          `[DEBUG] Calculated field "${parsedCorrected.column}" has aggregation in formula, correcting from "${parsedCorrected.derivation}" to "User"`,
-        );
         actualDerivation = 'User';
         // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix.
         actualColumnInstanceName = `[usr:${parsedCorrected.localFieldName}:${parsedCorrected.pivot}]`;
-        console.error(`[DEBUG] Corrected column-instance name: ${actualColumnInstanceName}`);
         if (actualColumnInstanceName !== correctedInstanceName) {
           emitFieldRewrite({
             requested: correctedInstanceName,

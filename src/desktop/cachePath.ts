@@ -2,11 +2,13 @@ import {
   closeSync,
   constants,
   fstatSync,
+  ftruncateSync,
   openSync,
   readFileSync,
   realpathSync,
   type Stats,
   statSync,
+  writeFileSync,
 } from 'fs';
 import { dirname, resolve, sep } from 'path';
 
@@ -18,6 +20,17 @@ export interface ContainedCacheReadOperations {
   realpath(path: string): string;
   stat(path: string): Stats;
   read(fd: number): Buffer;
+  close(fd: number): void;
+}
+
+export interface ContainedCacheWriteOperations {
+  noFollowFlag: number;
+  open(path: string, flags: number, mode?: number): number;
+  fstat(fd: number): Stats;
+  realpath(path: string): string;
+  stat(path: string): Stats;
+  truncate(fd: number, length: number): void;
+  write(fd: number, text: string): void;
   close(fd: number): void;
 }
 
@@ -36,12 +49,38 @@ export type ContainedCacheReadResult =
       error?: unknown;
     };
 
+export const CONTAINED_CACHE_WRITE_ISSUE = {
+  outsideCache: 'outside-cache',
+  unsupportedNewPath: 'unsupported-new-path',
+  unsafeFile: 'unsafe-file',
+  writeError: 'write-error',
+} as const;
+
+export type ContainedCacheWriteResult =
+  | { ok: true; path: string }
+  | {
+      ok: false;
+      issue: (typeof CONTAINED_CACHE_WRITE_ISSUE)[keyof typeof CONTAINED_CACHE_WRITE_ISSUE];
+      error?: unknown;
+    };
+
 const DEFAULT_CONTAINED_CACHE_READ_OPERATIONS: ContainedCacheReadOperations = {
   open: openSync,
   fstat: fstatSync,
   realpath: realpathSync,
   stat: statSync,
   read: (fd) => readFileSync(fd),
+  close: closeSync,
+};
+
+const DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS: ContainedCacheWriteOperations = {
+  noFollowFlag: typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0,
+  open: openSync,
+  fstat: fstatSync,
+  realpath: realpathSync,
+  stat: statSync,
+  truncate: ftruncateSync,
+  write: (fd, text) => writeFileSync(fd, text, 'utf-8'),
   close: closeSync,
 };
 
@@ -172,4 +211,130 @@ export function readContainedCacheTextFile(
       }
     }
   }
+}
+
+/** Write only after the opened descriptor is proven to be a regular file inside the cache. */
+export function writeContainedCacheTextFile(
+  path: string,
+  text: string,
+  operations: ContainedCacheWriteOperations = DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS,
+): ContainedCacheWriteResult {
+  const cacheDir = getCacheDir();
+  const absolutePath = resolve(path);
+  if (!isWithinCacheDir(absolutePath, cacheDir)) {
+    return { ok: false, issue: 'outside-cache' };
+  }
+
+  let realCacheDir: string;
+  try {
+    realCacheDir = operations.realpath(cacheDir);
+  } catch (error) {
+    return { ok: false, issue: 'write-error', error };
+  }
+
+  let fd: number | null = null;
+  try {
+    try {
+      fd = operations.open(absolutePath, constants.O_RDWR | operations.noFollowFlag);
+    } catch (error) {
+      if (errnoCode(error) !== 'ENOENT') {
+        return writeOpenFailure(error);
+      }
+
+      // DesktopCache emits direct children. Limiting creation to that shape avoids
+      // claiming nested parent traversal is race-safe without an openat-style API.
+      if (dirname(absolutePath) !== cacheDir) {
+        return { ok: false, issue: 'unsupported-new-path' };
+      }
+      let realParent: string;
+      try {
+        realParent = operations.realpath(dirname(absolutePath));
+      } catch (parentError) {
+        return { ok: false, issue: 'write-error', error: parentError };
+      }
+      if (realParent !== realCacheDir) {
+        return { ok: false, issue: 'unsafe-file' };
+      }
+      try {
+        fd = operations.open(
+          absolutePath,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | operations.noFollowFlag,
+          0o600,
+        );
+      } catch (createError) {
+        return writeOpenFailure(createError);
+      }
+    }
+
+    let opened: Stats;
+    try {
+      opened = operations.fstat(fd);
+    } catch (error) {
+      return { ok: false, issue: 'write-error', error };
+    }
+    if (!opened.isFile()) {
+      return { ok: false, issue: 'unsafe-file' };
+    }
+
+    let currentPathBefore: string;
+    let current: Stats;
+    let currentPathAfter: string;
+    try {
+      currentPathBefore = operations.realpath(absolutePath);
+      if (!isWithinCacheDir(currentPathBefore, realCacheDir)) {
+        return { ok: false, issue: 'unsafe-file' };
+      }
+      current = operations.stat(currentPathBefore);
+      currentPathAfter = operations.realpath(absolutePath);
+    } catch (error) {
+      return writeVerificationFailure(error);
+    }
+
+    if (
+      currentPathAfter !== currentPathBefore ||
+      !isWithinCacheDir(currentPathAfter, realCacheDir) ||
+      !current.isFile()
+    ) {
+      return { ok: false, issue: 'unsafe-file' };
+    }
+    if (
+      hasStableFileIdentity(opened) &&
+      hasStableFileIdentity(current) &&
+      !hasMatchingFileIdentity(opened, current)
+    ) {
+      return { ok: false, issue: 'unsafe-file' };
+    }
+
+    try {
+      operations.truncate(fd, 0);
+      operations.write(fd, text);
+      return { ok: true, path: absolutePath };
+    } catch (error) {
+      return { ok: false, issue: 'write-error', error };
+    }
+  } finally {
+    if (fd !== null) {
+      try {
+        operations.close(fd);
+      } catch {
+        // Closing cannot change whether the write crossed the cache boundary.
+      }
+    }
+  }
+}
+
+function writeOpenFailure(error: unknown): ContainedCacheWriteResult {
+  const code = errnoCode(error);
+  if (code === 'ELOOP' || code === 'EEXIST' || code === 'ENOTDIR') {
+    return { ok: false, issue: 'unsafe-file', error };
+  }
+  return { ok: false, issue: 'write-error', error };
+}
+
+function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
+  const code = errnoCode(error);
+  if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP') {
+    return { ok: false, issue: 'unsafe-file', error };
+  }
+  return { ok: false, issue: 'write-error', error };
 }

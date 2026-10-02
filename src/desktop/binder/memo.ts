@@ -1,5 +1,3 @@
-// src/binder/memo.ts
-//
 // Binder MEMOIZATION — "anything the system has seen once is seconds forever."
 //
 // Two content-addressed caches, both invalidated ONLY by a content-hash change

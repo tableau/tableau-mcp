@@ -2,11 +2,13 @@ import {
   closeSync,
   constants,
   fstatSync,
+  ftruncateSync,
   mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   type Stats,
   statSync,
@@ -18,8 +20,10 @@ import { join } from 'path';
 
 import {
   type ContainedCacheReadOperations,
+  type ContainedCacheWriteOperations,
   getCacheDir,
   readContainedCacheTextFile,
+  writeContainedCacheTextFile,
 } from './cachePath.js';
 
 describe('readContainedCacheTextFile', () => {
@@ -111,7 +115,7 @@ describe('readContainedCacheTextFile', () => {
     const outsideFile = join(outside, 'secret.xml');
     const candidate = join(directory, 'datasource.xml');
     writeFileSync(outsideFile, '<outside-secret/>');
-    symlinkSync(outsideFile, candidate);
+    symlinkSync(outsideFile, candidate, 'file');
 
     expect(readContainedCacheTextFile(candidate)).toMatchObject({
       ok: false,
@@ -124,7 +128,7 @@ describe('readContainedCacheTextFile', () => {
     const outside = outsideDirectory('intermediate-symlink');
     const outsideFile = join(outside, 'datasource.xml');
     writeFileSync(outsideFile, '<outside-secret/>');
-    symlinkSync(outside, join(directory, 'linked'));
+    symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
 
     expect(readContainedCacheTextFile(join(directory, 'linked', 'datasource.xml'))).toMatchObject({
       ok: false,
@@ -144,9 +148,9 @@ describe('readContainedCacheTextFile', () => {
       let candidate: string;
       if (linkKind === 'final') {
         candidate = join(directory, 'datasource.xml.meta.json');
-        symlinkSync(outsideSidecar, candidate);
+        symlinkSync(outsideSidecar, candidate, 'file');
       } else {
-        symlinkSync(outside, join(directory, 'linked'));
+        symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
         candidate = join(directory, 'linked', 'datasource.xml.meta.json');
       }
 
@@ -258,8 +262,209 @@ describe('readContainedCacheTextFile', () => {
   });
 });
 
+describe('writeContainedCacheTextFile', () => {
+  const temporaryPaths: string[] = [];
+
+  afterEach(() => {
+    for (const path of temporaryPaths.splice(0)) {
+      rmSync(path, { recursive: true, force: true });
+    }
+  });
+
+  function cacheDirectory(label: string): string {
+    const directory = mkdtempSync(join(getCacheDir(), `contained-cache-write-${label}-`));
+    temporaryPaths.push(directory);
+    return directory;
+  }
+
+  function outsideDirectory(label: string): string {
+    const directory = mkdtempSync(join(tmpdir(), `contained-cache-write-outside-${label}-`));
+    temporaryPaths.push(directory);
+    return directory;
+  }
+
+  function defaultOperations(
+    overrides: Partial<ContainedCacheWriteOperations> = {},
+  ): ContainedCacheWriteOperations {
+    return {
+      noFollowFlag: typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0,
+      open: (path: string, flags: number, mode?: number) => openSync(path, flags, mode),
+      fstat: (fd: number) => fstatSync(fd),
+      realpath: (path: string) => realpathSync(path),
+      stat: (path: string) => statSync(path),
+      truncate: (fd: number, length: number) => ftruncateSync(fd, length),
+      write: (fd: number, text: string) => writeFileSync(fd, text, 'utf-8'),
+      close: (fd: number) => closeSync(fd),
+      ...overrides,
+    } satisfies ContainedCacheWriteOperations;
+  }
+
+  it('updates an existing regular file through the verified descriptor', () => {
+    const directory = cacheDirectory('existing');
+    const file = join(directory, 'worksheet.xml');
+    writeFileSync(file, '<worksheet name="before"/>');
+
+    expect(writeContainedCacheTextFile(file, '<worksheet name="after"/>')).toEqual({
+      ok: true,
+      path: file,
+    });
+    expect(readFileSync(file, 'utf-8')).toBe('<worksheet name="after"/>');
+  });
+
+  it('opens an existing file read-write without truncation or symlink following', () => {
+    const directory = cacheDirectory('existing-flags');
+    const file = join(directory, 'worksheet.xml');
+    writeFileSync(file, '<before/>');
+    const open = vi.fn((path: string, flags: number, mode?: number) => openSync(path, flags, mode));
+
+    expect(writeContainedCacheTextFile(file, '<after/>', defaultOperations({ open })).ok).toBe(
+      true,
+    );
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0]?.[1]).toBe(
+      constants.O_RDWR | (typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0),
+    );
+    expect((open.mock.calls[0]?.[1] ?? 0) & constants.O_TRUNC).toBe(0);
+  });
+
+  it('creates a missing direct child of the verified cache root', () => {
+    const file = join(getCacheDir(), `contained-cache-new-${process.pid}-${Date.now()}.xml`);
+    temporaryPaths.push(file);
+
+    expect(writeContainedCacheTextFile(file, '<worksheet/>')).toEqual({ ok: true, path: file });
+    expect(readFileSync(file, 'utf-8')).toBe('<worksheet/>');
+  });
+
+  it('creates with exclusive no-follow flags and without truncation', () => {
+    const file = join(getCacheDir(), `contained-cache-new-flags-${process.pid}-${Date.now()}.xml`);
+    temporaryPaths.push(file);
+    const open = vi.fn((path: string, flags: number, mode?: number) => openSync(path, flags, mode));
+    const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+
+    expect(writeContainedCacheTextFile(file, '<worksheet/>', defaultOperations({ open })).ok).toBe(
+      true,
+    );
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.calls[0]?.[1]).toBe(constants.O_RDWR | noFollow);
+    expect(open.mock.calls[1]?.[1]).toBe(
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow,
+    );
+    expect(open.mock.calls[1]?.[2]).toBe(0o600);
+    expect((open.mock.calls[1]?.[1] ?? 0) & constants.O_TRUNC).toBe(0);
+  });
+
+  it('rejects a missing nested path rather than claiming it can create it race-safely', () => {
+    const directory = cacheDirectory('nested-new');
+    const nested = join(directory, 'missing.xml');
+
+    expect(writeContainedCacheTextFile(nested, '<worksheet/>')).toMatchObject({
+      ok: false,
+      issue: 'unsupported-new-path',
+    });
+    expect(() => readFileSync(nested)).toThrow();
+  });
+
+  it('rejects final and intermediate symlink escapes without changing the external target', () => {
+    const directory = cacheDirectory('symlinks');
+    const outside = outsideDirectory('symlinks');
+    const external = join(outside, 'external.xml');
+    writeFileSync(external, '<outside/>');
+
+    const finalLink = join(directory, 'final.xml');
+    symlinkSync(external, finalLink, 'file');
+    expect(writeContainedCacheTextFile(finalLink, '<escaped/>')).toMatchObject({
+      ok: false,
+      issue: 'unsafe-file',
+    });
+
+    const linkedDirectory = join(directory, 'linked');
+    symlinkSync(outside, linkedDirectory, directoryLinkType());
+    expect(
+      writeContainedCacheTextFile(join(linkedDirectory, 'external.xml'), '<escaped/>'),
+    ).toMatchObject({
+      ok: false,
+      issue: 'unsafe-file',
+    });
+    expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
+  });
+
+  it('does not truncate or write before descriptor identity verification succeeds', () => {
+    const directory = cacheDirectory('identity-mismatch');
+    const file = join(directory, 'worksheet.xml');
+    writeFileSync(file, '<before/>');
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+    const close = vi.fn((fd: number) => closeSync(fd));
+    const operations = defaultOperations({
+      stat: (path) => withInode(statSync(path), statSync(path).ino + 1),
+      truncate,
+      write,
+      close,
+    });
+
+    expect(writeContainedCacheTextFile(file, '<after/>', operations)).toMatchObject({
+      ok: false,
+      issue: 'unsafe-file',
+    });
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(readFileSync(file, 'utf-8')).toBe('<before/>');
+  });
+
+  it('rejects a final symlink before truncation when no no-follow flag is available', () => {
+    const directory = cacheDirectory('no-no-follow');
+    const outside = outsideDirectory('no-no-follow');
+    const external = join(outside, 'external.xml');
+    const candidate = join(directory, 'candidate.xml');
+    writeFileSync(external, '<outside/>');
+    symlinkSync(external, candidate, 'file');
+    const truncate = vi.fn((fd: number, length: number) => ftruncateSync(fd, length));
+    const write = vi.fn((fd: number, text: string) => writeFileSync(fd, text, 'utf-8'));
+
+    expect(
+      writeContainedCacheTextFile(
+        candidate,
+        '<escaped/>',
+        defaultOperations({ noFollowFlag: 0, truncate, write }),
+      ),
+    ).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    expect(truncate).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
+  });
+
+  it('keeps writing through the verified descriptor if the path is replaced after verification', () => {
+    const directory = cacheDirectory('held-descriptor');
+    const file = join(directory, 'worksheet.xml');
+    const openedFile = join(directory, 'opened.xml');
+    writeFileSync(file, '<before/>');
+    let replaced = false;
+    const operations = defaultOperations({
+      truncate: (fd, length) => {
+        renameSync(file, openedFile);
+        writeFileSync(file, '<replacement/>');
+        replaced = true;
+        ftruncateSync(fd, length);
+      },
+    });
+
+    expect(writeContainedCacheTextFile(file, '<after/>', operations)).toEqual({
+      ok: true,
+      path: file,
+    });
+    expect(replaced).toBe(true);
+    expect(readFileSync(file, 'utf-8')).toBe('<replacement/>');
+    expect(readFileSync(openedFile, 'utf-8')).toBe('<after/>');
+  });
+});
+
 function withInode(stats: Stats, ino: number): Stats {
   const copy = Object.assign(Object.create(Object.getPrototypeOf(stats)), stats) as Stats;
   Object.defineProperty(copy, 'ino', { value: ino, configurable: true });
   return copy;
+}
+
+function directoryLinkType(): 'dir' | 'junction' {
+  return process.platform === 'win32' ? 'junction' : 'dir';
 }
