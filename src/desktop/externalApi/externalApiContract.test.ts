@@ -61,8 +61,8 @@ import {
  * include that producer addition.
  * The storyboard `:refreshNow` path and 0.2.20 version were projected from the
  * W-24165695 monolith producer contract because no live 0.2.20 capture was available.
- * The fixture excludes connected-site paths and response schemas after removal of their
- * Desktop MCP tools; it is not a complete inventory of the producer's endpoints.
+ * The fixture excludes paths and response schemas for removed Desktop MCP tools;
+ * it is not a complete inventory of the producer's endpoints.
  */
 
 type SpecProperty = {
@@ -627,7 +627,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardRefreshNow,
       EXTERNAL_API_ROUTES.workbookGoToSheet,
       EXTERNAL_API_ROUTES.workbookExportAs,
-      EXTERNAL_API_ROUTES.workbookPublish,
       EXTERNAL_API_ROUTES.datasourceRefreshData,
       EXTERNAL_API_ROUTES.datasourceRefreshExtract,
       EXTERNAL_API_ROUTES.dashboardImage,

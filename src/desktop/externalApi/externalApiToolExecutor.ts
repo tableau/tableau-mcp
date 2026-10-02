@@ -973,15 +973,6 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async publishWorkbook(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    return this.applyDocument(
-      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookPublish, signal),
-      'workbook-publish',
-    );
-  }
-
   async refreshDatasourceData(
     datasourceId: string,
     signal: AbortSignal,

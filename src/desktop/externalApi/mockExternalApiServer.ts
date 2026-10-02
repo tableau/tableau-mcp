@@ -1227,11 +1227,6 @@ export async function startMockExternalApiServer(
       return;
     }
 
-    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookPublish) {
-      sendOperation(res, 'publish-workbook');
-      return;
-    }
-
     const datasourceRefreshMatch = path.match(
       /^\/v0\/datasources\/([^/]+):(refreshData|refreshExtract)$/,
     );

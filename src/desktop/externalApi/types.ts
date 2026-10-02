@@ -39,7 +39,6 @@ export const EXTERNAL_API_ROUTES = {
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
   workbookExportAs: '/v0/workbook:exportAs',
-  workbookPublish: '/v0/workbook:publish',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',

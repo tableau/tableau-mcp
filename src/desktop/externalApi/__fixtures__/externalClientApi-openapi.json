@@ -2509,39 +2509,6 @@
         }
       }
     },
-    "/v0/workbook:publish": {
-      "post": {
-        "summary": "Publish the workbook",
-        "description": "Publishes the open workbook to the connected Tableau site by opening the Publish Workbook dialog. Because the dialog is interactive, a terminal SUCCEEDED reports that the flow finished, not that a publish landed: dismissing or cancelling the dialog also resolves to SUCCEEDED. Returns 404 when not signed in to a site.",
-        "operationId": "publish",
-        "responses": {
-          "200": {
-            "description": "Publishes the open workbook to the connected Tableau site by opening the Publish Workbook dialog. Because the dialog is interactive, a terminal SUCCEEDED reports that the flow finished, not that a publish landed: dismissing or cancelling the dialog also resolves to SUCCEEDED. Returns 404 when not signed in to a site.",
-            "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } }
-            },
-            "headers": {
-              "X-Tableau-Operation-Id": {
-                "description": "Id of the operation.",
-                "schema": { "type": "string" }
-              },
-              "X-Tableau-Application-Version": {
-                "description": "Running Tableau Desktop build.",
-                "schema": { "type": "string" }
-              }
-            }
-          },
-          "202": { "$ref": "#/components/responses/Accepted" },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "421": { "$ref": "#/components/responses/MisdirectedRequest" },
-          "500": { "$ref": "#/components/responses/ServerError" },
-          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
-        }
-      }
-    },
     "/v0/workbook:redo": {
       "post": {
         "summary": "Redo the last undone change",
