@@ -534,11 +534,14 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:create');
     });
 
-    it('should not require content read for publish-workbook', () => {
+    it('should require base publish scopes plus content read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
-      expect(scopes).toEqual(['tableau:workbooks:create', 'tableau:file_uploads:create']);
-      expect(scopes).not.toContain('tableau:content:read');
+      expect(scopes).toEqual([
+        'tableau:workbooks:create',
+        'tableau:file_uploads:create',
+        'tableau:content:read',
+      ]);
     });
 
     it('should require all view-data API scopes for get-view-data', () => {

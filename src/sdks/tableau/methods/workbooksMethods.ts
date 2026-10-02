@@ -231,11 +231,16 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
    * Zodios-typed client and calls the underlying axios instance directly.
    *
+   * The destination is exactly one of `projectId` (emits `<project id=.../>`) or `location`
+   * (emits `<location id=... type=.../>`, used to publish directly into the caller's Personal
+   * Space). The two are mutually exclusive.
+   *
    * @param siteId - The Tableau site ID
    * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
    * @param workbookType - `twb` or `twbx`, matching the file uploaded to the session
    * @param name - The name to give the published workbook
-   * @param projectId - The ID of the project to publish the workbook into
+   * @param projectId - The ID of the project to publish into (mutually exclusive with `location`)
+   * @param location - The Personal Space LUID to publish into (mutually exclusive with `projectId`)
    * @param overwrite - Whether to overwrite an existing workbook with the same name
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
    */
@@ -245,18 +250,27 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     workbookType,
     name,
     projectId,
+    location,
     overwrite,
   }: {
     siteId: string;
     uploadSessionId: string;
     workbookType: 'twb' | 'twbx';
     name: string;
-    projectId: string;
+    projectId?: string;
+    location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
+    if ((projectId === undefined) === (location === undefined)) {
+      throw new Error('publishWorkbook requires exactly one of `projectId` or `location`.');
+    }
+    const destination =
+      projectId !== undefined
+        ? `<project id="${escapeXmlAttribute(projectId)}"/>`
+        : `<location id="${escapeXmlAttribute(location!)}" type="PersonalSpace"/>`;
     const xml =
       `<tsRequest><workbook name="${escapeXmlAttribute(name)}">` +
-      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      destination +
       '</workbook></tsRequest>';
     const { body, contentType } = buildMultipartMixedBody([
       { name: 'request_payload', contentType: 'text/xml', data: xml },
