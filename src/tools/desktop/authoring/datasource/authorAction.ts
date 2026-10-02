@@ -27,6 +27,8 @@ const modeSchema = z.enum(['parameter', 'set', 'url', 'filter']);
 const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
+// Desktop's two "Clearing the selection will" radios. See resolveClearOption.
+const onClearSchema = z.enum(['keep-current', 'set-value']);
 
 // The aggregations a parameter action can apply to its source field before pushing it to the
 // parameter (twb_2026.2.0.xsd, ActionList-Agg-ST). 'attr' is Tableau's default for a click-to-set
@@ -88,7 +90,12 @@ const paramsSchema = {
   sourceFieldAggregation: sourceFieldAggregationSchema
     .optional()
     .describe('parameter: how to aggregate the source field. Default attr.'),
-  clearValue: z.string().optional().describe('parameter: reset value on clear; string only.'),
+  onClear: onClearSchema
+    .optional()
+    .describe(
+      'parameter: keep-current or set-value on clear. Default: set-value iff clearValue set.',
+    ),
+  clearValue: z.string().optional().describe('parameter: reset value on clear; no datetime.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
   url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
@@ -116,6 +123,7 @@ type AuthorActionResult = AuthorActionResultBase &
         // clear-selection, if any — both echoed back from the applied XML.
         sourceFieldAggregation: string;
         clearValue?: string;
+        onClear: z.infer<typeof onClearSchema>;
       }
     | {
         mode: 'set';
@@ -166,6 +174,7 @@ type AuthorActionInput = AuthorActionInputBase &
         targetParameter?: string;
         sourceFieldAggregation?: SourceFieldAggregation;
         clearValue?: string;
+        onClear?: z.infer<typeof onClearSchema>;
       }
     | {
         mode: 'set';
@@ -217,6 +226,7 @@ export function parseAuthorActionArgs(
     clearSelection,
     sourceFieldAggregation,
     clearValue,
+    onClear,
     singleSelect,
     activation,
     url,
@@ -250,6 +260,9 @@ export function parseAuthorActionArgs(
   }
   if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter') {
     return new ArgsValidationError('excludeTargetSheets is only allowed in filter mode').toErr();
+  }
+  if (onClear !== undefined && mode !== 'parameter') {
+    return new ArgsValidationError('onClear is only allowed in parameter mode').toErr();
   }
   if (effectiveExcludedSourceSheets.length > 0) {
     if (mode !== 'url' && mode !== 'filter') {
@@ -386,6 +399,7 @@ export function parseAuthorActionArgs(
     targetParameter,
     sourceFieldAggregation,
     clearValue,
+    onClear,
   });
 }
 
@@ -447,18 +461,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // parameter mode needs a source field and an existing target parameter. Both errors
           // enumerate what the workbook offers, mirroring set mode's "Available sets".
           let resolvedTargetParameter = '';
-          // The source-field aggregation (a validated enum token, default 'attr') and the value kept
-          // on clear-selection (undefined leaves the parameter unchanged). Both are parameter-mode-
-          // only; they thread into renderParameterAction and the readback.
           let effectiveAggregation = 'attr';
+          // raw value echoed in the receipt; encoded value is emitted into the XML
           let effectiveClearValue: string | undefined;
+          let encodedClearValue: string | undefined;
           if (input.mode === 'parameter') {
             const { sourceField, targetParameter } = input;
             effectiveAggregation = input.sourceFieldAggregation ?? 'attr';
-            // Preserve clearValue verbatim: only an omitted (undefined) value means "leave the
-            // parameter unchanged on clear". An explicit "" or a padded " Month " is a real reset
-            // value, so trimming or empty-coercing it would apply — and report — a different reset
-            // behavior than the caller requested.
             effectiveClearValue = input.clearValue;
             // Reject empty/whitespace as well as undefined: renderParameterAction omits the
             // source-field param when it is blank and readback only checks the target survived,
@@ -501,20 +510,15 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 `targetParameter "${targetParameter.trim()}" was not found. Available parameters: ${formatAvailableParameters(liveXml)}`,
               ).toErr();
             }
-            // clearValue is always encoded with the string prefix (s:LROOT:), so on a non-string
-            // parameter it writes a malformed clear-option that Desktop silently rewrites — and
-            // readback can't catch it (hasParameterActionSettings checks the clear-option type, not
-            // its value). Reject rather than apply a value that won't survive. Per-datatype
-            // encoding is tracked as a follow-up.
-            if (
-              effectiveClearValue !== undefined &&
-              matchedParameter.datatype !== undefined &&
-              matchedParameter.datatype !== 'string'
-            ) {
-              return new ArgsValidationError(
-                `clearValue is only supported for string parameters; "${matchedParameter.caption ?? matchedParameter.name}" is ${matchedParameter.datatype}. Omit clearValue to leave the parameter unchanged on clear.`,
-              ).toErr();
+            const resolvedClear = resolveClearOption(
+              input.onClear,
+              matchedParameter.datatype,
+              effectiveClearValue,
+            );
+            if (resolvedClear.isErr()) {
+              return resolvedClear.error.toErr();
             }
+            encodedClearValue = resolvedClear.value;
             resolvedTargetParameter = `[Parameters].${bracketToken(matchedParameter.name)}`;
           }
 
@@ -737,7 +741,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               targetParameter: target,
               activation,
               aggregation: effectiveAggregation,
-              clearValue: effectiveClearValue,
+              encodedClearValue,
             });
           }
           const editResult = spliceActionIntoWorkbook(liveXml, actionXml, filterDependencies);
@@ -783,8 +787,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 caption,
                 'target-parameter',
                 target,
-              ) &&
-              hasParameterActionSettings(xml, caption, effectiveAggregation, effectiveClearValue)
+              ) && hasParameterActionSettings(xml, caption, effectiveAggregation, encodedClearValue)
             );
           };
           const outcome = await applyAndVerify({
@@ -865,7 +868,8 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             target,
             targetParameter: target,
             sourceFieldAggregation: effectiveAggregation,
-            clearValue: effectiveClearValue,
+            onClear: encodedClearValue === undefined ? 'keep-current' : 'set-value',
+            clearValue: encodedClearValue === undefined ? undefined : effectiveClearValue,
             hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
           });
         },
@@ -950,7 +954,7 @@ function hasParameterActionSettings(
   xml: string,
   caption: string,
   aggregation: string,
-  clearValue: string | undefined,
+  encodedClearValue: string | undefined,
 ): boolean {
   const actionPattern = /<edit-parameter-action\b[^>]*>[\s\S]*?<\/edit-parameter-action>/g;
   return [...xml.matchAll(actionPattern)].some((actionMatch) => {
@@ -970,7 +974,7 @@ function hasParameterActionSettings(
     // type='do-nothing' Desktop discards the emitted value='s:LROOT:' and stamps the target
     // parameter's own default in the param's datatype encoding (e.g. 'i:1' for an integer param),
     // so demanding the emitted value round-trip made every default apply falsely fail readback.
-    const expectedClearType = clearValue === undefined ? 'do-nothing' : 'assign-fixed-value';
+    const expectedClearType = encodedClearValue === undefined ? 'do-nothing' : 'assign-fixed-value';
     const clearMatches = getAttr(clearTag, 'type') === expectedClearType;
     return aggMatches && clearMatches;
   });
@@ -1023,6 +1027,109 @@ function renderActivation(activation: z.infer<typeof activationSchema>, autoClea
   return `<activation${autoClearAttr}${typeAttr} />`;
 }
 
+// Encode a fixed clear value into the datatype-prefixed form Tableau writes in
+// <clear-option value='...'> (only string carries LROOT). readback checks the clear-option type,
+// not its value, so a wrong encoding is silently rewritten and never caught — this strict per-datatype
+// validation is the only correctness guarantee. datetime is rejected rather than guessed.
+export function encodeClearValue(
+  datatype: string | undefined,
+  rawValue: string,
+): Result<string, ArgsValidationError> {
+  if (datatype === undefined || datatype === 'string') {
+    return new Ok(`s:LROOT:${rawValue}`);
+  }
+  const value = rawValue.trim();
+  if (datatype === 'integer') {
+    if (!/^-?\d+$/.test(value)) {
+      return new ArgsValidationError(
+        `clearValue "${rawValue}" is not a valid integer for an integer parameter.`,
+      ).toErr();
+    }
+    return new Ok(`i:${value}`);
+  }
+  if (datatype === 'real') {
+    if (!/^-?\d+(\.\d+)?$/.test(value)) {
+      return new ArgsValidationError(
+        `clearValue "${rawValue}" is not a valid real number for a real parameter.`,
+      ).toErr();
+    }
+    // r:<precision>:<scale>:<value> — scale = digits after '.', precision = total digit count.
+    const digits = value.replace(/[^\d]/g, '');
+    const dotIndex = value.indexOf('.');
+    const scale = dotIndex === -1 ? 0 : value.length - dotIndex - 1;
+    const precision = digits.length;
+    return new Ok(`r:${precision}:${scale}:${value}`);
+  }
+  if (datatype === 'boolean') {
+    const lowered = value.toLowerCase();
+    if (lowered !== 'true' && lowered !== 'false') {
+      return new ArgsValidationError(
+        `clearValue "${rawValue}" is not a valid boolean (use true or false) for a boolean parameter.`,
+      ).toErr();
+    }
+    return new Ok(`b:${lowered}`);
+  }
+  if (datatype === 'date') {
+    if (!isIsoDate(value)) {
+      return new ArgsValidationError(
+        `clearValue "${rawValue}" is not a valid ISO date (YYYY-MM-DD) for a date parameter.`,
+      ).toErr();
+    }
+    return new Ok(`d:${value}`);
+  }
+
+  return new ArgsValidationError(
+    `clearValue is not supported for ${datatype} parameters. Use onClear=keep-current to leave the parameter unchanged on clear.`,
+  ).toErr();
+}
+
+// Decide the clear-option, mirroring Desktop's two "Clearing the selection will" radios: undefined
+// for keep-current, the datatype-encoded value for set-value. When onClear is absent, a blank
+// clearValue infers keep-current and a non-blank one set-value (back-compat).
+export function resolveClearOption(
+  onClear: z.infer<typeof onClearSchema> | undefined,
+  datatype: string | undefined,
+  clearValue: string | undefined,
+): Result<string | undefined, ArgsValidationError> {
+  if (onClear === 'set-value' && clearValue === undefined) {
+    return new ArgsValidationError(
+      'onClear=set-value requires clearValue. Pass an explicit empty string to reset a string parameter to empty.',
+    ).toErr();
+  }
+  const raw = clearValue ?? '';
+  const isString = datatype === undefined || datatype === 'string';
+  // strings keep whitespace verbatim (only '' is blank); other datatypes trim before the check
+  const isBlank = isString ? raw.length === 0 : raw.trim().length === 0;
+  const effectiveOnClear = onClear ?? (isBlank ? 'keep-current' : 'set-value');
+  if (effectiveOnClear === 'keep-current') {
+    return new Ok(undefined);
+  }
+  if (isBlank && !isString) {
+    return new ArgsValidationError(
+      'onClear=set-value needs a clearValue; a non-string parameter has no empty value to set. Provide a value or use onClear=keep-current.',
+    ).toErr();
+  }
+  return encodeClearValue(datatype, raw);
+}
+
+function isIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+  const [, year, month, day] = match;
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (m < 1 || m > 12 || d < 1 || d > 31) {
+    return false;
+  }
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  return (
+    parsed.getUTCFullYear() === y && parsed.getUTCMonth() === m - 1 && parsed.getUTCDate() === d
+  );
+}
+
 function renderParameterAction({
   caption,
   actionName,
@@ -1031,7 +1138,7 @@ function renderParameterAction({
   targetParameter,
   activation,
   aggregation,
-  clearValue,
+  encodedClearValue,
 }: {
   caption: string;
   actionName: string;
@@ -1040,7 +1147,7 @@ function renderParameterAction({
   targetParameter: string;
   activation: z.infer<typeof activationSchema>;
   aggregation: string;
-  clearValue: string | undefined;
+  encodedClearValue: string | undefined;
 }): string {
   const params: string[] = [];
   if (sourceField.trim().length > 0) {
@@ -1048,12 +1155,12 @@ function renderParameterAction({
   }
   params.push(`<param name='target-parameter' value='${escapeXml(targetParameter.trim())}' />`);
   const aggTypeXml = `<agg-type type='${escapeXml(aggregation)}' />`;
-  // Absent clearValue keeps the parameter unchanged on clear (do-nothing). A clearValue resets it
-  // to that fixed value; the s:LROOT: prefix is the encoding Tableau writes for the kept value.
+  // undefined keeps the parameter unchanged (do-nothing, Desktop-owned s:LROOT: sentinel);
+  // otherwise reset to the already-datatype-encoded value.
   const clearOptionXml =
-    clearValue === undefined
+    encodedClearValue === undefined
       ? "<clear-option type='do-nothing' value='s:LROOT:' />"
-      : `<clear-option type='assign-fixed-value' value='s:LROOT:${escapeXml(clearValue)}' />`;
+      : `<clear-option type='assign-fixed-value' value='${escapeXml(encodedClearValue)}' />`;
   return (
     `<edit-parameter-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
     renderActivation(activation) +
