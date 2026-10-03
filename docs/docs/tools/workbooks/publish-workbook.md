@@ -4,8 +4,10 @@ sidebar_position: 5
 
 # Publish Workbook
 
-Publishes a TWB or TWBX workbook from a local file path or staged upload id to the specified
-Tableau project. Use [List Projects](../projects/list-projects.md) to discover project IDs.
+Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide
+`projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md)
+to discover project IDs), or omit it to publish into your Personal Space when the site supports
+direct-to-personal-space publishing.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any
 blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and
@@ -43,16 +45,6 @@ The name to give the published workbook.
 
 Example: `Q3 Sales Overview`
 
-### `projectId`
-
-The Tableau project LUID to publish the workbook into. Use
-[List Projects](../projects/list-projects.md) to discover available project IDs.
-
-If this MCP server is configured with a bounded project context, publishing to a project outside
-that context returns an error instead of publishing.
-
-Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
-
 ## One of `workbookUploadId` or `workbookFilePath`
 
 Exactly one of these must be provided — providing both, or neither, returns an error.
@@ -73,6 +65,35 @@ staged S3 uploads are not configured (i.e. `MCP_S3_BUCKET` is unset).
 Example: `/path/to/Superstore.twbx`
 
 ## Optional arguments
+
+### `projectId`
+
+The Tableau project LUID to publish the workbook into. Use
+[List Projects](../projects/list-projects.md) to discover available project IDs.
+
+`projectId` is optional and controls where the workbook lands:
+
+- **Provided:** the workbook is published into that project. If this MCP server is configured with
+  a bounded project context, publishing to a project outside that context returns an error instead
+  of publishing.
+- **Omitted:** the workbook is published into your **Personal Space**, when the site supports
+  direct-to-personal-space publishing. The bounded project context is **not** applied to this
+  default path — it gates only an explicitly provided `projectId`. Resolving your Personal Space
+  requires the `tableau:content:read` OAuth scope, which is requested automatically only on this
+  default path.
+
+Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
+
+When relying on the Personal Space default, the tool returns an error without publishing anything if:
+
+- your Personal Space could not be resolved (reported as `projectId` being required),
+- your Personal Space is read-only, or
+- the site has direct-to-personal-space publishing disabled.
+
+In addition, some servers accept the request but silently land the workbook in a default
+project instead of honoring the Personal Space target. In that case the workbook **is** actually
+published — just to an unintended location — and the tool still returns an error so you can
+delete it there if unwanted, or republish by passing an explicit `projectId`.
 
 ### `overwrite`
 

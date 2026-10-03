@@ -82,7 +82,7 @@ describe('server', () => {
         'manage-knowledge-context',
       ];
       // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -280,7 +280,7 @@ describe('server', () => {
         'manage-knowledge-context',
       ];
       // data-app tools are gated off by default (data-apps feature flag)
-      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app'];
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
 

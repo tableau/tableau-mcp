@@ -18,6 +18,17 @@ export const workbookSchema = z.object({
   webpageUrl: z.string().optional(),
   contentUrl: z.string(),
   project: projectSchema.optional(),
+  // The destination the server actually recorded: `type` is 'Project' or 'PersonalSpace'. Used to
+  // confirm a personal-space publish truly landed there — a personal-space landing has no `project`
+  // in the response at all, so the tool reads `location` to see where an auto-default landed.
+  location: z
+    .object({
+      id: z.string().optional(),
+      type: z.string().optional(),
+      name: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
   owner: restOwnerSchema.optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),

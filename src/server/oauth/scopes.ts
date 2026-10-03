@@ -35,6 +35,7 @@ export type McpScope =
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
+  | 'tableau:mcp:workbook:write'
   | 'tableau:mcp:knowledge:read'
   | 'tableau:mcp:knowledge:write';
 
@@ -71,6 +72,7 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
+  | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write';
 
@@ -90,6 +92,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
+  'tableau:mcp:workbook:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:flow:read',
@@ -162,6 +165,19 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:flows:read',
   'tableau:flows:download',
   'tableau:mcp_site_settings:read',
+];
+
+/**
+ * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
+ * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
+ * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * simplicity over narrowing the blast radius.
+ */
+export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:workbooks:create',
+  'tableau:file_uploads:create',
+  'tableau:content:read',
 ];
 
 /**
@@ -239,7 +255,7 @@ const toolScopeMap: Record<
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
+    api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -327,6 +343,10 @@ const toolScopeMap: Record<
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'move-workbook': {
+    mcp: ['tableau:mcp:workbook:write'],
+    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -554,6 +574,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
+    enabledTools.delete('move-workbook');
   }
 
   return enabledTools;
