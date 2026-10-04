@@ -17,6 +17,7 @@ import {
 import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { assertSignedInSiteMatchesToken } from './server/oauth/siteBinding.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -143,6 +144,13 @@ const getNewRestApiInstanceAsync = async (
     const authConfig = buildAuthConfig({ config, tableauAuthInfo, scopes: jwtScopes });
     if (authConfig) {
       await restApi.signIn(authConfig);
+      try {
+        assertSignedInSiteMatchesToken({ signedInSiteId: restApi.siteId, tableauAuthInfo });
+      } catch (error) {
+        await restApi.signOut().catch(() => undefined);
+        throw error;
+      }
+
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
     } else {
