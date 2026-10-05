@@ -219,7 +219,7 @@ class ResourceAccessChecker {
         if (!datasource.project) {
           // Embedded (workbook) data sources have no project, so a project allowlist can't admit
           // them. Fail closed here; resolving the parent workbook's project for allowlist matching
-          // is tracked as separate work.
+          // is tracked by W-23864479.
           return {
             allowed: false,
             message: [

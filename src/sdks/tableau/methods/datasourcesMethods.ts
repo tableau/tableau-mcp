@@ -4,7 +4,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
 import { RestApiCredentials } from '../restApi.js';
-import { DataSource } from '../types/dataSource.js';
+import { DataSource, PublishedDataSource } from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -41,7 +41,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     filter: string;
     pageSize?: number;
     pageNumber?: number;
-  }): Promise<{ pagination: Pagination; datasources: DataSource[] }> => {
+  }): Promise<{ pagination: Pagination; datasources: PublishedDataSource[] }> => {
     const response = await this._apiClient.listDatasources({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },
