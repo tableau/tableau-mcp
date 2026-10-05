@@ -30,7 +30,10 @@ import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
-import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import {
+  parseCanonicalColumnRef,
+  resolveUniqueDatasourceName,
+} from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
@@ -1460,6 +1463,7 @@ function buildCall2Contract({
   session,
   ask,
   targetWorksheet,
+  datasource,
   requiredFilterFields,
   requiredFilterValues,
 }: {
@@ -1467,6 +1471,7 @@ function buildCall2Contract({
   session: string;
   ask: string;
   targetWorksheet?: string;
+  datasource?: string;
   requiredFilterFields?: string[];
   requiredFilterValues?: ExactFilterValueConstraint[];
 }): Call2Contract {
@@ -1476,6 +1481,7 @@ function buildCall2Contract({
       session,
       ask,
       ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
+      ...(datasource !== undefined ? { datasource } : {}),
       auto_apply: true,
     },
     ...(llmInput.recommended ? { recommended: llmInput.recommended } : {}),
@@ -3144,6 +3150,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
           const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
+          const retainedDatasource = retainedCall2Contract?.arguments.datasource;
+          const requestedDatasource = datasource ?? retainedDatasource;
           const isStructuredCorrectionCall =
             currentProposalSignature !== undefined &&
             priorRecovery?.attempts.some(
@@ -3193,20 +3202,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
-            bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
-              resolvedSession,
-              askKey,
-              {
-                ...(currentProposalSignature !== undefined
-                  ? { proposalSignature: currentProposalSignature }
-                  : {}),
-              },
-            );
+            if (requestedDatasource === undefined) {
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            }
           } catch {
             /* fail-open */
           }
 
-          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
           if (proposal !== undefined && retainedCall2Contract !== undefined) {
             const mismatches = proposalContractMismatches(
               proposal as BindingProposal,
@@ -3250,10 +3260,53 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           let workbookXml = xmlResult.value;
           const hostBaselineWorkbookXml = workbookXml;
+          const effectiveDatasource =
+            requestedDatasource === undefined
+              ? undefined
+              : resolveUniqueDatasourceName(workbookXml, requestedDatasource);
+          if (effectiveDatasource === null) {
+            return new ArgsValidationError(
+              `datasource "${requestedDatasource}" not found or ambiguous in the workbook; use an internal datasource name or unique caption`,
+            ).toErr();
+          }
+          if (retainedDatasource !== undefined && effectiveDatasource !== retainedDatasource) {
+            return new ArgsValidationError(
+              `datasource must match the retained bind-template datasource "${retainedDatasource}"`,
+            ).toErr();
+          }
+          if (requestedDatasource !== undefined) {
+            try {
+              // The workbook read can overlap another call; reject its reservation before mutation.
+              const currentRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+              if (currentRecovery !== priorRecovery) {
+                const blocked = recoveryGateBlock(
+                  currentRecovery,
+                  currentProposalSignature,
+                  resolvedSession,
+                  askKey,
+                  target_worksheet,
+                );
+                if (blocked) {
+                  return new IncompleteOperationError(blocked).toErr();
+                }
+              }
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            } catch {
+              /* fail-open */
+            }
+          }
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
-            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineSchemaSummary = summarizeSchema(workbookXml, effectiveDatasource);
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
@@ -3288,7 +3341,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const prepared = prepareCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 resolveLooseReferences: true,
               });
               if (prepared.isErr()) {
@@ -3300,7 +3353,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const authored = await authorCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 executor,
                 signal: extra.signal,
                 resolveLooseReferences: true,
@@ -3382,6 +3435,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ask,
               workbookXml,
               manifests,
+              datasource: effectiveDatasource,
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
@@ -3397,6 +3451,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ask,
                 workbookXml,
                 manifests,
+                datasource: effectiveDatasource,
                 proposal: proposalFromRecommendation(ask, recommended),
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
@@ -3419,6 +3474,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ask,
                   workbookXml,
                   manifests,
+                  datasource: effectiveDatasource,
                   ...(minConfidence !== undefined ? { minConfidence } : {}),
                 });
                 const recommended =
@@ -3450,7 +3506,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          schemaSummary ??= summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── One structured correction boundary ─────────────────────────
@@ -3462,6 +3518,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   session: resolvedSession,
                   ask,
                   targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                  datasource: effectiveDatasource,
                   requiredFilterFields,
                   requiredFilterValues,
                 })

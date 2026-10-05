@@ -6420,7 +6420,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Datasource "Missing Datasource" was not found. Candidates: Superstore, Inventory',
+      'datasource "Missing Datasource" not found or ambiguous in the workbook',
     );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();
