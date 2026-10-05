@@ -506,6 +506,97 @@ describe('addFieldToCols / removeFieldFromCols', () => {
   });
 });
 
+describe('remove-field stale placement recovery', () => {
+  it.each([
+    ['rows', removeFieldFromRows, '[Sample].[none:Category:nk]'],
+    ['cols', removeFieldFromCols, '[Sample].[sum:Sales:qk]'],
+  ] as const)(
+    'reports actual placements when the field is on the wrong %s shelf',
+    (shelf, remove, column) => {
+      const attempt = (): string => remove(WORKSHEET_XML, column);
+
+      expect(attempt).toThrow(`Column ${column} not found in ${shelf}`);
+      expect(attempt).toThrow('"rows":["[Sample].[sum:Sales:qk]"]');
+      expect(attempt).toThrow('"cols":["[Sample].[none:Category:nk]"]');
+      expect(attempt).toThrow('"color":["[Sample].[none:Category:nk]"]');
+      expect(attempt).toThrow('read-cached-xml');
+      expect(attempt).toThrow('get-worksheet-xml');
+      expect(attempt).toThrow('pending edits');
+    },
+  );
+
+  it('reports the updated shelf after the field has already been removed', () => {
+    const removed = removeFieldFromRows(WORKSHEET_XML, '[Sample].[sum:Sales:qk]');
+
+    expect(() => removeFieldFromRows(removed, '[Sample].[sum:Sales:qk]')).toThrow('"rows":[]');
+    expect(() => removeFieldFromRows(removed, '[Sample].[sum:Sales:qk]')).toThrow(
+      'Do not retry removal if the field is absent',
+    );
+    expect(listFields(removed).filter((field) => field.location === 'rows')).toEqual([]);
+  });
+
+  it.each(['<worksheet name="Empty"/>', '<worksheet name="Empty"><table/></worksheet>'])(
+    'reports empty placements for an empty worksheet: %s',
+    (xml) => {
+      expect(() => removeFieldFromCols(xml, '[Sample].[sum:Sales:qk]')).toThrow(
+        '"rows":[],"cols":[],"encodings":{}',
+      );
+      expect(() => removeFieldFromEncoding(xml, 'size', '[Sample].[sum:Sales:qk]')).toThrow(
+        '"rows":[],"cols":[],"encodings":{}',
+      );
+    },
+  );
+
+  it.each(['size', 'angle'] as const)(
+    'reports populated channels when %s was never set',
+    (encoding) => {
+      const attempt = (): string =>
+        removeFieldFromEncoding(WORKSHEET_XML, encoding, '[Sample].[sum:Sales:qk]');
+
+      expect(attempt).toThrow(`No ${encoding} encodings found`);
+      expect(attempt).toThrow('"encodings":{"color":["[Sample].[none:Category:nk]"]}');
+      expect(attempt).toThrow('encodingType');
+    },
+  );
+
+  it('reports the actual field when the requested column is absent from a populated encoding', () => {
+    const attempt = (): string =>
+      removeFieldFromEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Profit:qk]');
+
+    expect(attempt).toThrow('Encoding color with column [Sample].[sum:Profit:qk] not found');
+    expect(attempt).toThrow('"color":["[Sample].[none:Category:nk]"]');
+  });
+
+  it('reports the canonical lod channel for a stale detail request', () => {
+    const xml = addFieldToEncoding(WORKSHEET_XML, 'lod', '[Sample].[none:Category:nk]');
+
+    expect(() => removeFieldFromEncoding(xml, 'detail', '[Sample].[sum:Profit:qk]')).toThrow(
+      '"lod":["[Sample].[none:Category:nk]"]',
+    );
+  });
+
+  it('only advertises encoding fields from the first pane that removal actually edits', () => {
+    const xml = WORKSHEET_XML.replace(
+      '</panes>',
+      '<pane><encodings><size column="[Sample].[sum:Profit:qk]"/></encodings></pane></panes>',
+    );
+    const attempt = (): string => removeFieldFromEncoding(xml, 'size', '[Sample].[sum:Sales:qk]');
+
+    expect(attempt).toThrow('first pane');
+    expect(attempt).toThrow('"encodings":{"color":["[Sample].[none:Category:nk]"]}');
+    expect(attempt).not.toThrow('[Sample].[sum:Profit:qk]');
+  });
+
+  it('keeps malformed worksheet errors distinct from stale placements', () => {
+    expect(() => removeFieldFromRows('<workbook/>', '[Sample].[sum:Sales:qk]')).toThrow(
+      'No worksheet found in XML',
+    );
+    expect(() =>
+      removeFieldFromEncoding('<workbook/>', 'color', '[Sample].[sum:Sales:qk]'),
+    ).toThrow('No worksheet found in XML');
+  });
+});
+
 describe('addFieldToEncoding / removeFieldFromEncoding', () => {
   it('should add a field to an encoding', () => {
     const modified = addFieldToEncoding(WORKSHEET_XML, 'size', '[Sample].[sum:Sales:qk]');

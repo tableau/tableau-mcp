@@ -55,6 +55,50 @@ OPENAI_API_KEY=<your OpenAI API key>
 5. Run `npm run test:eval` or select the `vitest.config.eval.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
+## Desktop remove-field recovery evals
+
+`tests/eval/removeField.test.ts` covers W-24252809 with eight model-driven cases: stale Rows and
+Columns assumptions, recovery after a wrong-shelf error, an already-removed field, missing Size and
+Angle encodings, preservation of pending edits, and Detail/lod removal. The model receives the built
+Desktop tool schemas and the current implementation's error diagnostics and success response. Tool
+execution uses in-memory worksheet fixtures; no Tableau session, site, or workbook changes are
+needed.
+
+Successful removals report the removed reference and resulting draft placements. The fixture uses
+the same result formatter as production and matches the SDK's single-content tool output; offline
+checks cover that parity and reject invalid combinations of read selectors.
+
+The deterministic grader checks inspection before removal, correct final placements, preservation of
+unrelated fields, and absence of redundant retries or live refreshes of pending drafts. It grades
+tool behavior rather than the wording of the final answer. These are focused recovery evals, not
+end-to-end Desktop or full-tool-catalog discovery tests.
+
+Build Desktop and run only this model suite with `OPENAI_API_KEY`, `OPENAI_BASE_URL` (for a
+gateway), and optionally `EVAL_TEST_MODEL` configured in your environment or `tests/eval/.env`:
+
+```sh
+npm run build:desktop
+npm run test:eval -- run tests/eval/removeField.test.ts
+```
+
+Use a Desktop bundle built from the same checkout as the tests: schemas come from the bundle, while
+removal diagnostics and the shared success formatter come from the source. Comparing revisions
+requires both to match.
+
+Set `ENABLE_LOGGING=true` to log each scenario's tool sequence, model-turn boundaries, call IDs, and
+final response. Call IDs are also logged as tools start, so a timeout retains partial execution
+evidence. A failed grade includes the tool sequence in its assertion output. Every case is bounded
+to eight agent turns. Identical call IDs across repeated runs can indicate gateway response caching;
+do not count cached repeats as independent model samples. This suite disables SDK trace export;
+model requests use the configured gateway.
+
+The fixture, grading, and tool-isolation checks run without a model credential, Desktop build, or
+network access:
+
+```sh
+npm run test:eval -- run tests/eval/removeFieldScenario.test.ts tests/eval/base.test.ts
+```
+
 ## Environment Variables
 
 The following environment variables are used by the Eval tests:
@@ -90,9 +134,9 @@ When `true`, enables evals that can invoke the content-mutating Tableau Prep flo
 are skipped by default because the eval harness executes real MCP tool calls against the configured
 Tableau site. Only enable them on a disposable site.
 
-This is a test-safety gate, separate from the product feature gates. Mutating flow evals also require
-`FLOW_WRITE_TOOLS_ENABLED=true`; the eval harness sets `FLOW_TOOLS_ENABLED=true` because the write
-tools are subordinate to the base flow tool gate.
+This is a test-safety gate, separate from the product feature gates. Mutating flow evals also
+require `FLOW_WRITE_TOOLS_ENABLED=true`; the eval harness sets `FLOW_TOOLS_ENABLED=true` because the
+write tools are subordinate to the base flow tool gate.
 
 <hr />
 
