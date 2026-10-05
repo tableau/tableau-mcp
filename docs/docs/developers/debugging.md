@@ -13,7 +13,8 @@ Reconnect the MCP client to rerun registration, then search the server logs for
 - **Scaffold data app gates evaluated** records the `data-apps` flag, Tableau product version
   and build, minimum version, `versionAllowed`, and the combined `disabled` result. For example,
   product version `0.0.0` with build `main.26.1005.0759` fails the `2026.3.1` minimum; the special
-  `main` exemption applies to the product-version value, not the build string.
+  `main` exemption applies to the product-version value, not the build string. The shared version
+  helper also treats unparseable product versions as fresh, allowing them through the version gate.
 - **Tool registration gates evaluated** lists `eligibleTools` and `omittedTools`. Each omitted
   tool includes its first failing gate: `disabled`, `not-in-include-tools`, `excluded`,
   `site-role-unavailable`, `insufficient-site-role`, or `registration-condition-not-met`.

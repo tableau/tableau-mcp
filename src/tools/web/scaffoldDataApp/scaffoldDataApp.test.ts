@@ -125,8 +125,8 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(makeTool(VERSION_BELOW).disabled)).toBe(true);
     });
 
-    it('is disabled for an unparseable version (unknown != fresh)', async () => {
-      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(true);
+    it('is enabled for an unparseable version following the shared helper convention', async () => {
+      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(false);
     });
 
     it('is disabled for product version 0.0.0 even when the build is from main', async () => {
@@ -150,7 +150,7 @@ describe('getScaffoldDataAppTool', () => {
     [true, VERSION_AT_FLOOR, true, false],
     [true, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
     [false, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
-    [true, VERSION_UNKNOWN, false, true],
+    [true, VERSION_UNKNOWN, true, false],
     [true, { value: 'main', build: '' }, true, false],
   ])(
     'logs gate inputs and outcomes (flag=%s, version=%j)',

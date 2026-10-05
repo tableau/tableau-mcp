@@ -18,20 +18,6 @@ import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspa
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
 const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
 
-function meetsDataAppMinVersion(productVersion: ProductVersion): boolean {
-  // Only the explicit 'main' dev-build sentinel gets the benefit of the doubt. A genuinely
-  // unparseable version string is "unknown", not "fresh", so it gates the tool OUT rather than
-  // in. Parseable versions fall through to the shared helper's year.major.minor floor comparison.
-  const { value } = productVersion;
-  if (value !== 'main' && value.split('.').map(Number).some(Number.isNaN)) {
-    return false;
-  }
-  return getResultForTableauVersion({
-    productVersion,
-    mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-  });
-}
-
 const paramsSchema = {
   datappName: z
     .string()
@@ -67,7 +53,10 @@ export const getScaffoldDataAppTool = (
     },
     disabled: new Provider(async () => {
       const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      const versionAllowed = meetsDataAppMinVersion(productVersion);
+      const versionAllowed = getResultForTableauVersion({
+        productVersion,
+        mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
+      });
       const disabled = !(flagOn && versionAllowed);
       log({
         level: 'info',
