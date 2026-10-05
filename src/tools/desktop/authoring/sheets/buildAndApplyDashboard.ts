@@ -87,7 +87,7 @@ export const getBuildAndApplyDashboardTool = (
 
           // The direct and batched dashboard paths share one zone builder.
           const zones = computeZones(titleText, layoutSpec);
-          const dashboardXml = buildDashboardXml(dashboardName, zones);
+          const dashboardXml = buildDashboardXml(dashboardName, zones, layoutSpec.layoutType);
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();

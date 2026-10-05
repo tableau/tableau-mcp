@@ -73,13 +73,51 @@ export function buildZoneXml(zone: Zone): string {
         </zone>`;
 }
 
-export function buildDashboardXml(dashboardName: string, zones: Zone[]): string {
-  const zonesXml = zones.map(buildZoneXml).join('\n        ');
+export function buildDashboardXml(
+  dashboardName: string,
+  zones: Zone[],
+  layoutType?: LayoutSpec['layoutType'],
+): string {
+  const rootId = zones.some((zone) => zone.id === 9) ? Math.max(9, ...zones.map((zone) => zone.id)) + 1 : 9;
+  let nextId = Math.max(rootId, ...zones.map((zone) => zone.id)) + 1;
+  const overlaps = zones.some((zone, index) =>
+    zones.slice(index + 1).some((other) =>
+      zone.x < other.x + other.w && other.x < zone.x + zone.w &&
+      zone.y < other.y + other.h && other.y < zone.y + zone.h,
+    ),
+  );
+  const rows: Zone[][] = [];
+  for (const zone of zones) {
+    const row = rows.find((group) => group[0].y === zone.y && group[0].h === zone.h);
+    if (row) row.push(zone);
+    else rows.push([zone]);
+  }
+  rows.sort((a, b) => a[0].y - b[0].y);
+  const tilesCanvas = !overlaps && rows.every((row, index) => {
+    const ordered = [...row].sort((a, b) => a.x - b.x);
+    return row[0].y === (index === 0 ? 0 : rows[index - 1][0].y + rows[index - 1][0].h) &&
+      ordered[0].x === 0 && ordered.every((zone, column) =>
+        column === 0 || Math.abs(zone.x - (ordered[column - 1].x + ordered[column - 1].w)) <= 1,
+      ) && Math.abs(ordered.at(-1)!.x + ordered.at(-1)!.w - 100000) <= row.length;
+  }) && (rows.length === 0 || Math.abs(rows.at(-1)![0].y + rows.at(-1)![0].h - 100000) <= rows.length);
+  const bandsXml = rows.map((row) => {
+    if (row.length === 1) return buildZoneXml(row[0]);
+    const x = Math.min(...row.map((zone) => zone.x));
+    const w = Math.max(...row.map((zone) => zone.x + zone.w)) - x;
+    return `<zone h="${row[0].h}" id="${nextId++}" param="horz" type-v2="layout-flow" w="${w}" x="${x}" y="${row[0].y}">
+          ${row.map(buildZoneXml).join('\n          ')}
+        </zone>`;
+  }).join('\n        ');
+  const zonesXml = layoutType === 'custom' || (layoutType === undefined && !tilesCanvas)
+    ? zones.map(buildZoneXml).join('\n        ')
+    : `<zone h="100000" id="${nextId++}" param="vert" type-v2="layout-flow" w="100000" x="0" y="0">
+        ${bandsXml}
+      </zone>`;
   return `<dashboard enable-sort-zone-taborder="true" name="${escapeXml(dashboardName)}">
   <style/>
   <size maxheight="1000" maxwidth="1400" minheight="1000" minwidth="1400" sizing-mode="fixed"/>
   <zones>
-    <zone h="100000" id="9" type-v2="layout-basic" w="100000" x="0" y="0">
+    <zone h="100000" id="${rootId}" type-v2="layout-basic" w="100000" x="0" y="0">
         ${zonesXml}
     </zone>
   </zones>

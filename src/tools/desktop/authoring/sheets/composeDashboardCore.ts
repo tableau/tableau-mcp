@@ -88,7 +88,7 @@ export function buildDashboardCandidateXml({
     layoutType: isExecutiveSummary ? 'executive-summary' : (layoutType ?? 'auto-grid'),
     gridColumns: layout?.gridColumns,
   });
-  const dashboardXml = buildDashboardXml(dashboardName, zones);
+  const dashboardXml = buildDashboardXml(dashboardName, zones, layoutType ?? 'auto-grid');
   const wrapperXml = `<workbook><dashboards>${dashboardXml}</dashboards><windows><window class="dashboard" name="${escapeXml(dashboardName)}"/></windows></workbook>`;
   const candidateXml = injectTemplate(baselineXml, wrapperXml, 'dashboard');
   return injectViewpoints(candidateXml, dashboardName, canonicalWorksheetNames);
@@ -291,6 +291,7 @@ async function createDashboard({
 const DASHBOARD_SHAPE_ATTRIBUTES = [
   'id',
   'type-v2',
+  'param',
   'name',
   'x',
   'y',
@@ -311,6 +312,7 @@ const DASHBOARD_SHAPE_ATTRIBUTES = [
 interface DashboardShapeElement {
   tagName: string;
   attributes: Record<string, string>;
+  parentZoneId?: string;
   text?: string;
 }
 
@@ -346,9 +348,13 @@ function dashboardShape(
           attributes[attributeName] = element.getAttribute(attributeName) ?? '';
         }
       }
+      const parent = element.parentNode as XmlElement;
       values.push({
         tagName,
         attributes,
+        ...(tagName === 'zone' && parent.tagName === 'zone'
+          ? { parentZoneId: parent.getAttribute('id') ?? undefined }
+          : {}),
         ...(tagName === 'run' ? { text: element.textContent ?? '' } : {}),
       });
     }
@@ -368,6 +374,7 @@ function dashboardShapesEqual(
     if (
       !actualElement ||
       expectedElement.tagName !== actualElement.tagName ||
+      expectedElement.parentZoneId !== actualElement.parentZoneId ||
       expectedElement.text !== actualElement.text
     ) {
       return false;

@@ -1,3 +1,4 @@
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { Err, Ok } from 'ts-results-es';
 
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
@@ -137,6 +138,56 @@ describe('buildDashboardCandidateXml', () => {
 });
 
 describe('dashboardCandidateReadbackIssues', () => {
+  it('rejects a changed horizontal row flow parameter', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      layout: { layoutType: 'columns' },
+    });
+    const readbackXml = candidateXml.replace('param="horz"', 'param="vert"');
+    expect(readbackXml).not.toBe(candidateXml);
+    expect(
+      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
+        'Sales',
+        'Profit',
+      ]),
+    ).toEqual([
+      'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
+    ]);
+  });
+
+  it('rejects a worksheet moved out of its horizontal parent even when zone order is unchanged', () => {
+    const candidateXml = buildDashboardCandidateXml({
+      baselineXml: PRISTINE,
+      dashboardName: 'Sales Dashboard',
+      canonicalWorksheetNames: ['Sales', 'Profit'],
+      layout: { layoutType: 'columns' },
+    });
+    const doc = new DOMParser().parseFromString(candidateXml, 'text/xml');
+    const flow = Array.from(doc.getElementsByTagName('zone')).find(
+      (zone) => zone.getAttribute('param') === 'vert',
+    )!;
+    const row = Array.from(doc.getElementsByTagName('zone')).find(
+      (zone) => zone.getAttribute('param') === 'horz',
+    )!;
+    const profit = Array.from(doc.getElementsByTagName('zone')).find(
+      (zone) => zone.getAttribute('name') === 'Profit',
+    )!;
+    expect(profit.parentNode).toBe(row);
+    flow.appendChild(profit);
+    const readbackXml = new XMLSerializer().serializeToString(doc);
+    expect(readbackXml).not.toBe(candidateXml);
+    expect(
+      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
+        'Sales',
+        'Profit',
+      ]),
+    ).toEqual([
+      'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
+    ]);
+  });
+
   it('accepts Desktop rounding each zone geometry attribute by one unit', () => {
     const candidateXml = buildDashboardCandidateXml({
       baselineXml: PRISTINE,

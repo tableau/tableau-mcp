@@ -1,3 +1,4 @@
+import { DOMParser, type Element as XmlElement } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 
 import { buildDashboardXml, computeZones, type LayoutSpec, type Zone } from './dashboardZones.js';
@@ -253,6 +254,88 @@ describe('computeZones — KPI strip (build-and-apply-dashboard only; unchanged 
 });
 
 describe('buildDashboardXml', () => {
+  function children(element: XmlElement): XmlElement[] {
+    return Array.from({ length: element.childNodes.length }, (_, index) =>
+      element.childNodes.item(index),
+    ).filter((node): node is XmlElement => node?.nodeType === 1);
+  }
+
+  function rootZone(xml: string): XmlElement {
+    const dashboard = new DOMParser().parseFromString(xml, 'text/xml').documentElement;
+    return children(children(dashboard!).find((child) => child.tagName === 'zones')!)[0];
+  }
+
+  it.each([
+    ['auto-grid', spec({ kpis: ['K1', 'K2'], charts: ['A', 'B', 'C'] }), ['K1,K2', 'A,B', 'C']],
+    ['rows', spec({ charts: ['A', 'B'], layoutType: 'rows' }), ['A', 'B']],
+    ['rounded rows', spec({ charts: ['A', 'B', 'C'], layoutType: 'rows' }), ['A', 'B', 'C']],
+    ['columns', spec({ charts: ['A', 'B'], layoutType: 'columns' }), ['A,B']],
+    ['executive-summary', executiveSpec({ kpis: ['K1'], charts: ['A', 'B', 'C'] }), ['K1', 'A', 'B,C']],
+  ] as const)('nests %s tiles as vertical bands with horizontal rows', (_name, layout, expectedBands) => {
+    const zones = computeZones('Title', layout);
+    const root = rootZone(buildDashboardXml('Dashboard', zones));
+    expect(root.getAttribute('type-v2')).toBe('layout-basic');
+    const flow = children(root)[0];
+    expect(flow.getAttribute('type-v2')).toBe('layout-flow');
+    expect(flow.getAttribute('param')).toBe('vert');
+    const bands = children(flow).filter((child) => child.tagName === 'zone');
+    expect(bands.map((band) => {
+      if (band.getAttribute('type-v2') !== 'layout-flow') return band.getAttribute('name') ?? 'Title';
+      expect(band.getAttribute('param')).toBe('horz');
+      return children(band).filter((child) => child.tagName === 'zone').map((child) => child.getAttribute('name')).join(',');
+    })).toEqual(['Title', ...expectedBands]);
+    const allZones = [root, flow, ...bands, ...bands.flatMap((band) => children(band).filter((child) => child.tagName === 'zone'))];
+    const ids = allZones.map((zone) => zone.getAttribute('id'));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(allZones.filter((zone) => zone.hasAttribute('name') || zone.getAttribute('type-v2') === 'text')
+      .sort((a, b) => Number(a.getAttribute('id')) - Number(b.getAttribute('id')))
+      .map((zone) => [zone.getAttribute('x'), zone.getAttribute('y'), zone.getAttribute('w'), zone.getAttribute('h')]))
+      .toEqual(zones.map((zone) => [zone.x, zone.y, zone.w, zone.h].map(String)));
+  });
+
+  it('keeps overlapping custom geometry absolute under the basic layout', () => {
+    const zones = computeZones(undefined, spec({
+      layoutType: 'custom', charts: ['A', 'B'],
+      customZones: [
+        { worksheetName: 'A', x: 0, y: 0, width: 60000, height: 60000 },
+        { worksheetName: 'B', x: 30000, y: 30000, width: 60000, height: 60000 },
+      ],
+    }));
+    const root = rootZone(buildDashboardXml('Custom', zones, 'custom'));
+    expect(children(root).filter((child) => child.tagName === 'zone').map((child) => child.getAttribute('name'))).toEqual(['A', 'B']);
+  });
+
+  it('keeps disjoint, partial-canvas custom geometry absolute', () => {
+    const root = rootZone(buildDashboardXml('Custom', [
+      { kind: 'worksheet', h: 20000, id: 10, name: 'A', w: 30000, x: 10000, y: 10000 },
+      { kind: 'worksheet', h: 20000, id: 11, name: 'B', w: 30000, x: 60000, y: 60000 },
+    ], 'custom'));
+    expect(children(root).filter((child) => child.tagName === 'zone').map((child) => child.getAttribute('name'))).toEqual(['A', 'B']);
+  });
+
+  it('keeps a custom layout absolute even when its zones tile the canvas', () => {
+    const layout = spec({
+      layoutType: 'custom', charts: ['A', 'B'],
+      customZones: [
+        { worksheetName: 'A', x: 0, y: 0, width: 50000, height: 100000 },
+        { worksheetName: 'B', x: 50000, y: 0, width: 50000, height: 100000 },
+      ],
+    });
+    const root = rootZone(buildDashboardXml('Custom', computeZones(undefined, layout), layout.layoutType));
+    expect(children(root).map((child) => child.getAttribute('name'))).toEqual(['A', 'B']);
+    expect(children(root).every((child) => child.getAttribute('type-v2') !== 'layout-flow')).toBe(true);
+  });
+
+  it('keeps a standard layout in a vertical flow even when its zones leave a gap', () => {
+    const zones = [
+      { kind: 'worksheet' as const, h: 40000, id: 10, name: 'A', w: 100000, x: 0, y: 0 },
+      { kind: 'worksheet' as const, h: 40000, id: 11, name: 'B', w: 100000, x: 0, y: 60000 },
+    ];
+    const root = rootZone(buildDashboardXml('Rows', zones, 'rows'));
+    expect(children(root)[0].getAttribute('param')).toBe('vert');
+    expect(children(children(root)[0]).map((zone) => zone.getAttribute('name'))).toEqual(['A', 'B']);
+  });
+
   it('writes title text directly under the text zone in Desktop readback shape', () => {
     const zones = computeZones('Q1 Sales', spec({ charts: ['A'] }));
     const xml = buildDashboardXml('My Dashboard', zones);
