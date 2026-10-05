@@ -4,32 +4,12 @@ import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { SCAFFOLD_DATA_APP_API_SCOPES } from '../../../server/oauth/scopes.js';
-import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
-
-// Data apps are hosted extension packages, which Tableau can only host on 2026.3.1+.
-// Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
-
-function meetsDataAppMinVersion(productVersion: ProductVersion): boolean {
-  // Only the explicit 'main' dev-build sentinel gets the benefit of the doubt. A genuinely
-  // unparseable version string is "unknown", not "fresh", so it gates the tool OUT rather than
-  // in. Parseable versions fall through to the shared helper's year.major.minor floor comparison.
-  const { value } = productVersion;
-  if (value !== 'main' && value.split('.').map(Number).some(Number.isNaN)) {
-    return false;
-  }
-  return getResultForTableauVersion({
-    productVersion,
-    mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-  });
-}
 
 const paramsSchema = {
   datappName: z
@@ -46,10 +26,7 @@ const paramsSchema = {
     ),
 };
 
-export const getScaffoldDataAppTool = (
-  server: WebMcpServer,
-  productVersion: ProductVersion,
-): WebTool<typeof paramsSchema> => {
+export const getScaffoldDataAppTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const scaffoldDataAppTool = new WebTool({
     server,
     name: 'scaffold-data-app',
@@ -64,10 +41,7 @@ export const getScaffoldDataAppTool = (
       idempotentHint: false,
       openWorldHint: false,
     },
-    disabled: new Provider(async () => {
-      const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      return !(flagOn && meetsDataAppMinVersion(productVersion));
-    }),
+    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('data-apps'))),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
         extra,

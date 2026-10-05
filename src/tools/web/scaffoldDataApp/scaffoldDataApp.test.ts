@@ -3,7 +3,6 @@ import { existsSync } from 'fs';
 import { z } from 'zod';
 
 import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
-import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -31,16 +30,8 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.1 (see scaffoldDataApp.ts).
-const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.1', build: '' };
-const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
-const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
-const VERSION_UNKNOWN: ProductVersion = { value: 'garbage', build: '' };
-
-function makeTool(
-  productVersion: ProductVersion = VERSION_AT_FLOOR,
-): ReturnType<typeof getScaffoldDataAppTool> {
-  return getScaffoldDataAppTool(new WebMcpServer(), productVersion);
+function makeTool(): ReturnType<typeof getScaffoldDataAppTool> {
+  return getScaffoldDataAppTool(new WebMcpServer());
 }
 
 describe('getScaffoldDataAppTool', () => {
@@ -101,34 +92,11 @@ describe('getScaffoldDataAppTool', () => {
       expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
     });
 
-    it('is enabled when the data-apps flag is on and the version is at the floor', async () => {
+    it('is enabled when the data-apps flag is on without requiring a Tableau version', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-      const tool = makeTool(VERSION_AT_FLOOR);
+      const tool = makeTool();
       expect(await Provider.from(tool.disabled)).toBe(false);
-    });
-  });
-
-  describe('version gate (disabled provider)', () => {
-    beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-    });
-
-    it('is enabled at or above the version floor', async () => {
-      expect(await Provider.from(makeTool(VERSION_AT_FLOOR).disabled)).toBe(false);
-      expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(false);
-    });
-
-    it('is disabled below the version floor', async () => {
-      expect(await Provider.from(makeTool(VERSION_BELOW).disabled)).toBe(true);
-    });
-
-    it('is disabled for an unparseable version (unknown != fresh)', async () => {
-      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(true);
-    });
-
-    it('is disabled below the floor even when the flag is on and above when off', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(true);
+      expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('data-apps');
     });
   });
 
