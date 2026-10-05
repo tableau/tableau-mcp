@@ -74,7 +74,8 @@ export type TableauApiScope =
   | 'tableau:users:update'
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:packages:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -165,6 +166,14 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:flows:read',
   'tableau:flows:download',
   'tableau:mcp_site_settings:read',
+];
+
+/**
+ * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
+ * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
+ */
+export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:packages:read',
 ];
 
 /**
@@ -493,12 +502,12 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
-  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
-  // caller's/skill's responsibility, applied outside this tool.
+  // Writes a bundled template to disk (or presigns a GET URL against a pre-published S3 object),
+  // then best-effort reads the site's external allowed-origins allow-list to enrich its output.
+  // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
-    api: new Set<TableauApiScope>([]),
+    api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
 };
 
