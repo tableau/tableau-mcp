@@ -11,6 +11,7 @@ import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
+import { siteBindingRequired, siteMatchesConfig } from './siteBinding.js';
 import { AuthorizationCode, PendingAuthorization } from './types.js';
 
 /**
@@ -125,13 +126,14 @@ export function callback(
         return;
       }
 
-      if (config.oauth.lockSite) {
+      if (siteBindingRequired(config)) {
         const { name: siteName, contentUrl: siteContentUrl } = sessionResult.value.site;
         const expected = config.siteName || 'Default';
-        const siteMatches =
-          siteName === config.siteName ||
-          siteContentUrl === config.siteName ||
-          (siteName === 'Default' && !config.siteName);
+        const siteMatches = siteMatchesConfig({
+          configSiteName: config.siteName,
+          siteName,
+          siteContentUrl,
+        });
 
         if (!siteMatches) {
           const signedIntoSite = siteContentUrl || siteName || 'Default';
