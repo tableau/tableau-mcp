@@ -67,7 +67,6 @@ export const desktopToolNames = [
   'get-storyboard-xml',
   'apply-storyboard',
   'get-api-root',
-  'get-site-info',
   'get-dashboard-info',
   'get-storyboard-info',
   'get-summary-data',

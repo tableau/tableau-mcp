@@ -73,12 +73,6 @@ import {
   ShowMeOptionsQuery,
   ShowMeOptionsResult,
   showMeOptionsResultSchema,
-  Site,
-  SiteDatasourceList,
-  siteDatasourceListSchema,
-  siteSchema,
-  SiteWorkbookList,
-  siteWorkbookListSchema,
   StartPageVisibility,
   startPageVisibilitySchema,
   storyboardDocumentRoute,
@@ -395,28 +389,6 @@ export class ExternalApiToolExecutor {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
     }
     return Ok(result.value);
-  }
-
-  async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal),
-    );
-  }
-
-  async listSiteWorkbooks(
-    signal: AbortSignal,
-  ): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal),
-    );
-  }
-
-  async listSiteDatasources(
-    signal: AbortSignal,
-  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal),
-    );
   }
 
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
@@ -998,15 +970,6 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(EXTERNAL_API_ROUTES.workbookExportAs, request, signal),
       'export-workbook-as',
-    );
-  }
-
-  async publishWorkbook(
-    signal: AbortSignal,
-  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
-    return this.applyDocument(
-      (http) => http.postEnvelope(EXTERNAL_API_ROUTES.workbookPublish, signal),
-      'workbook-publish',
     );
   }
 

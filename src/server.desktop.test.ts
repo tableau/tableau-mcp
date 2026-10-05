@@ -551,21 +551,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       ]) {
         expect(selected.map((t) => t.name)).toContain(verb);
       }
-      // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
+      // Keep unrelated info/validation and legacy template tools out. The six scoped and
       // whole-workbook fallbacks above are the complete XML surface added to this profile.
       for (const banished of [
         'build-and-apply-worksheet',
         'validate-workbook-xml',
         'validate-worksheet-xml',
         'inject-template',
-        'list-site-datasources',
-        'list-site-workbooks',
         'get-app-info',
         'get-health',
         'get-worksheet-info',
         'list-storyboards',
         'get-api-root',
-        'get-site-info',
         'get-dashboard-info',
         'get-storyboard-info',
         'list-knowledge-resources',
@@ -1065,12 +1062,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    for (const webOwnedOperation of [
-      'list-site-datasources',
-      'list-site-workbooks',
-      'open-publish-workbook-dialog',
-      'publish-workbook',
-    ]) {
+    for (const webOwnedOperation of ['open-publish-workbook-dialog', 'publish-workbook']) {
       expect(registeredNames).not.toContain(webOwnedOperation);
     }
   });
