@@ -18,6 +18,8 @@ import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspa
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
 const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
 
+type ScaffoldDataAppResult = DataAppWorkspaceResult & { allowedOrigins: string[] };
+
 const paramsSchema = {
   datappName: z
     .string()
@@ -42,7 +44,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If S3 storage is configured, the zip is served as a presigned `s3URL` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. When available, the result also includes `allowedOrigins` — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
+      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If S3 storage is configured, the zip is served as a presigned `s3URL` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. The tool requires a successful allowed-origins lookup and includes `allowedOrigins` in every successful result — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
     paramsSchema,
     annotations: {
       title: 'Scaffold Data App',
@@ -76,10 +78,19 @@ export const getScaffoldDataAppTool = (
       return disabled;
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
-      return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
+      return await scaffoldDataAppTool.logAndExecute<ScaffoldDataAppResult>({
         extra,
         args: { datappName },
         callback: async () => {
+          // Read the required site policy before preparing or uploading the workspace.
+          // Failures propagate through the standard tool error handler.
+          const allowedOrigins = await useRestApi({
+            ...extra,
+            jwtScopes: SCAFFOLD_DATA_APP_API_SCOPES,
+            callback: (restApi) =>
+              restApi.packagesMethods.getAllowedOrigins({ siteId: restApi.siteId }),
+          });
+
           const workspaceResult = await createDataAppWorkspace({
             datappName,
             config: extra.config,
@@ -88,25 +99,9 @@ export const getScaffoldDataAppTool = (
             return workspaceResult;
           }
 
-          // Best-effort enrichment: surface the site's external allowed-origins so the author can
-          // align the app's fetch/CSP targets. The read hits an experimental endpoint gated by the
-          // `Packages` feature flag and the `tableau:packages:read` scope; if any of that is
-          // unavailable (flag off, 403, etc.) we still return the scaffolded workspace without it.
-          let allowedOrigins: string[] | undefined;
-          try {
-            allowedOrigins = await useRestApi({
-              ...extra,
-              jwtScopes: SCAFFOLD_DATA_APP_API_SCOPES,
-              callback: (restApi) =>
-                restApi.packagesMethods.getAllowedOrigins({ siteId: restApi.siteId }),
-            });
-          } catch {
-            allowedOrigins = undefined;
-          }
-
           return new Ok({
             ...workspaceResult.value,
-            ...(allowedOrigins ? { allowedOrigins } : {}),
+            allowedOrigins,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

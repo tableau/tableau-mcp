@@ -33,9 +33,6 @@ export type DataAppWorkspaceResult = {
   filePath?: string;
   s3URL?: string;
   postUnzip?: PostUnzipPlan;
-  // The site's external allowed-origins allow-list, read best-effort by the scaffold tool so the
-  // author can align the app's fetch/CSP targets. Omitted when the read is unavailable.
-  allowedOrigins?: string[];
 };
 
 // Candidate parents of the template zip, tried in order, resolved relative to this module's own

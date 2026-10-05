@@ -10,6 +10,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import * as workspaceStore from './dataAppWorkspaceStore.js';
 import { getScaffoldDataAppTool } from './scaffoldDataApp.js';
 
 const mocks = vi.hoisted(() => ({
@@ -196,15 +197,25 @@ describe('getScaffoldDataAppTool', () => {
       expect(payload.allowedOrigins).toEqual(['https://example.com']);
     });
 
-    it('omits allowedOrigins and still succeeds when the allowed-origins read fails', async () => {
-      mocks.mockGetAllowedOrigins.mockRejectedValue(new Error('Packages feature not enabled'));
+    it('includes allowedOrigins when the site policy is empty', async () => {
       const result = await invokeCallback('Sales Demo');
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
-      const payload = JSON.parse(result.content[0].text);
+      expect(JSON.parse(result.content[0].text).allowedOrigins).toEqual([]);
+    });
 
-      expect(existsSync(payload.filePath)).toBe(true);
-      expect(payload.allowedOrigins).toBeUndefined();
+    it('fails without preparing a workspace when the allowed-origins read fails', async () => {
+      const createWorkspace = vi.spyOn(workspaceStore, 'createDataAppWorkspace');
+      mocks.mockGetAllowedOrigins.mockRejectedValue(new Error('Packages feature not enabled'));
+      try {
+        const result = await invokeCallback('Sales Demo');
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('Packages feature not enabled');
+        expect(createWorkspace).not.toHaveBeenCalled();
+      } finally {
+        createWorkspace.mockRestore();
+      }
     });
   });
 });

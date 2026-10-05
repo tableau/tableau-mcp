@@ -22,11 +22,15 @@ This tool is gated behind the `data-apps` feature flag, which defaults to `false
 ## Required permissions
 
 - **Site Role**: Requires Explorer (Can Publish) role or higher
+- **API scope**: `tableau:packages:read` is required. When API-scope enforcement is enabled,
+  callers with older tokens missing this scope must reauthorize to request it.
+- **Server feature**: The experimental packages API requires the Tableau `Packages` feature flag.
 
 ## APIs called
 
-None — the tool emits the starter workspace from a bundled or pre-published template with no
-Tableau REST API calls.
+`GET /api/exp/sites/{siteId}/packages/allowed-origins` — reads the site's external origin policy.
+This request is required and runs before the workspace is prepared or uploaded. If it fails,
+the tool returns an error instead of a scaffolded workspace.
 
 ## Required arguments
 
@@ -50,6 +54,9 @@ From `datappName` the tool derives the following identity:
 The extension's author is fixed to `Tableau MCP` in the template; it is not derived per call.
 
 ## Response behavior
+
+Every successful result includes `allowedOrigins`, an array of the site's configured external
+origins. An empty array is a valid result; a failed lookup is an error, not an empty policy.
 
 The result is a single object. Both output modes return the same static, un-substituted template
 zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping — they
@@ -76,6 +83,7 @@ returns.
 {
   "datappName": "Sales Demo",
   "filePath": "/app/build/templates/data-app-template.zip",
+  "allowedOrigins": [],
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
     "edits": [
@@ -109,6 +117,7 @@ returns.
 {
   "datappName": "Sales Demo",
   "s3URL": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "allowedOrigins": [],
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
     "edits": [
