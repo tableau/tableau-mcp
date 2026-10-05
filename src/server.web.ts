@@ -263,33 +263,13 @@ export class WebMcpServer extends Server {
     const toolsOmittedFromUnmetConditions = new Map<RegistrationCondition, string[]>();
 
     const toolsToRegister: typeof allTools = [];
-    const omittedTools: Array<{
-      tool: string;
-      reason: string;
-      minimumSiteRole?: string;
-      condition?: RegistrationCondition;
-    }> = [];
     for (const tool of allTools) {
-      if (await Provider.from(tool.disabled)) {
-        omittedTools.push({ tool: tool.name, reason: 'disabled' });
-        continue;
-      }
-      if (includeTools.length > 0 && !includeTools.includes(tool.name)) {
-        omittedTools.push({ tool: tool.name, reason: 'not-in-include-tools' });
-        continue;
-      }
-      if (excludeTools.length > 0 && excludeTools.includes(tool.name)) {
-        omittedTools.push({ tool: tool.name, reason: 'excluded' });
-        continue;
-      }
+      if (await Provider.from(tool.disabled)) continue;
+      if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
+      if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {
         const siteRole = registrationContext.siteRole;
         if (!siteRoleMeetsMinimum(siteRole, tool.minRequiredRole)) {
-          omittedTools.push({
-            tool: tool.name,
-            reason: siteRole === undefined ? 'site-role-unavailable' : 'insufficient-site-role',
-            minimumSiteRole: tool.minRequiredRole,
-          });
           // When the enforce-role-requirements feature flag is enabled, tools with role requirements are ommited during
           // registration if a user does not have the minimum role or if their role is unable to be fetched.
           // An `undefined` role means the fetch failed.
@@ -306,11 +286,6 @@ export class WebMcpServer extends Server {
           restApiArgs,
         );
         if (!conditionCheckResult.registrationConditionsMet) {
-          omittedTools.push({
-            tool: tool.name,
-            reason: 'registration-condition-not-met',
-            condition: conditionCheckResult.failingCondition,
-          });
           // Appends this tool to list of tools that failed under a particular condition
           const toolList =
             toolsOmittedFromUnmetConditions.get(conditionCheckResult.failingCondition) || [];
@@ -321,21 +296,6 @@ export class WebMcpServer extends Server {
       }
       toolsToRegister.push(tool);
     }
-
-    // Report the first failing gate per tool without logging auth info or raw configuration.
-    // Eligible tools may still be omitted later if their MCP app requires an unsupported client.
-    log({
-      level: 'info',
-      logger: 'tool-registration',
-      message: 'Tool registration gates evaluated',
-      data: {
-        enforceRoleRequirements,
-        enforceRegistrationConditions,
-        siteRole: registrationContext.siteRole ?? null,
-        eligibleTools: toolsToRegister.map((tool) => tool.name),
-        omittedTools,
-      },
-    });
 
     if (toolsOmittedForRoleFetchFailure.length > 0) {
       log({

@@ -97,21 +97,6 @@ describe('server', () => {
   });
 
   // Helper functions
-  function expectOmittedTool(
-    tool: string,
-    reason: string,
-    details: Record<string, string> = {},
-  ): void {
-    expect(logger.log).toHaveBeenCalledWith({
-      level: 'info',
-      logger: 'tool-registration',
-      message: 'Tool registration gates evaluated',
-      data: expect.objectContaining({
-        omittedTools: expect.arrayContaining([{ tool, reason, ...details }]),
-      }),
-    });
-  }
-
   function getServer(opts?: {
     capabilities?: ClientCapabilitiesWithUiExtension;
     clientId?: string;
@@ -317,7 +302,6 @@ describe('server', () => {
   it('should not register disabled tools', async () => {
     const server = getServer();
     await server.registerTools();
-    expectOmittedTool('scaffold-data-app', 'disabled');
 
     const allDisabledTools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
@@ -482,7 +466,6 @@ describe('server', () => {
     vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
-    expectOmittedTool('list-datasources', 'not-in-include-tools');
 
     const tool = getQueryDatasourceTool(server, testProductVersion);
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
@@ -501,7 +484,6 @@ describe('server', () => {
     vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
-    expectOmittedTool('query-datasource', 'excluded');
 
     const tools = await Promise.all(
       webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
@@ -824,9 +806,6 @@ describe('server', () => {
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
 
     await server.registerTools();
-    expectOmittedTool('mock-admin-tool', 'insufficient-site-role', {
-      minimumSiteRole: mockAdminTool.minRequiredRole,
-    });
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-admin-tool',
@@ -844,18 +823,6 @@ describe('server', () => {
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
 
     await server.registerTools();
-    expect(logger.log).toHaveBeenCalledWith({
-      level: 'info',
-      logger: 'tool-registration',
-      message: 'Tool registration gates evaluated',
-      data: {
-        enforceRoleRequirements: true,
-        enforceRegistrationConditions: false,
-        siteRole: 'SiteAdministratorCreator',
-        eligibleTools: ['mock-admin-tool'],
-        omittedTools: [],
-      },
-    });
 
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
       'mock-admin-tool',
@@ -873,9 +840,6 @@ describe('server', () => {
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAdminTool]);
 
     await server.registerTools();
-    expectOmittedTool('mock-admin-tool', 'site-role-unavailable', {
-      minimumSiteRole: mockAdminTool.minRequiredRole,
-    });
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-admin-tool',
@@ -1027,9 +991,6 @@ describe('server', () => {
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockConditionalTool]);
 
     await server.registerTools();
-    expectOmittedTool('mock-conditional-tool', 'registration-condition-not-met', {
-      condition: 'RequiresPulse',
-    });
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
       'mock-conditional-tool',

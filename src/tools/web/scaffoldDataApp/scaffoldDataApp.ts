@@ -3,7 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
-import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -59,23 +58,7 @@ export const getScaffoldDataAppTool = (
         productVersion,
         mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
       });
-      const disabled = !(flagOn && versionAllowed);
-      log({
-        level: 'debug',
-        logger: 'tool-registration',
-        tool_name: 'scaffold-data-app',
-        message: 'Scaffold data app gates evaluated',
-        data: {
-          featureFlag: 'data-apps',
-          featureFlagEnabled: flagOn,
-          productVersion: productVersion.value,
-          productBuild: productVersion.build,
-          minimumProductVersion: DATA_APP_MIN_PRODUCT_VERSION,
-          versionAllowed,
-          disabled,
-        },
-      });
-      return disabled;
+      return !(flagOn && versionAllowed);
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<ScaffoldDataAppResult>({
