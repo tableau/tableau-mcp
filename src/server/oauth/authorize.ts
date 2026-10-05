@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
+import type { IncomingMessage } from 'http';
 import https from 'https';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
@@ -259,8 +260,10 @@ export async function getClientFromMetadataDoc(
   }
 
   const resolvedUrl = new URL(clientMetadataUrl);
-  let lookup: AxiosRequestConfig['lookup'];
+  let requestUrl = clientMetadataUrl;
+  let requestConfig: AxiosRequestConfig = { httpsAgent: clientMetadataAgent };
   if (!isIP(clientMetadataUrl.hostname)) {
+    const { proxyResolvesHostname } = getConfig().oauth;
     try {
       // Resolve the IP from DNS
       const dnsResolver = getDnsResolver();
@@ -276,9 +279,38 @@ export async function getClientFromMetadataDoc(
           });
         }
       }
-      // Check the resolved IP address below and pin the connection to it
+      // Check the resolved IP address below
       resolvedUrl.hostname = isIP(ipAddress) === 6 ? `[${ipAddress}]` : ipAddress;
-      lookup = createPinnedLookup(clientMetadataUrl.hostname, ipAddress);
+      if (proxyResolvesHostname) {
+        // Pin direct connections to the checked address. A proxy resolves the hostname itself.
+        requestConfig = {
+          lookup: createPinnedLookup(clientMetadataUrl.hostname, ipAddress),
+          httpsAgent: clientMetadataAgent,
+        };
+      } else {
+        // Connect to the checked address, also through a proxy, and use the hostname in the Host
+        // header and as the TLS server name. The server name is set per request, because axios
+        // also applies the agent's options to the TLS connection with an https:// proxy.
+        const { hostname } = clientMetadataUrl;
+        const isIPv6 = isIP(ipAddress) === 6;
+        requestUrl = resolvedUrl;
+        requestConfig = {
+          httpsAgent: clientMetadataAgent,
+          transport: {
+            request: (options: https.RequestOptions, callback?: (res: IncomingMessage) => void) => {
+              // axios replaces the agent to connect through a proxy, and the CONNECT request that
+              // it sends does not support IPv6 addresses
+              if (isIPv6 && options.agent !== clientMetadataAgent) {
+                throw new Error(
+                  'IPv6 addresses are not sent to a proxy (see OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME)',
+                );
+              }
+              return https.request({ ...options, servername: hostname }, callback);
+            },
+          },
+          headers: { Host: clientMetadataUrl.host },
+        };
+      }
     } catch (error) {
       log({
         message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}`,
@@ -310,17 +342,17 @@ export async function getClientFromMetadataDoc(
     const client = axios.create();
     response = await retry(
       () =>
-        client.get(clientMetadataUrl.toString(), {
+        client.get(requestUrl.toString(), {
           timeout: 5000,
+          // axios does not time out connecting with a custom transport, so limit the whole attempt
+          ...(requestConfig.transport ? { signal: AbortSignal.timeout(5000) } : {}),
           maxContentLength: 5 * 1024, // 5 KB
           // Redirects MUST NOT be followed (draft-ietf-oauth-client-id-metadata-document-02 §5)
           maxRedirects: 0,
-          // Connect to the checked address. Behind a proxy (HTTPS_PROXY or ALL_PROXY) the proxy
-          // resolves the hostname instead, so only the check above applies.
-          lookup,
-          httpsAgent: clientMetadataAgent,
+          ...requestConfig,
           headers: {
             Accept: 'application/json',
+            ...requestConfig.headers,
           },
         }),
       {
