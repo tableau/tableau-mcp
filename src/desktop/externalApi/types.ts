@@ -39,7 +39,6 @@ export const EXTERNAL_API_ROUTES = {
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
   workbookExportAs: '/v0/workbook:exportAs',
-  workbookPublish: '/v0/workbook:publish',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -70,9 +69,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
-  site: '/v0/site',
-  siteDatasources: '/v0/site/datasources',
-  siteWorkbooks: '/v0/site/workbooks',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -494,15 +490,6 @@ export const healthSchema = z
   })
   .passthrough();
 
-/** Connected Tableau site returned by `GET /v0/site`. */
-export const siteSchema = z
-  .object({
-    siteId: z.string().optional(),
-    authenticatedUserId: z.string().optional(),
-  })
-  .passthrough();
-export type Site = z.infer<typeof siteSchema>;
-
 /** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
 export const protectedResourceMetadataSchema = z
   .object({
@@ -895,9 +882,7 @@ export const datasourceItemSchema = z
   .object({
     id: z.string().optional(),
     // Server LUID of the datasource; present only for a published, non-federated datasource and null
-    // otherwise. Same field as the luid on `GET /v0/site/datasources`, but nullable here (["string",
-    // "null"]) because the workbook endpoint emits null for embedded/federated datasources, whereas
-    // the site endpoint's luid is a plain string.
+    // otherwise.
     luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),
@@ -916,45 +901,6 @@ export const datasourceListSchema = z
   })
   .passthrough();
 export type DatasourceList = z.infer<typeof datasourceListSchema>;
-
-/** Published workbook item returned by `GET /v0/site/workbooks`. */
-export const siteWorkbookItemSchema = z
-  .object({
-    id: z.string().optional(),
-    luid: z.string().optional(),
-    name: z.string().optional(),
-    project: z.string().optional(),
-  })
-  .passthrough();
-export type SiteWorkbookItem = z.infer<typeof siteWorkbookItemSchema>;
-
-/** Published workbook list returned by `GET /v0/site/workbooks`. */
-export const siteWorkbookListSchema = z
-  .object({
-    workbooks: z.array(siteWorkbookItemSchema).optional(),
-  })
-  .passthrough();
-export type SiteWorkbookList = z.infer<typeof siteWorkbookListSchema>;
-
-/** Published datasource item returned by `GET /v0/site/datasources`. */
-export const siteDatasourceItemSchema = z
-  .object({
-    id: z.string().optional(),
-    luid: z.string().optional(),
-    name: z.string().optional(),
-    caption: z.string().optional(),
-    project: z.string().optional(),
-  })
-  .passthrough();
-export type SiteDatasourceItem = z.infer<typeof siteDatasourceItemSchema>;
-
-/** Published datasource list returned by `GET /v0/site/datasources`. */
-export const siteDatasourceListSchema = z
-  .object({
-    datasources: z.array(siteDatasourceItemSchema).optional(),
-  })
-  .passthrough();
-export type SiteDatasourceList = z.infer<typeof siteDatasourceListSchema>;
 
 /** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
 export const summaryDataSchema = z

@@ -24,7 +24,6 @@ import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
-import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
@@ -181,7 +180,6 @@ export const desktopToolFactories = [
   getStoryboardXmlTool,
   getApplyStoryboardTool,
   getApiRootTool,
-  getSiteInfoTool,
   getDashboardInfoTool,
   getStoryboardInfoTool,
   getSummaryDataTool,

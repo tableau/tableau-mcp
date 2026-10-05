@@ -17,7 +17,6 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApiRootTool } from './getApiRoot.js';
 import { getDashboardInfoTool } from './getDashboardInfo.js';
 import { getHealthTool } from './getHealth.js';
-import { getSiteInfoTool } from './getSiteInfo.js';
 import { getStoryboardInfoTool } from './getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './getStoryboardXml.js';
 import { getWorksheetInfoTool } from './getWorksheetInfo.js';
@@ -54,19 +53,6 @@ describe('External API coverage tools', () => {
             })
             .parse(body),
         ).toMatchObject({ apiVersion: '0.1.0', links: { workbook: '/v0/workbook' } });
-      },
-    },
-    {
-      makeTool: getSiteInfoTool,
-      args: {},
-      expectedPath: '/v0/site',
-      expectBody: (body: unknown) => {
-        expect(
-          z.object({ siteId: z.string(), authenticatedUserId: z.string() }).parse(body),
-        ).toEqual({
-          siteId: 'site-sales',
-          authenticatedUserId: 'user-author',
-        });
       },
     },
     {
@@ -320,12 +306,6 @@ describe('External API coverage tools', () => {
       args: {},
       overrideKey: 'GET /v0/',
       expectedMessage: 'does not serve the API root endpoint',
-    },
-    {
-      makeTool: getSiteInfoTool,
-      args: {},
-      overrideKey: 'GET /v0/site',
-      expectedMessage: 'does not serve the site endpoint',
     },
     {
       makeTool: getListStoryboardsTool,
