@@ -35,7 +35,6 @@ vi.mock('../../../restApiInstance.js', () => ({
 const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.1', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
-const VERSION_MAIN: ProductVersion = { value: 'main', build: 'main.26.0804.1416' };
 const VERSION_UNKNOWN: ProductVersion = { value: 'garbage', build: '' };
 
 function makeTool(
@@ -123,12 +122,8 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(makeTool(VERSION_BELOW).disabled)).toBe(true);
     });
 
-    it('is disabled for a dev build reporting "main" (no escape hatch)', async () => {
-      expect(await Provider.from(makeTool(VERSION_MAIN).disabled)).toBe(true);
-    });
-
-    it('is disabled for an unparseable version', async () => {
-      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(true);
+    it('is enabled for an unparseable version (dev-build escape hatch)', async () => {
+      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(false);
     });
 
     it('is disabled below the floor even when the flag is on and above when off', async () => {

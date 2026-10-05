@@ -8,31 +8,22 @@ import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { SCAFFOLD_DATA_APP_API_SCOPES } from '../../../server/oauth/scopes.js';
+import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
 
 // Data apps are hosted extension packages, which Tableau can only host on 2026.3.1+.
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1' as const;
+// (Dev builds reporting 'main'/an unparseable version are treated as fresh and pass, per the
+// shared isTableauVersionAtLeast convention.)
+const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
 
-/**
- * Strict `year.major.minor` floor check. Unlike `isTableauVersionAtLeast`, there is NO
- * `'main'`/dev-build escape hatch: `'main'` or any unparseable version is treated as below the
- * floor (tool gated out), because a dev build with no real version string cannot be assumed to
- * host data apps.
- */
 function meetsDataAppMinVersion(productVersion: ProductVersion): boolean {
-  const [year, major, minor] = productVersion.value.split('.').map(Number);
-  if ([year, major, minor].some(Number.isNaN)) {
-    return false;
-  }
-  const [minYear, minMajor, minMinor] = DATA_APP_MIN_PRODUCT_VERSION.split('.').map(Number);
-  return (
-    year > minYear ||
-    (year === minYear && major > minMajor) ||
-    (year === minYear && major === minMajor && minor >= minMinor)
-  );
+  return getResultForTableauVersion({
+    productVersion,
+    mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
+  });
 }
 
 const paramsSchema = {
