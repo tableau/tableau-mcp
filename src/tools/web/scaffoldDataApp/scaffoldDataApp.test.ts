@@ -129,9 +129,9 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(false);
     });
 
-    it('is disabled for product version 0.0.0 even when the build is from main', async () => {
+    it('is enabled for the test environment development build', async () => {
       const tool = makeTool({ value: '0.0.0', build: 'main.26.1005.0759' });
-      expect(await Provider.from(tool.disabled)).toBe(true);
+      expect(await Provider.from(tool.disabled)).toBe(false);
     });
 
     it('is enabled for the explicit main product-version sentinel', async () => {
@@ -148,8 +148,8 @@ describe('getScaffoldDataAppTool', () => {
   it.each([
     [false, VERSION_AT_FLOOR, true, true],
     [true, VERSION_AT_FLOOR, true, false],
-    [true, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
-    [false, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
+    [true, { value: '0.0.0', build: 'main.26.1005.0759' }, true, false],
+    [false, { value: '0.0.0', build: 'main.26.1005.0759' }, true, true],
     [true, VERSION_UNKNOWN, true, false],
     [true, { value: 'main', build: '' }, true, false],
   ])(

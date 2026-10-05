@@ -6,6 +6,15 @@ import { exportedForTesting, getResultForTableauVersion } from './isTableauVersi
 const { isTableauVersionAtLeast } = exportedForTesting;
 
 describe('getResultForTableauVersion', () => {
+  it('returns the supported result for the test environment development build', () => {
+    expect(
+      getResultForTableauVersion({
+        productVersion: { value: '0.0.0', build: 'main.26.1005.0759' },
+        mappings: { '2026.3.1': true, default: false },
+      }),
+    ).toBe(true);
+  });
+
   it('should return the result for the given tableau version', async () => {
     const result = await getResultForTableauVersion({
       mappings: {
@@ -30,6 +39,14 @@ describe('getResultForTableauVersion', () => {
 });
 
 describe('isTableauVersionAtLeast', () => {
+  it.each([
+    { value: '0.0.0', build: '' },
+    { value: '2026.3.0', build: 'main.26.1005.0759' },
+    { value: '2026.3.0', build: 'dev-main.26.1005.0759' },
+  ])('should accept either development-build marker: %j', (productVersion) => {
+    expect(isTableauVersionAtLeast({ productVersion, minVersion: '2026.3.1' })).toBe(true);
+  });
+
   it('should return true when version value is "main"', () => {
     const productVersion = {
       value: 'main',
