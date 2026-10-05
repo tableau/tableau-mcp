@@ -159,7 +159,7 @@ describe('getScaffoldDataAppTool', () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(flagOn);
       expect(await Provider.from(makeTool(productVersion).disabled)).toBe(disabled);
       expect(log).toHaveBeenCalledWith({
-        level: 'info',
+        level: 'debug',
         logger: 'tool-registration',
         tool_name: 'scaffold-data-app',
         message: 'Scaffold data app gates evaluated',

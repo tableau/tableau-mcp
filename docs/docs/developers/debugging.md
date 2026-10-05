@@ -7,15 +7,14 @@ sidebar_position: 4
 ## Diagnosing missing web tools
 
 Reconnect the MCP client to rerun registration, then search the server logs for
-`"logger":"tool-registration"`. These events use the `info` level, so the configured
-`LOG_LEVEL` must be `info` or `debug` and a logging sink must be enabled.
+`"logger":"tool-registration"`. Set `LOG_LEVEL=debug` to see both events and enable a logging sink.
 
-- **Scaffold data app gates evaluated** records the `data-apps` flag, Tableau product version
+- **Scaffold data app gates evaluated** (`debug`) records the `data-apps` flag, Tableau product version
   and build, minimum version, `versionAllowed`, and the combined `disabled` result. For example,
   product version `0.0.0` with build `main.26.1005.0759` passes the version gate: the shared helper
   treats either a `0.0.0` product version or a build containing `main` as a fresh development build.
   The helper also treats unparseable product versions as fresh. The `data-apps` flag must still be on.
-- **Tool registration gates evaluated** lists `eligibleTools` and `omittedTools`. Each omitted
+- **Tool registration gates evaluated** (`info`) lists `eligibleTools` and `omittedTools`. Each omitted
   tool includes its first failing gate: `disabled`, `not-in-include-tools`, `excluded`,
   `site-role-unavailable`, `insufficient-site-role`, or `registration-condition-not-met`.
   Role failures include the required role, and condition failures name the failing condition.

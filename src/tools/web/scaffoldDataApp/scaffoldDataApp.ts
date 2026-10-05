@@ -61,7 +61,7 @@ export const getScaffoldDataAppTool = (
       });
       const disabled = !(flagOn && versionAllowed);
       log({
-        level: 'info',
+        level: 'debug',
         logger: 'tool-registration',
         tool_name: 'scaffold-data-app',
         message: 'Scaffold data app gates evaluated',
