@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { z } from 'zod';
 
+import { log } from '../../../logging/logger.js';
 import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockGetAllowedOrigins: vi.fn(),
 }));
+
+vi.mock('../../../logging/logger.js');
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
@@ -141,6 +144,36 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(true);
     });
   });
+
+  it.each([
+    [false, VERSION_AT_FLOOR, true, true],
+    [true, VERSION_AT_FLOOR, true, false],
+    [true, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
+    [false, { value: '0.0.0', build: 'main.26.1005.0759' }, false, true],
+    [true, VERSION_UNKNOWN, false, true],
+    [true, { value: 'main', build: '' }, true, false],
+  ])(
+    'logs gate inputs and outcomes (flag=%s, version=%j)',
+    async (flagOn, productVersion, versionAllowed, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flagOn);
+      expect(await Provider.from(makeTool(productVersion).disabled)).toBe(disabled);
+      expect(log).toHaveBeenCalledWith({
+        level: 'info',
+        logger: 'tool-registration',
+        tool_name: 'scaffold-data-app',
+        message: 'Scaffold data app gates evaluated',
+        data: {
+          featureFlag: 'data-apps',
+          featureFlagEnabled: flagOn,
+          productVersion: productVersion.value,
+          productBuild: productVersion.build,
+          minimumProductVersion: '2026.3.1',
+          versionAllowed,
+          disabled,
+        },
+      });
+    },
+  );
 
   describe('callback', () => {
     beforeAll(async () => {
