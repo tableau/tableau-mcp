@@ -246,6 +246,25 @@ class ResourceAccessChecker {
       }
     }
 
+    // Query Data Source returns 403 when the user can't see the data source's parent project,
+    // even if they can query the data source itself.
+    // Fall back to the Metadata API to read the tags, which is not subject to that check.
+    async function getDatasourceTagLabels(): Promise<Array<string>> {
+      try {
+        datasource = await getDatasource();
+        return datasource.tags?.tag?.map((tag) => tag.label) ?? [];
+      } catch (error) {
+        const fallbackTagLabels =
+          error instanceof Error && getHttpStatus(error) === '403'
+            ? await getDatasourceTagLabelsFromMetadataApi()
+            : undefined;
+        if (!fallbackTagLabels) {
+          throw error;
+        }
+        return fallbackTagLabels;
+      }
+    }
+
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
     if (allowedProjectIds) {
       try {
@@ -284,27 +303,9 @@ class ResourceAccessChecker {
     const allowedTags = await this.getAllowedTags({ extra });
     if (allowedTags) {
       try {
-        let tagLabels: Array<string>;
-        if (datasource) {
-          tagLabels = datasource.tags?.tag?.map((tag) => tag.label) ?? [];
-        } else {
-          try {
-            datasource = await getDatasource();
-            tagLabels = datasource.tags?.tag?.map((tag) => tag.label) ?? [];
-          } catch (error) {
-            // Query Data Source returns 403 when the user can't see the data source's parent project,
-            // even if they can query the data source itself.
-            // Fall back to the Metadata API to read the tags, which is not subject to that check.
-            const fallbackTagLabels =
-              error instanceof Error && getHttpStatus(error) === '403'
-                ? await getDatasourceTagLabelsFromMetadataApi()
-                : undefined;
-            if (!fallbackTagLabels) {
-              throw error;
-            }
-            tagLabels = fallbackTagLabels;
-          }
-        }
+        const tagLabels = datasource
+          ? (datasource.tags?.tag?.map((tag) => tag.label) ?? [])
+          : await getDatasourceTagLabels();
 
         if (!tagLabels.some((label) => allowedTags.has(label))) {
           return {
