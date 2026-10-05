@@ -58,6 +58,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
   OAUTH_CIMD_DNS_SERVERS: string | undefined;
+  OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME: string | undefined;
   ADVERTISE_API_SCOPES: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_RESOURCE_URI: string | undefined;

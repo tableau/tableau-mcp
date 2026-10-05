@@ -556,6 +556,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth CIMD Proxy Resolves Hostname',
+    description:
+      'When "true", a proxy is asked to connect to the hostname of a client metadata document URL instead of its resolved and checked IP address. Defaults to "false".',
+    required: false,
+    sensitive: false,
+  },
   ADVERTISE_API_SCOPES: {
     includeInUserConfig: false,
     type: 'boolean',

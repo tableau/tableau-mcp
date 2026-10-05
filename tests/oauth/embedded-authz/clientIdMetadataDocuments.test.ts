@@ -1,10 +1,12 @@
 import express from 'express';
 import http from 'http';
+import { LookupFunction } from 'net';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
 import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import { clientMetadataAgent } from '../../../src/server/oauth/authorize.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
 import { milliseconds } from '../../../src/utils/milliseconds.js';
@@ -75,6 +77,7 @@ describe('clientIdMetadataDocuments', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   beforeAll(setEnv);
@@ -83,6 +86,7 @@ describe('clientIdMetadataDocuments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clientMetadataCache.clear();
+    vi.stubEnv('OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME', undefined);
     _server = undefined;
   });
 
@@ -127,8 +131,15 @@ describe('clientIdMetadataDocuments', () => {
 
     expect(mockAxios.get).toHaveBeenCalledWith(
       'https://1.2.3.4/.well-known/oauth/client-metadata.json',
-      expect.any(Object),
+      expect.objectContaining({
+        maxRedirects: 0,
+        httpsAgent: clientMetadataAgent,
+        transport: { request: expect.any(Function) },
+        signal: expect.any(AbortSignal),
+        headers: { Accept: 'application/json', Host: 'www.fakemcpclient.com' },
+      }),
     );
+    expect(mockAxios.get.mock.calls[0][1]).not.toHaveProperty('lookup');
 
     expect(response.status).toBe(302);
     const location = new URL(response.headers['location']);
@@ -177,7 +188,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({
       resolve4: () => [],
-      resolve6: () => ['[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]'],
+      resolve6: () => ['fedc:ba98:7654:3210:fedc:ba98:7654:3210'],
     });
     mockAxios.get.mockResolvedValue(mocks.MOCK_AXIOS_GET_RESPONSE);
 
@@ -193,8 +204,49 @@ describe('clientIdMetadataDocuments', () => {
 
     expect(mockAxios.get).toHaveBeenCalledWith(
       'https://[fedc:ba98:7654:3210:fedc:ba98:7654:3210]/.well-known/oauth/client-metadata.json',
-      expect.any(Object),
+      expect.objectContaining({
+        headers: { Accept: 'application/json', Host: 'www.fakemcpclient.com' },
+      }),
     );
+
+    expect(response.status).toBe(302);
+  });
+
+  it('should request the CIMD URL by hostname when OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME is true', async () => {
+    vi.stubEnv('OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME', 'true');
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({
+      resolve4: () => [],
+      resolve6: () => ['fedc:ba98:7654:3210:fedc:ba98:7654:3210'],
+    });
+    mockAxios.get.mockResolvedValue(mocks.MOCK_AXIOS_GET_RESPONSE);
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(mockAxios.get).toHaveBeenCalledWith(
+      constants.FAKE_CLIENT_METADATA_URL,
+      expect.objectContaining({
+        maxRedirects: 0,
+        lookup: expect.any(Function),
+        headers: { Accept: 'application/json' },
+      }),
+    );
+    const lookup = mockAxios.get.mock.calls[0][1]?.lookup as LookupFunction;
+    const lookupCallback = vi.fn();
+    lookup(new URL(constants.FAKE_CLIENT_METADATA_URL).hostname, { all: true }, lookupCallback);
+    await new Promise((resolve) => process.nextTick(resolve));
+    expect(lookupCallback).toHaveBeenCalledWith(null, [
+      { address: 'fedc:ba98:7654:3210:fedc:ba98:7654:3210', family: 6 },
+    ]);
 
     expect(response.status).toBe(302);
   });

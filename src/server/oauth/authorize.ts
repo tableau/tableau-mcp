@@ -1,5 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
+import type { IncomingMessage } from 'http';
+import https from 'https';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
@@ -8,7 +10,13 @@ import { fromError } from 'zod-validation-error/v3';
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
-import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
+import {
+  axios,
+  AxiosRequestConfig,
+  AxiosResponse,
+  getStringResponseHeader,
+  isAxiosError,
+} from '../../utils/axios.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
@@ -19,6 +27,7 @@ import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
+import { createPinnedLookup } from './pinnedLookup.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
@@ -237,8 +246,11 @@ async function getOAuthRedirectUrl(
   return initialOAuthUrl;
 }
 
+// Separate agent without keep-alive, so each client metadata request opens its own connection
+export const clientMetadataAgent = new https.Agent({ keepAlive: false });
+
 // https://client.dev/servers
-async function getClientFromMetadataDoc(
+export async function getClientFromMetadataDoc(
   clientMetadataUrl: URL,
 ): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
   const originalUrl = clientMetadataUrl.toString();
@@ -247,8 +259,11 @@ async function getClientFromMetadataDoc(
     return Ok(cache);
   }
 
-  const originalHostname = clientMetadataUrl.hostname;
+  const resolvedUrl = new URL(clientMetadataUrl);
+  let requestUrl = clientMetadataUrl;
+  let requestConfig: AxiosRequestConfig = { httpsAgent: clientMetadataAgent };
   if (!isIP(clientMetadataUrl.hostname)) {
+    const { proxyResolvesHostname } = getConfig().oauth;
     try {
       // Resolve the IP from DNS
       const dnsResolver = getDnsResolver();
@@ -264,8 +279,38 @@ async function getClientFromMetadataDoc(
           });
         }
       }
-      // Replace the hostname with the resolved IP Address
-      clientMetadataUrl.hostname = ipAddress;
+      // Check the resolved IP address below
+      resolvedUrl.hostname = isIP(ipAddress) === 6 ? `[${ipAddress}]` : ipAddress;
+      if (proxyResolvesHostname) {
+        // Pin direct connections to the checked address. A proxy resolves the hostname itself.
+        requestConfig = {
+          lookup: createPinnedLookup(clientMetadataUrl.hostname, ipAddress),
+          httpsAgent: clientMetadataAgent,
+        };
+      } else {
+        // Connect to the checked address, also through a proxy, and use the hostname in the Host
+        // header and as the TLS server name. The server name is set per request, because axios
+        // also applies the agent's options to the TLS connection with an https:// proxy.
+        const { hostname } = clientMetadataUrl;
+        const isIPv6 = isIP(ipAddress) === 6;
+        requestUrl = resolvedUrl;
+        requestConfig = {
+          httpsAgent: clientMetadataAgent,
+          transport: {
+            request: (options: https.RequestOptions, callback?: (res: IncomingMessage) => void) => {
+              // axios replaces the agent to connect through a proxy, and the CONNECT request that
+              // it sends does not support IPv6 addresses
+              if (isIPv6 && options.agent !== clientMetadataAgent) {
+                throw new Error(
+                  'IPv6 addresses are not sent to a proxy (see OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME)',
+                );
+              }
+              return https.request({ ...options, servername: hostname }, callback);
+            },
+          },
+          headers: { Host: clientMetadataUrl.host },
+        };
+      }
     } catch (error) {
       log({
         message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}`,
@@ -280,7 +325,7 @@ async function getClientFromMetadataDoc(
     }
   }
 
-  const isSafe = isSSRFSafeURL(clientMetadataUrl.toString(), {
+  const isSafe = isSSRFSafeURL(resolvedUrl.toString(), {
     allowedProtocols: ['https'],
     autoPrependProtocol: false,
   });
@@ -297,13 +342,17 @@ async function getClientFromMetadataDoc(
     const client = axios.create();
     response = await retry(
       () =>
-        client.get(clientMetadataUrl.toString(), {
+        client.get(requestUrl.toString(), {
           timeout: 5000,
+          // axios does not time out connecting with a custom transport, so limit the whole attempt
+          ...(requestConfig.transport ? { signal: AbortSignal.timeout(5000) } : {}),
           maxContentLength: 5 * 1024, // 5 KB
-          maxRedirects: 3,
+          // Redirects MUST NOT be followed (draft-ietf-oauth-client-id-metadata-document-02 §5)
+          maxRedirects: 0,
+          ...requestConfig,
           headers: {
             Accept: 'application/json',
-            Host: originalHostname,
+            ...requestConfig.headers,
           },
         }),
       {
