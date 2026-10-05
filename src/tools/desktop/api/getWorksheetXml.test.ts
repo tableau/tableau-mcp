@@ -40,6 +40,9 @@ describe('getWorksheetXmlTool', () => {
     const tool = getGetWorksheetXmlTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-worksheet-xml');
     expect(tool.description).toContain('Get structure for an EXISTING worksheet');
+    expect(tool.description).toContain('from live Desktop');
+    expect(tool.description).toContain('Resets its active edit buffer');
+    expect(tool.description).toContain('For pending drafts, read the cached file instead');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),

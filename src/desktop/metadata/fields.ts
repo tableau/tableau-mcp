@@ -236,25 +236,31 @@ export function removeFieldFromEncoding(
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
-  if (!worksheet?.table?.panes) {
-    throw new Error('No panes found in worksheet');
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+  if (!worksheet.table?.panes) {
+    throw fieldRemovalError(worksheet, 'No panes found in worksheet');
   }
 
   const panes = normalizeArray(worksheet.table.panes.pane);
   if (panes.length === 0) {
-    throw new Error('No panes found');
+    throw fieldRemovalError(worksheet, 'No panes found');
   }
 
   const firstPane = panes[0];
   if (!firstPane.encodings?.[encodingType]) {
-    throw new Error(`No ${encodingType} encodings found`);
+    throw fieldRemovalError(worksheet, `No ${encodingType} encodings found`);
   }
 
   const encodings = normalizeArray(firstPane.encodings[encodingType]);
   const filtered = encodings.filter((enc) => enc['@_column'] !== columnRef);
 
   if (filtered.length === encodings.length) {
-    throw new Error(`Encoding ${encodingType} with column ${columnRef} not found`);
+    throw fieldRemovalError(
+      worksheet,
+      `Encoding ${encodingType} with column ${columnRef} not found`,
+    );
   }
 
   if (filtered.length === 0) {
@@ -1010,6 +1016,53 @@ function addFieldToShelf(
   return serializeXML(parsed);
 }
 
+export type WorksheetFieldPlacements = {
+  rows: string[];
+  cols: string[];
+  encodings: Record<string, string[]>;
+};
+
+/** Snapshot the selected worksheet's shelves and first-pane encodings without a live read. */
+export function getWorksheetFieldPlacements(worksheetXml: string): WorksheetFieldPlacements {
+  const worksheet = getWorksheet(parseXML(worksheetXml));
+  if (!worksheet) throw new Error('No worksheet found in XML');
+  return worksheetFieldPlacements(worksheet);
+}
+
+function worksheetFieldPlacements(worksheet: ParsedWorksheet): WorksheetFieldPlacements {
+  const firstPane = normalizeArray(worksheet.table?.panes?.pane)[0];
+  const encodings = Object.fromEntries(
+    Object.entries(firstPane?.encodings ?? {})
+      .map(
+        ([channel, entries]) =>
+          [
+            channel,
+            normalizeArray(entries)
+              .map((encoding) => encoding['@_column'])
+              .filter((column) => typeof column === 'string' && column.length > 0),
+          ] as const,
+      )
+      .filter(([, columns]) => columns.length > 0),
+  );
+  return {
+    rows: parseShelfValue(worksheet.table?.rows),
+    cols: parseShelfValue(worksheet.table?.cols),
+    encodings,
+  };
+}
+
+/** Report the same worksheet and pane the removal checked, preserving pending edits. */
+function fieldRemovalError(worksheet: ParsedWorksheet, reason: string): Error {
+  return new Error(
+    `${reason}. No worksheet XML was changed.\n` +
+      `Current placements in the selected worksheet XML (encodings are for the first pane): ${JSON.stringify(worksheetFieldPlacements(worksheet))}\n` +
+      'Use read-cached-xml with filePath set to the same worksheetFile to confirm the exact columnRef, target, and encodingType before retrying. ' +
+      'For the latest live state, use get-worksheet-xml with mode="file", inspect its returned file with read-cached-xml, and pass that file to remove-field. ' +
+      'A live re-read resets the edit buffer; finish pending edits first. ' +
+      'Do not retry removal if the field is absent.',
+  );
+}
+
 /**
  * Internal helper to remove field from rows or cols shelf
  */
@@ -1021,15 +1074,18 @@ function removeFieldFromShelf(
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
-  if (!worksheet?.table) {
-    throw new Error(`No ${shelf} shelf found in worksheet`);
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+  if (!worksheet.table) {
+    throw fieldRemovalError(worksheet, `No ${shelf} shelf found in worksheet`);
   }
 
   const currentArray = parseShelfValue(worksheet.table[shelf]);
   const filtered = currentArray.filter((col) => col !== columnRef);
 
   if (filtered.length === currentArray.length) {
-    throw new Error(`Column ${columnRef} not found in ${shelf}`);
+    throw fieldRemovalError(worksheet, `Column ${columnRef} not found in ${shelf}`);
   }
 
   worksheet.table[shelf] = filtered.length > 0 ? serializeShelfValue(filtered) : '';
