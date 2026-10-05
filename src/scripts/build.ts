@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
 
-import { build, BuildOptions } from 'esbuild';
-import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { build, BuildOptions, context } from 'esbuild';
+import { cpSync } from 'fs';
+import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -12,6 +13,7 @@ import { isVariant, variants } from './variants.js';
 
 const dev = process.argv.includes('--dev');
 const dirty = process.argv.includes('--dirty');
+const watch = process.argv.includes('--watch');
 const variant = process.argv.includes('--variant')
   ? process.argv[process.argv.indexOf('--variant') + 1]
   : 'default';
@@ -44,8 +46,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     },
     outfile: './build/index.js',
     // must be last so that the action can override previous build options
-    ...globalIdentifiers.reduce((acc, { name, defaultValue, action }) => {
-      return { ...acc, ...action(globalValues[name] ?? defaultValue) };
+    ...globalIdentifiers.reduce((acc, { name, defaultValue, getBuildOptions }) => {
+      return { ...acc, ...getBuildOptions(globalValues[name] ?? defaultValue) };
     }, {}),
   };
 
@@ -61,6 +63,13 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   for (const warning of result.warnings) {
     console.log(`⚠️ ${warning.text}`);
+  }
+
+  if (variant === 'desktop' || variant === 'combined') {
+    copyDirectory('./resources/desktop', './build/resources/desktop');
+    // NOTE: desktop data is NOT copied here. It is staged below through the AUTHORITATIVE
+    // allowlist (`stagedDesktopData`). A blanket copy of src/desktop/data used to run here
+    // and silently defeated that allowlist (TR1) — do not reintroduce it.
   }
 
   console.log('🏗️ Building telemetry/tracing.js...');
@@ -92,6 +101,50 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     resolve(process.cwd(), 'build', 'features.json'),
   );
   console.log('✅ features.json copied successfully');
+
+  // Stage the bundled authoring data into the build output. esbuild bundles CODE
+  // only — these files are read at runtime via fs, so a published / npm-installed
+  // server has no data unless we copy them. The target `build/desktop/data` is the
+  // path server.desktop.ts resolves package-relative as DATA_ROOT (`__dirname/desktop/data`,
+  // where __dirname === build/ in the bundle); the search library reads its inputs through it.
+  //
+  // AUTHORITATIVE ALLOWLIST, not a blanket copy (Lane M5 tarball scoping + TR1 fix): stage
+  // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
+  // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
+  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds a shipped
+  // search tool: twb_2026.2.0.xsd (lookup-workbook-schema), corpus.json +
+  // examples/ (search-examples / search-workbook-examples), and twb-example-index.json —
+  // the committed TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this
+  // dir at src/desktop/data-source/ and is never staged. search-commands (and the name/param
+  // guards) no longer read a bundled snapshot here — commandsReference.ts synthesizes their
+  // document from tab-agent-south's live External API registry (TABLEAU_COMMANDS_REGISTRY_DIR)
+  // at runtime, which is why there is no tableau-desktop-commands-reference.json entry below.
+  //
+  // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
+  // ever resolves `build/desktop/data` at runtime. The `default` variant's server
+  // (src/index.ts) never reads it — and `default` is the ONLY variant the publish pipeline
+  // builds via `npm run build` — so staging is skipped there to keep the default package lean.
+  if (variant === 'desktop' || variant === 'combined') {
+    console.log('🏗️ Staging desktop data (allowlist)...');
+    const desktopDataSrc = './src/desktop/data';
+    const desktopDataOut = './build/desktop/data';
+    const stagedDesktopData = [
+      'twb_2026.2.0.xsd', // searchLibrary WORKBOOK_XSD_PATH — lookup-workbook-schema
+      'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
+      'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
+      'examples', // searchLibrary EXAMPLES_DIR — search-examples
+      'templates', // Compatibility fallback until TAS materializes the published content pack.
+    ];
+    await mkdir(desktopDataOut, { recursive: true });
+    for (const entry of stagedDesktopData) {
+      await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+    }
+    console.log(
+      `✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`,
+    );
+  } else {
+    console.log(`⏭️ Skipping desktop data staging for the '${variant}' variant (not read by it).`);
+  }
 
   // scaffold-data-app serves a static, un-substituted template zip (both local and S3 modes) from
   // an asset bundled next to index.js (same idiom as features.json). Rebuild the zip fresh from the
@@ -163,4 +216,45 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     console.error('❌ Failed to build MCP Apps:', error);
     process.exit(1);
   }
+
+  if (watch) {
+    // Watch re-bundles ONLY the main entry — the fast TS edit loop. Telemetry, features.json,
+    // desktop data, and the MCP Apps are built once above; editing those needs a full rebuild.
+    // esbuild cannot push new code into the already-running MCP process, so each rebuild still
+    // requires reconnecting the stdio server (/mcp) to take effect.
+    const ctx = await context({
+      ...buildOptions,
+      plugins: [
+        ...(buildOptions.plugins ?? []),
+        {
+          name: 'watch-reporter',
+          setup(build) {
+            build.onEnd(async (result) => {
+              for (const error of result.errors) {
+                console.log(`❌ ${error.text}`);
+              }
+              for (const warning of result.warnings) {
+                console.log(`⚠️ ${warning.text}`);
+              }
+              if (result.errors.length === 0 && buildOptions.outfile) {
+                await chmod(buildOptions.outfile, '755');
+                console.log(
+                  `✅ Rebuilt ${buildOptions.outfile} — reconnect the MCP (/mcp) to load it.`,
+                );
+              }
+            });
+          },
+        },
+      ],
+    });
+    await ctx.watch();
+    console.log(
+      `\n👀 Watching src for changes (re-bundling ${buildOptions.outfile} only). Ctrl-C to stop.`,
+    );
+  }
 })();
+
+function copyDirectory(source: string, destination: string): void {
+  console.log(`🏗️ Copying ${source} to ${destination}...`);
+  cpSync(source, destination, { recursive: true });
+}

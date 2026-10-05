@@ -115,6 +115,52 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     },
   };
 
+  // A populated response with `viz` blobs in both an insight result and a
+  // summary result — used to exercise the `slim` viz-stripping path.
+  const mockPopulatedResponse = {
+    bundle_response: {
+      result: {
+        insight_groups: [
+          {
+            type: 'ban',
+            insights: [
+              {
+                insight_type: 'popc',
+                result: {
+                  type: 'popc',
+                  version: 1,
+                  markup: 'There was a decrease of -$5.53 (-22.1%) over January 2024.',
+                  viz: { $schema: 'https://vega.github.io/schema/vega-lite/v5.json', mark: 'line' },
+                  facts: {
+                    target_period_value: { raw: 19.47, formatted: '$19.47' },
+                    difference: {
+                      direction: 'down',
+                      relative: { raw: -0.221, formatted: '-22.1%' },
+                    },
+                  },
+                  question: 'How has Sales changed?',
+                  score: 1,
+                },
+              },
+            ],
+            summaries: [
+              {
+                result: {
+                  id: 'summary-1',
+                  markup: '<b>Summary</b>',
+                  viz: { $schema: 'https://vega.github.io/schema/vega-lite/v5.json', mark: 'bar' },
+                  generation_id: 'gen-1',
+                },
+              },
+            ],
+          },
+        ],
+        has_errors: false,
+        characterization: 'CHARACTERIZATION_UNSPECIFIED',
+      },
+    },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -156,7 +202,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
-  it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
+  it.each(['ban', 'springboard', 'basic', 'detail', 'exploration'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
       mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
@@ -174,13 +220,25 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     },
   );
 
-  it('should have correct tool properties', () => {
+  it('should have correct tool properties', async () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
     expect(tool.description).toContain(
       'Generate an insight bundle for the current aggregated value',
     );
-    expect(tool.paramsSchema).toMatchObject({ bundleRequest: expect.any(Object) });
+    expect(paramsSchema).toMatchObject({
+      bundleRequest: expect.any(Object),
+      slim: expect.any(Object),
+      verbosity: expect.any(Object),
+    });
+    expect(paramsSchema.slim.description).toContain('Deprecated: use verbosity=slim.');
+    expect(paramsSchema.verbosity.description).toContain(
+      'strips the large viz (Vega chart-spec) blobs',
+    );
+    expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -280,9 +338,207 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).not.toHaveBeenCalled();
   });
 
-  async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
+  it('strips viz from every insight and summary result when slim is true', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+    const result = await getToolResult('ban', true);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    const group = parsed.bundle_response.result.insight_groups[0];
+    // viz removed everywhere it appears...
+    expect(group.insights[0].result).not.toHaveProperty('viz');
+    expect(group.summaries[0].result).not.toHaveProperty('viz');
+    // ...but the fields the UI renders are retained.
+    expect(group.insights[0].result.facts).toEqual(
+      mockPopulatedResponse.bundle_response.result.insight_groups[0].insights[0].result.facts,
+    );
+    expect(group.insights[0].result.markup).toBe(
+      'There was a decrease of -$5.53 (-22.1%) over January 2024.',
+    );
+    expect(group.summaries[0].result.markup).toBe('<b>Summary</b>');
+    // slim strips viz only — it does not add a metric_context sibling.
+    expect(parsed).not.toHaveProperty('metric_context');
+  });
+
+  it('returns byte-identical output for verbosity slim and deprecated slim alias', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const verbositySlimResult = await getToolResult('ban', undefined, 'slim');
+    const deprecatedSlimResult = await getToolResult('ban', true);
+
+    invariant(verbositySlimResult.content[0].type === 'text');
+    invariant(deprecatedSlimResult.content[0].type === 'text');
+    expect(verbositySlimResult.content[0].text).toBe(deprecatedSlimResult.content[0].text);
+  });
+
+  it('uses verbosity when both verbosity and deprecated slim alias are supplied', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const result = await getToolResult('ban', true, 'full');
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toEqual(mockPopulatedResponse);
+  });
+
+  it('returns viz verbatim when slim is omitted or false', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const defaultResult = await getToolResult('ban');
+    invariant(defaultResult.content[0].type === 'text');
+    const parsedDefault = JSON.parse(defaultResult.content[0].text);
+    expect(parsedDefault).toEqual(mockPopulatedResponse);
+    expect(parsedDefault).not.toHaveProperty('metric_context');
+
+    const explicitFalse = await getToolResult('ban', false);
+    invariant(explicitFalse.content[0].type === 'text');
+    const parsedExplicitFalse = JSON.parse(explicitFalse.content[0].text);
+    expect(parsedExplicitFalse).toEqual(mockPopulatedResponse);
+    expect(parsedExplicitFalse).not.toHaveProperty('metric_context');
+  });
+
+  it('forwards options.now verbatim to the API', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const withNow = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        options: { ...bundleRequest.bundle_request.options, now: '2026-05-31' },
+      },
+    };
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
+    await callback(
+      { bundleRequest: withNow, bundleType: undefined, slim: undefined, verbosity: undefined },
+      getMockRequestHandlerExtra(),
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(withNow, 'ban');
+    expect(
+      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.options.now,
+    ).toBe('2026-05-31');
+  });
+
+  it('forwards measurement_period.specific_period verbatim (under RANGE_BY_CONFIG)', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const ms = bundleRequest.bundle_request.input.metric.metric_specification;
+    const withSpecificPeriod = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metric: {
+            ...bundleRequest.bundle_request.input.metric,
+            metric_specification: {
+              ...ms,
+              measurement_period: {
+                ...ms.measurement_period,
+                range: 'RANGE_BY_CONFIG',
+                specific_period: { date: '2026-04-15', end_date: '2026-04-20' },
+              },
+            },
+          },
+        },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    await callback(
+      {
+        bundleRequest: withSpecificPeriod,
+        bundleType: undefined,
+        slim: undefined,
+        verbosity: undefined,
+      },
+      getMockRequestHandlerExtra(),
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      withSpecificPeriod,
+      'ban',
+    );
+    expect(
+      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.input.metric
+        .metric_specification.measurement_period.specific_period,
+    ).toEqual({ date: '2026-04-15', end_date: '2026-04-20' });
+  });
+
+  it('forwards a supported rolling period and dynamic-offset flag verbatim', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const metric = bundleRequest.bundle_request.input.metric;
+    const ms = metric.metric_specification;
+    const withLastXPeriod = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metric: {
+            ...metric,
+            metric_specification: {
+              ...ms,
+              measurement_period: {
+                granularity: 'GRANULARITY_BY_DAY',
+                range: 'RANGE_BY_CONFIG',
+                last_x_period: {
+                  period: 7 as const,
+                  period_type: 'GRANULARITY_BY_DAY' as const,
+                  include_current_period: true as const,
+                },
+              },
+            },
+            extension_options: {
+              ...metric.extension_options,
+              use_dynamic_offset: true,
+              offset_from_today: 0,
+            },
+          },
+        },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    await callback(
+      {
+        bundleRequest: withLastXPeriod,
+        bundleType: undefined,
+        slim: undefined,
+        verbosity: undefined,
+      },
+      getMockRequestHandlerExtra(),
+    );
+    const forwarded = mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0];
+    expect(
+      forwarded.bundle_request.input.metric.metric_specification.measurement_period.last_x_period,
+    ).toEqual({
+      period: 7,
+      period_type: 'GRANULARITY_BY_DAY',
+      include_current_period: true,
+    });
+    expect(forwarded.bundle_request.input.metric.extension_options?.use_dynamic_offset).toBe(true);
+  });
+
+  async function getToolResult(
+    bundleType?: PulseInsightBundleType,
+    slim?: boolean,
+    verbosity?: 'slim' | 'full',
+  ): Promise<CallToolResult> {
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    return await callback(
+      { bundleRequest, bundleType, slim, verbosity },
+      getMockRequestHandlerExtra(),
+    );
   }
 });

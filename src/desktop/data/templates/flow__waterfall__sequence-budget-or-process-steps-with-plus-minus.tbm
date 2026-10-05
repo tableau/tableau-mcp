@@ -1,0 +1,322 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Designed to show the sequencing of data through a flow process, typically budgets. Can include +/- components.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Financial Waterfall Charts' inline='true' name='federated.1s4iy760mr8q5k1bhiupl0u002ul' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Waterfall Charts' name='excel-direct.1mf3tt01f1tgpn12sli8c0xevxcv'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='excel-direct.1mf3tt01f1tgpn12sli8c0xevxcv' name='Financial' table='[Financial$]' type='table'>
+          <columns gridOrigin='A1:C29:no:A1:C29:0' header='yes' outcome='6'>
+            <column datatype='string' name='Item' ordinal='0' />
+            <column datatype='date' name='Date' ordinal='1' />
+            <column datatype='integer' name='Amount' ordinal='2' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Item</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Item]</local-name>
+            <parent-name>[Financial]</parent-name>
+            <remote-alias>Item</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Date</remote-name>
+            <remote-type>7</remote-type>
+            <local-name>[Date]</local-name>
+            <parent-name>[Financial]</parent-name>
+            <remote-alias>Date</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;DATE&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Amount</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Amount]</local-name>
+            <parent-name>[Financial]</parent-name>
+            <remote-alias>Amount</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Financial]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:C29:no:A1:C29:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='-Amount' datatype='integer' name='[Calculation_5073656843881177127]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='-[Amount]' />
+      </column>
+      <column caption='Change' datatype='boolean' name='[Calculation_5073656843881439273]' role='measure' type='nominal'>
+        <calculation class='tableau' formula='SUM([Amount])&gt;0' />
+      </column>
+      <column datatype='date' name='[Date]' role='dimension' type='ordinal' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column-instance column='[Date]' derivation='MDY' name='[md:Date:ok]' pivot='key' type='ordinal' />
+      <column-instance column='[Calculation_5073656843881439273]' derivation='User' name='[usr:Calculation_5073656843881439273:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/14/2018 06:11:58 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='7' timestamp-start='2018-07-14 18:11:58.860' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Item</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Item]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Item</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Financial</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>7</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Date</remote-name>
+              <remote-type>133</remote-type>
+              <local-name>[Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Date</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Financial</family>
+              <local-type>date</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Amount</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Amount]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Amount</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Financial</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>7</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+        <filter class='categorical' column='[md:Date:ok]' filter-group='2'>
+          <groupfilter function='member' level='[md:Date:ok]' member='20111231' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+        </filter>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[usr:Calculation_5073656843881439273:nk]' type='palette'>
+            <map to='#052f33'>
+              <bucket>true</bucket>
+            </map>
+            <map to='#b1493f'>
+              <bucket>false</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <filter class='categorical' column='[md:Date:ok]' filter-group='2'>
+        <groupfilter function='member' level='[md:Date:ok]' member='20111231' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='excel-direct.1mf3tt01f1tgpn12sli8c0xevxcv' name='Financial' table='[Financial$]' type='table'>
+                <columns gridOrigin='A1:C29:no:A1:C29:0' header='yes' outcome='6'>
+                  <column datatype='string' name='Item' ordinal='0' />
+                  <column datatype='date' name='Date' ordinal='1' />
+                  <column datatype='integer' name='Amount' ordinal='2' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <window tab-color='#72bcbb'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.1q3xxhn1t1nxoz17152l71ng6tqf].[md:Pivot Field Names:ok]</field>
+          <field>[federated.1q3xxhn1t1nxoz17152l71ng6tqf].[none:Category:nk]</field>
+          <field>[federated.1q3xxhn1t1nxoz17152l71ng6tqf].[none:Order:ok]</field>
+          <field>[federated.1q3xxhn1t1nxoz17152l71ng6tqf].[sum:Amount:qk]</field>
+          <field>[federated.1q3xxhn1t1nxoz17152l71ng6tqf].[yr:Pivot Field Names:ok]</field>
+          <field>[federated.1s4iy760mr8q5k1bhiupl0u002ul].[none:Item:nk]</field>
+          <field>[federated.1s4iy760mr8q5k1bhiupl0u002ul].[usr:Calculation_5073656843881439273:nk]</field>
+        </color-one-way>
+      </highlight>
+      <default-map-tool-selection tool='2' />
+    </viewpoint>
+    <simple-id uuid='{8E393E43-EF91-4739-A859-22062108FEB8}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Financial Waterfall Charts' name='federated.1s4iy760mr8q5k1bhiupl0u002ul' />
+      </datasources>
+      <datasource-dependencies datasource='federated.1s4iy760mr8q5k1bhiupl0u002ul'>
+        <column datatype='integer' name='[Amount]' role='measure' type='quantitative' />
+        <column caption='-Amount' datatype='integer' name='[Calculation_5073656843881177127]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='-[Amount]' />
+        </column>
+        <column caption='Change' datatype='boolean' name='[Calculation_5073656843881439273]' role='measure' type='nominal'>
+          <calculation class='tableau' formula='SUM([Amount])&gt;0' />
+        </column>
+        <column datatype='string' name='[Item]' role='dimension' type='nominal' />
+        <column-instance column='[Amount]' derivation='Sum' name='[cum:sum:Amount:qk]' pivot='key' type='quantitative'>
+          <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+        </column-instance>
+        <column-instance column='[Item]' derivation='None' name='[none:Item:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_5073656843881177127]' derivation='Sum' name='[sum:Calculation_5073656843881177127:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_5073656843881439273]' derivation='User' name='[usr:Calculation_5073656843881439273:nk]' pivot='key' type='nominal' />
+      </datasource-dependencies>
+      <manual-sort column='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[none:Item:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;Total Revenue&quot;</bucket>
+          <bucket>&quot;Cost of Revenue&quot;</bucket>
+          <bucket>&quot;Add&apos;l income items&quot;</bucket>
+          <bucket>&quot;Income Tax&quot;</bucket>
+          <bucket>&quot;Research and Development&quot;</bucket>
+          <bucket>&quot;Sales, General and Admin.&quot;</bucket>
+          <bucket>&quot;Add&apos;l expense items&quot;</bucket>
+          <bucket>%all%</bucket>
+        </dictionary>
+      </manual-sort>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[cum:sum:Amount:qk]' scope='rows' value='' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='total-label' data-class='total' field='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[none:Item:nk]' value='Net Profit' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-orientation' field='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[none:Item:nk]' value='0' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='border-style' data-class='total' value='none' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='in-tooltip' field='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[usr:Calculation_5073656843881439273:nk]' value='false' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='GanttBar' />
+        <encodings>
+          <color column='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[usr:Calculation_5073656843881439273:nk]' />
+          <size column='[federated.1s4iy760mr8q5k1bhiupl0u002ul].[sum:Calculation_5073656843881177127:qk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[federated.1s4iy760mr8q5k1bhiupl0u002ul].[cum:sum:Amount:qk]</rows>
+    <cols total='true'>[federated.1s4iy760mr8q5k1bhiupl0u002ul].[none:Item:nk]</cols>
+  </table>
+</bookmark>

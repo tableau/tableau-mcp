@@ -8,14 +8,21 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../config.desktop.js';
-import { ToolExecutor } from '../../desktop/toolExecutor/toolExecutor.js';
+import { CallDeadline } from '../../desktop/callDeadline.js';
+import { ExternalApiToolExecutor } from '../../desktop/externalApi/externalApiToolExecutor.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { TableauToolContext } from '../toolContext.js';
 
 // Additional context available to all desktop tool callbacks
 export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer> & {
   config: Config;
-  getExecutor: (sessionId: string) => Promise<ToolExecutor>;
+  getExecutor: (sessionId: string) => Promise<ExternalApiToolExecutor>;
+  /**
+   * The per-call clock. `extra.signal` is already composed with it, so a tool that forwards
+   * `extra.signal` gets the deadline for free; `logAndExecute` races it so a tool that ignores
+   * the signal still returns the honest timeout instead of hanging.
+   */
+  deadline?: CallDeadline;
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext

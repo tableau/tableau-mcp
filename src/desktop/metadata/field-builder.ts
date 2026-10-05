@@ -1,0 +1,574 @@
+/**
+ * Field builder utilities for constructing column references from user-friendly names
+ */
+
+import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
+import { normalizeArray, parseXML } from './parser.js';
+import {
+  AggregationType,
+  type FieldReference,
+  type ParsedColumn,
+  ParsedColumnInstance,
+  ParsedDatasourceDependencies,
+} from './types.js';
+
+export function inferRoleFromType(localType: string | undefined): string {
+  if (!localType) return 'dimension';
+  switch (localType) {
+    case 'integer':
+    case 'real':
+      return 'measure';
+    default:
+      return 'dimension';
+  }
+}
+
+export function inferFieldTypeFromType(localType: string | undefined): string {
+  if (!localType) return 'nominal';
+  switch (localType) {
+    case 'integer':
+    case 'real':
+    case 'date':
+    case 'datetime':
+      return 'quantitative';
+    default:
+      return 'nominal';
+  }
+}
+
+function normalizeLogicalTableId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().replace(/^\[|\]$/g, '');
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getEnabledFormatElement(container: unknown, elementName: string): any {
+  if (!container || typeof container !== 'object') return undefined;
+
+  const elements = container as Record<string, unknown>;
+  if (elements[elementName] !== undefined) return elements[elementName];
+
+  const enabledSuffix = `.true...${elementName}`;
+  const matches = Object.entries(elements).filter(
+    ([name]) => name.startsWith('_.fcp.') && name.endsWith(enabledSuffix),
+  );
+  return matches.length === 1 ? matches[0][1] : undefined;
+}
+
+/**
+ * Visit every `<column>` under a relation tree, outermost relation first.
+ * Relations nest to any depth — a join of joins puts the leaf
+ * `<relation type='table'>` two or more levels down, and only the leaf carries
+ * `<columns>`. Walking one level made those columns invisible to the reader and
+ * unresolvable by the writer, which now refuses rather than fabricating. Both
+ * sides share this walk so they agree on which columns exist at any depth.
+ */
+export function forEachRelationColumn(relations: any[], visit: (column: any) => void): void {
+  for (const relation of relations) {
+    if (!relation || typeof relation !== 'object') continue;
+    for (const column of normalizeArray(relation.columns?.column)) {
+      visit(column);
+    }
+    forEachRelationColumn(normalizeArray(relation.relation), visit);
+  }
+}
+
+/**
+ * Find a field in the workbook's first datasource
+ * @param workbookXml - Full workbook XML
+ * @param fieldName - User-friendly field name (e.g., "Profit", "sum of Profit", "Category")
+ * @param aggregation - Optional aggregation type (if not provided, will parse from fieldName or use defaults)
+ * @returns FieldReference object or null if not found
+ */
+export function findField(
+  workbookXml: string,
+  fieldName: string,
+  aggregation?: AggregationType,
+): FieldReference | null {
+  const workbook = parseXML(workbookXml);
+
+  // Find first datasource in first worksheet
+  const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
+  if (worksheets.length === 0) {
+    return null;
+  }
+
+  const firstWorksheet = worksheets[0];
+  const datasources = normalizeArray(firstWorksheet.table?.view?.datasources?.datasource);
+  if (datasources.length === 0) {
+    return null;
+  }
+
+  const datasourceName = datasources[0]['@_name'];
+  if (!datasourceName) {
+    return null;
+  }
+
+  // Find datasource-dependencies for this datasource
+  const dependencies = normalizeArray(firstWorksheet.table?.view?.['datasource-dependencies']);
+  const datasourceDeps = dependencies.find(
+    (dep: ParsedDatasourceDependencies) => dep['@_datasource'] === datasourceName,
+  );
+
+  if (!datasourceDeps) {
+    return null;
+  }
+
+  // Parse aggregation from fieldName if not provided
+  let parsedAggregation = aggregation;
+  let cleanFieldName = fieldName.trim();
+
+  if (!parsedAggregation) {
+    // Try to parse aggregation from fieldName (e.g., "sum of Profit", "avg of Sales")
+    const lowerName = cleanFieldName.toLowerCase();
+    if (lowerName.startsWith('sum of ')) {
+      parsedAggregation = AggregationType.Sum;
+      cleanFieldName = cleanFieldName.substring(7).trim();
+    } else if (lowerName.startsWith('avg of ') || lowerName.startsWith('average of ')) {
+      parsedAggregation = AggregationType.Avg;
+      cleanFieldName = lowerName.startsWith('avg of ')
+        ? cleanFieldName.substring(7).trim()
+        : cleanFieldName.substring(11).trim();
+    } else if (lowerName.startsWith('min of ')) {
+      parsedAggregation = AggregationType.Min;
+      cleanFieldName = cleanFieldName.substring(7).trim();
+    } else if (lowerName.startsWith('max of ')) {
+      parsedAggregation = AggregationType.Max;
+      cleanFieldName = cleanFieldName.substring(7).trim();
+    } else if (lowerName.startsWith('count of ')) {
+      parsedAggregation = AggregationType.Count;
+      cleanFieldName = cleanFieldName.substring(9).trim();
+    } else if (lowerName.startsWith('count distinct of ')) {
+      parsedAggregation = AggregationType.CountDistinct;
+      cleanFieldName = cleanFieldName.substring(18).trim();
+    }
+  }
+
+  // Strip brackets from field name for matching
+  const searchName = cleanFieldName.replace(/^\[|\]$/g, '');
+
+  // Search columns (case-sensitive)
+  const columns = normalizeArray(datasourceDeps.column);
+  let matchedColumn: ParsedColumn | null = null;
+
+  for (const column of columns) {
+    const columnName = column['@_name']?.replace(/^\[|\]$/g, '') || '';
+
+    // Match by name (case-sensitive)
+    if (columnName === searchName) {
+      matchedColumn = column;
+      break;
+    }
+
+    // Also check caption for calculated fields
+    if (column['@_caption'] && column['@_caption'] === searchName) {
+      matchedColumn = column;
+      break;
+    }
+  }
+
+  if (!matchedColumn) {
+    return null;
+  }
+
+  // Determine default aggregation if not specified
+  const role = matchedColumn['@_role'];
+  if (!parsedAggregation) {
+    if (role === 'dimension') {
+      parsedAggregation = AggregationType.None;
+    } else if (role === 'measure') {
+      parsedAggregation = AggregationType.Sum;
+    } else {
+      parsedAggregation = AggregationType.None;
+    }
+  }
+
+  // Find matching column-instance
+  const columnInstances = normalizeArray(datasourceDeps['column-instance']);
+  let matchedInstance: ParsedColumnInstance | null = null;
+
+  for (const instance of columnInstances) {
+    if (
+      instance['@_column'] === matchedColumn['@_name'] &&
+      instance['@_derivation'] === (parsedAggregation as string)
+    ) {
+      matchedInstance = instance;
+      break;
+    }
+  }
+
+  // If no exact match, try to find one with the right column (might need to create)
+  if (!matchedInstance) {
+    // For calculated fields (User derivation), we might not find a match
+    // In that case, we'll need to construct the column-instance name
+    if (parsedAggregation === AggregationType.User) {
+      // This is a calculated field - we'd need the actual instance name
+      // For now, return what we can
+      return {
+        datasource: datasourceName,
+        columnName: matchedColumn['@_name'],
+        columnInstanceName: '', // Will need to be constructed
+        derivation: parsedAggregation,
+        type: matchedColumn['@_type'],
+        role: role,
+        datatype: matchedColumn['@_datatype'],
+        caption: matchedColumn['@_caption'],
+      };
+    }
+
+    // Try to find any instance with this column
+    for (const instance of columnInstances) {
+      if (instance['@_column'] === matchedColumn['@_name']) {
+        matchedInstance = instance;
+        break;
+      }
+    }
+  }
+
+  if (!matchedInstance) {
+    // Construct column-instance name based on pattern
+    const columnName = matchedColumn['@_name'].replace(/^\[|\]$/g, '');
+    const typeSuffix = matchedColumn['@_type'] === 'quantitative' ? 'qk' : 'nk';
+    let prefix = 'none';
+
+    if (parsedAggregation === AggregationType.Sum) prefix = 'sum';
+    else if (parsedAggregation === AggregationType.Avg) prefix = 'avg';
+    else if (parsedAggregation === AggregationType.Min) prefix = 'min';
+    else if (parsedAggregation === AggregationType.Max) prefix = 'max';
+    else if (parsedAggregation === AggregationType.Count) prefix = 'count';
+    else if (parsedAggregation === AggregationType.CountDistinct) prefix = 'countdistinct';
+    else if (parsedAggregation === AggregationType.User) prefix = 'usr';
+
+    const constructedName = `[${prefix}:${columnName}:${typeSuffix}]`;
+
+    return {
+      datasource: datasourceName,
+      columnName: matchedColumn['@_name'],
+      columnInstanceName: constructedName,
+      derivation: parsedAggregation,
+      type: matchedColumn['@_type'],
+      role: role,
+      datatype: matchedColumn['@_datatype'],
+      caption: matchedColumn['@_caption'],
+    };
+  }
+
+  return {
+    datasource: datasourceName,
+    columnName: matchedColumn['@_name'],
+    columnInstanceName: matchedInstance['@_name'],
+    derivation: parsedAggregation,
+    type: matchedColumn['@_type'],
+    role: role,
+    datatype: matchedColumn['@_datatype'],
+    caption: matchedColumn['@_caption'],
+  };
+}
+
+/**
+ * Build a full column reference string from FieldReference
+ * @param fieldRef - FieldReference object
+ * @returns Column reference string in format: [Datasource Name].[column-instance-name]
+ * Note: columnInstanceName should already include brackets (e.g., "[sum:Profit:qk]")
+ */
+export function buildColumnRef(fieldRef: FieldReference): string {
+  // columnInstanceName already has brackets, so just concatenate
+  return `[${fieldRef.datasource}].${fieldRef.columnInstanceName}`;
+}
+
+/**
+ * Helper to find field and build column reference in one call
+ * @param workbookXml - Full workbook XML
+ * @param fieldName - User-friendly field name
+ * @param aggregation - Optional aggregation type
+ * @returns Column reference string or null if field not found
+ */
+export function findAndBuildColumnRef(
+  workbookXml: string,
+  fieldName: string,
+  aggregation?: AggregationType,
+): string | null {
+  const fieldRef = findField(workbookXml, fieldName, aggregation);
+  if (!fieldRef) {
+    return null;
+  }
+  return buildColumnRef(fieldRef);
+}
+
+/**
+ * List all available fields from the workbook's datasources
+ * @param workbookXml - Full workbook XML
+ * @returns Array of FieldReference objects with column_ref strings
+ */
+export function listAvailableFields(
+  workbookXml: string,
+): Array<FieldReference & { column_ref: string }> {
+  const workbook = parseXML(workbookXml);
+
+  // Look at workbook-level datasources
+  const datasources = normalizeArray(workbook.workbook?.datasources?.datasource);
+  if (datasources.length === 0) {
+    return [];
+  }
+
+  const results: Array<FieldReference & { column_ref: string }> = [];
+
+  // Process each datasource (skip Parameters)
+  for (const datasource of datasources) {
+    const datasourceName = datasource['@_name'];
+    if (!datasourceName || datasourceName === 'Parameters') continue;
+
+    // A PUBLISHED datasource carries a repository-location whose id is its
+    // contentUrl (the input generate-insight-cards resolves). Embedded/local
+    // datasources have no repository-location, so this stays undefined.
+    const contentUrl = datasource['repository-location']?.['@_id'];
+
+    // Map to track all columns by name (to deduplicate)
+    const columnMap = new Map<
+      string,
+      { column: any; source: 'top-level' | 'relation' | 'metadata-record' }
+    >();
+    const tableByColumn = new Map<string, string>();
+    const ambiguousTableColumns = new Set<string>();
+    const logicalTableIdByColumn = new Map<string, string>();
+    const ambiguousLogicalTableColumns = new Set<string>();
+    const invalidLogicalTableColumns = new Set<string>();
+    const approxCountByName = new Map<string, number>();
+
+    // In federated datasources, metadata-record parent-name may only identify the
+    // repeated physical relation (for example `[sqlproxy]`). `object-id` is the
+    // field's logical-table identity. Only trust ids declared by object-graph.
+    const objectGraph = getEnabledFormatElement(datasource, 'object-graph');
+    const logicalTableObjects = normalizeArray(objectGraph?.objects?.object);
+    const logicalTableIds = new Set(
+      logicalTableObjects
+        .map((object) => normalizeLogicalTableId(object?.['@_id']))
+        .filter((id): id is string => id !== undefined),
+    );
+    const soleLogicalTableId =
+      logicalTableObjects.length === 1
+        ? normalizeLogicalTableId(logicalTableObjects[0]?.['@_id'])
+        : undefined;
+
+    if (datasource.connection?.['metadata-records']) {
+      const records = normalizeArray(datasource.connection['metadata-records']['metadata-record']);
+      for (const record of records) {
+        if (record['@_class'] !== 'column') continue;
+        const localName = record['local-name'];
+        const raw = typeof record['approx-count'] === 'string' ? record['approx-count'] : undefined;
+        if (!localName || raw === undefined) continue;
+        const count = Number(raw.trim());
+        if (!Number.isInteger(count) || count < 0) continue;
+        const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+        approxCountByName.set(bracketedName, count);
+      }
+    }
+
+    // Build folder lookup: field name -> folder name
+    const folderMap = new Map<string, string>();
+    const foldersCommon = datasource['folders-common'];
+    if (foldersCommon) {
+      const folders = normalizeArray(foldersCommon.folder);
+      for (const folder of folders) {
+        const folderName = folder['@_name'];
+        if (!folderName) continue;
+        const folderItems = normalizeArray(folder['folder-item']);
+        for (const item of folderItems) {
+          if (item['@_type'] === 'field' && item['@_name']) {
+            folderMap.set(item['@_name'], folderName);
+          }
+        }
+      }
+    }
+
+    // 1. Get top-level columns from datasource (these have role, type metadata)
+    const topLevelColumns = normalizeArray(datasource.column);
+    for (const column of topLevelColumns) {
+      const columnName = column['@_name'];
+      if (columnName) {
+        columnMap.set(columnName, { column, source: 'top-level' });
+      }
+    }
+
+    // 2. Get columns from connection relations (raw table columns), at any depth
+    if (datasource.connection) {
+      forEachRelationColumn(normalizeArray(datasource.connection.relation), (column) => {
+        const columnName = column['@_name'];
+        if (!columnName) return;
+        const bracketedName = columnName.startsWith('[') ? columnName : `[${columnName}]`;
+        if (!columnMap.has(bracketedName)) {
+          columnMap.set(bracketedName, { column, source: 'relation' });
+        }
+      });
+
+      // 3. Get columns from metadata-records (covers fields only defined at the connection level)
+      const metadataRecords = datasource.connection['metadata-records'];
+      if (metadataRecords) {
+        const records = normalizeArray(metadataRecords['metadata-record']);
+        for (const record of records) {
+          const recordClass = record['@_class'];
+          if (recordClass !== 'column' && recordClass !== 'measure') continue;
+          const localName = record['local-name'];
+          if (!localName) continue;
+          const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+
+          const rawLogicalTableId = getEnabledFormatElement(record, 'object-id');
+          const logicalTableId = normalizeLogicalTableId(rawLogicalTableId);
+          if (logicalTableId && logicalTableIds.has(logicalTableId)) {
+            const previous = logicalTableIdByColumn.get(bracketedName);
+            if (previous !== undefined && previous !== logicalTableId) {
+              ambiguousLogicalTableColumns.add(bracketedName);
+              logicalTableIdByColumn.delete(bracketedName);
+            } else if (!ambiguousLogicalTableColumns.has(bracketedName)) {
+              logicalTableIdByColumn.set(bracketedName, logicalTableId);
+            }
+          } else if (rawLogicalTableId !== undefined) {
+            // An explicit id that is absent from the graph is contradictory metadata,
+            // not an unmapped field that may inherit a single-object owner.
+            invalidLogicalTableColumns.add(bracketedName);
+            logicalTableIdByColumn.delete(bracketedName);
+          }
+
+          // Keep legacy physical-table projection behavior limited to column records.
+          // Measure records are visited here only to capture logical-table identity.
+          if (recordClass !== 'column') continue;
+
+          const parentName = record['parent-name'];
+          if (typeof parentName === 'string' && parentName.length > 0) {
+            const previous = tableByColumn.get(bracketedName);
+            if (previous !== undefined && previous !== parentName) {
+              ambiguousTableColumns.add(bracketedName);
+              tableByColumn.delete(bracketedName);
+            } else if (!ambiguousTableColumns.has(bracketedName)) {
+              tableByColumn.set(bracketedName, parentName);
+            }
+          }
+
+          if (!columnMap.has(bracketedName)) {
+            columnMap.set(bracketedName, {
+              column: {
+                '@_name': bracketedName,
+                '@_datatype': record['local-type'],
+                '@_role': inferRoleFromType(record['local-type']),
+                '@_type': inferFieldTypeFromType(record['local-type']),
+                '@_caption': record['remote-alias'] || record['remote-name'],
+                _aggregation: record.aggregation,
+              },
+              source: 'metadata-record',
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Process all columns
+    for (const [columnName, { column, source }] of columnMap.entries()) {
+      if (columnName.includes('__tableau_internal_')) continue;
+
+      const cleanNameTest = columnName.replace(/^\[|\]$/g, '');
+      if (cleanNameTest.includes('[') || cleanNameTest.includes(']')) continue;
+
+      let role: string;
+      let type: string;
+      let datatype: string;
+      let caption: string | undefined;
+      let semanticRole: string | undefined;
+
+      let isAggregated = false;
+      let formula: string | undefined;
+      let isGroup = false;
+
+      if (source === 'top-level') {
+        role = column['@_role'];
+        type = column['@_type'];
+        datatype = column['@_datatype'];
+        caption = column['@_caption'];
+        semanticRole = column['@_semantic-role'];
+
+        isGroup = column.calculation?.['@_class'] === 'categorical-bin';
+
+        const calculationFormula = column.calculation?.['@_formula'];
+        if (calculationFormula) {
+          formula = calculationFormula;
+          isAggregated = formulaRequiresUserDerivation(calculationFormula);
+        }
+
+        if (column['@_hidden'] === 'true') continue;
+      } else if (source === 'metadata-record') {
+        role = column['@_role'];
+        type = column['@_type'];
+        datatype = column['@_datatype'];
+        caption = column['@_caption'];
+        semanticRole = column['@_semantic-role'];
+      } else {
+        datatype = column['@_datatype'];
+        caption = undefined;
+
+        if (datatype === 'integer' || datatype === 'real') {
+          role = 'measure';
+          type = 'quantitative';
+        } else if (datatype === 'date' || datatype === 'datetime') {
+          role = 'dimension';
+          type = 'quantitative';
+        } else {
+          role = 'dimension';
+          type = 'nominal';
+        }
+      }
+
+      // Determine default aggregation based on role
+      // If field is already aggregated (calculated field with aggregation), use User
+      const defaultAgg = isAggregated
+        ? AggregationType.User
+        : role === 'measure'
+          ? AggregationType.Sum
+          : AggregationType.None;
+
+      // Construct column-instance name
+      const cleanName = columnName.replace(/^\[|\]$/g, '');
+      const typeSuffix = type === 'quantitative' ? 'qk' : type === 'ordinal' ? 'ok' : 'nk'; // nominal and other types
+      const prefix = isAggregated ? 'usr' : defaultAgg === AggregationType.Sum ? 'sum' : 'none';
+      const constructedInstance = `[${prefix}:${cleanName}:${typeSuffix}]`;
+
+      const folder = folderMap.get(columnName);
+
+      // Tableau's ObjectModelEncapsulateLegacy transform wraps an eligible pre-object-model
+      // relation tree, including physical joins, in one logical object. When the serialized
+      // graph confirms exactly one object, fields without metadata records (notably top-level
+      // calculations) have only that logical owner and may inherit its ID. A missing graph or
+      // a multi-object graph is not proof of shared ownership, so those cases are never inferred.
+      const hasUntrustworthyLogicalTableId =
+        ambiguousLogicalTableColumns.has(columnName) || invalidLogicalTableColumns.has(columnName);
+      const logicalTableId = hasUntrustworthyLogicalTableId
+        ? undefined
+        : (logicalTableIdByColumn.get(columnName) ?? soleLogicalTableId);
+
+      const fieldRef: FieldReference = {
+        datasource: datasourceName,
+        ...(tableByColumn.has(columnName) ? { table: tableByColumn.get(columnName) } : {}),
+        ...(logicalTableId ? { logicalTableId } : {}),
+        contentUrl: contentUrl,
+        columnName: columnName,
+        columnInstanceName: constructedInstance,
+        derivation: defaultAgg,
+        type: type,
+        role: role,
+        datatype: datatype,
+        caption: caption,
+        semanticRole: semanticRole,
+        approxCount: approxCountByName.get(columnName),
+        isAggregated: isAggregated,
+        formula: formula,
+        folder: folder,
+        isGroup: isGroup,
+      };
+
+      results.push({
+        ...fieldRef,
+        column_ref: buildColumnRef(fieldRef),
+      });
+    }
+  }
+
+  return results;
+}

@@ -1,0 +1,673 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt; </run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Violin Plot' inline='true' name='federated.1hii5tt0bk6jak18l15yz06f3din' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Violin data' name='excel-direct.1fipmhb1bnxash112zaci09ax6dg'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation join='inner' type='join'>
+          <clause type='join'>
+            <expression op='='>
+              <expression op='&quot;join&quot;' />
+              <expression op='&quot;join&quot;' />
+            </expression>
+          </clause>
+          <relation connection='excel-direct.1fipmhb1bnxash112zaci09ax6dg' name='Violin data' table='[&apos;Violin data$&apos;]' type='table'>
+            <columns gridOrigin='A1:E1092:no:A1:E1092:0' header='yes' outcome='6'>
+              <column datatype='integer' name='ID' ordinal='0' />
+              <column datatype='integer' name='host_id' ordinal='1' />
+              <column datatype='string' name='borough' ordinal='2' />
+              <column datatype='string' name='neighbourhood' ordinal='3' />
+              <column datatype='integer' name='price' ordinal='4' />
+            </columns>
+          </relation>
+          <relation connection='excel-direct.1fipmhb1bnxash112zaci09ax6dg' name='Scaffold' table='[Scaffold$]' type='table'>
+            <columns gridOrigin='A1:A100:no:A1:A100:0' header='yes' outcome='6'>
+              <column datatype='integer' name='Saffold Value' ordinal='0' />
+            </columns>
+          </relation>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:E1092:no:A1:E1092:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Scaffold]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:A100:no:A1:A100:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>6</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>ID</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[ID]</local-name>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias>ID</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>host_id</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[host_id]</local-name>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias>host_id</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>borough</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[borough]</local-name>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias>borough</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>neighbourhood</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[neighbourhood]</local-name>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias>neighbourhood</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>price</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[price]</local-name>
+            <parent-name>[Violin data]</parent-name>
+            <remote-alias>price</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Saffold Value</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Saffold Value]</local-name>
+            <parent-name>[Scaffold]</parent-name>
+            <remote-alias>Saffold Value</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Evenly distributed scaffold values' datatype='real' name='[Calculation_1915437258869919759]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='IF [Saffold Value] = 0 THEN {MIN([Calculation_917889941769101313])} - [Parameters].[Parameter 3]&#13;&#10;ELSEIF [Saffold Value] = 99 THEN {MAX([Calculation_917889941769101313])} + [Parameters].[Parameter 3]&#13;&#10;ELSE&#13;&#10;({MIN([Calculation_917889941769101313])} - [Parameters].[Parameter 3]) + &#13;&#10;&#13;&#10;(&#13;&#10;&#13;&#10;ABS(&#13;&#10;    ({MAX([Calculation_917889941769101313])}+[Parameters].[Parameter 3]) - ({MIN([Calculation_917889941769101313])}-[Parameters].[Parameter 3]) &#13;&#10;)&#13;&#10;&#13;&#10;    * ([Saffold Value]/99)&#13;&#10;&#13;&#10;)&#13;&#10;END' />
+      </column>
+      <column caption='kernel' datatype='real' name='[Calculation_1915437258870394896]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='(1/({COUNTD([Calculation_917889941769101313])}*[Parameters].[Parameter 4])&#13;&#10;&#13;&#10;*&#13;&#10;&#13;&#10;(1/(SQRT(2*PI()))) &#13;&#10;&#13;&#10;* &#13;&#10;&#13;&#10;EXP(-0.5  * (([Calculation_1915437258869919759] - [Calculation_917889941769101313])^2)/[Parameters].[Parameter 4]))' />
+      </column>
+      <column caption='Total per borough' datatype='integer' name='[Calculation_917889941769101313]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='{fixed [neighbourhood]: min([price]) }' />
+      </column>
+      <column caption='1 - BIN' datatype='real' name='[Calculation_917889942041595926]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='INT([price]/[Parameters].[Parameter 5])*[Parameters].[Parameter 5]-IIF([price]&lt;0,[Parameters].[Parameter 5],0)' />
+      </column>
+      <column aggregation='Attribute' caption='2 - POINTS' datatype='integer' name='[Calculation_917889942041743383]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='{EXCLUDE [ID]: COUNTD([ID])}' />
+      </column>
+      <column aggregation='Attribute' caption='3 - MAX' datatype='real' name='[Calculation_917889942041817112]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='[Calculation_917889942041743383]/2 - 0.5' />
+      </column>
+      <column caption='4 - COORDINATE' datatype='real' name='[Calculation_917889942041874457]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='MAX([Calculation_917889942041817112]) - INDEX() + 1'>
+          <table-calc ordering-type='Rows' />
+        </calculation>
+      </column>
+      <column datatype='integer' name='[ID]' role='dimension' type='ordinal' />
+      <column caption='Scaffold Values' datatype='integer' name='[Saffold Value]' role='measure' type='quantitative' />
+      <column caption='Violin data' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Violin data_26205CBC9F384839A6A3D507A2A04A9F]' role='measure' type='quantitative' />
+      <column caption='Borough' datatype='string' hidden='true' name='[borough]' role='dimension' type='nominal' />
+      <column caption='Host Id' datatype='integer' hidden='true' name='[host_id]' role='dimension' type='ordinal' />
+      <column caption='Neighbourhood' datatype='string' name='[neighbourhood]' role='dimension' type='nominal' />
+      <column caption='Price' datatype='integer' name='[price]' role='measure' type='quantitative' />
+      <column-instance column='[neighbourhood]' derivation='None' name='[none:neighbourhood:nk]' pivot='key' type='nominal' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:14:04 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='Violin data+ (Violin data)' increment-value='%null%' refresh-type='create' rows-inserted='108009' timestamp-start='2026-06-30 20:14:03.627' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>ID</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[ID]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>ID</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Violin data</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>4821</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>neighbourhood</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[neighbourhood]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>neighbourhood</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Violin data</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>48</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>price</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[price]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>price</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Violin data</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>291</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Saffold Value</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Saffold Value]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Saffold Value</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Scaffold</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>99</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Violin data_26205CBC9F384839A6A3D507A2A04A9F]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='false' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:neighbourhood:nk]' type='palette'>
+            <map to='#499894'>
+              <bucket>&quot;Concourse Village&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;University Heights&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Allerton&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Morris Park&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;City Island&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Schuylerville&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Fieldston&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Williamsbridge&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;East Morrisania&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Van Nest&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Claremont Village&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Soundview&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Melrose&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Baychester&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Morrisania&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Kingsbridge&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Clason Point&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Tremont&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Fordham&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Woodlawn&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Highbridge&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Longwood&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Morris Heights&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Eastchester&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Wakefield&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Concourse&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Unionport&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Belmont&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;North Riverdale&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Hunts Point&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Edenwald&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;West Farms&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Castle Hill&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Olinville&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United Kingdom&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='Scaffold scaling factor' datatype='real' name='[Parameter 3]' param-domain-type='any' role='measure' type='quantitative' value='10.'>
+          <calculation class='tableau' formula='10.' />
+        </column>
+        <column caption='Bandwidth' datatype='real' name='[Parameter 4]' param-domain-type='any' role='measure' type='quantitative' value='1.'>
+          <calculation class='tableau' formula='1.' />
+        </column>
+        <column caption='BIN SIZE' datatype='real' name='[Parameter 5]' param-domain-type='any' role='measure' type='quantitative' value='10.'>
+          <calculation class='tableau' formula='10.' />
+        </column>
+      </datasource-dependencies>
+      <filter class='categorical' column='[neighbourhood]' filter-group='2'>
+        <groupfilter function='except' user:ui-domain='database' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[neighbourhood]' />
+          <groupfilter function='member' level='[neighbourhood]' member='&quot;Riverdale&quot;' />
+        </groupfilter>
+      </filter>
+      <object-graph>
+        <objects>
+          <object caption='Violin data' id='Violin data_26205CBC9F384839A6A3D507A2A04A9F'>
+            <properties context=''>
+              <relation join='inner' type='join'>
+                <clause type='join'>
+                  <expression op='='>
+                    <expression op='&quot;join&quot;' />
+                    <expression op='&quot;join&quot;' />
+                  </expression>
+                </clause>
+                <relation connection='excel-direct.1fipmhb1bnxash112zaci09ax6dg' name='Violin data' table='[&apos;Violin data$&apos;]' type='table'>
+                  <columns gridOrigin='A1:E1092:no:A1:E1092:0' header='yes' outcome='6'>
+                    <column datatype='integer' name='ID' ordinal='0' />
+                    <column datatype='integer' name='host_id' ordinal='1' />
+                    <column datatype='string' name='borough' ordinal='2' />
+                    <column datatype='string' name='neighbourhood' ordinal='3' />
+                    <column datatype='integer' name='price' ordinal='4' />
+                  </columns>
+                </relation>
+                <relation connection='excel-direct.1fipmhb1bnxash112zaci09ax6dg' name='Scaffold' table='[Scaffold$]' type='table'>
+                  <columns gridOrigin='A1:A100:no:A1:A100:0' header='yes' outcome='6'>
+                    <column datatype='integer' name='Saffold Value' ordinal='0' />
+                  </columns>
+                </relation>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window tab-color='#a65200'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card param='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:neighbourhood:nk]' type='filter' />
+          <card mode='type_in' param='[Parameters].[Parameter 5]' type='parameter' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{9B27FD6C-596E-4E85-B513-33BCA0D0E38D}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Violin Plot' name='federated.1hii5tt0bk6jak18l15yz06f3din' />
+        <datasource name='Parameters' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='BIN SIZE' datatype='real' name='[Parameter 5]' param-domain-type='any' role='measure' type='quantitative' value='10.'>
+          <calculation class='tableau' formula='10.' />
+        </column>
+      </datasource-dependencies>
+      <datasource-dependencies datasource='federated.1hii5tt0bk6jak18l15yz06f3din'>
+        <column caption='1 - BIN' datatype='real' name='[Calculation_917889942041595926]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='INT([price]/[Parameters].[Parameter 5])*[Parameters].[Parameter 5]-IIF([price]&lt;0,[Parameters].[Parameter 5],0)' />
+        </column>
+        <column aggregation='Attribute' caption='2 - POINTS' datatype='integer' name='[Calculation_917889942041743383]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='{EXCLUDE [ID]: COUNTD([ID])}' />
+        </column>
+        <column aggregation='Attribute' caption='3 - MAX' datatype='real' name='[Calculation_917889942041817112]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='[Calculation_917889942041743383]/2 - 0.5' />
+        </column>
+        <column caption='4 - COORDINATE' datatype='real' name='[Calculation_917889942041874457]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='MAX([Calculation_917889942041817112]) - INDEX() + 1'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='integer' name='[ID]' role='dimension' type='ordinal' />
+        <column-instance column='[neighbourhood]' derivation='Attribute' name='[attr:neighbourhood:nk]' pivot='key' type='nominal' />
+        <column caption='Neighbourhood' datatype='string' name='[neighbourhood]' role='dimension' type='nominal' />
+        <column-instance column='[Calculation_917889942041595926]' derivation='None' name='[none:Calculation_917889942041595926:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[ID]' derivation='None' name='[none:ID:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[neighbourhood]' derivation='None' name='[none:neighbourhood:nk]' pivot='key' type='nominal' />
+        <column caption='Price' datatype='integer' name='[price]' role='measure' type='quantitative' />
+        <column-instance column='[price]' derivation='Sum' name='[sum:price:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_917889942041874457]' derivation='User' name='[usr:Calculation_917889942041874457:qk:4]' pivot='key' type='quantitative'>
+          <table-calc level-break='[federated.1hii5tt0bk6jak18l15yz06f3din].[ID]' ordering-type='Field'>
+            <order field='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:Calculation_917889942041595926:qk]' />
+            <order field='[federated.1hii5tt0bk6jak18l15yz06f3din].[ID]' />
+          </table-calc>
+        </column-instance>
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:neighbourhood:nk]'>
+        <groupfilter function='except' user:ui-domain='database' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[none:neighbourhood:nk]' />
+          <groupfilter function='union'>
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Allerton&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Baychester&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Belmont&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Bronxdale&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Castle Hill&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;City Island&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Claremont Village&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Clason Point&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Co-op City&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Concourse&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Concourse Village&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Eastchester&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Edenwald&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Fieldston&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Fordham&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Highbridge&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Hunts Point&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Kingsbridge&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Longwood&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Melrose&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Morris Heights&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Morris Park&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Morrisania&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Mott Haven&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Mount Eden&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Mount Hope&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;North Riverdale&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Norwood&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Parkchester&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Pelham Bay&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Pelham Gardens&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Port Morris&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Spuyten Duyvil&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Throgs Neck&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Unionport&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;University Heights&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;West Farms&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Westchester Square&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Williamsbridge&quot;' />
+            <groupfilter function='member' level='[none:neighbourhood:nk]' member='&quot;Woodlawn&quot;' />
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[federated.1hii5tt0bk6jak18l15yz06f3din].[none:neighbourhood:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='display' class='0' field='[federated.1hii5tt0bk6jak18l15yz06f3din].[usr:Calculation_917889942041874457:qk:4]' scope='rows' value='false' />
+        <format attr='title' class='0' field='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:Calculation_917889942041595926:qk]' scope='cols' value='Price ($)' />
+        <format attr='height' field='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:Calculation_917889942041595926:qk]' value='45' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-color' scope='cols' value='#333333' />
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='band-color' scope='rows' value='#ffffff' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='band-color' scope='rows' value='#ffffff' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+        <format attr='band-size' scope='rows' value='1' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-color' scope='rows' value='#f2f2f2b9' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+        <format attr='stroke-size' scope='cols' value='1' />
+        <format attr='line-visibility' scope='cols' value='on' />
+        <format attr='line-pattern-only' scope='cols' value='solid' />
+        <format attr='stroke-color' scope='cols' value='#f2f2f2b4' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#d4d4d4' />
+        <format attr='line-pattern-only' value='dashed' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='line-pattern-only' scope='rows' value='solid' />
+        <format attr='stroke-color' scope='rows' value='#f5f5f5' />
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[federated.1hii5tt0bk6jak18l15yz06f3din].[none:ID:ok]' />
+          <tooltip column='[federated.1hii5tt0bk6jak18l15yz06f3din].[attr:neighbourhood:nk]' />
+          <tooltip column='[federated.1hii5tt0bk6jak18l15yz06f3din].[sum:price:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontcolor='#1b1b1b'>&lt;[federated.1hii5tt0bk6jak18l15yz06f3din].[attr:neighbourhood:nk]&gt; </run>
+            <run>Æ&#10;</run>
+            <run bold='true' fontsize='11'>BnB Price:&#9;&lt;[federated.1hii5tt0bk6jak18l15yz06f3din].[sum:price:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-line-first' value='true' />
+            <format attr='mark-labels-line-last' value='true' />
+            <format attr='mark-labels-range-min' value='true' />
+            <format attr='mark-labels-range-max' value='true' />
+            <format attr='mark-labels-mode' value='all' />
+            <format attr='mark-labels-range-scope' value='pane' />
+            <format attr='mark-labels-range-field' value='' />
+            <format attr='mark-labels-show' value='false' />
+            <format attr='size' value='0.73563534021377563' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='mark-transparency' value='185' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1hii5tt0bk6jak18l15yz06f3din].[usr:Calculation_917889942041874457:qk:4]</rows>
+    <cols>[federated.1hii5tt0bk6jak18l15yz06f3din].[none:Calculation_917889942041595926:qk]</cols>
+    <show-full-range>
+      <column>[World Indicators].[GDP (bin)]</column>
+    </show-full-range>
+  </table>
+</bookmark>

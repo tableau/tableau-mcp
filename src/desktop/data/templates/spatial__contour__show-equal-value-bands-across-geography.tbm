@@ -1,0 +1,348 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <LayerControlWidget />
+    <MapboxVectorStylesAndLayers />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <preferences />
+  <datasources>
+    <datasource caption='Contour Graph' inline='true' name='federated.1dac6fs09zddmk18appyy0imrhcl' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='contour lines' name='hyper.0ysn6bo0vd7eqa156k0o111bynl9'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.0ysn6bo0vd7eqa156k0o111bynl9' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>ID</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[ID]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>ID</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>1330</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>FEAT_TYPE</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[FEAT_TYPE]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>FEAT_TYPE</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>2</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>SUB_TYPE</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[SUB_TYPE]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>SUB_TYPE</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>3</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='binary' />
+            <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>PROP_VALUE</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[PROP_VALUE]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>PROP_VALUE</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>40</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>SpatialObj</remote-name>
+            <remote-type>128</remote-type>
+            <local-name>[SpatialObj]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>SpatialObj</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>spatial</local-type>
+            <aggregation>Collect</aggregation>
+            <approx-count>1317</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Feat Type' datatype='string' hidden='true' name='[FEAT_TYPE]' role='dimension' type='nominal' />
+      <column caption='Prop Value' datatype='real' name='[PROP_VALUE]' role='measure' type='quantitative' />
+      <column caption='Sub Type' datatype='string' hidden='true' name='[SUB_TYPE]' role='dimension' type='nominal' />
+      <column caption='Spatial Obj' datatype='spatial' name='[SpatialObj]' role='measure' type='nominal' />
+      <column caption='Extract' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]' role='measure' type='quantitative' />
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:11:19 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='contour lines Extract' increment-value='%null%' refresh-type='create' rows-inserted='1330' timestamp-start='2026-06-30 20:11:18.808' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>ID</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[ID]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>ID</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Extract</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1330</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='binary' />
+              <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>PROP_VALUE</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[PROP_VALUE]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>PROP_VALUE</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Extract</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>40</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>SpatialObj</remote-name>
+              <remote-type>128</remote-type>
+              <local-name>[SpatialObj]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>SpatialObj</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Extract</family>
+              <local-type>spatial</local-type>
+              <aggregation>Collect</aggregation>
+              <approx-count>1317</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout common-percentage='0.525641' dim-ordering='alphabetic' measure-ordering='alphabetic' parameter-percentage='0.474359' show-structure='true' user-set-layout-v2='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;USA&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Extract' id='Extract (Extract.Extract)_8A319B668F6C4A118CE265664F2358B1'>
+            <properties context=''>
+              <relation connection='hyper.0ysn6bo0vd7eqa156k0o111bynl9' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <mapsources>
+    <mapsource name='Tableau' />
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[federated.1dac6fs09zddmk18appyy0imrhcl].[sum:PROP_VALUE:qk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <highlight>
+        <color-one-way>
+          <field>[federated.1dac6fs09zddmk18appyy0imrhcl].[clct:SpatialObj:nk]</field>
+          <field>[federated.1dac6fs09zddmk18appyy0imrhcl].[none:ID:nk]</field>
+        </color-one-way>
+      </highlight>
+      <floating-toolbar-visibility value='2' />
+      <geo-search-visibility value='1' />
+      <default-map-tool-selection tool='2' />
+      <map-navigation value='1' />
+      <layer-control toolbar-button-enabled='false' />
+    </viewpoint>
+    <simple-id uuid='{F23EC214-497F-4390-91F3-6EE5BA48F046}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Contour Graph' name='federated.1dac6fs09zddmk18appyy0imrhcl' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.1dac6fs09zddmk18appyy0imrhcl'>
+        <column datatype='string' name='[ID]' role='dimension' type='nominal' />
+        <column caption='Prop Value' datatype='real' name='[PROP_VALUE]' role='measure' type='quantitative' />
+        <column caption='Spatial Obj' datatype='spatial' name='[SpatialObj]' role='measure' type='nominal' />
+        <column-instance column='[SpatialObj]' derivation='Collect' name='[clct:SpatialObj:nk]' pivot='key' type='nominal' />
+        <column-instance column='[ID]' derivation='None' name='[none:ID:nk]' pivot='key' type='nominal' />
+        <column-instance column='[PROP_VALUE]' derivation='Sum' name='[sum:PROP_VALUE:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[federated.1dac6fs09zddmk18appyy0imrhcl].[Longitude (generated)]' field-type='quantitative' max='-598843.51583631372' min='-653122.35062330775' projection='EPSG:3857' range-type='fixed' scope='cols' type='space' />
+        <encoding attr='space' class='0' field='[federated.1dac6fs09zddmk18appyy0imrhcl].[Latitude (generated)]' field-type='quantitative' max='6480080.7954378473' min='6457491.6988841947' projection='EPSG:3857' range-type='fixed' scope='rows' type='space' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.1dac6fs09zddmk18appyy0imrhcl].[sum:PROP_VALUE:qk]' palette='green_gold_10_0' reverse='true' symmetric='false' type='interpolated' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='hillshade_highlight_bright' value='true' />
+        <format attr='enabled' id='hillshade_highlight_med' value='true' />
+        <format attr='enabled' id='hillshade_shadow_faint' value='true' />
+        <format attr='enabled' id='hillshade_shadow_med' value='true' />
+        <format attr='enabled' id='hillshade_shadow_dark' value='true' />
+        <format attr='enabled' id='hillshade_shadow_extreme' value='true' />
+        <format attr='enabled' id='admin-0-boundaries-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute' value='false' />
+        <format attr='enabled' id='light-admin-1-label-9th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-8th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-7th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-6th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-5th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-4th-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-3rd-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-2nd-tier' value='true' />
+        <format attr='enabled' id='light-admin-1-label-1st-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-3rd-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-2nd-tier' value='true' />
+        <format attr='enabled' id='light-us-admin-1-label-abbr-1st-tier' value='true' />
+        <format attr='enabled' id='admin-0-boundaries-bg-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents-bg' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents-bg' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-dispute-sub' value='false' />
+        <format attr='enabled' id='admin-0-boundaries-sub' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-supress' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-sm-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-md-parents' value='false' />
+        <format attr='enabled' id='admin-1-boundaries-lg-parents' value='false' />
+        <format attr='enabled' id='admin1-water-lines-usa-tableau' value='false' />
+        <format attr='enabled' id='9-dash-line-casing' value='false' />
+        <format attr='enabled' id='9-dash-line' value='false' />
+        <format attr='enabled' id='place-village' value='true' />
+        <format attr='enabled' id='place-town' value='true' />
+        <format attr='enabled' id='place-islands' value='true' />
+        <format attr='enabled' id='place-islands-2' value='true' />
+        <format attr='enabled' id='place-city-sm' value='true' />
+        <format attr='enabled' id='place-city-md-s' value='true' />
+        <format attr='enabled' id='place-city-md-n' value='true' />
+        <format attr='enabled' id='place-city-lg-s' value='true' />
+        <format attr='enabled' id='place-city-lg-n' value='true' />
+        <format attr='enabled' id='place-capital-s' value='true' />
+        <format attr='enabled' id='place-capital-n' value='true' />
+        <format attr='enabled' id='background' value='false' />
+        <format attr='enabled' id='barrier_line-land-polygon' value='false' />
+        <format attr='enabled' id='barrier_line-land-line' value='false' />
+        <format attr='enabled' id='national_park' value='false' />
+        <format attr='enabled' id='pitch' value='false' />
+        <format attr='enabled' id='industrial' value='false' />
+        <format attr='enabled' id='built-up-area' value='false' />
+        <format attr='enabled' id='water' value='false' />
+        <format attr='enabled' id='waterway-river-canal' value='false' />
+        <format attr='enabled' id='aeroway-polygon' value='false' />
+        <format attr='enabled' id='aeroway-runway' value='false' />
+        <format attr='enabled' id='aeroway-taxiway' value='false' />
+        <format attr='enabled' id='Coastline' value='true' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[federated.1dac6fs09zddmk18appyy0imrhcl].[sum:PROP_VALUE:qk]' />
+          <lod column='[federated.1dac6fs09zddmk18appyy0imrhcl].[clct:SpatialObj:nk]' />
+          <lod column='[federated.1dac6fs09zddmk18appyy0imrhcl].[none:ID:nk]' />
+          <geometry column='[federated.1dac6fs09zddmk18appyy0imrhcl].[clct:SpatialObj:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='0.14193369448184967' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.1dac6fs09zddmk18appyy0imrhcl].[Latitude (generated)]</rows>
+    <cols>[federated.1dac6fs09zddmk18appyy0imrhcl].[Longitude (generated)]</cols>
+    <tooltip-style tooltip-mode='none' />
+  </table>
+</bookmark>

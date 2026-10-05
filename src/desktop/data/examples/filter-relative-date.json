@@ -1,0 +1,82 @@
+{
+  "_description": "Relative date filter on a date dimension. Uses class='relative-date' with a date-range node specifying anchor, period, and range units.",
+  "_feature": "filter,filter-relative-date",
+  "filter_last_n_days": {
+    "_description": "Show data for the last 30 days relative to today",
+    "_placement": "Inside worksheet > table > view node (sibling to datasources)",
+    "type": "filter",
+    "attrs": {
+      "column": "[federated.XXXX].[[Order Date]]",
+      "class": "relative-date"
+    },
+    "children": [
+      {
+        "type": "date-range",
+        "attrs": {
+          "anchor": "today",
+          "first-period": "-30",
+          "period-type": "days"
+        }
+      }
+    ]
+  },
+  "filter_last_n_months": {
+    "_description": "Show data for the last 3 complete months",
+    "type": "filter",
+    "attrs": {
+      "column": "[federated.XXXX].[[Order Date]]",
+      "class": "relative-date"
+    },
+    "children": [
+      {
+        "type": "date-range",
+        "attrs": {
+          "anchor": "today",
+          "first-period": "-3",
+          "period-type": "months"
+        }
+      }
+    ]
+  },
+  "filter_year_to_date": {
+    "_description": "Show data for the current year to date",
+    "type": "filter",
+    "attrs": {
+      "column": "[federated.XXXX].[[Order Date]]",
+      "class": "relative-date"
+    },
+    "children": [
+      {
+        "type": "date-range",
+        "attrs": {
+          "anchor": "today",
+          "first-period": "0",
+          "period-type": "years",
+          "to-date": "true"
+        }
+      }
+    ]
+  },
+  "filter_date_range_absolute": {
+    "_description": "Absolute date range filter (fixed start/end dates)",
+    "type": "filter",
+    "attrs": {
+      "column": "[federated.XXXX].[[Order Date]]",
+      "class": "quantitative"
+    },
+    "children": [
+      { "type": "min", "content": "#2024-01-01#" },
+      { "type": "max", "content": "#2024-12-31#" }
+    ]
+  },
+  "notes": {
+    "column_format": "[datasourceId].[[FieldName]] — double brackets around field name",
+    "class_relative_date": "class='relative-date' for rolling/relative filters",
+    "period_type_values": ["days", "weeks", "months", "quarters", "years"],
+    "anchor_values": ["today", "now", "last-full-period"],
+    "first_period": "Negative = looking back (e.g., -30 = last 30 days); 0 = current period",
+    "to_date": "to-date='true' for YTD/MTD/QTD — truncates to start of current period",
+    "absolute_date_format": "Use #YYYY-MM-DD# format for date literals in min/max children",
+    "filter_placement": "Filters go inside the view node (worksheet > table > view), alongside datasource-dependencies"
+  }
+}

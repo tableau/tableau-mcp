@@ -1,0 +1,359 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
+import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import {
+  ArgsValidationError,
+  DesktopCommandExecutionError,
+  XmlModificationError,
+} from '../../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { sessionParam } from '../../params.js';
+import { DesktopTool } from '../../tool.js';
+import { applyAndVerify } from './applyAndVerify.js';
+import {
+  type DatasourceElement,
+  findDatasourceElements,
+  selectTargetDatasource,
+} from './authorCalcCore.js';
+
+const endSchema = z.enum(['top', 'bottom']);
+const modeSchema = z.enum(['top-n', 'empty', 'condition']);
+
+// Primitives in, groupfilter XML server-side, readback out. Authors create an initially
+// empty set, a computed Top/Bottom-N set, or a condition (rule-based) set on a
+// dimension; the Top-N shape retains its provenance from the WW2021W44 golden
+// workbook, and the condition shape matches Desktop's own filter-group serialization.
+const paramsSchema = {
+  session: sessionParam(),
+  mode: modeSchema.default('top-n').describe(''),
+  caption: z.string().describe(''),
+  dimension: z.string().describe(''),
+  orderBy: z.string().optional().describe(''),
+  count: z.string().optional().describe(''),
+  conditionExpression: z.string().optional().describe(''),
+  end: endSchema.default('top').describe(''),
+  datasource: z.string().optional().describe('Internal datasource name or unique caption.'),
+};
+
+type AuthorSetResult = {
+  setName: string;
+  caption: string;
+  datasource: string;
+  hint: string;
+};
+
+const title = 'Author Set';
+export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'author-set',
+    title,
+    description: 'Author set.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    callback: async (
+      {
+        session,
+        mode = 'top-n',
+        caption,
+        dimension,
+        orderBy,
+        count,
+        conditionExpression,
+        end = 'top',
+        datasource,
+      },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await tool.logAndExecute<AuthorSetResult>({
+        extra,
+        args: {
+          session,
+          mode,
+          caption,
+          dimension,
+          orderBy,
+          count,
+          conditionExpression,
+          end,
+          datasource,
+        },
+        callback: async () => {
+          if (caption.trim().length === 0) {
+            return new ArgsValidationError('caption empty').toErr();
+          }
+          if (dimension.trim().length === 0) {
+            return new ArgsValidationError('dimension empty').toErr();
+          }
+          // Treat a blank ('' / whitespace-only) optional param as ABSENT, matching the
+          // mode-specific required-arg checks below (which use .trim().length). Without this a
+          // caller that passes orderBy='' alongside a condition set — or conditionExpression=''
+          // alongside a top-n set — would be wrongly rejected for "supplying" an irrelevant param.
+          const hasOrderBy = orderBy !== undefined && orderBy.trim().length > 0;
+          const hasCount = count !== undefined && count.trim().length > 0;
+          const hasConditionExpression =
+            conditionExpression !== undefined && conditionExpression.trim().length > 0;
+          if ((mode === 'empty' || mode === 'condition') && (hasOrderBy || hasCount)) {
+            return new ArgsValidationError(
+              `orderBy and count cannot be supplied in ${mode} mode`,
+            ).toErr();
+          }
+          if (mode !== 'condition' && hasConditionExpression) {
+            return new ArgsValidationError(
+              'conditionExpression is only valid in condition mode',
+            ).toErr();
+          }
+
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+
+          const executor = await extra.getExecutor(sessionResult.value);
+          const readResult = await getWorkbookXml({ executor, signal: extra.signal });
+          if (readResult.isErr()) {
+            return new DesktopCommandExecutionError(readResult.error).toErr();
+          }
+
+          const liveXml = readResult.value;
+          const targetResult = selectTargetDatasource(liveXml, datasource);
+          if (targetResult.isErr()) {
+            return targetResult.error.toErr();
+          }
+          const target = targetResult.value;
+
+          if (hasGroupCaption(target.xml, caption)) {
+            return new ArgsValidationError(
+              'caption collision — pick a new caption or use the existing set',
+            ).toErr();
+          }
+
+          const setName = `[${caption}]`;
+          let groupXml: string;
+          if (mode === 'top-n') {
+            if (orderBy === undefined || orderBy.trim().length === 0) {
+              return new ArgsValidationError('orderBy is required in top-n mode').toErr();
+            }
+            if (count === undefined || count.trim().length === 0) {
+              return new ArgsValidationError('count is required in top-n mode').toErr();
+            }
+            const trimmedCount = count.trim();
+            const isParameterReference = /^\[Parameters\]\.\[[^\]]+\]$/.test(trimmedCount);
+            // Parameter references are write-blind: their live value is not validated here.
+            // Literal counts must be positive integers before the workbook is written.
+            if (!isParameterReference && !/^[1-9]\d*$/.test(trimmedCount)) {
+              return new ArgsValidationError(
+                'count must be a positive integer in top-n mode',
+              ).toErr();
+            }
+            groupXml = renderTopNGroupSet({
+              caption,
+              setName,
+              dimension,
+              orderBy,
+              count,
+              end,
+            });
+          } else if (mode === 'condition') {
+            if (conditionExpression === undefined || conditionExpression.trim().length === 0) {
+              return new ArgsValidationError(
+                'conditionExpression is required in condition mode',
+              ).toErr();
+            }
+            groupXml = renderConditionGroupSet({
+              caption,
+              setName,
+              dimension,
+              conditionExpression,
+            });
+          } else {
+            groupXml = renderEmptyGroupSet({ caption, setName, dimension });
+          }
+          const editedXml = spliceElementIntoDatasource(liveXml, target, groupXml);
+          const validation = validateWorkbookDocumentApply(editedXml, liveXml);
+          if (!validation.ok) {
+            return new ArgsValidationError(validation.message).toErr();
+          }
+
+          const findReadbackGroup = (xml: string): string | undefined => {
+            const readbackTarget = findDatasourceElements(xml).find(
+              (datasource) => datasource.name === target.name,
+            );
+            return readbackTarget === undefined
+              ? undefined
+              : findGroupByNameAndCaption(readbackTarget.xml, setName, caption);
+          };
+          const outcome = await applyAndVerify({
+            xml: editedXml,
+            baselineXml: liveXml,
+            settled: (xml) => {
+              const group = findReadbackGroup(xml);
+              return group !== undefined && getAttr(group, 'user:ui-builder') === 'filter-group';
+            },
+            executor,
+            signal: extra.signal,
+          });
+          if (outcome.status === 'failed') {
+            return outcome.error.toErr();
+          }
+          if (outcome.status === 'not-applied') {
+            return new XmlModificationError(
+              findReadbackGroup(outcome.workbookXml) === undefined
+                ? 'load completed but did not apply: readback did not contain the new set name and caption'
+                : "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
+            ).toErr();
+          }
+
+          return new Ok({
+            setName,
+            caption,
+            datasource: target.name,
+            hint: 'reference it by caption in a build-worksheets-from-templates fieldMapping, or as a filter/color field',
+          });
+        },
+      });
+    },
+  });
+
+  return tool;
+};
+
+function hasGroupCaption(datasourceXml: string, caption: string): boolean {
+  return findGroupTags(datasourceXml).some(
+    (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
+  );
+}
+
+function findGroupByNameAndCaption(xml: string, name: string, caption: string): string | undefined {
+  return findGroupTags(xml).find(
+    (tag) =>
+      unescapeXml(getAttr(tag, 'name') ?? '') === name &&
+      unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
+  );
+}
+
+function findGroupTags(xml: string): string[] {
+  // Only the group OPEN tag is needed for name/caption checks.
+  return [...xml.matchAll(/<group\b[^>]*>/g)].map((match) => match[0]);
+}
+
+function bracketize(token: string): string {
+  const trimmed = token.trim();
+  // Already a reference like [Parameters].[Parameter 3] or [Sub-Category] — pass through.
+  if (trimmed.startsWith('[')) {
+    return trimmed;
+  }
+  return `[${trimmed}]`;
+}
+
+function renderTopNGroupSet({
+  caption,
+  setName,
+  dimension,
+  orderBy,
+  count,
+  end,
+}: {
+  caption: string;
+  setName: string;
+  dimension: string;
+  orderBy: string;
+  count: string;
+  end: z.infer<typeof endSchema>;
+}): string {
+  const level = bracketize(dimension);
+  // count is a literal integer or a parameter reference token — emit verbatim
+  // (Tableau resolves [Parameters].[X] at runtime; a bare integer is a fixed N).
+  return (
+    `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
+    `<groupfilter count='${escapeXml(count.trim())}' end='${end}' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'>` +
+    `<groupfilter direction='DESC' expression='${escapeXml(orderBy)}' function='order' user:ui-marker='order'>` +
+    `<groupfilter function='level-members' level='${escapeXml(level)}' user:ui-enumeration='all' user:ui-marker='enumerate' />` +
+    '</groupfilter></groupfilter></group>'
+  );
+}
+
+function renderEmptyGroupSet({
+  caption,
+  setName,
+  dimension,
+}: {
+  caption: string;
+  setName: string;
+  dimension: string;
+}): string {
+  return (
+    `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
+    `<groupfilter function='empty-level' member='${escapeXml(bracketize(dimension))}' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />` +
+    '</group>'
+  );
+}
+
+function renderConditionGroupSet({
+  caption,
+  setName,
+  dimension,
+  conditionExpression,
+}: {
+  caption: string;
+  setName: string;
+  dimension: string;
+  conditionExpression: string;
+}): string {
+  const level = bracketize(dimension);
+  return (
+    `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
+    `<groupfilter expression='${escapeXml(conditionExpression)}' function='filter' user:ui-filter-by-field='true' user:ui-marker='filter-by'>` +
+    `<groupfilter function='level-members' level='${escapeXml(level)}' user:ui-enumeration='all' user:ui-marker='enumerate' />` +
+    '</groupfilter></group>'
+  );
+}
+
+function spliceElementIntoDatasource(
+  xml: string,
+  datasource: DatasourceElement,
+  elementXml: string,
+): string {
+  if (datasource.selfClosing) {
+    const openTag = xml.slice(datasource.openStart, datasource.openEnd).replace(/\/\s*>$/, '>');
+    return `${xml.slice(0, datasource.openStart)}${openTag}${elementXml}</datasource>${xml.slice(
+      datasource.openEnd,
+    )}`;
+  }
+
+  // Insert at the datasource END — the position every successful live splice used
+  // (author-calc lesson: relation/columns blocks are a position trap).
+  return `${xml.slice(0, datasource.closeStart)}${elementXml}${xml.slice(datasource.closeStart)}`;
+}
+
+function getAttr(tag: string, name: string): string | undefined {
+  const match = tag.match(new RegExp(`\\b${name}=(['"])(.*?)\\1`));
+  return match?.[2];
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll("'", '&apos;')
+    .replaceAll('"', '&quot;');
+}
+
+function unescapeXml(value: string): string {
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&gt;', '>')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&amp;', '&');
+}

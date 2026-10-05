@@ -24,6 +24,13 @@ jobs:
           npm install -g npm@latest
           npm ci
           npm run build
+          # Build the desktop variant into the same build/ dir. --dirty preserves the
+          # default build/index.js emitted above (a non-dirty desktop build would wipe it).
+          npx tsx src/scripts/build.ts --variant desktop --dirty
+          # Fail the publish if either entry point or the staged desktop data is missing.
+          test -f build/index.js
+          test -f build/index.desktop.js
+          test -d build/desktop/data
           # Prerelease-aware publish. A SemVer prerelease version (one containing a
           # `-`, e.g. 2.18.0-hotfix.1; build metadata `+...` is NOT a prerelease)
           # must NOT reassign the `latest` npm dist-tag — otherwise a hotfix off an

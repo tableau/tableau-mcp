@@ -1,0 +1,284 @@
+import { runValidation } from '../validation/registry.js';
+import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import { parseXML } from './parser.js';
+import {
+  addSheet,
+  deleteSheet,
+  extractSheetXml,
+  extractWorksheetWindowXml,
+  listSheets,
+  listWorksheetRefs,
+  resolveWorksheetRef,
+  upsertSheetIntoWorkbook,
+  upsertWorksheetAndWindowIntoWorkbook,
+  worksheetFragmentSimpleId,
+} from './sheets.js';
+
+// Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
+// filter carries a user:-prefixed attribute (confirmed pattern, see refineWorksheet.test.ts).
+// The declaration lives on the ancestor <workbook> element, not on <worksheet> itself.
+const WORKBOOK_WITH_USER_NAMESPACE = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook original-version='18.1' source-build='0.0.0 (0000.26.0531.2046)' source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sales by Region'>
+      <table>
+        <view>
+          <filter class='categorical' column='[none:Region:nk]'>
+            <groupfilter function='level-members' level='[none:Region:nk]' user:ui-enumeration='all' />
+          </filter>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+
+describe('extractSheetXml', () => {
+  it('finds and extracts an existing worksheet', () => {
+    const xml = extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Sales by Region');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('<worksheet');
+    expect(xml).toContain('name="Sales by Region"');
+  });
+
+  it('returns null for a worksheet that does not exist', () => {
+    expect(extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Does Not Exist')).toBeNull();
+  });
+
+  // Live-bug regression (Tableau Desktop, get-worksheet-xml -> unmodified apply-worksheet):
+  // extracting a <worksheet> subtree that uses a user:-prefixed attribute, out of a <workbook>
+  // that declares xmlns:user only on its own root, must not strip the namespace declaration.
+  // An untouched get -> apply round-trip must always pass the same well-formed-xml preflight
+  // that apply-worksheet runs — a NamespaceError here is exactly the live failure mode.
+  it('carries the xmlns:user declaration from the workbook root onto the extracted worksheet', () => {
+    const xml = extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Sales by Region');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('user:ui-enumeration');
+
+    const issues = wellFormedXmlRule.validate(xml!);
+    const errors = issues.filter((i) => i.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
+  it('does not overwrite a namespace declaration the worksheet already carries itself', () => {
+    const workbookWithConflict = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='q' xmlns:user='http://example.com/already-declared'>
+      <table></table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+    const xml = extractSheetXml(workbookWithConflict, 'q');
+    expect(xml).toContain('http://example.com/already-declared');
+    expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
+  });
+});
+describe('upsertSheetIntoWorkbook', () => {
+  // The External Client API POST replaces the open workbook wholesale, so the posted doc must carry
+  // the entire live workbook with only the target sheet swapped in — siblings and dashboards intact.
+  const LIVE_WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+    <worksheet name='Sheet 2'><table /></worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Dashboard 1'><zones /></dashboard>
+  </dashboards>
+  <windows>
+    <window class='worksheet' name='Sheet 1'><cards /></window>
+    <window class='worksheet' name='Sheet 2'><cards /></window>
+  </windows>
+</workbook>`;
+
+  it('replaces the target sheet while preserving siblings and dashboards', () => {
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).not.toContain('<old');
+    expect(doc).toContain('name="Sheet 2"');
+    expect(doc).toContain('name="Dashboard 1"');
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2']);
+  });
+
+  it('appends a brand-new sheet, keeping the existing ones', () => {
+    const edited = "<worksheet name='Sheet 3'><table /></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 3', edited);
+
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
+    expect(doc).toContain('name="Dashboard 1"');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 3">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
+  });
+
+  it('adds the worksheet window when replacing a sheet whose window is missing', () => {
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 1">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
+  });
+
+  it('throws when the edited XML does not carry a <worksheet> with the given name', () => {
+    const edited = "<worksheet name='Wrong'><table /></worksheet>";
+    expect(() => upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited)).toThrow();
+  });
+
+  it('preserves whitespace-significant run text on an untouched sibling sheet', () => {
+    // A single-sheet apply re-serializes the whole workbook. A sibling's formatted <run> text with
+    // significant leading/trailing spaces must survive verbatim — trimming corrupts titles/tooltips.
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Edited'><table><old /></table></worksheet>
+    <worksheet name='Sibling'><table><formatted-text><run>Sales: </run><run>  $1.2M</run></formatted-text></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Edited'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Edited', edited);
+
+    expect(doc).toContain('<run>Sales: </run>');
+    expect(doc).toContain('<run>  $1.2M</run>');
+  });
+});
+
+describe('worksheet plus window artifacts', () => {
+  const LIVE = `<?xml version='1.0'?><workbook>
+    <worksheets>
+      <worksheet name='A'><table><old /></table></worksheet>
+      <worksheet name='Sibling'><table><keep /></table></worksheet>
+    </worksheets>
+    <windows>
+      <window class='worksheet' name='A'><cards><old /></cards></window>
+      <window class='worksheet' name='Sibling' active='true'><cards /></window>
+    </windows>
+  </workbook>`;
+
+  it('extracts the matching worksheet window as a standalone fragment', () => {
+    expect(extractWorksheetWindowXml(LIVE, 'A')).toContain('<window class="worksheet" name="A">');
+    expect(extractWorksheetWindowXml(LIVE, 'Missing')).toBeNull();
+  });
+
+  it('carries inherited namespaces onto an extracted worksheet window', () => {
+    const workbook = `<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <worksheets><worksheet name='A'><table /></worksheet></worksheets>
+      <windows><window class='worksheet' name='A' user:ui-state='shown'><cards /></window></windows>
+    </workbook>`;
+    const window = extractWorksheetWindowXml(workbook, 'A');
+
+    expect(window).toContain('user:ui-state="shown"');
+    expect(window).toContain('xmlns:user="http://www.tableausoftware.com/xml/user"');
+    expect(() => parseXML(window!)).not.toThrow();
+  });
+
+  it('upserts the target worksheet and its window while preserving unrelated live edits', () => {
+    const latest = LIVE.replace('<keep />', '<unrelated-live-edit />');
+    const applied = upsertWorksheetAndWindowIntoWorkbook(
+      latest,
+      'A',
+      '<worksheet name="A"><table><new /></table></worksheet>',
+      '<window class="worksheet" name="A"><cards><new /></cards></window>',
+    );
+
+    expect(applied).toContain('<unrelated-live-edit');
+    expect(applied).toMatch(/<worksheet name="A">\s*<table>\s*<new/);
+    expect(applied).toMatch(/<window class="worksheet" name="A">\s*<cards>\s*<new/);
+    expect(applied).toContain('name="Sibling" active="true"');
+  });
+});
+
+describe('listSheets', () => {
+  it('lists worksheet names', () => {
+    expect(listSheets(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Sales by Region']);
+  });
+});
+
+describe('listWorksheetRefs', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sales by Region'><table /><simple-id uuid='{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}' /></worksheet>
+    <worksheet name='P&amp;L'><table /><simple-id uuid='{0FD195D1-1111-2222-3333-444455556666}' /></worksheet>
+  </worksheets>
+</workbook>`;
+
+  it('pairs each worksheet id with its name, decoding XML entities', () => {
+    expect(listWorksheetRefs(WORKBOOK)).toEqual([
+      { id: '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}', name: 'Sales by Region' },
+      { id: '{0FD195D1-1111-2222-3333-444455556666}', name: 'P&L' },
+    ]);
+  });
+
+  it('drops a worksheet that carries no simple-id — a Desktop document always has one', () => {
+    expect(listWorksheetRefs(WORKBOOK_WITH_USER_NAMESPACE)).toEqual([]);
+  });
+});
+
+describe('resolveWorksheetRef', () => {
+  const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sales by Region'><table /><simple-id uuid='{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}' /></worksheet>
+    <worksheet name='P&amp;L'><table /><simple-id uuid='{0FD195D1-1111-2222-3333-444455556666}' /></worksheet>
+  </worksheets>
+</workbook>`;
+
+  it('matches by simple-id first (id identifies across a rename)', () => {
+    expect(resolveWorksheetRef(WORKBOOK, '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}')).toEqual({
+      id: '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}',
+      name: 'Sales by Region',
+    });
+  });
+
+  it('falls back to the display name, decoding XML entities', () => {
+    expect(resolveWorksheetRef(WORKBOOK, 'P&L')).toEqual({
+      id: '{0FD195D1-1111-2222-3333-444455556666}',
+      name: 'P&L',
+    });
+  });
+
+  it('returns null when neither an id nor a name matches', () => {
+    expect(resolveWorksheetRef(WORKBOOK, 'No Such Sheet')).toBeNull();
+  });
+});
+
+describe('worksheetFragmentSimpleId', () => {
+  it('reads the simple-id off a standalone worksheet fragment', () => {
+    const fragment =
+      "<worksheet name='Sales'><table /><simple-id uuid='{ABCD-1234}' /></worksheet>";
+    expect(worksheetFragmentSimpleId(fragment)).toBe('{ABCD-1234}');
+  });
+
+  it('returns null when the fragment carries no simple-id', () => {
+    expect(worksheetFragmentSimpleId("<worksheet name='Sales'><table /></worksheet>")).toBeNull();
+  });
+});
+
+describe('addSheet / deleteSheet', () => {
+  it('round-trips add then delete', () => {
+    const added = addSheet(WORKBOOK_WITH_USER_NAMESPACE, 'New Sheet');
+    expect(listSheets(added)).toContain('New Sheet');
+    const deleted = deleteSheet(added, 'New Sheet');
+    expect(listSheets(deleted)).not.toContain('New Sheet');
+  });
+});

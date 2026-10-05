@@ -1,0 +1,1369 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run fontcolor='#40414c' fontname='Tableau Semibold' fontsize='12'>&lt;Sheet Name&gt; </run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource inline='true' name='World Indicators' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='World Indicators' name='hyper.02tkzk21390wwr18vjk7f1tnp84z'>
+            <connection authentication='auth-none' author-locale='en_GB' class='hyper' dbname='' default-settings='yes' sslmode='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='hyper.02tkzk21390wwr18vjk7f1tnp84z' name='Extract' table='[Extract].[Extract]' type='table' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Birth Rate</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Birth Rate]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Birth Rate</remote-alias>
+            <ordinal>0</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>47</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Business Tax Rate</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Business Tax Rate]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Business Tax Rate</remote-alias>
+            <ordinal>1</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>397</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>CO2 Emissions</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[CO2 Emissions]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>CO2 Emissions</remote-alias>
+            <ordinal>2</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>1261</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Country/Region</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Country/Region]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Country/Region</remote-alias>
+            <ordinal>3</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>208</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RUS_S2' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Days to Start Business</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Days to Start Business]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Days to Start Business</remote-alias>
+            <ordinal>4</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>115</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Ease of Business</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Ease of Business]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Ease of Business</remote-alias>
+            <ordinal>5</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>334</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Energy Usage</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Energy Usage]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Energy Usage</remote-alias>
+            <ordinal>6</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>1520</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>GDP</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[GDP]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>GDP</remote-alias>
+            <ordinal>7</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>1605</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Health Exp % GDP</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Health Exp % GDP]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Health Exp % GDP</remote-alias>
+            <ordinal>8</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>131</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Health Exp/Capita</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Health Exp/Capita]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Health Exp/Capita</remote-alias>
+            <ordinal>9</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>836</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Hours to do Tax</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Hours to do Tax]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Hours to do Tax</remote-alias>
+            <ordinal>10</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>262</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Infant Mortality Rate</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Infant Mortality Rate]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Infant Mortality Rate</remote-alias>
+            <ordinal>11</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>128</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Internet Usage</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Internet Usage]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Internet Usage</remote-alias>
+            <ordinal>12</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>617</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Lending Interest</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Lending Interest]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Lending Interest</remote-alias>
+            <ordinal>13</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>319</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Life Expectancy Female</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Life Expectancy Female]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Life Expectancy Female</remote-alias>
+            <ordinal>14</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>48</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Life Expectancy Male</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Life Expectancy Male]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Life Expectancy Male</remote-alias>
+            <ordinal>15</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>47</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Mobile Phone Usage</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Mobile Phone Usage]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Mobile Phone Usage</remote-alias>
+            <ordinal>16</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>950</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population 0-14</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Population 0-14]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Population 0-14</remote-alias>
+            <ordinal>17</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>391</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population 15-64</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Population 15-64]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Population 15-64</remote-alias>
+            <ordinal>18</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>287</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population 65+</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Population 65+]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Population 65+</remote-alias>
+            <ordinal>19</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>199</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population Total</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Population Total]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Population Total</remote-alias>
+            <ordinal>20</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>2691</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Population Urban</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Population Urban]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Population Urban</remote-alias>
+            <ordinal>21</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>782</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Region</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[Region]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Region</remote-alias>
+            <ordinal>22</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <approx-count>6</approx-count>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RUS_S2' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Tourism Inbound</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Tourism Inbound]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Tourism Inbound</remote-alias>
+            <ordinal>23</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>1207</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Tourism Outbound</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Tourism Outbound]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Tourism Outbound</remote-alias>
+            <ordinal>24</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <approx-count>1082</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Year</remote-name>
+            <remote-type>133</remote-type>
+            <local-name>[Year]</local-name>
+            <parent-name>[Extract]</parent-name>
+            <remote-alias>Year</remote-alias>
+            <ordinal>25</ordinal>
+            <family>World Indicators.csv</family>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <approx-count>13</approx-count>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column datatype='real' hidden='true' name='[Birth Rate]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Business Tax Rate]' role='measure' type='quantitative' />
+      <column datatype='integer' name='[CO2 Emissions]' role='measure' type='quantitative' />
+      <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column datatype='integer' hidden='true' name='[Days to Start Business]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Ease of Business]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Energy Usage]' role='measure' type='quantitative' />
+      <column aggregation='None' caption='GDP (bin)' datatype='integer' hidden='true' name='[GDP (bin)]' role='dimension' type='quantitative'>
+        <calculation class='bin' decimals='4' formula='[GDP]' peg='0' size='4.36267e+11' />
+      </column>
+      <column datatype='integer' name='[GDP]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Health Exp % GDP]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Health Exp/Capita]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Hours to do Tax]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Infant Mortality Rate]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Lending Interest]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Life Expectancy Female]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Life Expectancy Male]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Mobile Phone Usage]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column datatype='real' hidden='true' name='[Population 0-14]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Population 15-64]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Population 65+]' role='measure' type='quantitative' />
+      <column datatype='real' hidden='true' name='[Population Urban]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Tourism Inbound]' role='measure' type='quantitative' />
+      <column datatype='integer' hidden='true' name='[Tourism Outbound]' role='measure' type='quantitative' />
+      <column caption='Migrated Data' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+      <column-instance column='[CO2 Emissions]' derivation='Sum' name='[sum:CO2 Emissions:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[GDP]' derivation='Sum' name='[sum:GDP:qk]' pivot='key' type='quantitative' />
+      <folders-common>
+        <folder name='Development'>
+          <folder-item name='[CO2 Emissions]' type='field' />
+          <folder-item name='[Energy Usage]' type='field' />
+          <folder-item name='[GDP (bin)]' type='field' />
+          <folder-item name='[GDP]' type='field' />
+          <folder-item name='[Internet Usage]' type='field' />
+          <folder-item name='[Mobile Phone Usage]' type='field' />
+          <folder-item name='[Tourism Inbound]' type='field' />
+          <folder-item name='[Tourism Outbound]' type='field' />
+        </folder>
+        <folder name='Population'>
+          <folder-item name='[Birth Rate]' type='field' />
+          <folder-item name='[Population 65+]' type='field' />
+          <folder-item name='[Population Total]' type='field' />
+          <folder-item name='[Population Urban]' type='field' />
+        </folder>
+      </folders-common>
+      <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='06/30/2026 08:14:21 PM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='World Indicators' increment-value='%null%' refresh-type='create' rows-inserted='2691' timestamp-start='2026-06-30 20:14:21.515' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>CO2 Emissions</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[CO2 Emissions]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>CO2 Emissions</remote-alias>
+              <ordinal>0</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>1283</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Country/Region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Country/Region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Country/Region</remote-alias>
+              <ordinal>1</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>207</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RUS_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>GDP</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[GDP]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>GDP</remote-alias>
+              <ordinal>2</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>1597</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Internet Usage</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Internet Usage]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Internet Usage</remote-alias>
+              <ordinal>3</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>577</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Population Total</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Population Total]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Population Total</remote-alias>
+              <ordinal>4</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>2691</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Region</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Region]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Region</remote-alias>
+              <ordinal>5</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RUS_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Year</remote-name>
+              <remote-type>133</remote-type>
+              <local-name>[Year]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Year</remote-alias>
+              <ordinal>6</ordinal>
+              <family>World Indicators.csv</family>
+              <local-type>date</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>13</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='false' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:Country/Region:nk]' type='palette'>
+            <map to='#44485f'>
+              <bucket>&quot;Colombia&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Antigua and Barbuda&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Central African Republic&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Cyprus&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Gambia, The&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Iraq&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Liechtenstein&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Mozambique&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Poland&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Somalia&quot;</bucket>
+            </map>
+            <map to='#499894'>
+              <bucket>&quot;Tonga&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Afghanistan&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Benin&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Comoros&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Eswatini&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Haiti&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Kuwait&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Mauritius&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Norway&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Serbia&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Sweden&quot;</bucket>
+            </map>
+            <map to='#4e79a7'>
+              <bucket>&quot;Uzbekistan&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Bosnia and Herzegovina&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Brunei&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Cote d&apos;Ivoire&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Finland&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Iceland&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Lebanon&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Monaco&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Papua New Guinea&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Sint Maarten (Dutch part)&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Tanzania&quot;</bucket>
+            </map>
+            <map to='#59a14f'>
+              <bucket>&quot;Yemen&quot;</bucket>
+            </map>
+            <map to='#76b7b2'>
+              <bucket>&quot;Canada&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Aruba&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Cameroon&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Dominica&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Greece&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Italy&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Madagascar&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Netherlands&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Romania&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Spain&quot;</bucket>
+            </map>
+            <map to='#79706e'>
+              <bucket>&quot;Turkmenistan&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Argentina&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Burkina Faso&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Czechia&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Georgia&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Ireland&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Lithuania&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Myanmar&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Portugal&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;South Africa&quot;</bucket>
+            </map>
+            <map to='#86bcb6'>
+              <bucket>&quot;Trinidad and Tobago&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;American Samoa&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Botswana&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Croatia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;France&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;India&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Lesotho&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Mongolia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Paraguay&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Slovakia&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Thailand&quot;</bucket>
+            </map>
+            <map to='#8cd17d'>
+              <bucket>&quot;Zambia&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Belgium&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Equatorial Guinea&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Guinea-Bissau&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Kiribati&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Marshall Islands&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;North Korea&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Saudi Arabia&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;Sudan&quot;</bucket>
+            </map>
+            <map to='#9d7660'>
+              <bucket>&quot;United States&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Albania&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Bermuda&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Congo (Brazzaville)&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Ethiopia&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Honduras&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Kyrgyzstan&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Mexico&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Oman&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Seychelles&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Switzerland&quot;</bucket>
+            </map>
+            <map to='#a0cbe8'>
+              <bucket>&quot;Vanuatu&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Bahamas, The&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Barbados&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;El Salvador&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Guatemala&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Kazakhstan&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Mali&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;Niger&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;San Marino&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;St. Martin (French part)&quot;</bucket>
+            </map>
+            <map to='#b07aa1'>
+              <bucket>&quot;United Arab Emirates&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Andorra&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Brazil&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Estonia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;French Polynesia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Indonesia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Liberia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Montenegro&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Peru&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Slovenia&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Timor-Leste&quot;</bucket>
+            </map>
+            <map to='#b6992d'>
+              <bucket>&quot;Zimbabwe&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Australia&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Chad&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Dominican Republic&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Greenland&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Jamaica&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Malawi&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;New Caledonia&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Russia&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Sri Lanka&quot;</bucket>
+            </map>
+            <map to='#bab0ac'>
+              <bucket>&quot;Turks and Caicos Islands&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Austria&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Bahrain&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Ecuador&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Grenada&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Japan&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Malaysia&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;New Zealand&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Rwanda&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;St. Kitts and Nevis&quot;</bucket>
+            </map>
+            <map to='#d37295'>
+              <bucket>&quot;Uganda&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Belarus&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Chile&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Guinea&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Kenya&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Malta&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Nigeria&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;Sao Tome and Principe&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;St. Vincent and the Grenadines&quot;</bucket>
+            </map>
+            <map to='#d4a6c8'>
+              <bucket>&quot;United Kingdom&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Belize&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Eritrea&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Guyana&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Kosovo&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Mauritania&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;North Macedonia&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Senegal&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Suriname&quot;</bucket>
+            </map>
+            <map to='#d7b5a6'>
+              <bucket>&quot;Uruguay&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Burundi&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;China&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Denmark&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Germany&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Isle of Man&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Luxembourg&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Namibia&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Puerto Rico&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;South Korea&quot;</bucket>
+            </map>
+            <map to='#e15759'>
+              <bucket>&quot;Tunisia&quot;</bucket>
+            </map>
+            <map to='#f07cef'>
+              <bucket>&quot;Bulgaria&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Angola&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Cayman Islands&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Curacao&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Gabon&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Iran&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Libya&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Morocco&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Philippines&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Solomon Islands&quot;</bucket>
+            </map>
+            <map to='#f1ce63'>
+              <bucket>&quot;Togo&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Bhutan&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Congo (Kinshasa)&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Cuba&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Faroe Islands&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Hong Kong SAR, China&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Laos&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Micronesia, Fed. Sts.&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Pakistan&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Sierra Leone&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Syria&quot;</bucket>
+            </map>
+            <map to='#f28e2b'>
+              <bucket>&quot;Venezuela&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Azerbaijan&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Bangladesh&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Egypt&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Guam&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Jordan&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Maldives&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Nicaragua&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Samoa&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;St. Lucia&quot;</bucket>
+            </map>
+            <map to='#fabfd2'>
+              <bucket>&quot;Ukraine&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Armenia&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Cambodia&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Djibouti&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Ghana&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Israel&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Macao SAR, China&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Nepal&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Qatar&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;South Sudan&quot;</bucket>
+            </map>
+            <map to='#ff9d9a'>
+              <bucket>&quot;Türkiye&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Algeria&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Bolivia&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Costa Rica&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Fiji&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Hungary&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Latvia&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Moldova&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Panama&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Singapore&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Tajikistan&quot;</bucket>
+            </map>
+            <map to='#ffbe7d'>
+              <bucket>&quot;Vietnam&quot;</bucket>
+            </map>
+          </encoding>
+          <encoding attr='color' field='[:Measure Names]' type='palette'>
+            <map to='#44485f'>
+              <bucket>&quot;[World Indicators].[sum:CO2 Emissions:qk]&quot;</bucket>
+            </map>
+            <map to='#f09ace'>
+              <bucket>&quot;[World Indicators].[sum:GDP:qk]&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />
+      </semantic-values>
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='hyper.02tkzk21390wwr18vjk7f1tnp84z' name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <datasource-relationships>
+    <datasource-relationship source='federated.1or5ea20ktzg3y11wyj1a1k8aw9q' target='Sample - EU Superstore'>
+      <column-mapping />
+    </datasource-relationship>
+  </datasource-relationships>
+  <window tab-color='#6e597f'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='2' param='[World Indicators].[none:Country/Region:nk]' type='color' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+    </viewpoint>
+    <simple-id uuid='{2239D50A-9BFD-4207-A9B3-18C63675EF94}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='World Indicators' />
+      </datasources>
+      <datasource-dependencies datasource='World Indicators'>
+        <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column datatype='integer' name='[GDP]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Internet Usage]' role='measure' type='quantitative' />
+        <column datatype='date' name='[Year]' role='dimension' type='ordinal' />
+        <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[GDP]' derivation='Sum' name='[sum:GDP:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Internet Usage]' derivation='Sum' name='[sum:Internet Usage:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Year]' derivation='Year' name='[yr:Year:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[World Indicators].[none:Country/Region:nk]'>
+        <groupfilter function='member' level='[none:Country/Region:nk]' member='&quot;Colombia&quot;' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <slices>
+        <column>[World Indicators].[none:Country/Region:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='height' field='[World Indicators].[sum:Internet Usage:qk]' value='41' />
+        <format attr='width' field='[World Indicators].[sum:GDP:qk]' value='64' />
+        <format attr='tick-color' value='#00000000' />
+        <format attr='stroke-color' scope='cols' value='#333333' />
+        <format attr='line-pattern-only' value='solid' />
+        <format attr='stroke-size' value='0' />
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-format' field='[World Indicators].[sum:GDP:qk]' value='c&quot;£&quot;#,##0,,,B;-&quot;£&quot;#,##0,,,B' />
+        <format attr='text-format' field='[World Indicators].[sum:Internet Usage:qk]' value='p0%' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='background-color' value='#00000000' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='dropline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+        <format attr='stroke-size' scope='rows' value='1' />
+        <format attr='line-visibility' scope='rows' value='on' />
+        <format attr='line-pattern-only' scope='rows' value='solid' />
+        <format attr='stroke-color' scope='rows' value='#f2f2f286' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='stroke-color' value='#d4d4d4' />
+        <format attr='line-visibility' value='on' />
+        <format attr='line-pattern-only' value='dotted' />
+        <format attr='stroke-size' value='1' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='stroke-size' scope='rows' value='0' />
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='stroke-size' scope='cols' value='0' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[World Indicators].[none:Country/Region:nk]' />
+          <text column='[World Indicators].[yr:Year:ok]' />
+          <lod column='[World Indicators].[yr:Year:ok]' />
+          <path column='[World Indicators].[yr:Year:ok]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontname='Tableau Regular'>&lt;[World Indicators].[none:Country/Region:nk]&gt;, &lt;[World Indicators].[yr:Year:ok]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#1b1b1b' fontname='Tableau Regular' fontsize='11'>GDP:</run>
+            <run bold='true' fontcolor='#1b1b1b' fontname='Tableau Regular' fontsize='11'> &lt;[World Indicators].[sum:GDP:qk]&gt;</run>
+            <run>Æ&#10;</run>
+            <run fontcolor='#1b1b1b' fontname='Tableau Regular' fontsize='11'>Internet Usage:</run>
+            <run bold='true' fontcolor='#1b1b1b' fontname='Tableau Regular' fontsize='11'> &lt;[World Indicators].[sum:Internet Usage:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='left' />
+            <format attr='vertical-align' value='bottom' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='font-weight' value='bold' />
+            <format attr='font-size' value='8' />
+            <format attr='color' value='#6e7383' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='size' value='0.69165748357772827' />
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-mode' value='line-ends' />
+            <format attr='mark-labels-line-first' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-color' value='#44485f' />
+            <format attr='mark-markers-mode' value='all' />
+            <format attr='mark-transparency' value='255' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[World Indicators].[sum:GDP:qk]</rows>
+    <cols>[World Indicators].[sum:Internet Usage:qk]</cols>
+  </table>
+</bookmark>

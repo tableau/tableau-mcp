@@ -1,0 +1,1152 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MapAttribution2 />
+    <MapboxVectorBuiltInAndUserStyles />
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Use for totals rather than rates – be wary that small differences in data will be hard to see.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <preferences>
+    <color-palette custom='true' name='Facebook Blue-Gray Diverging' type='ordered-diverging'>
+      <color>#080a10</color>
+      <color>#141823</color>
+      <color>#232937</color>
+      <color>#373e4d</color>
+      <color>#4e5665</color>
+      <color>#6a7180</color>
+      <color>#898f9c</color>
+      <color>#adb2bb</color>
+      <color>#d3d6db</color>
+      <color>#e9eaed</color>
+      <color>#f6f7f8</color>
+    </color-palette>
+  </preferences>
+  <datasources>
+    <datasource caption='Rat Sightings' inline='true' name='federated.0v0o2ld10ici9p16hfr0a195sn24' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Rat Sightings' name='excel-direct.1mbfugy16olgp916dlqa80l8qku2'>
+            <connection class='excel-direct' cleaning='no' compat='no' dataRefreshTime='' interpretationMode='0' validate='no' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='excel-direct.1mbfugy16olgp916dlqa80l8qku2' name='Rat_Sightings' table='[Rat_Sightings$]' type='table'>
+          <columns gridOrigin='A1:AB10001:no:A1:AB10001:0' header='yes' outcome='2'>
+            <column datatype='string' name='Address Type' ordinal='0' />
+            <column datatype='string' name='Agency Name' ordinal='1' />
+            <column datatype='string' name='Agency' ordinal='2' />
+            <column datatype='string' name='Borough' ordinal='3' />
+            <column datatype='string' name='City' ordinal='4' />
+            <column datatype='datetime' name='Closed Date' ordinal='5' />
+            <column datatype='string' name='Community Board' ordinal='6' />
+            <column datatype='string' name='Complaint Type' ordinal='7' />
+            <column datatype='datetime' name='Created Date' ordinal='8' />
+            <column datatype='string' name='Cross Street 1' ordinal='9' />
+            <column datatype='string' name='Cross Street 2' ordinal='10' />
+            <column datatype='string' name='Descriptor' ordinal='11' />
+            <column datatype='datetime' name='Due Date' ordinal='12' />
+            <column datatype='string' name='Facility Type' ordinal='13' />
+            <column datatype='string' name='Incident Address' ordinal='14' />
+            <column datatype='integer' name='Incident Zip' ordinal='15' />
+            <column datatype='string' name='Intersection Street 1' ordinal='16' />
+            <column datatype='string' name='Intersection Street 2' ordinal='17' />
+            <column datatype='string' name='Landmark' ordinal='18' />
+            <column datatype='real' name='Latitude' ordinal='19' />
+            <column datatype='string' name='Location Type' ordinal='20' />
+            <column datatype='real' name='Longitude' ordinal='21' />
+            <column datatype='string' name='Park Borough' ordinal='22' />
+            <column datatype='string' name='Park Facility Name' ordinal='23' />
+            <column datatype='string' name='Resolution Action Updated Date' ordinal='24' />
+            <column datatype='string' name='Status' ordinal='25' />
+            <column datatype='string' name='Street Name' ordinal='26' />
+            <column datatype='integer' name='Unique Key' ordinal='27' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>Address Type</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Address Type]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Address Type</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Agency Name</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Agency Name]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Agency Name</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Agency</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Agency]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Agency</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Borough</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Borough]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Borough</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>City</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[City]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>City</remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Closed Date</remote-name>
+            <remote-type>7</remote-type>
+            <local-name>[Closed Date]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Closed Date</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>datetime</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;DATE&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Community Board</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Community Board]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Community Board</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Complaint Type</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Complaint Type]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Complaint Type</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Created Date</remote-name>
+            <remote-type>7</remote-type>
+            <local-name>[Created Date]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Created Date</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>datetime</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;DATE&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Cross Street 1</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Cross Street 1]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Cross Street 1</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Cross Street 2</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Cross Street 2]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Cross Street 2</remote-alias>
+            <ordinal>10</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Descriptor</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Descriptor]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Descriptor</remote-alias>
+            <ordinal>11</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Due Date</remote-name>
+            <remote-type>7</remote-type>
+            <local-name>[Due Date]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Due Date</remote-alias>
+            <ordinal>12</ordinal>
+            <local-type>datetime</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;DATE&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Facility Type</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Facility Type]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Facility Type</remote-alias>
+            <ordinal>13</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Incident Address</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Incident Address]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Incident Address</remote-alias>
+            <ordinal>14</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Incident Zip</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Incident Zip]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Incident Zip</remote-alias>
+            <ordinal>15</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Intersection Street 1</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Intersection Street 1]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Intersection Street 1</remote-alias>
+            <ordinal>16</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Intersection Street 2</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Intersection Street 2]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Intersection Street 2</remote-alias>
+            <ordinal>17</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Landmark</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Landmark]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Landmark</remote-alias>
+            <ordinal>18</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Latitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Latitude]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Latitude</remote-alias>
+            <ordinal>19</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Location Type</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Location Type]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Location Type</remote-alias>
+            <ordinal>20</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Longitude</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[Longitude]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Longitude</remote-alias>
+            <ordinal>21</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <precision>15</precision>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;R8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Park Borough</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Park Borough]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Park Borough</remote-alias>
+            <ordinal>22</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Park Facility Name</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Park Facility Name]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Park Facility Name</remote-alias>
+            <ordinal>23</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Resolution Action Updated Date</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Resolution Action Updated Date]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Resolution Action Updated Date</remote-alias>
+            <ordinal>24</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Status</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Status]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Status</remote-alias>
+            <ordinal>25</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Street Name</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[Street Name]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Street Name</remote-alias>
+            <ordinal>26</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <collation flag='1' name='LEN_RGB_S2' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;WSTR&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>Unique Key</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[Unique Key]</local-name>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias>Unique Key</remote-alias>
+            <ordinal>27</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;I8&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Rat_Sightings]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='context'>0</attribute>
+              <attribute datatype='string' name='gridOrigin'>&quot;A1:AB10001:no:A1:AB10001:0&quot;</attribute>
+              <attribute datatype='boolean' name='header'>true</attribute>
+              <attribute datatype='integer' name='outcome'>2</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column aggregate-role-from='[Incident Zip]' datatype='string' name='[Borough]' role='dimension' type='nominal' />
+      <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />
+      <column datatype='integer' default-format='*00000' name='[Incident Zip]' role='dimension' semantic-role='[ZipCode].[Name]' type='ordinal' />
+      <column aggregation='Avg' datatype='real' name='[Latitude]' role='measure' semantic-role='[Geographical].[Latitude]' type='quantitative' />
+      <column aggregation='Avg' datatype='real' name='[Longitude]' role='measure' semantic-role='[Geographical].[Longitude]' type='quantitative' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column datatype='integer' name='[Unique Key]' role='dimension' type='ordinal' />
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <drill-paths>
+        <drill-path name='Borough, Incident Zip'>
+          <field>[Borough]</field>
+          <field>[Incident Zip]</field>
+        </drill-path>
+      </drill-paths>
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/13/2018 09:19:02 AM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='114507' timestamp-start='2018-07-13 09:19:02.621' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>Address Type</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Address Type]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Address Type</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Agency Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Agency Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Agency Name</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Agency</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Agency]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Agency</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Borough</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Borough]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Borough</remote-alias>
+              <ordinal>3</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>City</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[City]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>City</remote-alias>
+              <ordinal>4</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>213</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Closed Date</remote-name>
+              <remote-type>135</remote-type>
+              <local-name>[Closed Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Closed Date</remote-alias>
+              <ordinal>5</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>datetime</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>9101</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Community Board</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Community Board]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Community Board</remote-alias>
+              <ordinal>6</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>91</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Complaint Type</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Complaint Type]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Complaint Type</remote-alias>
+              <ordinal>7</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Created Date</remote-name>
+              <remote-type>135</remote-type>
+              <local-name>[Created Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Created Date</remote-alias>
+              <ordinal>8</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>datetime</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>12546</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Cross Street 1</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Cross Street 1]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Cross Street 1</remote-alias>
+              <ordinal>9</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>4425</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Cross Street 2</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Cross Street 2]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Cross Street 2</remote-alias>
+              <ordinal>10</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>4709</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Descriptor</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Descriptor]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Descriptor</remote-alias>
+              <ordinal>11</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Due Date</remote-name>
+              <remote-type>135</remote-type>
+              <local-name>[Due Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Due Date</remote-alias>
+              <ordinal>12</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>datetime</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>114507</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Facility Type</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Facility Type]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Facility Type</remote-alias>
+              <ordinal>13</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Incident Address</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Incident Address]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Incident Address</remote-alias>
+              <ordinal>14</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>36088</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Incident Zip</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Incident Zip]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Incident Zip</remote-alias>
+              <ordinal>15</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>415</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Intersection Street 1</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Intersection Street 1]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Intersection Street 1</remote-alias>
+              <ordinal>16</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>3115</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Intersection Street 2</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Intersection Street 2]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Intersection Street 2</remote-alias>
+              <ordinal>17</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>6372</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Landmark</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Landmark]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Landmark</remote-alias>
+              <ordinal>18</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Latitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Latitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Latitude</remote-alias>
+              <ordinal>19</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>39387</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Location Type</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Location Type]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Location Type</remote-alias>
+              <ordinal>20</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>53</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Longitude</remote-name>
+              <remote-type>5</remote-type>
+              <local-name>[Longitude]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Longitude</remote-alias>
+              <ordinal>21</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>real</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>39387</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Park Borough</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Park Borough]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Park Borough</remote-alias>
+              <ordinal>22</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>5</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Park Facility Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Park Facility Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Park Facility Name</remote-alias>
+              <ordinal>23</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>1</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Resolution Action Updated Date</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Resolution Action Updated Date]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Resolution Action Updated Date</remote-alias>
+              <ordinal>24</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>16512</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Status</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Status]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Status</remote-alias>
+              <ordinal>25</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>3</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Street Name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[Street Name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Street Name</remote-alias>
+              <ordinal>26</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>7744</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='1' name='LEN_RGB_S2' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>Unique Key</remote-name>
+              <remote-type>20</remote-type>
+              <local-name>[Unique Key]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>Unique Key</remote-alias>
+              <ordinal>27</ordinal>
+              <family>Rat_Sightings</family>
+              <local-type>integer</local-type>
+              <aggregation>Sum</aggregation>
+              <approx-count>114507</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />
+        <semantic-value key='[ZipCode].[Name]' value='%null%' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='excel-direct.1mbfugy16olgp916dlqa80l8qku2' name='Rat_Sightings' table='[Rat_Sightings$]' type='table'>
+                <columns gridOrigin='A1:AB10001:no:A1:AB10001:0' header='yes' outcome='2'>
+                  <column datatype='string' name='Address Type' ordinal='0' />
+                  <column datatype='string' name='Agency Name' ordinal='1' />
+                  <column datatype='string' name='Agency' ordinal='2' />
+                  <column datatype='string' name='Borough' ordinal='3' />
+                  <column datatype='string' name='City' ordinal='4' />
+                  <column datatype='datetime' name='Closed Date' ordinal='5' />
+                  <column datatype='string' name='Community Board' ordinal='6' />
+                  <column datatype='string' name='Complaint Type' ordinal='7' />
+                  <column datatype='datetime' name='Created Date' ordinal='8' />
+                  <column datatype='string' name='Cross Street 1' ordinal='9' />
+                  <column datatype='string' name='Cross Street 2' ordinal='10' />
+                  <column datatype='string' name='Descriptor' ordinal='11' />
+                  <column datatype='datetime' name='Due Date' ordinal='12' />
+                  <column datatype='string' name='Facility Type' ordinal='13' />
+                  <column datatype='string' name='Incident Address' ordinal='14' />
+                  <column datatype='integer' name='Incident Zip' ordinal='15' />
+                  <column datatype='string' name='Intersection Street 1' ordinal='16' />
+                  <column datatype='string' name='Intersection Street 2' ordinal='17' />
+                  <column datatype='string' name='Landmark' ordinal='18' />
+                  <column datatype='real' name='Latitude' ordinal='19' />
+                  <column datatype='string' name='Location Type' ordinal='20' />
+                  <column datatype='real' name='Longitude' ordinal='21' />
+                  <column datatype='string' name='Park Borough' ordinal='22' />
+                  <column datatype='string' name='Park Facility Name' ordinal='23' />
+                  <column datatype='string' name='Resolution Action Updated Date' ordinal='24' />
+                  <column datatype='string' name='Status' ordinal='25' />
+                  <column datatype='string' name='Street Name' ordinal='26' />
+                  <column datatype='integer' name='Unique Key' ordinal='27' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <mapsources>
+    <mapsource inline='true' name='Light Grey' source-platform='mac' version='18.1'>
+      <connection api-key='' class='CustomMapbox' offline='' port='443' server='https://api.mapbox.com' url='styles/v1' url-format='/styles/v1/vizwiz/{L}/tiles/{Z}/{X}/{Y}{D}?access_token=' username='vizwiz' wait-tile-color='#dddddd' />
+      <languages />
+      <layers>
+        <layer display-name='B&amp;W-copy' name='cj94lowku0fkb2spplo6m3s92' show-ui='true' type='features' />
+      </layers>
+      <properties />
+      <map-styles>
+        <map-style display-name='Light Grey' name='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' wait-tile-color='#dddddd'>
+          <map-layer-style name='B&amp;W-copy' request-string='cj94lowku0fkb2spplo6m3s92' />
+        </map-style>
+      </map-styles>
+      <mapsource-defaults version='18.1'>
+        <style>
+          <style-rule element='map'>
+            <format attr='washout' value='0' />
+            <format attr='map-style' value='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' />
+          </style-rule>
+        </style>
+      </mapsource-defaults>
+      <map-attribution copyright-string='© %1 Mapbox' copyright-url='https://mapbox.com/about/maps' short-copyright-string='' />
+      <map-attribution2 copyright-string='©OpenStreetMap' copyright-url='https://mapbox.com/about/maps' short-copyright-string='©OSM' />
+    </mapsource>
+  </mapsources>
+  <window>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='31'>
+          <card type='title' />
+        </strip>
+      </edge>
+      <edge name='right'>
+        <strip size='160'>
+          <card pane-specification-id='0' param='[federated.0v0o2ld10ici9p16hfr0a195sn24].[sum:Number of Records:qk]' type='size' />
+        </strip>
+      </edge>
+    </cards>
+    <simple-id uuid='{3D15DE61-2EA5-480A-A769-7773BBFC5D31}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Rat Sightings' name='federated.0v0o2ld10ici9p16hfr0a195sn24' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Light Grey' />
+      </mapsources>
+      <datasource-dependencies datasource='federated.0v0o2ld10ici9p16hfr0a195sn24'>
+        <column aggregate-role-from='[Incident Zip]' datatype='string' name='[Borough]' role='dimension' type='nominal' />
+        <column datatype='integer' default-format='*00000' name='[Incident Zip]' role='dimension' semantic-role='[ZipCode].[Name]' type='ordinal' />
+        <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+          <calculation class='tableau' formula='1' />
+        </column>
+        <column-instance column='[Borough]' derivation='None' name='[none:Borough:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Incident Zip]' derivation='None' name='[none:Incident Zip:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Number of Records]' derivation='Sum' name='[sum:Number of Records:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[federated.0v0o2ld10ici9p16hfr0a195sn24].[none:Incident Zip:ok]' direction='ASC' using='[federated.0v0o2ld10ici9p16hfr0a195sn24].[sum:Number of Records:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[federated.0v0o2ld10ici9p16hfr0a195sn24].[sum:Number of Records:qk]' palette='Facebook Blue-Gray Diverging' reverse='true' type='interpolated' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='show-null-value-warning' value='false' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='rows' value='off' />
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+      <style-rule element='map-layer'>
+        <format attr='enabled' id='cj94lowku0fkb2spplo6m3s92' value='true' />
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0' />
+        <format attr='map-style' value='mapbox://styles/vizwiz/cj94lowku0fkb2spplo6m3s92' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <size column='[federated.0v0o2ld10ici9p16hfr0a195sn24].[sum:Number of Records:qk]' />
+          <lod column='[federated.0v0o2ld10ici9p16hfr0a195sn24].[none:Borough:nk]' />
+          <lod column='[federated.0v0o2ld10ici9p16hfr0a195sn24].[none:Incident Zip:ok]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='has-halo' value='false' />
+            <format attr='mark-color' value='#e94e25' />
+            <format attr='size' value='1' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#898989' />
+            <format attr='mark-transparency' value='129' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0v0o2ld10ici9p16hfr0a195sn24].[Latitude (generated)]</rows>
+    <cols>[federated.0v0o2ld10ici9p16hfr0a195sn24].[Longitude (generated)]</cols>
+  </table>
+</bookmark>

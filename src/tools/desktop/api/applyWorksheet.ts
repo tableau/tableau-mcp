@@ -1,0 +1,543 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
+import { Ok, type Result } from 'ts-results-es';
+import { z } from 'zod';
+
+import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
+import { resolveSession } from '../../../desktop/session/sessionResolution.js';
+import {
+  buildTemplateWorksheetArtifact,
+  type BuiltTemplateWorksheetArtifact,
+  type WorksheetTemplatePlan,
+} from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
+import {
+  getTemplateArtifactStore,
+  type TemplateArtifactStore,
+} from '../../../desktop/templates/templateArtifactStore.js';
+import {
+  classifyWorksheetPromiseOutcome,
+  formatWorksheetPromiseCheck,
+} from '../../../desktop/validation/promise-check.js';
+import {
+  formatReadbackVerificationWarnings,
+  type ReadbackVerificationResult,
+} from '../../../desktop/validation/readback-verify.js';
+import {
+  loadWorksheetXml,
+  resolveCanonicalWorksheetName,
+} from '../../../desktop/wrappers/loadWorksheetXml.js';
+import {
+  ArgsValidationError,
+  DesktopCommandExecutionError,
+  IncompleteOperationError,
+  McpToolError,
+  WorksheetXmlLoadFailedError,
+} from '../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import { resolveWorksheetSimpleId } from '../authoring/fields/worksheetCache.js';
+import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
+import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
+import {
+  doneNextAction,
+  jsonToolResult,
+  prefillNextAction,
+  receipt,
+  StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
+import { DesktopTool } from '../tool.js';
+import { runApplyPreamble } from './applyPreamble.js';
+import {
+  applyWorksheetArtifact,
+  applyWorksheetArtifactPayload,
+  templateArtifactUnavailableError,
+  type WorksheetArtifactOutcome,
+} from './applyWorksheetArtifact.js';
+
+const templatePlanSchema = z.object({
+  templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  datasource: z.string().trim().min(1).max(255).describe('Datasource name.'),
+  fieldMapping: z
+    .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
+    .describe('Slot ID to exact live field ref.'),
+  derivationOverrides: z
+    .record(z.string(), z.enum(['cnt', 'ctd']))
+    .optional()
+    .describe('Count derivation by slot ID.'),
+});
+
+const paramsSchema = {
+  session: sessionParam({ max: 64 }),
+  artifactId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255)
+    .optional()
+    .describe('Artifact ID; omit with plan/file.'),
+  templatePlan: templatePlanSchema.optional().describe('Exact binding to build and apply.'),
+  worksheetName: artifactNameParam('worksheet', { min: 1, max: 255 })
+    .optional()
+    .describe('Target id/name or plan/artifact title.'),
+  worksheetFile: artifactFileParam('worksheet', { max: 4096 })
+    .optional()
+    .describe('Cached-file path.'),
+};
+
+const title = 'Updating worksheet';
+
+type ApplyWorksheetResult =
+  | {
+      message: string;
+      title: string;
+      applied: true;
+      retrySafe: false;
+      verification: ReadbackVerificationResult;
+    }
+  | {
+      artifactId?: string;
+      title: string;
+      applied: true;
+      retrySafe: false;
+      verification: ReadbackVerificationResult;
+    };
+
+export const getApplyWorksheetTool = (
+  server: DesktopMcpServer,
+  dependencies: {
+    store?: TemplateArtifactStore;
+    createId?: () => string;
+    buildArtifact?: typeof buildTemplateWorksheetArtifact;
+  } = {},
+): DesktopTool<typeof paramsSchema> => {
+  const artifactStore = dependencies.store ?? getTemplateArtifactStore(server);
+  const createId = dependencies.createId ?? randomUUID;
+  const buildArtifact = dependencies.buildArtifact ?? buildTemplateWorksheetArtifact;
+  const applyWorksheetTool = new DesktopTool({
+    server,
+    name: 'apply-worksheet',
+    title,
+    description: 'Apply a worksheet artifact, plan, or cached file.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: false, // updates worksheet in workbook
+      openWorldHint: false,
+      destructiveHint: true, // updates active workbook
+      idempotentHint: false,
+    },
+    callback: async (
+      { session, artifactId, templatePlan, worksheetName, worksheetFile },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await applyWorksheetTool.logAndExecute({
+        extra,
+        args: { session, artifactId, templatePlan, worksheetName, worksheetFile },
+        callback: async (): Promise<
+          Result<StructuredResult<ApplyWorksheetResult>, McpToolError>
+        > => {
+          const cachedModeSelected =
+            worksheetFile !== undefined ||
+            (artifactId === undefined && templatePlan === undefined && worksheetName !== undefined);
+          const modeCount =
+            Number(artifactId !== undefined) +
+            Number(templatePlan !== undefined) +
+            Number(cachedModeSelected);
+          if (modeCount !== 1) {
+            return new ArgsValidationError(
+              'Provide exactly one apply mode: artifactId, templatePlan, or worksheetFile (worksheetName optional).',
+            ).toErr();
+          }
+
+          if (
+            templatePlan !== undefined &&
+            worksheetName !== undefined &&
+            worksheetName !== templatePlan.title
+          ) {
+            return new ArgsValidationError(
+              `worksheetName "${worksheetName}" must match templatePlan.title "${templatePlan.title}".`,
+            ).toErr();
+          }
+
+          if (artifactId !== undefined) {
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) return sessionResult.error.toErr();
+            const resolvedSession = sessionResult.value;
+            const reservation = artifactStore.reserve(artifactId, resolvedSession);
+            if (!reservation.ok) {
+              return templateArtifactUnavailableError(artifactId, reservation.reason).toErr();
+            }
+            if (worksheetName !== undefined && worksheetName !== reservation.artifact.title) {
+              artifactStore.release(reservation.lease);
+              return new ArgsValidationError(
+                `worksheetName "${worksheetName}" must match artifact title "${reservation.artifact.title}".`,
+              ).toErr();
+            }
+            try {
+              const executor = await extra.getExecutor(resolvedSession);
+              const existingArtifactBufferId = await resolveWorksheetSimpleId({
+                worksheetRef: reservation.artifact.title,
+                resolvedSession,
+                extra,
+              });
+              const outcome = await applyWorksheetArtifact({
+                store: artifactStore,
+                artifactId,
+                sessionId: resolvedSession,
+                executor,
+                signal: extra.signal,
+                reservation,
+              });
+
+              if (outcome.state !== 'failed') {
+                const artifactBufferId =
+                  existingArtifactBufferId ??
+                  (outcome.state === 'applied'
+                    ? await resolveWorksheetSimpleId({
+                        worksheetRef: reservation.artifact.title,
+                        resolvedSession,
+                        extra,
+                      })
+                    : undefined);
+                if (artifactBufferId) {
+                  clearStickyWorksheetFile({
+                    session: resolvedSession,
+                    worksheetId: artifactBufferId,
+                  });
+                }
+              }
+              if (outcome.state !== 'applied') return artifactApplyError(outcome);
+
+              // The artifact apply already carries the verification outcome
+              // (applyWorksheetArtifact resolves the skipped fallback), so the
+              // structured receipt references that same object rather than
+              // deriving a second account of the readback.
+              const verification = outcome.receipt.verification;
+              const verificationRan = verification.status !== 'skipped';
+              return Ok(
+                withNextAction(
+                  {
+                    artifactId: outcome.receipt.artifactId,
+                    title: outcome.receipt.title,
+                    applied: true as const,
+                    retrySafe: false as const,
+                    verification,
+                  },
+                  // A 'done' marker tells the agent to stop; an observed FAILED readback
+                  // is the one outcome where stopping buries the failure, so that branch
+                  // points at the follow-up work instead of minting a terminal receipt.
+                  verification.status === 'skipped' &&
+                    !isUnsupportedUsedFieldValidation(verification)
+                    ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                    : verification.status === 'failed'
+                      ? prefillNextAction('Verification failed — diagnose listed findings')
+                      : doneNextAction(
+                          receipt({
+                            did: [
+                              `Desktop accepted the artifact apply for worksheet "${outcome.receipt.title}"`,
+                              ...(verificationRan
+                                ? [
+                                    `read back the applied worksheet — verification status "${verification.status}"`,
+                                  ]
+                                : []),
+                            ],
+                            unverified: verificationRan
+                              ? [
+                                  'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
+                                ]
+                              : [
+                                  'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
+                                ],
+                          }),
+                          'Artifact apply dispatched — see verification',
+                        ),
+                ),
+              );
+            } catch (error) {
+              artifactStore.release(reservation.lease);
+              throw error;
+            }
+          }
+
+          if (templatePlan !== undefined) {
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) return sessionResult.error.toErr();
+            const resolvedSession = sessionResult.value;
+            const executor = await extra.getExecutor(resolvedSession);
+            const workbookResult = await executor.getWorkbookDocument(extra.signal);
+            if (workbookResult.isErr()) {
+              return new DesktopCommandExecutionError(workbookResult.error).toErr();
+            }
+            const instanceId = workbookResult.value.instanceId;
+            if (!instanceId) {
+              return new DesktopCommandExecutionError({
+                type: 'invalid-response',
+                error: new Error(
+                  'Workbook read did not identify its External Client API instance.',
+                ),
+              }).toErr();
+            }
+
+            const built: Result<BuiltTemplateWorksheetArtifact, McpToolError> = buildArtifact({
+              artifactId: createId(),
+              sessionId: resolvedSession,
+              instanceId,
+              workbookXml: workbookResult.value.xml,
+              plan: templatePlan as WorksheetTemplatePlan,
+            });
+            if (built.isErr()) return built.error.toErr();
+
+            const existingTemplatePlanBufferId = await resolveWorksheetSimpleId({
+              worksheetRef: built.value.artifact.title,
+              resolvedSession,
+              extra,
+            });
+            const outcome = await applyWorksheetArtifactPayload({
+              artifact: built.value.artifact,
+              executor,
+              signal: extra.signal,
+            });
+
+            if (outcome.state !== 'failed') {
+              const templatePlanBufferId =
+                existingTemplatePlanBufferId ??
+                (outcome.state === 'applied'
+                  ? await resolveWorksheetSimpleId({
+                      worksheetRef: built.value.artifact.title,
+                      resolvedSession,
+                      extra,
+                    })
+                  : undefined);
+              if (templatePlanBufferId) {
+                clearStickyWorksheetFile({
+                  session: resolvedSession,
+                  worksheetId: templatePlanBufferId,
+                });
+              }
+            }
+            if (outcome.state !== 'applied') return artifactApplyError(outcome);
+
+            const verification = outcome.receipt.verification;
+            const verificationRan = verification.status !== 'skipped';
+            return Ok(
+              withNextAction(
+                {
+                  title: outcome.receipt.title,
+                  applied: true as const,
+                  retrySafe: false as const,
+                  verification,
+                },
+                verification.status === 'skipped' && !isUnsupportedUsedFieldValidation(verification)
+                  ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                  : verification.status === 'failed'
+                    ? prefillNextAction('Verification failed — diagnose listed findings')
+                    : doneNextAction(
+                        receipt({
+                          did: [
+                            `Desktop accepted the direct template apply for worksheet "${outcome.receipt.title}"`,
+                            ...(verificationRan
+                              ? [
+                                  `read back the applied worksheet — verification status "${verification.status}"`,
+                                ]
+                              : []),
+                          ],
+                          unverified: verificationRan
+                            ? [
+                                'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
+                              ]
+                            : [
+                                'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply workbook readback was unavailable',
+                              ],
+                        }),
+                        'Direct template apply dispatched — see verification',
+                      ),
+              ),
+            );
+          }
+
+          const preamble = runApplyPreamble({
+            kind: 'worksheet',
+            file: worksheetFile,
+            session,
+            emptyPathGuidance:
+              'Get one from get-worksheet-xml, edit it with read-cached-xml and ' +
+              'write-cached-xml, then pass that path here.',
+            notFoundGuidance: 'Provide a path returned by get-worksheet-xml.',
+          });
+          if (preamble.isErr()) {
+            return preamble;
+          }
+          const { xml: worksheetXml, resolvedSession, sourceHash } = preamble.value;
+
+          const canonical = resolveCanonicalWorksheetName(worksheetName, worksheetXml);
+          if (canonical.isErr()) {
+            return new WorksheetXmlLoadFailedError(canonical.error).toErr();
+          }
+          const canonicalWorksheetName = canonical.value;
+
+          const executor = await extra.getExecutor(resolvedSession);
+          const result = await loadWorksheetXml({
+            worksheetName: canonicalWorksheetName,
+            xml: worksheetXml,
+            focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
+            executor,
+            signal: extra.signal,
+            // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`
+            // route; a name that does not resolve surfaces as an error rather than creating a sheet
+            // through the whole-workbook path (build-worksheets-from-templates owns net-new creation).
+            requireExistingSheet: true,
+            expectedSourceHash: sourceHash,
+          });
+
+          if (result.isErr()) {
+            const { type, error } = result.error;
+            switch (type) {
+              case 'execute-command-error':
+                return new DesktopCommandExecutionError(error).toErr();
+              case 'load-worksheet-xml-error':
+                return new WorksheetXmlLoadFailedError(error).toErr();
+              default: {
+                const _: never = type;
+              }
+            }
+          }
+
+          // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
+          // along so the agent can re-check the rendered chart before moving on (W4).
+          const readbackWarning = result.isOk()
+            ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
+            : '';
+          // Host verification receipt (W-23447506) — subsumes the old readback
+          // status sentence: one host-truth line, derived from preflight +
+          // readback, never model-filled.
+          const receiptInput = result.isOk()
+            ? {
+                validationWarnings: result.value.validationWarnings ?? [],
+                readback: result.value.readbackVerification,
+                readbackFindings: result.value.readbackWarnings,
+              }
+            : undefined;
+          const promiseOutcome = receiptInput
+            ? classifyWorksheetPromiseOutcome(receiptInput)
+            : 'unverified';
+          if (result.isOk()) {
+            await emitWorksheetPromiseEvents({
+              config: extra.config,
+              sessionId: resolvedSession,
+              tool: 'apply-worksheet',
+              operation: 'load-worksheet',
+              readback: result.value.readbackVerification,
+              findings: result.value.readbackWarnings,
+              promiseOutcome,
+            });
+          }
+          const hostVerification = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
+          const appliedWorksheetName = result.isOk()
+            ? (result.value.appliedName ?? canonicalWorksheetName)
+            : canonicalWorksheetName;
+
+          // The edits just landed — close the buffer so a later name-only call starts from a
+          // fresh live read. Resolve the id from the live name, not the fragment: a cached
+          // fragment may carry no <simple-id>, and keying the clear on that would skip it.
+          const appliedBufferId = await resolveWorksheetSimpleId({
+            worksheetRef: appliedWorksheetName,
+            resolvedSession,
+            extra,
+          });
+          if (appliedBufferId) {
+            clearStickyWorksheetFile({ session: resolvedSession, worksheetId: appliedBufferId });
+          }
+
+          // An explicit skipped verification keeps the run open for live inspection;
+          // legacy outcomes with no verification object retain their unverified receipt.
+          const readback = receiptInput?.readback;
+          const readbackRan = readback !== undefined && readback.status !== 'skipped';
+          return new Ok(
+            withNextAction(
+              {
+                message:
+                  readback?.status === 'failed'
+                    ? `Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${hostVerification}`
+                    : `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                title: appliedWorksheetName,
+                applied: true as const,
+                retrySafe: false as const,
+                verification: readback ?? {
+                  ok: true,
+                  status: 'skipped' as const,
+                  message: 'Post-apply verification was unavailable.',
+                },
+              },
+              readback?.status === 'skipped' && !isUnsupportedUsedFieldValidation(readback)
+                ? prefillNextAction('Verification unavailable — inspect live worksheet state')
+                : readback?.status === 'failed'
+                  ? prefillNextAction('Verification failed — diagnose listed findings')
+                  : doneNextAction(
+                      receipt({
+                        did: [
+                          `Desktop accepted the worksheet XML apply for "${appliedWorksheetName}"`,
+                          `preflight validation returned ${receiptInput?.validationWarnings.length ?? 0} warning(s)`,
+                          ...(readbackRan
+                            ? [
+                                `read back the applied worksheet — verification status "${readback.status}", promise outcome "${promiseOutcome}"`,
+                              ]
+                            : []),
+                        ],
+                        unverified: readbackRan
+                          ? [
+                              'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
+                            ]
+                          : [
+                              'whether the applied worksheet retained its intended structure, or query execution or rendering succeeds — post-apply readback was unavailable',
+                            ],
+                      }),
+                      'Worksheet apply finished — see verification',
+                    ),
+            ),
+          );
+        },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
+      });
+    },
+  });
+
+  return applyWorksheetTool;
+};
+
+function artifactApplyError(
+  outcome: Exclude<WorksheetArtifactOutcome, { state: 'applied' }>,
+): ReturnType<IncompleteOperationError<object>['toErr']> {
+  return new IncompleteOperationError(
+    withNextAction(
+      {
+        state: outcome.state,
+        retrySafe: outcome.retrySafe,
+        error: {
+          type: outcome.error.type,
+          statusCode: outcome.error.statusCode,
+          message: outcome.error.getErrorText(),
+        },
+      },
+      prefillNextAction(
+        outcome.state === 'failed'
+          ? 'Address the error, then retry the apply'
+          : 'Inspect worksheet state; do not retry this apply',
+      ),
+    ),
+  ).toErr();
+}
+
+function isUnsupportedUsedFieldValidation(
+  verification: ReadbackVerificationResult | undefined,
+): boolean {
+  const findings = verification?.findings ?? [];
+  return (
+    findings.some(
+      (finding) => finding.source === 'used-field-validity' && finding.reason === 'unsupported-api',
+    ) &&
+    !findings.some(
+      (finding) =>
+        finding.source === 'readback' && finding.reason === 'structural-readback-unavailable',
+    )
+  );
+}

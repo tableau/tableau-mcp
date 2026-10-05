@@ -1,0 +1,26 @@
+{
+  "dashboardName": "Health Dash",
+  "sheets": [
+    {
+      "title": "Sales Trend",
+      "templateName": "line-basic",
+      "fieldMapping": {
+        "x": "[Superstore Lite].[none:Order Stamp:nk]",
+        "y": "[Superstore Lite].[sum:Sales:qk]"
+      },
+      "schemaHash": "",
+      "primaryDatasource": "Superstore Lite"
+    },
+    {
+      "title": "Region Count",
+      "templateName": "bar-basic",
+      "fieldMapping": {
+        "cat": "[Superstore Lite].[none:Region:nk]"
+      },
+      "schemaHash": "",
+      "primaryDatasource": "Superstore Lite"
+    }
+  ],
+  "workbookHashAtBind": "",
+  "recordedAt": "2026-07-01T00:00:00.000Z"
+}

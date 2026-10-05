@@ -17,6 +17,7 @@ vi.mock('../config.js', () => ({
 
 import { getConfig } from '../config.js';
 import { getDirname } from '../utils/getDirname.js';
+import { _setSeaApiForTest } from '../utils/sea.js';
 import { getFeatureGate, initializeFeatureGate, resetFeatureGate } from './init.js';
 import { featureGateProviderSchema, isFeatureGateProvider } from './types.js';
 
@@ -24,6 +25,41 @@ describe('FeatureGate', () => {
   beforeEach(() => {
     resetFeatureGate();
     vi.clearAllMocks();
+    _setSeaApiForTest(null);
+  });
+
+  describe('SEA (embedded features.json)', () => {
+    it('reads features.json from the SEA blob, not the filesystem', async () => {
+      _setSeaApiForTest({
+        isSea: () => true,
+        getAsset: (key: string) => {
+          if (key === 'features.json') {
+            return JSON.stringify({ mcpapps: true, pulse: false });
+          }
+          throw new Error(`missing SEA asset: ${key}`);
+        },
+      });
+
+      const gate = getFeatureGate();
+
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
+      expect(readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('disables all features when features.json is not embedded in the SEA blob', async () => {
+      _setSeaApiForTest({
+        isSea: () => true,
+        getAsset: (key: string) => {
+          throw new Error(`missing SEA asset: ${key}`);
+        },
+      });
+
+      const gate = getFeatureGate();
+
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
+      expect(readFileSync).not.toHaveBeenCalled();
+    });
   });
 
   describe('loadFeatures', () => {

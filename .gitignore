@@ -3,8 +3,8 @@
 .env.*
 .vscode/
 build/
-cache/
-node_modules/
+/cache/
+node_modules
 junit/
 coverage/
 test-logs/

@@ -3,6 +3,28 @@ import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
+  it('recognizes capture-window-screenshot as a Desktop tool name', () => {
+    expect(isDesktopToolName('capture-window-screenshot')).toBe(true);
+  });
+
+  it('registers each dialog tool name exactly once', () => {
+    for (const toolName of [
+      'get-desktop-state',
+      'get-active-dialogs',
+      'invoke-dialog-action',
+    ] as const) {
+      expect(desktopToolNames.filter((name) => name === toolName)).toHaveLength(1);
+      expect(isDesktopToolName(toolName)).toBe(true);
+    }
+  });
+
+  it('registers the dashboard refresh tool name exactly once', () => {
+    expect(
+      desktopToolNames.filter((name) => name === 'refresh-dashboard-auto-updates'),
+    ).toHaveLength(1);
+    expect(isDesktopToolName('refresh-dashboard-auto-updates')).toBe(true);
+  });
+
   it('should verify all tool names are unique and accounted for', () => {
     const variants = {
       desktop: {

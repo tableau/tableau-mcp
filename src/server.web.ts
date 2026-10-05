@@ -6,12 +6,14 @@ import {
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
+  CallToolResult,
   ReadResourceResult,
   ServerNotification,
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { z } from 'zod';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
@@ -37,16 +39,41 @@ import {
 } from './tools/web/registrationConditions.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
+import {
+  WebToolGroupName,
+  webToolGroupNames,
+  webToolGroups,
+  WebToolName,
+} from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
+import { readSeaAssetText, runningAsSea } from './utils/sea.js';
 
 export const serverName = 'tableau-mcp';
 
 const serverVersion = pkg.version;
 const __dirname = getDirname();
+
+// Lazy web-tool loading (combined-lean profile): the combined desktop+web surface
+// serializes ~3x past the ~46k-byte tools/list cliff where clients auto-defer schemas,
+// and even dropping the whole pulse group leaves it far over. So under
+// TOOL_PROFILE=combined-lean the web half advertises ONE tiny loader tool; calling it
+// registers the requested group's real tools on the live server (the SDK emits
+// notifications/tools/list_changed on each registration).
+export const LOAD_WEB_TOOLS_TOOL_NAME = 'load-web-tools';
+const loadableWebToolGroupNames = [...webToolGroupNames, 'all'] as const;
+export type LoadableWebToolGroupName = (typeof loadableWebToolGroupNames)[number];
+const loadWebToolsParamsSchema = {
+  group: z.enum(loadableWebToolGroupNames),
+};
+
+export type LoadWebToolsResult = {
+  status: 'loaded' | 'already-loaded';
+  toolNames: WebToolName[];
+};
 
 const BASE_INSTRUCTIONS =
   'Tableau MCP exposes tools for exploring and querying Tableau Cloud/Server content: ' +
@@ -106,6 +133,9 @@ export function buildWebInstructions(): string {
 }
 
 export class WebMcpServer extends Server {
+  private readonly _loadedLazyWebToolGroups = new Set<WebToolGroupName>();
+  private readonly _registeredLazyWebToolNames = new Set<WebToolName>();
+
   constructor({
     mcpServer,
     clientInfo,
@@ -128,88 +158,185 @@ export class WebMcpServer extends Server {
     });
   }
 
+  registerResources = async (): Promise<void> => {
+    // No resources to register
+  };
+
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
+    // Lazy loading is meaningless on stateless HTTP: the per-request server is
+    // discarded as the response closes, so tools hydrated by the loader would
+    // register on a corpse. Fall back to the eager surface there.
+    const statelessHttp = config.transport === 'http' && config.disableSessionManagement;
+    if (config.toolProfile === 'combined-lean' && !statelessHttp) {
+      this._registerLoadWebToolsTool();
+    } else {
+      for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+        await this._registerWebTool(tool);
+      }
+    }
 
-    // claude.ai over OAuth/HTTP advertises the UI capability but its MCP-Apps renderer is broken,
-    // so force the plain-tool fallback for it regardless of what it declares. Reuses the existing
-    // telemetry client_id → display-name mapping; undefined clientId (e.g. stdio) is never 'Claude'.
-    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
+    registerPrompts(this);
+    await this.enableSkillsCapability();
+  };
 
-    for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
-      const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
-        args: typeof tool.paramsSchema,
+  /**
+   * Register a web tool group's real tools on the live server (combined-lean lazy path).
+   * Idempotent: already-registered tools are skipped (the SDK throws on duplicate names).
+   * Registration goes through the same filtered pipeline as eager startup, so disabled
+   * tools and INCLUDE_TOOLS/EXCLUDE_TOOLS scoping still apply.
+   */
+  loadWebTools = (
+    group: LoadableWebToolGroupName,
+    tableauAuthInfo?: TableauAuthInfo,
+  ): Promise<LoadWebToolsResult> => {
+    // Serialize loads: two overlapping calls for the same group would both pass
+    // the loaded-set check and the second registerTool would throw on the
+    // duplicate name. The chain never rejects (failures are surfaced on the
+    // caller's promise, swallowed on the chain) so one bad load can't wedge it.
+    const run = this._loadWebToolsChain.then(() => this._loadWebToolsInner(group, tableauAuthInfo));
+    this._loadWebToolsChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
+  private _loadWebToolsChain: Promise<void> = Promise.resolve();
+
+  private _loadWebToolsInner = async (
+    group: LoadableWebToolGroupName,
+    tableauAuthInfo?: TableauAuthInfo,
+  ): Promise<LoadWebToolsResult> => {
+    const groupNames: readonly WebToolGroupName[] = group === 'all' ? webToolGroupNames : [group];
+
+    if (groupNames.every((groupName) => this._loadedLazyWebToolGroups.has(groupName))) {
+      return { status: 'already-loaded', toolNames: this._loadedLazyToolNames(groupNames) };
+    }
+
+    const requestedToolNames = new Set<WebToolName>(
+      groupNames.flatMap((groupName) => [...webToolGroups[groupName]]),
+    );
+
+    const toolsToRegister = (await this._getToolsToRegister(tableauAuthInfo)).filter(
+      (tool) =>
+        requestedToolNames.has(tool.name) && !this._registeredLazyWebToolNames.has(tool.name),
+    );
+
+    for (const tool of toolsToRegister) {
+      if (await this._registerWebTool(tool)) {
+        this._registeredLazyWebToolNames.add(tool.name);
+      }
+    }
+    for (const groupName of groupNames) {
+      this._loadedLazyWebToolGroups.add(groupName);
+    }
+
+    return { status: 'loaded', toolNames: this._loadedLazyToolNames(groupNames) };
+  };
+
+  private _loadedLazyToolNames = (groupNames: readonly WebToolGroupName[]): WebToolName[] =>
+    groupNames.flatMap((groupName) =>
+      webToolGroups[groupName].filter((toolName) => this._registeredLazyWebToolNames.has(toolName)),
+    );
+
+  private _registerLoadWebToolsTool = (): void => {
+    this.mcpServer.registerTool(
+      LOAD_WEB_TOOLS_TOOL_NAME,
+      {
+        title: 'Load Web Tools',
+        description: 'Load a Tableau web tool group.',
+        inputSchema: loadWebToolsParamsSchema,
+        annotations: {
+          title: 'Load Web Tools',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async (
+        args: { group: LoadableWebToolGroupName },
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-      ) => {
+      ): Promise<CallToolResult> => {
+        const config = getConfig();
         if (config.breakGlassDisableGlobally) {
           throw new ServiceUnavailableError(
             'The Tableau MCP server is temporarily unavailable. Please try again later.',
           );
         }
+        const result = await this.loadWebTools(args.group, getTableauAuthInfo(extra.authInfo));
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      },
+    );
+  };
 
-        const requestOverridesHeader =
-          extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
-        const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
-        const tableauToolCallback = await Provider.from(tool.callback);
-        const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
-          ...extra,
-          config,
-          server: this,
-          get tableauAuthInfo() {
-            return getTableauAuthInfo(extra.authInfo);
-          },
-          _userLuid: undefined,
-          _siteLuid: undefined,
-          getUserLuid() {
-            return (
-              tableauRequestHandlerExtra._userLuid ??
-              getTableauAuthInfo(extra.authInfo)?.userId ??
-              ''
-            );
-          },
-          setUserLuid(userLuid: string) {
-            tableauRequestHandlerExtra._userLuid = userLuid;
-          },
-          getSiteLuid() {
-            return (
-              tableauRequestHandlerExtra._siteLuid ??
-              getTableauAuthInfo(extra.authInfo)?.siteId ??
-              ''
-            );
-          },
-          setSiteLuid(siteLuid: string) {
-            tableauRequestHandlerExtra._siteLuid = siteLuid;
-          },
-          getSiteName() {
-            return getTableauAuthInfo(extra.authInfo)?.siteName ?? config.siteName;
-          },
-          getConfigWithOverrides: async () =>
-            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
-          // True only when an MCP-Apps card can actually render for THIS client: the feature is on
-          // and it is not a known-incompatible renderer — the SAME condition that registers a tool
-          // as an app-tool below. Tools whose app path returns a card must gate on this (not on
-          // `mcpAppsEnabled` alone) so an app-incapable client falls back to a readable text result
-          // instead of an unrenderable payload (W-24212898).
-          mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
-        };
+  private _registerWebTool = async (tool: WebTool<any>): Promise<boolean> => {
+    const config = getConfig();
+    const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
+    const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
 
-        return tableauToolCallback(args, tableauRequestHandlerExtra);
+    const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
+      args: typeof tool.paramsSchema,
+      extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+    ) => {
+      if (config.breakGlassDisableGlobally) {
+        throw new ServiceUnavailableError(
+          'The Tableau MCP server is temporarily unavailable. Please try again later.',
+        );
+      }
+
+      const requestOverridesHeader =
+        extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+      const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
+      const tableauToolCallback = await Provider.from(tool.callback);
+      const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
+        ...extra,
+        config,
+        server: this,
+        get tableauAuthInfo() {
+          return getTableauAuthInfo(extra.authInfo);
+        },
+        _userLuid: undefined,
+        _siteLuid: undefined,
+        getUserLuid() {
+          return (
+            tableauRequestHandlerExtra._userLuid ?? getTableauAuthInfo(extra.authInfo)?.userId ?? ''
+          );
+        },
+        setUserLuid(userLuid: string) {
+          tableauRequestHandlerExtra._userLuid = userLuid;
+        },
+        getSiteLuid() {
+          return (
+            tableauRequestHandlerExtra._siteLuid ?? getTableauAuthInfo(extra.authInfo)?.siteId ?? ''
+          );
+        },
+        setSiteLuid(siteLuid: string) {
+          tableauRequestHandlerExtra._siteLuid = siteLuid;
+        },
+        getSiteName() {
+          return getTableauAuthInfo(extra.authInfo)?.siteName ?? config.siteName;
+        },
+        getConfigWithOverrides: async () =>
+          getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
+        // Keep tool callback behavior aligned with the registration path: clients forced onto the
+        // plain-tool fallback must receive text results even when the global MCP Apps flag is on.
+        mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
       };
 
-      if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {
-        await this._registerAppTool(tool, toolCallback);
-      } else if (tool.app?.hideWhenUnsupported) {
-        continue;
-      } else {
-        await this._registerTool(tool, toolCallback);
-      }
+      return tableauToolCallback(args, tableauRequestHandlerExtra);
+    };
+
+    if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {
+      await this._registerAppTool(tool, toolCallback);
+    } else if (tool.app?.hideWhenUnsupported) {
+      return false;
+    } else {
+      await this._registerTool(tool, toolCallback);
     }
-
-    registerPrompts(this);
-
-    await this.enableSkillsCapability();
+    return true;
   };
 
   protected _getToolsToRegister = async (
@@ -399,7 +526,12 @@ export class WebMcpServer extends Server {
         mimeType: RESOURCE_MIME_TYPE,
       },
       async (): Promise<ReadResourceResult> => {
-        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+        const htmlContent = runningAsSea()
+          ? readSeaAssetText(htmlPath)
+          : await readFile(join(__dirname, htmlPath), 'utf-8');
+        if (htmlContent === null) {
+          throw new Error(`SEA app resource '${htmlPath}' is missing or unreadable`);
+        }
 
         return {
           contents: [

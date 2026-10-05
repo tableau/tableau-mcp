@@ -1,0 +1,354 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import levenshtein from 'fast-levenshtein';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { DesktopCache } from '../../../../desktop/cache.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
+import {
+  addFieldToCols,
+  addFieldToEncoding,
+  addFieldToRows,
+  listAvailableFields,
+} from '../../../../desktop/metadata/index.js';
+import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
+import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
+import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+  UnknownError,
+  XmlModificationError,
+  XmlValidationError,
+} from '../../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
+import { DesktopTool } from '../../tool.js';
+import { refreshWorkbookCache } from './refreshWorkbookCache.js';
+import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
+
+/** Encoding channels a field can be placed on. */
+const ENCODING_TYPES = [
+  'color',
+  'size',
+  'lod',
+  'detail',
+  'text',
+  'tooltip',
+  'path',
+  'angle',
+] as const;
+/** Shelf / encoding a field can be added to. */
+const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
+
+/** One worked column ref, used in both the schema description and the rejection message. */
+const COLUMN_REF_EXAMPLE = '[Sample - Superstore].[sum:Sales:qk]';
+const MAX_COLUMN_SUGGESTIONS = 3;
+
+/**
+ * Nearest real column refs for a value that is not a column ref at all. The schema
+ * said only "Field.", so the agent sent bare names; restating the grammar back at it
+ * did not help. Name the refs that exist instead.
+ */
+function nearestColumnRefs(columnRef: string, workbookXml: string | undefined): string[] {
+  if (!workbookXml) {
+    return [];
+  }
+  let fields: ReturnType<typeof listAvailableFields>;
+  try {
+    fields = listAvailableFields(workbookXml);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(fields) || fields.length === 0) {
+    return [];
+  }
+  const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const needle = normalize(columnRef);
+  return fields
+    .map((field) => ({
+      ref: field.column_ref,
+      distance: levenshtein.get(needle, normalize(field.columnName ?? field.column_ref)),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.ref.localeCompare(b.ref))
+    .slice(0, MAX_COLUMN_SUGGESTIONS)
+    .map(({ ref }) => ref);
+}
+
+function columnRefRejection(columnRef: string, workbookXml: string | undefined): string {
+  const suggestions = nearestColumnRefs(columnRef, workbookXml);
+  const next =
+    suggestions.length > 0
+      ? `Did you mean: ${suggestions.join(', ')}?`
+      : 'Call resolve-field with the field name to get the exact ref, or list-available-fields for every ref in the workbook.';
+  return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
+}
+
+// Every value here that the agent must OBTAIN somewhere else names the tool that hands it
+// over. Shipped Studio said only 'Session.' / 'Workbook.' / 'Fetched fresh.', so an agent
+// that wanted to add a colour encoding sent a WORKSHEET NAME as workbookFile, then cycled
+// session='pinned' / session omitted / session='x' against a contract no value satisfied:
+// 69 failed add-field calls, 591 seconds, one killed conversation.
+const paramsSchema = {
+  session: z
+    .string()
+    .optional()
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  worksheetName: z
+    .string()
+    .optional()
+    .describe('Sheet name; name-only calls reuse the edit buffer. Omit to pass worksheetFile.'),
+  worksheetFile: z.string().optional().describe('Cached path; omit to reuse the edit buffer.'),
+  target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
+  columnRef: z
+    .string()
+    .describe(
+      `[Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}; from field resolution, never invented.`,
+    ),
+  encodingType: z
+    .enum(ENCODING_TYPES)
+    .optional()
+    .describe('Mark channel when target=encoding (color, size, text...); required then.'),
+  index: z.number().optional().describe('0-based slot on the shelf; omit to append last.'),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe('Cached workbook path returned by field resolution; omit to read the workbook live.'),
+};
+
+const title = 'Adding field';
+export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
+  const addFieldTool = new DesktopTool({
+    server,
+    name: 'add-field',
+    title,
+    description:
+      'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    callback: async (
+      {
+        session,
+        worksheetName,
+        worksheetFile,
+        target,
+        columnRef,
+        encodingType,
+        index,
+        workbookFile,
+      },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await addFieldTool.logAndExecute({
+        extra,
+        args: {
+          session,
+          worksheetName,
+          worksheetFile,
+          target,
+          columnRef,
+          encodingType,
+          index,
+          workbookFile,
+        },
+        callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const editFile = await resolveWorksheetEditFile({
+            worksheetName,
+            worksheetFile,
+            resolvedSession,
+            extra,
+          });
+          if (editFile.isErr()) {
+            return editFile.error.toErr();
+          }
+          worksheetFile = editFile.value;
+
+          // encodingType is conditionally required — enforced here (not in the JSON Schema) so
+          // the schema stays flat and host-portable.
+          if (target === 'encoding' && !encodingType) {
+            return new ArgsValidationError(
+              `encodingType is required when target=encoding. Provide one of: ${ENCODING_TYPES.join(', ')}.`,
+            ).toErr();
+          }
+
+          let worksheetXml: string;
+          try {
+            worksheetXml = readFileSync(worksheetFile, 'utf-8');
+          } catch (error) {
+            return new FileReadError(error).toErr();
+          }
+
+          let workbookXml: string | undefined;
+          const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
+          if (requestedWorkbookFile) {
+            if (!existsSync(requestedWorkbookFile)) {
+              return new FileNotFoundError(requestedWorkbookFile).toErr();
+            }
+            try {
+              workbookXml = readFileSync(requestedWorkbookFile, 'utf-8');
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
+          } else {
+            const liveWorkbookFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
+            let refresh: Awaited<ReturnType<typeof refreshWorkbookCache>>;
+            try {
+              refresh = await refreshWorkbookCache({
+                extra,
+                workbookFile: liveWorkbookFile,
+                resolvedSession,
+                action: 'adding a field',
+              });
+            } catch (error) {
+              return new UnknownError(
+                `Could not read the current workbook from Tableau: ${getExceptionMessage(error)}. ` +
+                  'Pass workbookFile from field resolution, or check the session with list-instances, then retry.',
+              ).toErr();
+            }
+            if (!refresh.ok) {
+              return refresh.error.toErr();
+            }
+            workbookXml = refresh.xml;
+          }
+
+          if (index !== undefined) {
+            let existingLength: number;
+            try {
+              existingLength = getCurrentPlacementLength(worksheetXml, target, encodingType);
+            } catch (error) {
+              return new XmlModificationError(
+                error instanceof Error ? error.message : String(error),
+              ).toErr();
+            }
+
+            if (!Number.isInteger(index) || index < 0 || index > existingLength) {
+              return new ArgsValidationError(
+                `index must be an integer in the range 0..${existingLength} for ${target}.`,
+              ).toErr();
+            }
+          }
+
+          // Checked here, not deeper down, because this is the only layer that can see
+          // the workbook and name the refs that DO exist.
+          if (!parseDatasourceQualifiedColumnRef(columnRef)) {
+            return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
+          }
+
+          // fields.ts refuses (throws) rather than fabricating a type whenever the
+          // workbook, datasource, or column can't be resolved — caught below and
+          // surfaced as-is, so no half-built XML is ever written.
+          let modifiedXml: string;
+          let placement: string;
+          try {
+            switch (target) {
+              case 'rows':
+                modifiedXml = addFieldToRows(worksheetXml, columnRef, index, workbookXml);
+                placement = 'Rows shelf';
+                break;
+              case 'cols':
+                modifiedXml = addFieldToCols(worksheetXml, columnRef, index, workbookXml);
+                placement = 'Columns shelf';
+                break;
+              case 'encoding':
+                modifiedXml = addFieldToEncoding(
+                  worksheetXml,
+                  encodingType!,
+                  columnRef,
+                  index,
+                  workbookXml,
+                );
+                placement = `${encodingType} encoding`;
+                break;
+              default: {
+                const _exhaustive: never = target;
+                throw new Error(`Unknown target: ${String(_exhaustive)}`);
+              }
+            }
+          } catch (error) {
+            return new XmlModificationError(
+              error instanceof Error ? error.message : String(error),
+            ).toErr();
+          }
+
+          const issues = wellFormedXmlRule.validate(modifiedXml);
+          const errors = issues.filter((i) => i.severity === 'error').map((i) => i.message);
+          if (errors.length > 0) {
+            return new XmlValidationError(errors).toErr();
+          }
+
+          try {
+            writeFileSync(worksheetFile, modifiedXml, 'utf-8');
+            restampSidecarAfterEdit(worksheetFile, resolvedSession);
+          } catch (error) {
+            return new FileReadError(error).toErr();
+          }
+
+          return new Ok(
+            withNextAction(
+              {
+                message: `Successfully added field to ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
+                file: worksheetFile,
+              },
+              prefillNextAction('Apply worksheet edits'),
+            ),
+          );
+        },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
+      });
+    },
+  });
+
+  return addFieldTool;
+};
+
+function getCurrentPlacementLength(
+  worksheetXml: string,
+  target: (typeof FIELD_TARGETS)[number],
+  encodingType?: (typeof ENCODING_TYPES)[number],
+): number {
+  const parsed = parseXML(worksheetXml);
+  const worksheet = getWorksheet(parsed);
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+
+  if (target === 'rows' || target === 'cols') {
+    return parseShelfValue(worksheet.table?.[target]).length;
+  }
+
+  const canonicalEncodingType = encodingType === 'detail' ? 'lod' : encodingType;
+  if (canonicalEncodingType === undefined) {
+    throw new Error('encodingType is required when target=encoding');
+  }
+  const firstPane = normalizeArray(worksheet.table?.panes?.pane)[0];
+  return normalizeArray(firstPane?.encodings?.[canonicalEncodingType]).length;
+}
+
+function getWorksheet(parsed: any): any | undefined {
+  if (parsed.workbook?.worksheets) {
+    return normalizeArray(parsed.workbook.worksheets.worksheet)[0];
+  }
+  if (parsed.workbook?.worksheet) {
+    return normalizeArray(parsed.workbook.worksheet)[0];
+  }
+  if (parsed.worksheet) {
+    return normalizeArray(parsed.worksheet)[0];
+  }
+  return undefined;
+}
