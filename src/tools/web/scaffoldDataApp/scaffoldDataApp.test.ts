@@ -122,8 +122,8 @@ describe('getScaffoldDataAppTool', () => {
       expect(await Provider.from(makeTool(VERSION_BELOW).disabled)).toBe(true);
     });
 
-    it('is enabled for an unparseable version (dev-build escape hatch)', async () => {
-      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(false);
+    it('is disabled for an unparseable version (unknown != fresh)', async () => {
+      expect(await Provider.from(makeTool(VERSION_UNKNOWN).disabled)).toBe(true);
     });
 
     it('is disabled below the floor even when the flag is on and above when off', async () => {
