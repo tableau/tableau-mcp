@@ -1,3 +1,4 @@
+import { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -6,7 +7,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getInspectKnowledgeContextTool } from './inspectKnowledgeContext.js';
+import { getInspectKnowledgeContextTool, validateInspectArgs } from './inspectKnowledgeContext.js';
+import { advertisedInputSchema } from './knowledgeSchemaTestUtils.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
@@ -78,15 +80,30 @@ describe('inspectKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
-  it('exposes only parameters relevant to each inspection action', async () => {
-    const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema).toHaveProperty('safeParse', expect.any(Function));
-    if (!('safeParse' in schema)) return;
+  it('advertises a non-empty inputSchema carrying the action enum', async () => {
+    // Reproduces the MCP SDK's own schema-advertisement conversion (see
+    // knowledgeSchemaTestUtils.ts). A z.discriminatedUnion (this tool's schema before the fix)
+    // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
+    // flat raw shape this tool now uses does not have that problem.
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
-    expect(schema.safeParse({ action: 'status' }).success).toBe(true);
-    expect(schema.safeParse({ action: 'list', isGlobal: true }).success).toBe(true);
-    expect(schema.safeParse({ action: 'suggestions', severity: 'high' }).success).toBe(true);
-    expect(schema.safeParse({ action: 'create', statements: [] }).success).toBe(false);
+    expect(properties).toBeTruthy();
+    expect(Object.keys(properties ?? {}).length).toBeGreaterThan(0);
+    expect(properties?.action?.enum).toEqual(['status', 'list', 'suggestions']);
+  });
+
+  it('rejects params irrelevant to the chosen inspection action', () => {
+    expect(validateInspectArgs({ action: 'status' })).toBeNull();
+    expect(validateInspectArgs({ action: 'list', isGlobal: true })).toBeNull();
+    expect(validateInspectArgs({ action: 'suggestions', severity: 'high' })).toBeNull();
+    expect(validateInspectArgs({ action: 'status', isGlobal: true })).toMatch(
+      /isGlobal is not used when action is "status"/,
+    );
+    expect(validateInspectArgs({ action: 'list', pdsId: 'pds-1' })).toMatch(
+      /pdsId is not used when action is "list"/,
+    );
   });
 
   it('is read-only for every authenticated site role', async () => {

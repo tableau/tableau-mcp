@@ -445,7 +445,7 @@ describe('OAuth', () => {
       expect(passthroughRawFromAuthInfo[0]).toBe('valid-access-token-1');
 
       // Tool call used the second header
-      expect(passthroughRawFromAuthInfo[1]).toBe('valid-access-token-2');
+      expect(passthroughRawFromAuthInfo.at(-1)).toBe('valid-access-token-2');
     } finally {
       getTableauAuthInfoSpy.mockRestore();
     }

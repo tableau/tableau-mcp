@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { severitySchema } from '../../../sdks/tableau/types/knowledge.js';
@@ -23,34 +24,76 @@ const limitSchema = resultLimitSchema.describe(
   'Maximum returned graphs, suggestions, or statements.',
 );
 
-const paramsSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('status'), limit: limitSchema }).strict(),
-  z
-    .object({
-      action: z.literal('list'),
-      graphId: optionalGraphIdSchema,
-      nodeId: z.string().trim().min(1).max(512).optional().describe('Exact Knowledge node ID.'),
-      isGlobal: z.boolean().optional().describe('Filter by graph-wide status.'),
-      limit: limitSchema,
-    })
-    .strict(),
-  z
-    .object({
-      action: z.literal('suggestions'),
-      graphId: optionalGraphIdSchema,
-      pdsId: z.string().trim().min(1).max(512).optional().describe('Published data source ID.'),
-      severity: severitySchema.optional().describe('Suggestion severity filter.'),
-      suggestionType: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe('Suggestion type filter.'),
-      limit: limitSchema,
-    })
-    .strict(),
-]);
+// A flat raw shape, not a z.discriminatedUnion. The MCP SDK's normalizeObjectSchema needs a
+// top-level `.shape` to advertise a real inputSchema; a discriminated union has none, so the SDK
+// falls back to advertising `{"type":"object","properties":{}}` and agents guess at arguments.
+// See validateInspectArgs below for the per-action field allowlist this flat shape can no longer
+// express structurally.
+const actionSchema = z
+  .enum(['status', 'list', 'suggestions'])
+  .describe(
+    'What to inspect. "status": limit only. "list": graphId, nodeId, isGlobal, limit. ' +
+      '"suggestions": graphId, pdsId, severity, suggestionType, limit.',
+  );
+
+const paramsSchema = {
+  action: actionSchema,
+  graphId: optionalGraphIdSchema,
+  nodeId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe('Exact Knowledge node ID. (action=list only.)'),
+  isGlobal: z.boolean().optional().describe('Filter by graph-wide status. (action=list only.)'),
+  pdsId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe('Published data source ID. (action=suggestions only.)'),
+  severity: severitySchema
+    .optional()
+    .describe('Suggestion severity filter. (action=suggestions only.)'),
+  suggestionType: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Suggestion type filter. (action=suggestions only.)'),
+  limit: limitSchema,
+};
+
+// Type-only helper: gives validateInspectArgs a precise parameter type. This object schema is
+// never registered with the MCP server or used to parse anything — `paramsSchema` above (the flat
+// raw shape) is what the SDK advertises and parses against.
+type InspectArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
+
+const FIELDS_BY_ACTION: Record<InspectArgs['action'], ReadonlyArray<keyof InspectArgs>> = {
+  status: [],
+  list: ['graphId', 'nodeId', 'isGlobal'],
+  suggestions: ['graphId', 'pdsId', 'severity', 'suggestionType'],
+};
+
+/**
+ * Pure per-action validation that the flat schema can no longer express structurally: which
+ * params are allowed for the chosen action. `limit` is always allowed. Returns a clear,
+ * actionable message on failure, or null when args are valid.
+ */
+export function validateInspectArgs(args: InspectArgs): string | null {
+  const allowed = new Set<keyof InspectArgs>(['action', 'limit', ...FIELDS_BY_ACTION[args.action]]);
+  const disallowed = (Object.keys(args) as Array<keyof InspectArgs>).filter(
+    (key) => args[key] !== undefined && !allowed.has(key),
+  );
+  if (disallowed.length > 0) {
+    return `${disallowed.join(', ')} ${disallowed.length === 1 ? 'is' : 'are'} not used when action is "${args.action}".`;
+  }
+
+  return null;
+}
 
 export const getInspectKnowledgeContextTool = (
   server: WebMcpServer,
@@ -85,6 +128,13 @@ update, or delete context.
         extra,
         args,
         callback: async () => {
+          // Surfaced from inside logAndExecute (not a pre-callback early return) so the invocation
+          // is still logged and telemetry-emitted even when the args are rejected.
+          const validationError = validateInspectArgs(args);
+          if (validationError) {
+            return new ArgsValidationError(validationError).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
