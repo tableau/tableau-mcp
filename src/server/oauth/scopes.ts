@@ -175,12 +175,9 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
  * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
  * simplicity over narrowing the blast radius.
  *
- * `tableau:permissions:read` is requested so that, after publishing to a shared project,
- * publish-workbook can read back the workbook's permission rules to disclose them to the caller
- * (best-effort - a permissions-read failure never fails the publish). It follows the same
- * always-requested-not-narrowed tradeoff above. NOTE: if a Tableau deployment rejects this scope at
- * JWT-mint time, remove it here - the Query Workbook Permissions call is also covered by
- * `tableau:content:read` and the best-effort path still returns the published workbook.
+ * `tableau:permissions:read` lets a project publish read back and disclose the workbook's
+ * permission rules (best-effort). If a deployment rejects it at JWT-mint time, remove it:
+ * the read also falls under `tableau:content:read`.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
