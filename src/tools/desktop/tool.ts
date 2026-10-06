@@ -11,8 +11,11 @@ import {
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
 import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
+import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
@@ -65,7 +68,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     const { requestId } = extra;
     this.notifyInvocation({ requestId, args });
 
-    let toolResult: CallToolResult;
+    let toolResult: CallToolResult | undefined;
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
     const episodeId = currentEpisodeId(sessionId);
 
@@ -77,6 +80,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     });
     const startedAt = performance.now();
 
+    // Mirrors the web path's `tool_call` product-telemetry event (see src/tools/web/tool.ts) so
+    // desktop tool calls land in the same pipeline. Emitted once, in the finally below.
+    const productTelemetryForwarder = getProductTelemetry(
+      extra.config.productTelemetryEndpoint,
+      extra.config.productTelemetryEnabled,
+      '',
+    );
+    let success = false;
+    let errorCode = '';
+
     try {
       const result = await raceDeadline(extra, callback);
       if (result.isOk()) {
@@ -87,6 +100,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
         const mappedError = toolResult.isError === true;
+        success = !mappedError;
         if (mappedError) {
           void emitToolErrorEvent({
             config: extra.config,
@@ -109,6 +123,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         return toolResult;
       }
 
+      errorCode = result.error instanceof McpToolError ? String(result.error.statusCode) : '';
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
         isError: true,
@@ -135,6 +150,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } catch (error) {
       const timedOut = isDesktopCallTimeout(error);
+      errorCode = error instanceof McpToolError ? String(error.statusCode) : '';
       log({
         message: timedOut
           ? 'Tool execution exceeded the Desktop call deadline'
@@ -169,6 +185,28 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         result_size_chars: serializedResultSize(toolResult),
       });
       return toolResult;
+    } finally {
+      // Mirrors the web `tool_call` (src/tools/web/tool.ts). Desktop is stdio-only with no Tableau
+      // OAuth/pod, so those fields are sent empty. session_id carries the stable Desktop session GUID
+      // (TABLEAU_DESKTOP_SESSION_LUID). This is NOT the same "session id" SessionManager resolves instances by
+      // (that one is the desktop app's process id) as the process id may be reused across sessions.
+      // site_luid/user_luid carry the signed-in identity the agent forwarded; auth_type is 'desktop'.
+      productTelemetryForwarder.send('tool_call', {
+        tool_name: this.name,
+        request_id: requestId.toString(),
+        session_id: extra.config.desktopSessionLuid ?? '',
+        site_luid: extra.config.siteLuid,
+        user_luid: extra.config.userLuid,
+        chat_id: extra.config.chatId,
+        podname: '',
+        is_hyperforce: extra.config.isHyperforce,
+        success,
+        error_code: errorCode,
+        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
+        oauth_client_id: '',
+        oauth_client_display_name: '',
+        auth_type: 'desktop',
+      });
     }
   }
 }

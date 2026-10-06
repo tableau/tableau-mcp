@@ -8,8 +8,13 @@ import {
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
 } from './desktop/limits/inlineImageCap.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
+import { parseSessionLuid } from './desktop/session/parseSessionLuid.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
 import { parseNumber } from './utils/parseNumber.js';
+
+// Mirrors the web server's default (see src/config.ts) so desktop tool calls forward to the
+// same product-telemetry pipeline.
+const DEFAULT_PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
 
 export class Config extends BaseConfig {
   // toolProfile lives on BaseConfig (shared with web/combined); desktop consumes it via
@@ -49,6 +54,44 @@ export class Config extends BaseConfig {
   desktopSessionId: string | undefined;
 
   /**
+   * Stable GUID identity of the launching Tableau Desktop session, pinned via
+   * `TABLEAU_DESKTOP_SESSION_LUID` (the guid counterpart to the pid in `TABLEAU_DESKTOP_SESSION_ID`).
+   * Forwarded as the product-telemetry `session_id`, so a run's desktop tool calls can be
+   * correlated the way the web path correlates by mcp-session-id. Ignored unless it is a
+   * well-formed GUID.
+   */
+  desktopSessionLuid: string | undefined;
+
+  /**
+   * Signed-in Tableau site and user LUID of the launching Desktop session, forwarded by the agent
+   * from `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch). Sent as
+   * the product-telemetry `site_luid` / `user_luid`, the desktop analog of the per-request site/user
+   * identity the web path reads from Tableau auth. Empty string when the launcher did not provide them.
+   */
+  siteLuid: string;
+  userLuid: string;
+
+  /**
+   * The agent's chat (conversation) id for this session, forwarded by tab-agent-south via
+   * `TABLEAU_CHAT_ID`. The agent spawns one desktop MCP child per chat, so this is stable for
+   * the child's life. Sent as the product-telemetry `chat_id` to correlate a run's desktop tool
+   * calls with the conversation that drove them. Empty string when the launcher did not provide it.
+   */
+  chatId: string;
+
+  /**
+   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event. Mirrors the
+   * web server's config (same `PRODUCT_TELEMETRY_ENDPOINT` / `PRODUCT_TELEMETRY_ENABLED` env vars
+   * and default endpoint) so desktop tool calls land in the same pipeline. Enabled by default; set
+   * `PRODUCT_TELEMETRY_ENABLED=false` to turn off.
+   */
+  productTelemetryEndpoint: string;
+  productTelemetryEnabled: boolean;
+
+  /** Whether this deployment runs on Hyperforce; forwarded as the telemetry `is_hyperforce` flag. */
+  isHyperforce: boolean;
+
+  /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
    * agent is told Desktop stopped answering. Env-overridable via TABLEAU_DESKTOP_CALL_TIMEOUT_MS;
    * values under MIN_DESKTOP_CALL_TIMEOUT_MS are ignored because they would cut real work.
@@ -74,8 +117,15 @@ export class Config extends BaseConfig {
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
+      TABLEAU_SITE_LUID: siteLuid,
+      TABLEAU_USER_LUID: userLuid,
+      TABLEAU_CHAT_ID: chatId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
+      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
+      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
+      IS_HYPERFORCE: isHyperforce,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -87,6 +137,19 @@ export class Config extends BaseConfig {
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
         ? desktopSessionId
         : undefined;
+
+    this.desktopSessionLuid =
+      desktopSessionLuid && parseSessionLuid(desktopSessionLuid) !== undefined
+        ? desktopSessionLuid
+        : undefined;
+
+    this.siteLuid = siteLuid || '';
+    this.userLuid = userLuid || '';
+    this.chatId = chatId || '';
+
+    this.productTelemetryEndpoint = productTelemetryEndpoint || DEFAULT_PRODUCT_TELEMETRY_ENDPOINT;
+    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
+    this.isHyperforce = isHyperforce === 'true';
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,
