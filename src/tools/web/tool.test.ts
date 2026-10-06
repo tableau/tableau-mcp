@@ -1,5 +1,5 @@
 import { ZodiosError } from '@zodios/core';
-import { AxiosError } from 'axios';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
@@ -291,8 +291,84 @@ describe('Tool', () => {
       const text = result.content[0].text;
       expect(text).toContain('Permission denied (403)');
       expect(text).toContain('may lack the required site role or permission');
+      expect(text).not.toContain('Reauthorize');
+      expect(text).not.toContain('do not re-authenticate');
       expect(text).toContain('site "tc25"');
     });
+
+    it.each([
+      ['scaffold-data-app', 'tableau:packages:read', false],
+      ['get-datasource-metadata', 'tableau:content:read', true],
+    ] as const)(
+      'returns scope guidance for %s requiring %s (wrapped=%s)',
+      async (name, scope, wrapped) => {
+        const tool = new WebTool({ ...mockParams, name });
+        const axiosError = new AxiosError('Request failed with status code 403');
+        axiosError.response = {
+          status: 403,
+          data: { error: 'insufficient_scope', error_description: 'untrusted upstream text' },
+        } as AxiosError['response'];
+        const extra = getMockRequestHandlerExtra({
+          config: { ...mockExtra.config, auth: 'oauth' },
+        });
+
+        const result = await tool.logAndExecute({
+          extra,
+          args: { param1: 'test' },
+          callback: () => {
+            throw wrapped
+              ? new Error('Outer wrapper', {
+                  cause: new Error('Wrapped request', { cause: axiosError }),
+                })
+              : axiosError;
+          },
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('Insufficient scopes (403)');
+        expect(result.content[0].text).toContain(scope);
+        expect(result.content[0].text).toContain('Reauthorize the OAuth connection');
+        expect(result.content[0].text).not.toContain('untrusted upstream text');
+        expect(mockTelemetrySend).toHaveBeenCalledWith(
+          'tool_call',
+          expect.objectContaining({
+            tool_name: name,
+            success: false,
+            error_code: '403',
+            error_message: result.content[0].text,
+          }),
+        );
+      },
+    );
+
+    it.each(['pat', 'direct-trust', 'uat'] as const)(
+      'does not tell %s callers to reauthorize an OAuth connection',
+      async (auth) => {
+        const tool = new WebTool(mockParams);
+        const axiosError = new AxiosError('Request failed with status code 403');
+        axiosError.response = {
+          status: 403,
+          headers: { 'www-authenticate': 'Bearer error="insufficient_scope"' },
+          data: undefined,
+          statusText: 'Forbidden',
+          config: { headers: new AxiosHeaders() },
+        };
+        const result = await tool.logAndExecute({
+          extra: getMockRequestHandlerExtra({ config: { ...mockExtra.config, auth } }),
+          args: { param1: 'test' },
+          callback: () => {
+            throw axiosError;
+          },
+          constrainSuccessResult: (result) => ({ type: 'success', result }),
+        });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('Configure the Tableau credentials');
+        expect(result.content[0].text).not.toContain('Reauthorize the OAuth connection');
+      },
+    );
 
     it('should NOT reclassify a curated McpToolError that carries its own 403 message', async () => {
       const tool = new WebTool(mockParams);

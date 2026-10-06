@@ -46,9 +46,29 @@ export function buildPermissionErrorMessage(target: AuthTarget = {}): string {
   return (
     'Permission denied (403): you are authenticated to this Tableau MCP server' +
     `${describeAuthTarget(target)} but this request was refused. Your account may lack the ` +
-    'required site role or permission, or the capability may not be enabled for this site. This ' +
-    'is not an authentication failure — do not re-authenticate. Use an account with the required ' +
+    'required site role or permission, or the capability may not be enabled for this site. ' +
+    'Use an account with the required ' +
     'permissions, or confirm the capability is enabled for this site.'
+  );
+}
+
+/** Recovery guidance for an explicit upstream insufficient-scope response. */
+export function buildInsufficientScopeErrorMessage({
+  site,
+  server,
+  requiredScopes,
+  isOAuth,
+}: AuthTarget & { requiredScopes: ReadonlyArray<string>; isOAuth: boolean }): string {
+  const scopes =
+    requiredScopes.length > 0
+      ? ` Required API scopes for this tool: ${requiredScopes.join(', ')}.`
+      : '';
+  return (
+    `Insufficient scopes (403): the Tableau credentials${describeAuthTarget({ site, server })} ` +
+    `do not grant the scopes required for this request.${scopes} ` +
+    (isOAuth
+      ? 'Reauthorize the OAuth connection with the required scopes, then retry.'
+      : 'Configure the Tableau credentials with the required scopes, then retry.')
   );
 }
 
