@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { dataSourceSchema } from '../types/dataSource.js';
+import { dataSourceSchema, publishedDataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -29,7 +29,7 @@ const listDatasourcesEndpoint = makeEndpoint({
   response: z.object({
     pagination: paginationSchema,
     datasources: z.object({
-      datasource: z.optional(z.array(dataSourceSchema)),
+      datasource: z.optional(z.array(publishedDataSourceSchema)),
     }),
   }),
 });

@@ -270,6 +270,19 @@ class ResourceAccessChecker {
       try {
         datasource = await getDatasource();
 
+        if (!datasource.project) {
+          // Embedded (workbook) data sources have no project, so a project allowlist can't admit
+          // them. Fail closed here; resolving the parent workbook's project for allowlist matching
+          // is tracked by W-23864479.
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed data sources that can be queried is limited by the server configuration.',
+              `The datasource with LUID ${datasourceLuid} cannot be queried because it is an embedded (workbook) data source, which cannot be matched against the allowed projects.`,
+            ].join(' '),
+          };
+        }
+
         if (!allowedProjectIds.has(datasource.project.id)) {
           return {
             allowed: false,
