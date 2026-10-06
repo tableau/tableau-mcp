@@ -21,7 +21,9 @@ const paramsSchema = {
     .array(z.string().trim().min(1).max(255))
     .min(1)
     .max(6)
-    .describe('Rendered worksheet names (1-6).'),
+    .describe(
+      'Live worksheet names (1-6). Empty worksheets are added as empty dashboard tiles with a warning.',
+    ),
   title: z.string().trim().min(1).max(255).optional().describe('Optional title.'),
   layout: layoutSchema.optional().describe('Layout.'),
 };
@@ -33,6 +35,7 @@ type ComposeDashboardSuccess = {
   worksheets: string[];
   replaced: boolean;
   verification: { status: 'passed'; issues: [] };
+  warnings?: string[];
 };
 
 type ComposeDashboardResult = StructuredResult<ComposeDashboardSuccess>;
