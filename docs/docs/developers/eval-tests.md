@@ -99,6 +99,38 @@ network access:
 npm run test:eval -- run tests/eval/removeFieldScenario.test.ts tests/eval/base.test.ts
 ```
 
+## Desktop dashboard apply evals
+
+`tests/eval/dashboardApply.test.ts` covers W-24366364 with seven model-driven cases: the first apply
+to an empty dashboard, missing worksheet view registrations, replacing membership while retaining
+view settings, removing the final worksheet, ordinary layout edits, recovery from unsupported
+worksheet zone types in desktop and Phone layouts, and rejection of a genuinely blank worksheet.
+
+The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
+fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
+response formatters. The fake API preserves the distinction between dashboard layout updates and
+workbook view registrations, and models additive workbook actions. The independent grader checks the
+final layouts, registrations, retained view settings, unrelated worksheets/data sources/actions,
+apply route, readback, and redundant retries. It grades tool behavior, not final-answer wording.
+
+No Tableau session or workbook is accessed. These focused evals do not replace live rendering or
+native zone-removal validation. Build the Desktop bundle from the same checkout as the tests and
+configure model credentials as described above, then run:
+
+```sh
+npm run build:desktop
+npm run test:eval -- run tests/eval/dashboardApply.test.ts
+```
+
+Each case allows ten agent turns and two minutes. `ENABLE_LOGGING=true` records tool calls, call
+IDs, model turns, and final responses; SDK trace export is disabled. The fixture and grader checks
+run offline, including negative controls for the original missing-registration bug, duplicate
+actions, incomplete Phone repairs, discarded draft changes, and omitted readback:
+
+```sh
+npm run test:eval -- run tests/eval/dashboardApplyScenario.test.ts tests/eval/base.test.ts
+```
+
 ## Environment Variables
 
 The following environment variables are used by the Eval tests:
