@@ -1,4 +1,6 @@
 import {
+  getDatasourceTagsByLuid,
+  getDatasourceTagsQuery,
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
@@ -706,6 +708,42 @@ describe('lineageUtils', () => {
       id: 'u-1',
       displayName: 'Jane Smith',
       username: 'jsmith@acme.com',
+    });
+  });
+
+  describe('getDatasourceTagsQuery', () => {
+    it('filters published data sources by the given LUIDs', () => {
+      const query = getDatasourceTagsQuery(['ds-1', 'ds-2']);
+      expect(query).toContain(
+        'publishedDatasourcesConnection(filter: { luidWithin: ["ds-1", "ds-2"] })',
+      );
+      expect(query).toContain('tags');
+    });
+  });
+
+  describe('getDatasourceTagsByLuid', () => {
+    it('maps each data source LUID to its tag names', () => {
+      const tags = getDatasourceTagsByLuid({
+        data: {
+          publishedDatasourcesConnection: {
+            nodes: [
+              { luid: 'ds-1', tags: [{ name: 'MCP Enabled' }, { name: 'certified' }] },
+              { luid: 'ds-2', tags: null },
+            ],
+          },
+        },
+      });
+
+      expect(tags).toEqual(
+        new Map([
+          ['ds-1', ['MCP Enabled', 'certified']],
+          ['ds-2', []],
+        ]),
+      );
+    });
+
+    it('throws when the response does not have the expected shape', () => {
+      expect(() => getDatasourceTagsByLuid({ data: {} })).toThrow();
     });
   });
 });

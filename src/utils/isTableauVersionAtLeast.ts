@@ -26,11 +26,11 @@ function isTableauVersionAtLeast({
   productVersion: ProductVersion;
   minVersion: `${number}.${number}.${number}`;
 }): boolean {
-  const { value: versionValue } = productVersion;
+  const { value: versionValue, build } = productVersion;
 
-  if (versionValue === 'main') {
-    // Build is from the main branch, so the build version is on the "build" attribute and looks like "main.25.0804.1416"
-    // This is likely an internal dev environment, so we'll assume it's a fresh build and pass the check.
+  if (versionValue === '0.0.0' || build.includes('main')) {
+    // Development servers can report 0.0.0 or a main build (for example main.26.1005.0759).
+    // Treat either marker as a fresh build and pass the check.
     return true;
   }
 
