@@ -156,6 +156,37 @@ describe('ResourceAccessChecker', () => {
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
+
+      it('should deny an embedded (project-less) datasource under a project allowlist', async () => {
+        // Embedded (workbook) data sources have no project, so a project allowlist can't admit them;
+        // fail closed with an embedded-specific message rather than throwing on `project.id`.
+        mocks.mockQueryDatasource.mockResolvedValue({
+          ...mockDatasource,
+          project: undefined,
+          parentType: 'Workbook',
+        });
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `The datasource with LUID ${mockDatasource.id} cannot be queried because it is an embedded (workbook) data source, which cannot be matched against the allowed projects.`,
+          ].join(' '),
+        });
+      });
     });
 
     describe('tag check when Query Data Source is forbidden', () => {

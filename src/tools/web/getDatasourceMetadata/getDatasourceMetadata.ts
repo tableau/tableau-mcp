@@ -10,6 +10,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -20,7 +21,7 @@ import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
 import {
   combineFields,
-  FieldsResult,
+  DatasourceType,
   simplifyReadMetadataResult,
 } from './datasourceMetadataUtils.js';
 
@@ -197,12 +198,15 @@ export const getGetDatasourceMetadataTool = (
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
+              // Resolve the type on every path so it's set even when the Metadata API is disabled or
+              // throws, not only on the publishedDatasources-match path.
               if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
                 return Ok(
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
+                    await resolveDatasourceType(restApi, datasourceLuid, false),
                   ),
                 );
               }
@@ -218,31 +222,16 @@ export const getGetDatasourceMetadataTool = (
                   simplifyReadMetadataResult(
                     readMetadataResult.value,
                     datasourceModelResult?.value,
+                    await resolveDatasourceType(restApi, datasourceLuid, false),
                   ),
                 );
               }
 
-              // Resolve published vs embedded. A publishedDatasources match is authoritative and
-              // free. On a miss, disambiguate an embedded (workbook) data source from a published
-              // one that isn't indexed by the Metadata API yet via the REST datasources endpoint,
-              // which only lists published data sources — so a not-found there means embedded.
-              let datasourceType: FieldsResult['datasourceType'] = listFieldsResult.data
-                .publishedDatasources?.[0]
-                ? 'published'
-                : undefined;
-              if (!datasourceType) {
-                const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
-                  siteId: restApi.siteId,
-                  datasourceId: datasourceLuid,
-                });
-                if (restLookup.isOk()) {
-                  datasourceType = 'published';
-                } else if (restLookup.error === 'not-found') {
-                  datasourceType = 'embedded';
-                }
-                // 'error' (permissions/transient) is non-authoritative; leave the type unset since
-                // labeling is best-effort and must never break the metadata response.
-              }
+              const datasourceType = await resolveDatasourceType(
+                restApi,
+                datasourceLuid,
+                !!listFieldsResult.data.publishedDatasources?.[0],
+              );
 
               // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
               return Ok(
@@ -268,6 +257,34 @@ export const getGetDatasourceMetadataTool = (
 
   return getDatasourceMetadataTool;
 };
+
+// A publishedDatasources match (Metadata API) is authoritative and free. Otherwise probe the REST
+// Query Data Source endpoint and classify on the returned shape: WBDS-enabled servers return
+// embedded (workbook) data sources here too (HTTP 200) — those carry `parentType: "Workbook"` and no
+// `project`, while published ones carry a `project`. A 404 means the server doesn't serve this LUID
+// via REST at all; since the LUID is already VizQL-resolvable, that too is an embedded signal. Any
+// other error ⇒ leave unset (best-effort; must never break the metadata response).
+async function resolveDatasourceType(
+  restApi: RestApi,
+  datasourceLuid: string,
+  hasPublishedMatch: boolean,
+): Promise<DatasourceType | undefined> {
+  if (hasPublishedMatch) {
+    return 'published';
+  }
+  const restLookup = await restApi.datasourcesMethods.tryQueryDatasource({
+    siteId: restApi.siteId,
+    datasourceId: datasourceLuid,
+  });
+  if (restLookup.isOk()) {
+    const datasource = restLookup.value;
+    return datasource.parentType === 'Workbook' || !datasource.project ? 'embedded' : 'published';
+  }
+  if (restLookup.error === 'not-found') {
+    return 'embedded';
+  }
+  return undefined;
+}
 
 function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
   return getResultForTableauVersion({
