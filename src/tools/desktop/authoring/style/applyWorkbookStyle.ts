@@ -7,7 +7,7 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { IncompleteOperationError } from '../../../../errors/mcpToolError.js';
+import { IncompleteOperationError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { workbookTargetFingerprint } from '../../api/workbookTargetFingerprint.js';

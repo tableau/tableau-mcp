@@ -30,10 +30,8 @@ import { readTemplate } from '../../../../desktop/templates/templatePath.js';
 import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import * as validationRegistry from '../../../../desktop/validation/registry.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  DesktopCommandExecutionError,
-  NoDesktopInstancesFoundError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { NoDesktopInstancesFoundError } from '../../../../errors/mcpToolError.js';
 import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
@@ -6422,7 +6420,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'Datasource "Missing Datasource" was not found. Candidates: Superstore, Inventory',
+      'datasource "Missing Datasource" not found or ambiguous in the workbook',
     );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();

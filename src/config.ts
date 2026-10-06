@@ -213,7 +213,8 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || auth === 'passthrough';
+    const purePassthroughAuth = auth === 'passthrough';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || purePassthroughAuth;
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -226,7 +227,7 @@ export class Config extends BaseConfig {
     }
 
     this.oauth = {
-      enabled: disableOauthOverride ? false : !!oauthIssuer,
+      enabled: !purePassthroughAuth && !disableOauthOverride && !!oauthIssuer,
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
@@ -381,7 +382,12 @@ export class Config extends BaseConfig {
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
-    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+    if (
+      this.transport === 'http' &&
+      this.auth !== 'passthrough' &&
+      !disableOauthOverride &&
+      !this.oauth.issuer
+    ) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );

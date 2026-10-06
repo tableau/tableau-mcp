@@ -74,6 +74,7 @@ export interface BindRecoveryProposalContext {
     session: string;
     ask: string;
     target_worksheet?: string;
+    datasource?: string;
     auto_apply: true;
   };
   recommended?: {

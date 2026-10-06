@@ -4,7 +4,10 @@
  */
 
 import { resolveDerivation } from '../derivations.js';
-import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
+import {
+  createCalculationAggregationResolver,
+  getCalculationDependencyReferences,
+} from '../formulaAggregation.js';
 import {
   forEachRelationColumn,
   inferFieldTypeFromType,
@@ -702,6 +705,69 @@ function getColumnFromWorkbook(
   }
 }
 
+function createDatasourceCalculationAggregationResolver(
+  workbookXml: string | undefined,
+  datasourceName: string,
+  datasourceDependency: any,
+): (columnName: string) => boolean {
+  const formulas = new Map<string, string>();
+
+  if (workbookXml) {
+    try {
+      const workbook = parseXML(workbookXml).workbook;
+      const datasource = normalizeArray(workbook?.datasources?.datasource).find(
+        (candidate: any) => candidate['@_name'] === datasourceName,
+      );
+      for (const column of normalizeArray(datasource?.column)) {
+        const name = column['@_name'];
+        const formula = column.calculation?.['@_formula'];
+        if (typeof name === 'string' && typeof formula === 'string') {
+          formulas.set(name, formula);
+        }
+      }
+    } catch {
+      // Workbook parse failures retain the existing worksheet-only behavior.
+    }
+  }
+
+  for (const column of normalizeArray(datasourceDependency.column)) {
+    const name = column['@_name'];
+    if (typeof name !== 'string') continue;
+    const formula = column.calculation?.['@_formula'];
+    if (typeof formula === 'string') formulas.set(name, formula);
+    else formulas.delete(name);
+  }
+
+  return createCalculationAggregationResolver(formulas);
+}
+
+function copyWorkbookColumnWithDependencies(
+  columns: any[],
+  workbookXml: string | undefined,
+  datasourceName: string,
+  workbookColumn: any,
+): void {
+  const columnName = workbookColumn?.['@_name'];
+  if (
+    typeof columnName !== 'string' ||
+    columns.some((column: any) => column['@_name'] === columnName)
+  ) {
+    return;
+  }
+
+  columns.push({ ...workbookColumn });
+  const formula = workbookColumn.calculation?.['@_formula'];
+  if (typeof formula !== 'string') return;
+
+  for (const dependencyName of getCalculationDependencyReferences(formula)) {
+    if (columns.some((column: any) => column['@_name'] === dependencyName)) continue;
+    const dependency = getColumnFromWorkbook(workbookXml, datasourceName, dependencyName);
+    if (dependency) {
+      copyWorkbookColumnWithDependencies(columns, workbookXml, datasourceName, dependency);
+    }
+  }
+}
+
 /**
  * Ensure column-instance exists in datasource-dependencies
  * If it doesn't exist, adds both column and column-instance entries
@@ -778,14 +844,16 @@ function ensureColumnInstanceInDependencies(
   // Check if base column exists to determine if it's a calculated field
   const columnsArray = normalizeArray(datasourceDep.column);
   const existingBaseColumn = columnsArray.find((col: any) => col['@_name'] === parsed.column);
+  const calculationRequiresUserDerivation = createDatasourceCalculationAggregationResolver(
+    workbookXml,
+    datasource,
+    datasourceDep,
+  );
   let correctedInstanceName = columnInstanceName;
 
   // If it's a calculated field with aggregation, we need to use usr prefix
   if (existingBaseColumn?.calculation?.['@_formula']) {
-    const formula = existingBaseColumn.calculation['@_formula'];
-    const hasAggregation = formulaRequiresUserDerivation(formula);
-
-    if (hasAggregation && parsed.derivation !== 'User') {
+    if (calculationRequiresUserDerivation(parsed.column) && parsed.derivation !== 'User') {
       correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
       emitFieldRewrite({
         requested: columnInstanceName,
@@ -825,34 +893,7 @@ function ensureColumnInstanceInDependencies(
       const workbookColumn = getColumnFromWorkbook(workbookXml, datasource, parsedCorrected.column);
 
       if (workbookColumn) {
-        // Copy the full column definition from workbook, including any calculation elements
-        // Make a shallow copy to avoid reference issues
-        const newColumn = { ...workbookColumn };
-        columns.push(newColumn);
-
-        // If this is a calculated field, also ensure dependent columns exist
-        if (workbookColumn.calculation) {
-          // Parse the formula to extract dependent column names (simplified approach)
-          const formula =
-            workbookColumn.calculation['@_formula'] || workbookColumn.calculation['@_class'];
-          if (formula && typeof formula === 'string') {
-            // Extract column names in brackets from formula (e.g., [Profit], [Sales])
-            const dependentColumns = formula.match(/\[([^\]]+)\]/g);
-            if (dependentColumns) {
-              for (const depCol of dependentColumns) {
-                // Check if this dependent column already exists
-                const depExists = columns.some((col: any) => col['@_name'] === depCol);
-                if (!depExists) {
-                  // Try to get it from workbook
-                  const depWorkbookColumn = getColumnFromWorkbook(workbookXml, datasource, depCol);
-                  if (depWorkbookColumn) {
-                    columns.push({ ...depWorkbookColumn });
-                  }
-                }
-              }
-            }
-          }
-        }
+        copyWorkbookColumnWithDependencies(columns, workbookXml, datasource, workbookColumn);
       } else if (!workbookXml) {
         throw new Error(
           `Cannot resolve column ${parsedCorrected.column} without workbook context. ` +
@@ -907,10 +948,10 @@ function ensureColumnInstanceInDependencies(
     let actualDerivation = parsedCorrected.derivation;
     let actualColumnInstanceName = correctedInstanceName;
     if (baseColumn?.calculation?.['@_formula']) {
-      const formula = baseColumn.calculation['@_formula'];
-      const hasAggregation = formulaRequiresUserDerivation(formula);
-
-      if (hasAggregation && parsedCorrected.derivation !== 'User') {
+      if (
+        calculationRequiresUserDerivation(parsedCorrected.column) &&
+        parsedCorrected.derivation !== 'User'
+      ) {
         // This calculated field already has aggregation - use User derivation to prevent double aggregation
         actualDerivation = 'User';
         // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix.

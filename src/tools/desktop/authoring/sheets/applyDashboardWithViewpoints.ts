@@ -9,13 +9,15 @@ import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
-  ArgsValidationError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-  FileReadError,
   IncompleteOperationError,
-  WorkbookNotFoundError,
   WorkbookXmlLoadFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
+  ArgsValidationError,
+  FileReadError,
+  WorkbookNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../../params.js';

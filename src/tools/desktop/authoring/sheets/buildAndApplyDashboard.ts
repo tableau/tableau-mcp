@@ -10,12 +10,14 @@ import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
-  CacheSessionMismatchError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-  WorkbookNotFoundError,
   WorkbookXmlLoadFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
+  CacheSessionMismatchError,
+  WorkbookNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';

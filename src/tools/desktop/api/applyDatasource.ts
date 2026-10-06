@@ -5,7 +5,7 @@ import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-eve
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { applyDatasourceXml } from '../../../desktop/wrappers/applyDatasourceXml.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { jsonToolResult, type StructuredResult } from '../structuredContent.js';

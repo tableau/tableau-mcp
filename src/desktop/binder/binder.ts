@@ -562,8 +562,9 @@ export async function bindTemplate(args: {
   proposal?: BindingProposal;
   llmPropose?: LlmProposeFn;
   minConfidence?: number;
+  datasource?: string;
 }): Promise<BinderResult> {
-  const summary = summarizeSchema(args.workbookXml);
+  const summary = summarizeSchema(args.workbookXml, args.datasource);
   const minConfidence = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
   // ── Call 2: validate the agent-produced proposal ─────────────────

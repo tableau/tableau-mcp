@@ -397,6 +397,91 @@ describe('addFieldToRows aggregate correction consistency (regression)', () => {
     ).toBe('[Sample].[sum:Display Value:qk]');
     expect(modified).not.toContain('[usr:Display Value:qk]');
   });
+
+  it('writes User for an aggregate alias already declared in worksheet dependencies', () => {
+    const worksheetXml = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      `<column name="[Base]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+      <column name="[Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ABS([Base])"/>
+      </column></datasource-dependencies>`,
+    );
+
+    const modified = addFieldToRows(worksheetXml, '[Sample].[sum:Alias:qk]');
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Alias:qk]" column="[Alias]" derivation="User"',
+    );
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Alias'),
+      )?.column,
+    ).toBe('[Sample].[usr:Alias:qk]');
+  });
+
+  it('writes User and copies the full calculation chain for a workbook-only alias', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Base]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+      <column name="[Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ABS([Base])"/>
+      </column>
+      <column name="[Two Hop Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ZN([Alias])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[sum:Two Hop Alias:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Two Hop Alias:qk]" column="[Two Hop Alias]" derivation="User"',
+    );
+    expect(modified).toContain('column name="[Alias]"');
+    expect(modified).toContain('formula="ABS([Base])"');
+    expect(modified).toContain('column name="[Base]"');
+    expect(modified).toContain('formula="SUM([Sales])"');
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Two Hop Alias'),
+      )?.column,
+    ).toBe('[Sample].[usr:Two Hop Alias:qk]');
+  });
+
+  it('copies workbook-only LOD dependencies without classifying the LOD as aggregate', () => {
+    const worksheetXml = `<worksheet name="Sheet 1"><table><view>
+      <datasources><datasource name="Sample"/></datasources>
+      <datasource-dependencies datasource="Sample"/>
+    </view><rows></rows></table></worksheet>`;
+    const workbookXml = `<workbook><datasources><datasource name="Sample">
+      <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
+      <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[LOD]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="{ FIXED [Category] : SUM([Sales]) }"/>
+      </column>
+    </datasource></datasources></workbook>`;
+
+    const modified = addFieldToRows(worksheetXml, '[Sample].[sum:LOD:qk]', undefined, workbookXml);
+
+    expect(modified).toContain(
+      '<column-instance name="[sum:LOD:qk]" column="[LOD]" derivation="Sum"',
+    );
+    expect(modified).toContain('column name="[Category]"');
+    expect(modified).toContain('column name="[Sales]"');
+    expect(modified).not.toContain('[usr:LOD:qk]');
+  });
 });
 
 describe('addFieldToEncoding aggregate correction consistency (regression)', () => {

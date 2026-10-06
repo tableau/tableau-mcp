@@ -51,8 +51,10 @@ export function bareName(name: string): string {
  * The `fields` array preserves the order `listAvailableFields` returns; the
  * primary datasource is the one with the most fields (first-seen wins ties).
  */
-export function summarizeSchema(workbookXml: string): SchemaSummary {
-  const raw = listAvailableFields(workbookXml);
+export function summarizeSchema(workbookXml: string, datasource?: string): SchemaSummary {
+  const available = listAvailableFields(workbookXml);
+  const raw =
+    datasource === undefined ? available : available.filter((f) => f.datasource === datasource);
 
   const fields: SchemaField[] = raw.map((f) => {
     const bare = bareName(f.columnName);
@@ -75,7 +77,7 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
     };
   });
 
-  return { datasource: pickPrimaryDatasource(fields), fields };
+  return { datasource: datasource ?? pickPrimaryDatasource(fields), fields };
 }
 
 /** The datasource contributing the most fields; first-seen wins ties. "" if none. */

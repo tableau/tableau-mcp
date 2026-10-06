@@ -10,9 +10,9 @@ import {
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import {
   ArgsValidationError,
-  DesktopCommandExecutionError,
   FileReadError,
   McpToolError,
 } from '../../../../errors/mcpToolError.js';

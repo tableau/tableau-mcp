@@ -320,7 +320,7 @@ const envVars = {
     type: 'string',
     title: 'Tool Profile',
     description:
-      "Tool registration profile: unset/'dynamic-authoring' registers the lean native-authoring surface (bind-template + guarded artifacts + author-* verbs), 'full' registers every Desktop tool, 'demo' the slim Desktop set, 'combined-lean' the full Desktop set plus a lazy web-tool loader.",
+      'This Web bundle registers tools eagerly; TOOL_PROFILE does not change its tool surface.',
     required: false,
     sensitive: false,
   },
@@ -644,7 +644,7 @@ const envVars = {
     type: 'string',
     title: 'Episode Events Directory',
     description:
-      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY.',
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY. Files persist until an operator removes them; use a dedicated directory with external retention.',
     required: false,
     sensitive: false,
   },
