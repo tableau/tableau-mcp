@@ -83,3 +83,50 @@ describe('authMiddleware auth-error wording (W-23757363)', () => {
     expect(res.body.error_description).toContain(OAUTH_AUTH_CHALLENGE_GUIDANCE);
   });
 });
+
+describe('scaffold-data-app required API scope', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('ADVERTISE_API_SCOPES', 'true');
+    vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    [[], false],
+    [['tableau:packages:read'], true],
+  ])('checks packages:read on a valid token with scopes %j', async (scopes, authorized) => {
+    const authInfo = { scopes, clientId: 'test-client' };
+    const middleware = authMiddleware(makeValidator(new Ok(authInfo)));
+    const req = {
+      headers: { authorization: 'Bearer valid-token' },
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'scaffold-data-app', arguments: { datappName: 'Sales Demo' } },
+      },
+    } as unknown as AuthenticatedRequest;
+    const res = makeRes();
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+
+    if (authorized) {
+      expect(next).toHaveBeenCalledOnce();
+      expect(req.auth).toEqual(authInfo);
+      expect(res.statusCode).toBeUndefined();
+    } else {
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('insufficient_scope');
+      expect(res.headers['WWW-Authenticate']).toContain('scope="tableau:packages:read"');
+    }
+  });
+});
