@@ -6,24 +6,40 @@ sidebar_position: 5
 
 Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide
 `projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md) to
-discover project IDs), or set `personalSpace: true` to publish into your Personal Space when the
-site supports direct-to-personal-space publishing. Exactly one destination is required. Providing
-both `projectId` and `personalSpace: true`, or providing neither, returns an error before any file
-is uploaded.
+discover project IDs), or, when the `data-apps` feature flag is enabled, set `personalSpace: true`
+to publish into your Personal Space when the site supports direct-to-personal-space publishing.
+Exactly one destination is required. Providing both `projectId` and `personalSpace: true`, or
+providing neither, returns an error before any file is uploaded.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking
 errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau
 as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.
 
 :::warning[Disabled by Default]
+
 This tool is gated behind the `authoring-tools` feature flag, which
 defaults to `false` in `features.json`. It is unavailable unless an administrator enables
 `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+
+:::
+
+:::info[Personal Space feature flag]
+
+Direct Personal Space publishing additionally requires the
+existing `data-apps` feature flag, which defaults to `false`. When it is off, `personalSpace` is
+omitted from the advertised tool schema and description, and `projectId` is required. The execution
+path also checks the flag, so a stale Personal Space call is rejected before API calls or file
+access. Project publishing remains available when `authoring-tools` is enabled.
+
+After changing file-based flags, restart the MCP server and reconnect clients to refresh the schema.
+
 :::
 
 :::info[Minimum REST API version]
+
 Requires Tableau REST API version 3.29 or later (Tableau Server
 2026.2+). Calling this tool against an older server returns an error instead of publishing.
+
 :::
 
 Related tools: [Request Workbook Upload](request-workbook-upload.md),
@@ -80,6 +96,8 @@ Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
 ### `personalSpace`
 
+This parameter is advertised only when `data-apps` is enabled.
+
 Set this boolean to `true` to publish into your **Personal Space**. The tool resolves the caller's
 Personal Space LUID automatically and sends it as a location to Tableau; do not pass a Personal
 Space LUID as `projectId`.
@@ -105,6 +123,7 @@ Example Personal Space request:
 
 For Personal Space requests, the tool returns an error without publishing anything if:
 
+- the `data-apps` feature flag is disabled,
 - your Personal Space could not be resolved,
 - your Personal Space is read-only, or
 - the site has direct-to-personal-space publishing disabled.

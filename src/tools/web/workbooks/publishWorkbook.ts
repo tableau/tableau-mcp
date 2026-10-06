@@ -69,6 +69,22 @@ const paramsSchema = {
     ),
 };
 
+const personalSpaceParamsSchema = z.object(paramsSchema).strict();
+const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true }).extend({
+  projectId: z
+    .string()
+    .min(1)
+    .describe(
+      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
+    ),
+});
+// Both advertised schemas produce arguments accepted by the same execution path.
+type PublishWorkbookParamsSchema = z.ZodType<
+  z.output<typeof personalSpaceParamsSchema>,
+  z.ZodTypeDef,
+  z.input<typeof personalSpaceParamsSchema>
+>;
+
 export type PublishWorkbookResult =
   | {
       status: 'published';
@@ -90,14 +106,28 @@ type ValidationFinding = {
   elementName: string;
 };
 
-export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
-  const tool = new WebTool({
+export const getPublishWorkbookTool = (
+  server: WebMcpServer,
+): WebTool<PublishWorkbookParamsSchema> => {
+  const tool = new WebTool<PublishWorkbookParamsSchema>({
     server,
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    description:
-      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide projectId to choose the target project (use list-projects to discover IDs), or set personalSpace to true to publish to your Personal Space when the site supports it. Exactly one destination is required; providing both or neither returns an error before upload. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
-    paramsSchema,
+    description: new Provider(async () => {
+      const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+      return (
+        'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
+        (personalSpaceEnabled
+          ? 'Provide projectId to choose the target project (use list-projects to discover IDs), or set personalSpace to true to publish to your Personal Space when the site supports it. Exactly one destination is required; providing both or neither returns an error before upload. '
+          : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
+        'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
+      );
+    }),
+    paramsSchema: new Provider(async () =>
+      (await getFeatureGate().isFeatureEnabled('data-apps'))
+        ? personalSpaceParamsSchema
+        : projectParamsSchema,
+    ),
     annotations: {
       title: 'Publish Workbook',
       readOnlyHint: false,
@@ -110,10 +140,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
         isSlackClient(server.clientId),
     ),
-    callback: async (
-      { workbookUploadId, workbookFilePath, name, projectId, personalSpace, overwrite = false },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async (args, extra): Promise<CallToolResult> => {
+      const { workbookUploadId, workbookFilePath, name, projectId, overwrite = false } = args;
+      const personalSpace = 'personalSpace' in args ? args.personalSpace : undefined;
       return await tool.logAndExecute<PublishWorkbookResult>({
         extra,
         args: {
@@ -125,6 +154,13 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
           overwrite,
         },
         callback: async () => {
+          // Recheck at execution time in case the client cached a schema from before the flag changed.
+          const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+          if (personalSpace === true && !personalSpaceEnabled) {
+            throw new FeatureDisabledError(
+              'Direct publishing to Personal Space requires the data-apps feature flag. Publish to a project instead by passing projectId and omitting personalSpace.',
+            );
+          }
           if (projectId !== undefined && personalSpace === true) {
             throw new ArgsValidationError(
               'Provide either projectId or personalSpace: true, but not both.',
@@ -132,7 +168,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
           }
           if (projectId === undefined && personalSpace !== true) {
             throw new ArgsValidationError(
-              'A publish destination is required: provide projectId or set personalSpace to true.',
+              personalSpaceEnabled
+                ? 'A publish destination is required: provide projectId or set personalSpace to true.'
+                : 'projectId is required to publish a workbook.',
             );
           }
           assertMinimumRestApiVersionSupported();

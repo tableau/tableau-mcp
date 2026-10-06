@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
 
@@ -101,21 +103,93 @@ describe('publishWorkbookTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('publish-workbook');
-    expect(tool.description).toContain('Publishes a TWB or TWBX workbook');
-    expect(paramsSchema).toMatchObject({
-      workbookUploadId: expect.any(Object),
-      workbookFilePath: expect.any(Object),
-      name: expect.any(Object),
-      projectId: expect.any(Object),
-      personalSpace: expect.any(Object),
-      overwrite: expect.any(Object),
-    });
+    expect(await Provider.from(tool.description)).toContain('Publishes a TWB or TWBX workbook');
     expect(annotations.destructiveHint).toBe(true);
-    expect(paramsSchema.name.safeParse('').success).toBe(false);
-    expect(tool.description).toContain('Personal Space');
-    expect(paramsSchema.personalSpace.safeParse(true).success).toBe(true);
-    expect(paramsSchema.personalSpace.safeParse(false).success).toBe(true);
-    expect(paramsSchema.personalSpace.safeParse('personal-space-luid').success).toBe(false);
+    expect(paramsSchema.safeParse({ ...validArgs, name: '' }).success).toBe(false);
+    expect(await Provider.from(tool.description)).toContain('Personal Space');
+    expect(paramsSchema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(true);
+    expect(paramsSchema.safeParse({ ...validArgs, personalSpace: false }).success).toBe(true);
+    expect(
+      paramsSchema.safeParse({ ...validArgs, personalSpace: 'personal-space-luid' }).success,
+    ).toBe(false);
+  });
+
+  it.each([false, true])('advertises Personal Space only when data-apps is %s', async (enabled) => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
+      flag === 'data-apps' ? enabled : true,
+    );
+    const { McpServer } = await vi.importActual<
+      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+    >('@modelcontextprotocol/sdk/server/mcp.js');
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
+    server.registerTool(
+      tool.name,
+      {
+        description: await Provider.from(tool.description),
+        inputSchema: schema,
+      },
+      async () => ({ content: [] }),
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const { tools } = await client.listTools();
+      const listed = tools.find(({ name }) => name === 'publish-workbook');
+      expect(listed?.inputSchema.properties).toHaveProperty('projectId');
+      if (enabled) {
+        expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
+        expect(listed?.inputSchema.required).not.toContain('projectId');
+        expect(listed?.description).toContain('personalSpace');
+      } else {
+        expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
+        expect(listed?.inputSchema.required).toContain('projectId');
+        expect(listed?.description).not.toMatch(/personal.?space/i);
+        expect(schema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(false);
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('blocks a stale Personal Space call after data-apps is disabled before API or file access', async () => {
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
+    const args = schema.parse({
+      name: validArgs.name,
+      workbookFilePath: '/tmp/demo.twbx',
+      personalSpace: true,
+    });
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag !== 'data-apps');
+    const result = await (await Provider.from(tool.callback))(args, getMockExtra({}));
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({ text: expect.stringContaining('data-apps feature flag') }),
+    ]);
+    expect(mocks.useRestApiCalls).toHaveLength(0);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('keeps project publishing available when data-apps is disabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag !== 'data-apps');
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect((await Provider.from(tool.paramsSchema)).safeParse(validArgs).success).toBe(true);
+    const result = await getToolResult(validArgs);
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: validArgs.projectId }),
+    );
   });
 
   it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
