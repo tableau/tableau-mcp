@@ -46,9 +46,9 @@ function getSkillsDir(): string {
 }
 
 /**
- * Parse a SKILL.md-style leading frontmatter block. Supports a single `---`-delimited block
- * of flat `key: value` lines (blank lines ignored). Returns an empty object when no
- * frontmatter block is present.
+ * Every skill.md starts with a frontmatter that is denoted by surrounding '---' symbols. The
+ * frontmatter contains the skill's name and description. We parse and return the information
+ * in the frontmatter to be key value pairs based on the colon
  */
 function parseFrontmatter(content: string): Record<string, unknown> {
   // Match a block of text beginning and ending with `---`, capturing its inner body
@@ -58,6 +58,8 @@ function parseFrontmatter(content: string): Record<string, unknown> {
     return {};
   }
 
+  // For the information contained inside the frontmatter block, split the values
+  // into key value pairs and return the final list of frontmatter information
   const frontmatter: Record<string, unknown> = {};
   for (const line of match[1].split(/\r?\n/)) {
     const trimmed = line.trim();
