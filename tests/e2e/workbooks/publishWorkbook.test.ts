@@ -1,11 +1,16 @@
+import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 import { z } from 'zod';
 
+import { getConfig } from '../../../src/config.js';
+import { buildAuthConfig } from '../../../src/sdks/tableau/buildAuthConfig.js';
+import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
 import { validationIssueSchema } from '../../../src/sdks/tableau/types/workbookValidation.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { buildVariant } from '../build.js';
 import { McpClient } from '../mcpClient.js';
+import { getRestFailureDiagnostic, PublishWorkbookTestRun } from './publishWorkbookTestRun.js';
 
 const publishWorkbookResultSchema = z.discriminatedUnion('status', [
   z.object({
@@ -33,50 +38,84 @@ type PublishWorkbookSmokeConfig = {
   projectId: string;
 };
 
+// This live suite creates temporary workbooks and deletes only the returned IDs at teardown.
+// Its identity must be allowed to publish and delete workbooks in the configured test project.
+// PUBLISH_WORKBOOK_E2E_NAME is a prefix; every execution gets a unique suffix, including CI reruns.
 describe('publish-workbook local file', () => {
   let client: McpClient | undefined;
+  let testRun: PublishWorkbookTestRun;
 
   beforeAll(() => {
     setEnv();
-  });
-
-  afterAll(() => {
-    resetEnv();
+    const { workbookName, projectId } = getPublishWorkbookSmokeConfig();
+    testRun = new PublishWorkbookTestRun(workbookName, projectId);
   });
 
   beforeAll(async () => {
     await buildVariant('default');
     client = new McpClient({ env: getPublishWorkbookSmokeEnv() });
+    client.client.setNotificationHandler(LoggingMessageNotificationSchema, ({ params }) => {
+      const diagnostic = getRestFailureDiagnostic(params.data);
+      if (diagnostic) console.error(`Publish E2E REST failure: ${diagnostic}`);
+    });
     await client.connect();
   });
 
   afterAll(async () => {
-    await client?.close();
-  });
+    try {
+      if (testRun?.hasPublishedWorkbooks) {
+        const config = getConfig();
+        const authConfig = buildAuthConfig({
+          config,
+          tableauAuthInfo: undefined,
+          scopes: new Set(['tableau:workbooks:delete']),
+        });
+        if (!authConfig) throw new Error('Publish E2E cleanup requires a sign-in auth mode.');
+        RestApi.host = config.server;
+        const restApi = new RestApi({ maxRequestTimeoutMs: 10_000 });
+        await restApi.signIn(authConfig);
+        try {
+          await testRun.cleanup((workbookId) =>
+            restApi.workbooksMethods.deleteWorkbook({ siteId: restApi.siteId, workbookId }),
+          );
+        } finally {
+          await restApi.signOut();
+        }
+      }
+    } finally {
+      try {
+        await client?.close();
+      } finally {
+        resetEnv();
+      }
+    }
+  }, 60_000);
 
   it('validates and publishes a workbook (.twb) from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
+    const workbookName = testRun.name('TWB');
 
     const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
       toolArgs: {
         workbookFilePath: smokeConfig.workbookFilePath,
-        name: smokeConfig.workbookName,
+        name: workbookName,
         projectId: smokeConfig.projectId,
-        overwrite: true,
+        overwrite: false,
       },
     });
 
     expect(publishResult.status).toBe('published');
     if (publishResult.status === 'published') {
-      expect(publishResult.data.name).toBe(smokeConfig.workbookName);
+      testRun.track(publishResult.data);
+      expect(publishResult.data.name).toBe(workbookName);
       expect(publishResult.url).toEqual(expect.any(String));
     }
   });
 
   it('validates and publishes a .twbx workbook from a local file path', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
-    const workbookName = `${smokeConfig.workbookName} TWBX`;
+    const workbookName = testRun.name('TWBX');
 
     const publishResult = await client!.callTool('publish-workbook', {
       schema: publishWorkbookResultSchema,
@@ -84,12 +123,13 @@ describe('publish-workbook local file', () => {
         workbookFilePath: twbxWorkbookFilePath,
         name: workbookName,
         projectId: smokeConfig.projectId,
-        overwrite: true,
+        overwrite: false,
       },
     });
 
     expect(publishResult.status).toBe('published');
     if (publishResult.status === 'published') {
+      testRun.track(publishResult.data);
       expect(publishResult.data.name).toBe(workbookName);
       expect(publishResult.url).toEqual(expect.any(String));
     }
@@ -102,12 +142,13 @@ describe('publish-workbook local file', () => {
       schema: publishWorkbookResultSchema,
       toolArgs: {
         workbookFilePath: malformedWorkbookFilePath,
-        name: `${smokeConfig.workbookName} Malformed TWB`,
+        name: testRun.name('Malformed TWB'),
         projectId: smokeConfig.projectId,
-        overwrite: true,
+        overwrite: false,
       },
     });
 
+    if (publishResult.status === 'published') testRun.track(publishResult.data);
     expect(publishResult.status).toBe('invalid');
     if (publishResult.status === 'invalid') {
       expect(publishResult.errors.length).toBeGreaterThan(0);
@@ -127,17 +168,18 @@ describe('publish-workbook local file', () => {
   it('returns a publish error and does not publish a .twbx containing a malformed .twb', async () => {
     const smokeConfig = getPublishWorkbookSmokeConfig();
 
-    await expect(
-      client!.callTool('publish-workbook', {
-        schema: publishWorkbookResultSchema,
-        toolArgs: {
-          workbookFilePath: malformedTwbxWorkbookFilePath,
-          name: `${smokeConfig.workbookName} Bad TWBX`,
-          projectId: smokeConfig.projectId,
-          overwrite: true,
-        },
-      }),
-    ).rejects.toThrow(/status code 400|bad workbook|publish/i);
+    const publish = client!.callTool('publish-workbook', {
+      schema: publishWorkbookResultSchema,
+      toolArgs: {
+        workbookFilePath: malformedTwbxWorkbookFilePath,
+        name: testRun.name('Bad TWBX'),
+        projectId: smokeConfig.projectId,
+        overwrite: false,
+      },
+    });
+    const result = await publish.catch(() => undefined);
+    if (result?.status === 'published') testRun.track(result.data);
+    await expect(publish).rejects.toThrow(/status code 400|bad workbook|publish/i);
   });
 });
 
