@@ -31,6 +31,7 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
     server,
     name: 'download-workbook',
     minRequiredRole: SiteRole.EXPLORER,
+    activityLogObject: ({ workbookId }) => ({ type: 'workbook', luid: workbookId }),
     description: [
       'Downloads workbook content as a TWB (application/xml) or TWBX (application/octet-stream) file.',
       'The returned file metadata includes Tableau-provided content type and filename when available.',

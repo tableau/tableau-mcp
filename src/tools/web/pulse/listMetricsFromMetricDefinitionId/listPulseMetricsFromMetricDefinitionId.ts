@@ -19,6 +19,10 @@ export const getListPulseMetricsFromMetricDefinitionIdTool = (
     server,
     name: 'list-pulse-metrics-from-metric-definition-id',
     minRequiredRole: SiteRole.VIEWER,
+    activityLogObject: ({ pulseMetricDefinitionID }) => ({
+      type: 'pulse-metric-definition',
+      luid: pulseMetricDefinitionID,
+    }),
     registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a specific Pulse Metric Definition on the current site.

@@ -36,6 +36,11 @@ vi.mock('../../telemetry/init.js', () => ({
   }),
 }));
 
+const mockRecordMcpToolCall = vi.hoisted(() => vi.fn());
+vi.mock('../../activityLog/index.js', () => ({
+  recordMcpToolCall: mockRecordMcpToolCall,
+}));
+
 describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 
@@ -597,6 +602,203 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: 'https://claude.ai/.well-known/oauth/client-metadata.json',
           oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+  });
+
+  describe('Activity Log', () => {
+    beforeEach(() => {
+      mockRecordMcpToolCall.mockClear();
+    });
+
+    it('should record an mcp_tool_call with the call details on success', async () => {
+      const tool = new WebTool(mockParams);
+      const extra = getMockRequestHandlerExtra({
+        tableauAuthInfo: {
+          type: 'Bearer',
+          clientId: 'https://claude.ai/client',
+        } as TableauAuthInfo,
+        requestInfo: { headers: { 'user-agent': 'test-agent/1.0' } },
+      });
+
+      await tool.logAndExecute({
+        extra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledTimes(1);
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(extra.config, {
+        toolName: 'get-datasource-metadata',
+        siteLuid: 'test-site-luid',
+        userLuid: 'test-user-luid',
+        success: true,
+        errorCode: '',
+        oauthClientId: 'https://claude.ai/client',
+        userAgent: 'test-agent/1.0',
+        mcpRequestId: '2',
+        object: undefined,
+      });
+    });
+
+    it('should record the object the tool declares for the call arguments', async () => {
+      const tool = new WebTool({
+        ...mockParams,
+        activityLogObject: ({ param1 }) => ({ type: 'datasource', luid: param1 }),
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: '11111111-2222-3333-4444-555555555555' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({
+          object: { type: 'datasource', luid: '11111111-2222-3333-4444-555555555555' },
+        }),
+      );
+    });
+
+    it('should keep the tool result, and record no object, when activityLogObject throws', async () => {
+      const tool = new WebTool({
+        ...mockParams,
+        activityLogObject: () => {
+          throw new TypeError('bad args');
+        },
+      });
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: true, object: undefined }),
+      );
+    });
+
+    it('should record the failure and its HTTP status when the callback throws', async () => {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 403');
+      axiosError.response = { status: 403 } as AxiosError['response'];
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: false, errorCode: '403', userAgent: undefined }),
+      );
+    });
+
+    it('should default a thrown error with no HTTP status to 500', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Something unexpected happened');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: false, errorCode: '500' }),
+      );
+    });
+
+    it('should record the failure of a typed Err result', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(new DatasourceNotAllowedError('Not allowed').toErr()),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: false, errorCode: '403' }),
+      );
+    });
+
+    it('should record a constrained error result as a failure', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'error', message: 'Not allowed' }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: false, errorCode: '' }),
+      );
+    });
+
+    it('should record the ZodiosValidationError passthrough as a success, since the client gets its data', async () => {
+      const tool = new WebTool(mockParams);
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        { fields: [] },
+        new ZodError([]),
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(new ZodiosValidationError(zodiosError).toErr()),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        mockExtra.config,
+        expect.objectContaining({ success: true }),
+      );
+    });
+
+    it('should read the LUIDs after the callback, once sign-in has set them', async () => {
+      const tool = new WebTool(mockParams);
+      const extra = getMockRequestHandlerExtra({ _siteLuid: undefined, _userLuid: undefined });
+
+      await tool.logAndExecute({
+        extra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          extra._siteLuid = 'signed-in-site-luid';
+          extra._userLuid = 'signed-in-user-luid';
+          return Promise.resolve(Ok({ data: 'success' }));
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
+        extra.config,
+        expect.objectContaining({
+          siteLuid: 'signed-in-site-luid',
+          userLuid: 'signed-in-user-luid',
         }),
       );
     });

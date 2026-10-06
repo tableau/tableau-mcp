@@ -83,6 +83,8 @@ export class Config extends BaseConfig {
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
+  activityLogEnabled: boolean;
+  activityLogDirectory: string;
   cspAllowedDomains: string[];
   // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
   flowWriteToolsEnabled: boolean;
@@ -161,6 +163,8 @@ export class Config extends BaseConfig {
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
+      ACTIVITY_LOG_ENABLED: activityLogEnabled,
+      ACTIVITY_LOG_DIRECTORY: activityLogDirectory,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
@@ -352,6 +356,10 @@ export class Config extends BaseConfig {
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+    // Activity Log recording also needs the internal CEPP SDK installed, so it only takes effect
+    // in the hosted deployment (see src/activityLog).
+    this.activityLogEnabled = activityLogEnabled === 'true';
+    this.activityLogDirectory = activityLogDirectory?.trim() ?? '';
     this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools

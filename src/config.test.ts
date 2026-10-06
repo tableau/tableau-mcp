@@ -302,6 +302,27 @@ describe('Config', () => {
     expect(config.insightsToolsEnabled).toBe(true);
   });
 
+  it('should default activityLogEnabled to false and activityLogDirectory to empty', () => {
+    const config = new Config();
+    expect(config.activityLogEnabled).toBe(false);
+    expect(config.activityLogDirectory).toBe('');
+  });
+
+  it('should set activityLogEnabled to true only when ACTIVITY_LOG_ENABLED is "true"', () => {
+    vi.stubEnv('ACTIVITY_LOG_ENABLED', 'true');
+    expect(new Config().activityLogEnabled).toBe(true);
+
+    vi.stubEnv('ACTIVITY_LOG_ENABLED', 'yes');
+    expect(new Config().activityLogEnabled).toBe(false);
+  });
+
+  it('should set activityLogDirectory from ACTIVITY_LOG_DIRECTORY, trimmed', () => {
+    vi.stubEnv('ACTIVITY_LOG_DIRECTORY', ' /home/nodejs/logs ');
+
+    const config = new Config();
+    expect(config.activityLogDirectory).toBe('/home/nodejs/logs');
+  });
+
   it('should set flowWriteToolsEnabled to false by default', () => {
     const config = new Config();
     expect(config.flowWriteToolsEnabled).toBe(false);

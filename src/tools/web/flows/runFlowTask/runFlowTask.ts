@@ -36,6 +36,7 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     server,
     name: 'run-flow-task',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
+    activityLogObject: ({ taskId }) => ({ type: 'flow-task', luid: taskId }),
     // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>

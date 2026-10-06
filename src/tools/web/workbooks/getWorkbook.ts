@@ -41,6 +41,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     server,
     name: 'get-workbook',
     minRequiredRole: SiteRole.VIEWER,
+    activityLogObject: ({ workbookId }) => ({ type: 'workbook', luid: workbookId }),
     description:
       'Retrieves information about the specified workbook, including information about the views contained in the workbook and backing datasources. ' +
       "The response's upstreamDatasources list each data source the workbook depends on; " +
