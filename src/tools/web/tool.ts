@@ -15,13 +15,11 @@ import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import {
   buildAuthenticationErrorMessage,
-  buildInsufficientScopeErrorMessage,
   buildPermissionErrorMessage,
 } from '../../utils/authErrorMessage.js';
 import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
-import { isInsufficientScopeError } from '../../utils/isInsufficientScopeError.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { RegistrationCondition } from './registrationConditions.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
@@ -269,9 +267,7 @@ export class WebTool<
       // passthrough). Typed McpToolErrors already carry curated messages, so they pass through
       // unchanged.
       const authErrorMessage =
-        error instanceof McpToolError
-          ? undefined
-          : getAuthErrorMessage(errorCode, extra, error, this.requiredApiScopes);
+        error instanceof McpToolError ? undefined : getAuthErrorMessage(errorCode, extra);
       toolResult = authErrorMessage
         ? { isError: true, content: [{ type: 'text', text: authErrorMessage }] }
         : getErrorResult(requestId, error);
@@ -320,8 +316,6 @@ export class WebTool<
 function getAuthErrorMessage(
   errorCode: string,
   extra: TableauWebRequestHandlerExtra,
-  error: unknown,
-  requiredScopes: ReadonlyArray<TableauApiScope>,
 ): string | undefined {
   if (errorCode !== '401' && errorCode !== '403') {
     return undefined;
@@ -329,14 +323,6 @@ function getAuthErrorMessage(
 
   const site = extra.getSiteName();
   const server = extra.config.server || extra.tableauAuthInfo?.server;
-  if (errorCode === '403' && isInsufficientScopeError(error)) {
-    return buildInsufficientScopeErrorMessage({
-      site,
-      server,
-      requiredScopes,
-      isOAuth: extra.config.auth === 'oauth',
-    });
-  }
   return errorCode === '401'
     ? buildAuthenticationErrorMessage({ site, server })
     : buildPermissionErrorMessage({ site, server });

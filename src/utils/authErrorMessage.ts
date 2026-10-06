@@ -52,26 +52,6 @@ export function buildPermissionErrorMessage(target: AuthTarget = {}): string {
   );
 }
 
-/** Recovery guidance for an explicit upstream insufficient-scope response. */
-export function buildInsufficientScopeErrorMessage({
-  site,
-  server,
-  requiredScopes,
-  isOAuth,
-}: AuthTarget & { requiredScopes: ReadonlyArray<string>; isOAuth: boolean }): string {
-  const scopes =
-    requiredScopes.length > 0
-      ? ` Required API scopes for this tool: ${requiredScopes.join(', ')}.`
-      : '';
-  return (
-    `Insufficient scopes (403): the Tableau credentials${describeAuthTarget({ site, server })} ` +
-    `do not grant the scopes required for this request.${scopes} ` +
-    (isOAuth
-      ? 'Reauthorize the OAuth connection with the required scopes, then retry.'
-      : 'Configure the Tableau credentials with the required scopes, then retry.')
-  );
-}
-
 /**
  * Guidance appended to the OAuth transport challenge (a 401 returned before any tool runs, where
  * the targeted site / pod are not yet known). Kept alongside — never in place of — the

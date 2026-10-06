@@ -7,20 +7,20 @@ import { isAxiosError } from './axios.js';
  * Returns empty string if no HTTP status can be determined
  */
 export function getHttpStatus(error: Error): string {
-  const visited = new Set<object>();
-  let current: unknown = error;
-  while (current !== null && typeof current === 'object' && !visited.has(current)) {
-    visited.add(current);
-    if (isAxiosError(current) && current.response?.status) {
-      return String(current.response.status);
-    }
-    if (current instanceof McpToolError) {
-      return String(current.statusCode);
-    }
-    if (current instanceof TableauRestError) {
-      return current.statusCode;
-    }
-    current = 'cause' in current ? current.cause : undefined;
+  // Check if the error itself is an AxiosError
+  if (isAxiosError(error) && error.response?.status) {
+    return String(error.response.status);
+  }
+  // Check if the error is a McpToolError
+  if (error instanceof McpToolError) {
+    return String(error.statusCode);
+  }
+  if (error instanceof TableauRestError) {
+    return error.statusCode;
+  }
+  // Check if the error wraps an AxiosError in its cause (e.g., ZodiosError)
+  if (error.cause && isAxiosError(error.cause) && error.cause.response?.status) {
+    return String(error.cause.response.status);
   }
   return '';
 }
