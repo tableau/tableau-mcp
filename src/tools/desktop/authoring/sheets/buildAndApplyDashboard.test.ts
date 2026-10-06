@@ -87,6 +87,51 @@ describe('buildAndApplyDashboardTool', () => {
     expect(resultObj.viewpointCount).toBe(4);
   });
 
+  it('uses verified registrations without a redundant read or write, even if another read would fail', async () => {
+    vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+      Ok({
+        validationWarnings: [],
+        verifiedWorksheetNames: ['KPI 1', 'KPI 2', 'Chart 1', 'Chart 2'],
+      }),
+    );
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
+      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+    );
+
+    const result = await getToolResult({
+      layoutSpec: defaultLayoutSpec,
+      worksheetNames: ['KPI 1', 'Chart 1'],
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      viewpointCount: 2,
+      viewpointState: 'success',
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+    expect(injectViewpointsModule.injectViewpoints).not.toHaveBeenCalled();
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('does not treat an unverified requested worksheet as registered', async () => {
+    vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+      Ok({ validationWarnings: [], verifiedWorksheetNames: ['KPI 1'] }),
+    );
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
+      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+    );
+
+    const result = await getToolResult({
+      layoutSpec: defaultLayoutSpec,
+      worksheetNames: ['KPI 1', 'Chart 1'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('names the dashboard as the artifact on every write it makes', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')

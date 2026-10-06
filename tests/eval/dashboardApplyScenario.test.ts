@@ -39,8 +39,9 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
     }
     await complete(scenario);
     expect(scenario.grade()).toEqual([]);
-    if (!testCase.blank && !testCase.layoutOnly) {
-      expect(scenario.executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    if (!testCase.blank && !testCase.registrationRequired) {
+      expect(scenario.executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(scenario.writes[0].route).toBe('dashboard');
       expect(scenario.writes[0].xml).not.toContain('<actions>');
     }
   });
@@ -114,7 +115,7 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
   });
 
   it('detects layout-only writes that leave views unregistered (the original regression)', async () => {
-    const scenario = new DashboardApplyScenario(dashboardApplyCases[0]);
+    const scenario = new DashboardApplyScenario({ ...dashboardApplyCases[0], registered: [] });
     await scenario.executor.applyDashboardDocument(
       'dashboard-eval-1',
       dashboardFragment(['Sales']),
@@ -126,12 +127,21 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
   it('detects duplicate actions when an existing action is resubmitted', async () => {
     const scenario = new DashboardApplyScenario(dashboardApplyCases[0]);
     await complete(scenario);
-    const posted = scenario.writes[0].xml.replace(
-      '</workbook>',
-      '<actions><action name="Existing filter"/></actions></workbook>',
-    );
+    const workbook = await scenario.executor.getWorkbookDocument(new AbortController().signal);
+    const posted = workbook.unwrap().xml;
     await scenario.executor.applyWorkbookDocument(posted, new AbortController().signal);
     expect(scenario.grade()).toContain('Unrelated actions changed');
+  });
+
+  it('rejects retrying or claiming success when native registrations are unavailable', async () => {
+    const scenario = new DashboardApplyScenario(dashboardApplyCases[7]);
+    const result = await scenario.invoke('apply_dashboard', applyArgs);
+    expect(result.text).toContain('No changes were sent to Tableau');
+    expect(result.text).toContain('whole-workbook replacement');
+    expect(scenario.writes).toEqual([]);
+    expect(scenario.grade()).toEqual([]);
+    await scenario.invoke('apply_dashboard', applyArgs);
+    expect(scenario.grade()).toContain('Expected one missing-registration rejection');
   });
 
   it('reports the production blank-worksheet diagnostic without a write', async () => {

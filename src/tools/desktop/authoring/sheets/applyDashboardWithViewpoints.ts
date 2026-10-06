@@ -8,6 +8,7 @@ import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { injectViewpoints } from '../../../../desktop/wrappers/injectViewpoints.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { parsedXmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DashboardXmlLoadFailedError,
@@ -84,10 +85,8 @@ export const getApplyDashboardWithViewpointsTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // Apply the dashboard first. A new dashboard has no dashboard window in the
-          // pre-apply workbook, so injecting viewpoints before this step is a silent no-op.
-          // Both writes in this call produce the same dashboard, and the viewpoint apply
-          // below returns early when the viewpoints are already present, so each one names it.
+          // The apply helper verifies registrations generated from the layout. Reuse its
+          // receipt below; only additional, unverified requests need a separate injection.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
@@ -105,11 +104,27 @@ export const getApplyDashboardWithViewpointsTool = (
                 return new DashboardXmlLoadFailedError(error).toErr();
               default: {
                 const _: never = type;
+                return _;
               }
             }
           }
 
-          // Re-read after dashboard apply so its window exists, then inject viewpoints.
+          const verifiedNames = dashboardApplyResult.value.verifiedWorksheetNames;
+          if (
+            verifiedNames &&
+            worksheetNames.every((name) =>
+              verifiedNames.some((verified) => parsedXmlNamesEqual(name, verified)),
+            )
+          ) {
+            return new Ok({
+              message: `Successfully applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s).`,
+              dashboardName,
+              viewpointCount: worksheetNames.length,
+              viewpointState: 'success',
+            });
+          }
+
+          // Only legacy/unverified results or additional requested registrations need this pass.
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (workbookResult.isErr()) {
             const error = new DesktopCommandExecutionError(workbookResult.error);

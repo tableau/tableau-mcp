@@ -101,17 +101,22 @@ npm run test:eval -- run tests/eval/removeFieldScenario.test.ts tests/eval/base.
 
 ## Desktop dashboard apply evals
 
-`tests/eval/dashboardApply.test.ts` covers W-24366364 with seven model-driven cases: the first apply
-to an empty dashboard, missing worksheet view registrations, replacing membership while retaining
-view settings, removing the final worksheet, ordinary layout edits, recovery from unsupported
-worksheet zone types in desktop and Phone layouts, and rejection of a genuinely blank worksheet.
+`tests/eval/dashboardApply.test.ts` covers W-24366364 with eight model-driven cases: adding an
+already registered worksheet to an empty dashboard, replacing membership while retaining view
+settings, removing the final worksheet, ordinary layout edits, recovery from unsupported worksheet
+zone types in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe refusal
+of missing registrations in both empty and populated dashboards. Existing-dashboard edits use the
+surgical dashboard endpoint. Until Desktop supports safe registration updates, the model must
+explain that blocker without attempting a whole-workbook replacement or discarding the requested
+membership.
 
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
 response formatters. The fake API preserves the distinction between dashboard layout updates and
 workbook view registrations, and models additive workbook actions. The independent grader checks the
-final layouts, registrations, retained view settings, unrelated worksheets/data sources/actions,
-apply route, readback, and redundant retries. It grades tool behavior, not final-answer wording.
+final layouts, required registrations (allowing retained unused viewpoints), retained view settings,
+unrelated worksheets/data sources/actions, apply route, readback, and redundant retries. It grades
+tool behavior, not final-answer wording.
 
 No Tableau session or workbook is accessed. These focused evals do not replace live rendering or
 native zone-removal validation. Build the Desktop bundle from the same checkout as the tests and

@@ -30,19 +30,27 @@ type DashboardApplyCase = {
   malformed?: boolean;
   blank?: boolean;
   layoutOnly?: boolean;
+  registrationRequired?: boolean;
 };
 
 export const dashboardApplyCases: DashboardApplyCase[] = [
-  { name: 'first apply to an empty dashboard', before: [], after: ['Sales'] },
   {
-    name: 'repair populated zones with missing view registrations',
+    name: 'add a registered worksheet to an empty dashboard',
+    before: [],
+    registered: ['Sales'],
+    after: ['Sales'],
+  },
+  {
+    name: 'refuse populated zones with missing view registrations without replacing the workbook',
     before: ['Sales'],
     registered: [],
     after: ['Sales'],
+    registrationRequired: true,
   },
   {
     name: 'replace membership while preserving the retained view settings',
     before: ['Sales', 'Profit'],
+    registered: ['Sales', 'Profit', 'Quantity'],
     after: ['Profit', 'Quantity'],
   },
   { name: 'remove the final worksheet from both layouts', before: ['Sales'], after: [] },
@@ -57,12 +65,19 @@ export const dashboardApplyCases: DashboardApplyCase[] = [
     before: [],
     after: ['Sales'],
     malformed: true,
+    registered: ['Sales'],
   },
   {
     name: 'blank worksheet rejection does not send a write',
     before: [],
     after: ['Empty'],
     blank: true,
+  },
+  {
+    name: 'refuse first apply requiring new view registrations without replacing the workbook',
+    before: [],
+    after: ['Sales'],
+    registrationRequired: true,
   },
 ];
 
@@ -168,6 +183,7 @@ export class DashboardApplyScenario {
       `In session eval-session, apply the prepared draft ${draftFile} to the existing dashboard "${dashboardName}". ` +
       "Keep the draft's worksheet choices, layout, and Phone layout, and preserve the rest of the workbook. " +
       'If apply reports a layout validation error, correct it and retry. Read back the dashboard after a successful apply. ' +
+      'If the current Desktop API cannot register the requested worksheet views safely, stop and explain the blocker without replacing the workbook. ' +
       'If a referenced worksheet has no visual representation, stop and explain the blocker; do not populate it or change the selected worksheets.';
     const completed = (): Ok<ExecuteCommandResult<undefined>> =>
       Ok({ command_id: 'eval-apply', status: 'completed' as const, submitted_at: '' });
@@ -356,6 +372,13 @@ export class DashboardApplyScenario {
         failures.push('Blank worksheet must not cause a write or success');
       return failures;
     }
+    if (this.testCase.registrationRequired) {
+      if (JSON.stringify(this.rejections) !== JSON.stringify(['registration-required']))
+        failures.push('Expected one missing-registration rejection');
+      if (this.writes.length !== 0 || this.live !== this.original || this.successes !== 0)
+        failures.push('Missing registrations must not cause a write or success');
+      return failures;
+    }
     if (this.successes !== 1 || this.writes.length !== 1)
       failures.push('Expected exactly one successful document write');
     if (
@@ -375,7 +398,7 @@ export class DashboardApplyScenario {
       named(root, 'window', dashboardName).getElementsByTagName('viewpoint'),
     );
     const actualNames = views.map((view) => view.getAttribute('name')).sort();
-    if (JSON.stringify(actualNames) !== JSON.stringify([...this.testCase.after].sort()))
+    if (this.testCase.after.some((name) => !actualNames.includes(name)))
       failures.push('Worksheet view registrations do not match membership');
     for (const view of views) {
       const name = view.getAttribute('name')!;
@@ -393,8 +416,7 @@ export class DashboardApplyScenario {
       if (!sameXml(named(root, tag, 'Unrelated'), named(original, tag, 'Unrelated')))
         failures.push(`Unrelated ${tag} changed`);
     }
-    if (this.writes[0]?.route !== (this.testCase.layoutOnly ? 'dashboard' : 'workbook'))
-      failures.push('Incorrect apply route');
+    if (this.writes[0]?.route !== 'dashboard') failures.push('Incorrect apply route');
     if (!this.readback || !sameXml(parse(this.readback), target))
       failures.push('Successful apply was not read back');
     return failures;

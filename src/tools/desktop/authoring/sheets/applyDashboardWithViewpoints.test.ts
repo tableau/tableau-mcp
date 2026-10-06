@@ -74,6 +74,48 @@ describe('applyDashboardWithViewpointsTool', () => {
     expect(resultObj.message).toContain('2 viewpoint');
   });
 
+  it('uses verified registrations without a redundant read or write, even if another read would fail', async () => {
+    vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+      Ok({ validationWarnings: [], verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'] }),
+    );
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
+      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+    );
+
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      viewpointCount: 2,
+      viewpointState: 'success',
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+    expect(injectViewpointsModule.injectViewpoints).not.toHaveBeenCalled();
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('does not treat an unverified requested worksheet as registered', async () => {
+    vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+      Ok({ validationWarnings: [], verifiedWorksheetNames: ['Sheet 1'] }),
+    );
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
+      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+    );
+
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('should inject viewpoints with the correct dashboard and worksheet names', async () => {
     const mockInject = vi
       .spyOn(injectViewpointsModule, 'injectViewpoints')

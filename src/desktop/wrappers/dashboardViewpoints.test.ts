@@ -20,11 +20,60 @@ describe('dashboard viewpoint registration', () => {
       source,
       'D',
       '<dashboard name="D"><zones><zone name="A"/></zones></dashboard>',
-    );
+    ).unwrap().xml;
     expect(result).toContain(worksheet);
     expect(result).toContain('<simple-id uuid="stable"/>');
     expect(result).toContain('<dashboard name="Other"/>');
     expect(dashboardMembershipMatches(result, 'D', ['A'])).toBe(true);
+  });
+
+  it('rejects newly introduced missing worksheet references, including device-only visual zones', () => {
+    const result = composeDashboardWorkbook(
+      '<workbook><worksheets><worksheet name="A"/></worksheets></workbook>',
+      'D',
+      '<dashboard name="D"><zones><zone name="A"/></zones><devicelayouts><devicelayout name="Phone"><zones><zone name="Missing" type-v2="visual"/></zones></devicelayout></devicelayouts></dashboard>',
+    );
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr()).toMatchObject([
+      {
+        ruleId: 'dashboard-zones-reference-included-worksheets',
+        message: expect.stringContaining('Missing'),
+      },
+    ]);
+  });
+
+  it('leaves pre-existing unrelated dashboard defects unchanged', () => {
+    const unrelated = '<dashboard name="Other"><zones><zone name="Missing"/></zones></dashboard>';
+    const source = `<workbook><worksheets><worksheet name="A"/></worksheets><dashboards>${unrelated}</dashboards></workbook>`;
+    const result = composeDashboardWorkbook(
+      source,
+      'D',
+      '<dashboard name="D"><zones><zone name="A"/></zones></dashboard>',
+    ).unwrap();
+    expect(result.xml).toContain(unrelated);
+    expect(result.worksheetNames).toEqual(['A']);
+    expect(dashboardMembershipMatches(result.xml, 'D', ['A'])).toBe(true);
+  });
+
+  it.each([
+    '<dashboards><dashboard name="D"/><dashboard name="D"/></dashboards>',
+    '<windows><window class="dashboard" name="D"/><window class="dashboard" name="D"/></windows>',
+  ])('rejects ambiguous target identity before composing: %s', (ambiguous) => {
+    const result = composeDashboardWorkbook(
+      `<workbook>${ambiguous}</workbook>`,
+      'D',
+      '<dashboard name="D"><zones/></dashboard>',
+    );
+    expect(result.unwrapErr()).toMatchObject([{ ruleId: 'dashboard-membership-identity' }]);
+  });
+
+  it('matches decoded and canonically equivalent worksheet names', () => {
+    const result = composeDashboardWorkbook(
+      '<workbook><worksheets><worksheet name="A &amp; Café"/></worksheets></workbook>',
+      'D',
+      '<dashboard name="D"><zones><zone name="A &amp; Café"/></zones></dashboard>',
+    ).unwrap();
+    expect(dashboardMembershipMatches(result.xml, 'D', ['A & Café'])).toBe(true);
   });
   it('omits existing root actions from dashboard-only posts without removing other content', () => {
     const source =

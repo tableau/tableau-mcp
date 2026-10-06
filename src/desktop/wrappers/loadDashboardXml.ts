@@ -7,11 +7,7 @@ import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
-import {
-  blockingValidationIssues,
-  introducedBlockingValidationIssues,
-  runValidation,
-} from '../validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
 import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
@@ -21,6 +17,7 @@ import {
   dashboardMembershipMatches,
   dashboardWorksheetNames,
   omitWorkbookActions,
+  unregisteredDashboardWorksheets,
 } from './dashboardViewpoints.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
@@ -46,6 +43,7 @@ export type LoadDashboardXmlError =
   | { type: 'load-rejected'; message: string }
   | { type: 'source-drift'; message: string }
   | { type: 'verification-failed'; message: string }
+  | { type: 'registration-required'; message: string; worksheetNames: string[] }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string }
@@ -57,6 +55,8 @@ export type LoadDashboardXmlError =
 export interface LoadDashboardXmlOk {
   appliedName?: string;
   validationWarnings: ValidationIssue[];
+  /** Worksheet registrations observed in the successful post-apply readback. */
+  verifiedWorksheetNames?: string[];
 }
 
 type LoadDashboardXmlResult = Result<
@@ -66,7 +66,7 @@ type LoadDashboardXmlResult = Result<
 >;
 
 type LoadDashboardHelperResult = Result<
-  void,
+  { verifiedWorksheetNames: string[] },
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError }
 >;
@@ -141,7 +141,7 @@ function resolveCanonicalDashboardName(
  *
  * This is a pure function over an ALREADY-FETCHED live workbook snapshot: the caller reads the
  * workbook inside `withApplyLock` and hands the same snapshot both here and to the apply, so the
- * check and the write see one consistent read-modify-write (no read/apply race), and a read
+ * MCP writes share one snapshot. Desktop user edits are not serialized by this mutex. A read
  * failure is the caller's to surface as a retriable error (fail CLOSED) rather than being
  * swallowed here. Only worksheets PRESENT-but-blank are flagged -- absent worksheets are the
  * `sheet-absent` / create path's concern, and this guard must not duplicate that (so it returns
@@ -183,7 +183,8 @@ function sheetNotRenderedError(
 // this from INSIDE their `withApplyLock` body so the read/check/apply run as one critical section.
 //
 // Returns the fetched live-workbook snapshot so composition can reuse the guard's snapshot.
-// The atomic apply separately checks for drift and reads back the result. Returns `null` WITHOUT reading when the dashboard
+// The create-capable apply separately checks for drift and reads back the result.
+// Returns `null` WITHOUT reading when the dashboard
 // names no worksheet zones -- there is nothing for the guard to check, so a zone-less apply
 // (per-sheet or whole-workbook) pays no guard fetch, exactly as before this guard existed.
 async function runRenderGuardInLock(
@@ -235,8 +236,8 @@ export async function loadDashboardXml({
   xml: string;
   focus: ApplyFocus;
   kind?: LoadDashboardKind;
-  // True resolves an existing sheet by id and rejects absent targets. Dashboard membership
-  // changes use an atomic workbook apply; ordinary layout/storyboard edits use the per-sheet route.
+  // True resolves an existing sheet by id and uses only its surgical document endpoint.
+  // Missing worksheet registrations require native support; never replace the workbook here.
   // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
   // the whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
@@ -299,7 +300,7 @@ export async function loadDashboardXml({
 
   // The render guard (a zone naming an existing-but-blank worksheet would be rejected by Desktop's
   // own HasVisualDoc check) reads the live workbook. Run it INSIDE each route's apply lock so the
-  // read/check/apply are one critical section (no concurrent render between check and apply) and a
+  // MCP read/check/apply are one critical section; this does not block Desktop user edits. A
   // read failure fails CLOSED. See {@link runRenderGuardInLock}.
   if (requireExistingSheet) {
     const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
@@ -324,35 +325,30 @@ export async function loadDashboardXml({
           return Ok(prepared.value);
         }
         const checked = prepared.value;
-        let liveWorkbookXml = guard.value;
-        // Removing the final worksheet also changes membership. The candidate alone
-        // contains no worksheet zones in that case, so consult the checked live fragment.
-        if (
-          kind === 'dashboard' &&
-          liveWorkbookXml === null &&
-          checked.liveDocumentXml &&
-          dashboardWorksheetNames(checked.liveDocumentXml).length > 0
-        ) {
-          const current = await getWorkbookXml({ executor, signal });
-          if (current.isErr()) return Err({ type: 'execute-command-error', error: current.error });
-          liveWorkbookXml = current.value;
-        }
-        if (kind === 'dashboard' && liveWorkbookXml !== null) {
+        if (kind === 'dashboard' && guard.value !== null) {
           const names = dashboardWorksheetNames(checked.fragmentXml);
-          if (!dashboardMembershipMatches(liveWorkbookXml, checked.name, names)) {
-            const applied = await applyDashboardWithViewpointsInLock({
-              liveWorkbookXml,
-              dashboardName: checked.name,
-              xml: checked.fragmentXml,
-              focus:
-                canonicalFocus.navigate === 'artifact'
-                  ? { ...canonicalFocus, sheetName: checked.name }
-                  : canonicalFocus,
-              executor,
-              signal,
+          let missing: string[];
+          try {
+            missing = unregisteredDashboardWorksheets(guard.value, checked.name, names);
+          } catch (error) {
+            return Err({
+              type: 'execute-command-error',
+              error: { type: 'invalid-response', error },
             });
-            if (applied.isErr()) return applied;
-            return Ok({ ...checked, status: 'applied', documentWarnings: [] });
+          }
+          if (missing.length > 0) {
+            return Err({
+              type: 'load-dashboard-xml-error',
+              error: {
+                type: 'registration-required',
+                worksheetNames: missing,
+                message:
+                  `Dashboard "${checked.name}" needs worksheet view registrations for ${missing.join(', ')}. ` +
+                  'This Desktop API cannot add them through the dashboard-only endpoint, and a whole-workbook replacement could overwrite concurrent edits. ' +
+                  'Add the worksheets to this dashboard in Desktop, then re-read the dashboard before retrying the layout edit. ' +
+                  'Do not change worksheet zone types or retry with a whole-workbook replacement. No changes were sent to Tableau.',
+              },
+            });
           }
         }
         const applied = await applyPreparedSheet({
@@ -417,7 +413,11 @@ export async function loadDashboardXml({
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
-  return Ok({ appliedName: canonicalName, validationWarnings: validation.issues });
+  return Ok({
+    appliedName: canonicalName,
+    validationWarnings: validation.issues,
+    ...result.value,
+  });
 }
 
 /**
@@ -497,11 +497,11 @@ async function loadDashboardXmlViaExternalApi({
       data: { dashboardName },
     });
 
-    return Ok.EMPTY;
+    return applyResult;
   });
 }
 
-/** The caller holds the apply lock for snapshot, validation, atomic write and readback. */
+/** Legacy create-capable route. The MCP lock does not prevent concurrent Desktop edits. */
 async function applyDashboardWithViewpointsInLock({
   liveWorkbookXml,
   dashboardName,
@@ -518,20 +518,22 @@ async function applyDashboardWithViewpointsInLock({
   let workbookDoc: string;
   const names = dashboardWorksheetNames(xml);
   try {
-    workbookDoc = composeDashboardWorkbook(liveWorkbookXml, dashboardName, xml);
+    // The authored fragment was validated above. Only dashboard membership and identity
+    // change here; validate those against the same parsed snapshot used for composition.
+    // Revalidating unrelated worksheet fields twice makes this lock scale with their schemas.
+    const composed = composeDashboardWorkbook(liveWorkbookXml, dashboardName, xml);
+    if (composed.isErr()) {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'validation-failed', issues: composed.error },
+      });
+    }
+    workbookDoc = composed.value.xml;
   } catch (error) {
     return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
   }
-  const introduced = introducedBlockingValidationIssues(
-    runValidation(liveWorkbookXml, 'workbook').issues,
-    runValidation(workbookDoc, 'workbook').issues,
-  );
-  if (introduced.length > 0)
-    return Err({
-      type: 'load-dashboard-xml-error',
-      error: { type: 'validation-failed', issues: introduced },
-    });
-  // The mutex coordinates MCP writes; this comparison also catches intervening Desktop edits.
+  // Best-effort check for edits already visible now; the API has no atomic revision precondition.
+  // Existing-sheet callers must use the surgical endpoint instead of this legacy create route.
   const current = await getWorkbookXml({ executor, signal });
   if (current.isErr()) return Err({ type: 'execute-command-error', error: current.error });
   if (current.value !== liveWorkbookXml)
@@ -543,9 +545,8 @@ async function applyDashboardWithViewpointsInLock({
           'The workbook changed before the dashboard apply. Re-read the dashboard and retry. No changes were sent to Tableau.',
       },
     });
-  // Actions are additive on this endpoint, unlike worksheet/dashboard documents. The
-  // candidate is validated with its existing actions, but this dashboard-only update
-  // leaves those live actions alone rather than appending copies on every layout edit.
+  // Actions are additive on this endpoint, unlike worksheet/dashboard documents.
+  // Leave live actions alone rather than appending copies during this dashboard update.
   const applied = await applyWorkbookText({
     xml: omitWorkbookActions(workbookDoc),
     focus,
@@ -566,7 +567,7 @@ async function applyDashboardWithViewpointsInLock({
         message: `Tableau accepted the dashboard apply, but the worksheet zones and window registrations for "${dashboardName}" could not be verified. Changes may have been applied. Re-read the live dashboard before retrying.`,
       },
     });
-  return Ok.EMPTY;
+  return Ok({ verifiedWorksheetNames: names });
 }
 
 function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): string {

@@ -7,10 +7,7 @@ import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
-import {
-  dashboardMembershipMatches,
-  synchronizeDashboardViewpoints,
-} from './dashboardViewpoints.js';
+import { synchronizeDashboardViewpoints } from './dashboardViewpoints.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
@@ -188,9 +185,15 @@ describe('loadDashboardXml (External Client API transport)', () => {
       },
     );
 
-    it('applies the corrected zones when the referenced worksheets are populated', async () => {
+    it('applies corrected zones surgically when worksheet views are already registered', async () => {
       const correctedXml = malformedXml.replaceAll(' type-v2="worksheet"', '');
-      const { executor } = dispatchingExecutor(liveWorkbook([dashboardName], worksheetNames));
+      const { executor } = dispatchingExecutor(
+        synchronizeDashboardViewpoints(
+          liveWorkbook([dashboardName], worksheetNames),
+          dashboardName,
+          worksheetNames,
+        ).xml,
+      );
       vi.mocked(executor.listDashboards).mockResolvedValue(
         Ok({ dashboards: [{ id: 'dash-1', name: dashboardName, hidden: false }] }),
       );
@@ -211,10 +214,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
       });
 
       expect(result.isOk()).toBe(true);
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
-      expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
-      const appliedXml = vi.mocked(executor.applyWorkbookDocument).mock.calls[0][0];
-      expect(dashboardMembershipMatches(appliedXml, dashboardName, worksheetNames)).toBe(true);
+      expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(vi.mocked(executor.applyDashboardDocument).mock.calls[0][1]).toBe(correctedXml);
     });
   });
 
