@@ -45,6 +45,7 @@ export interface ComposeDashboardReceipt {
   worksheets: string[];
   replaced: boolean;
   verification: { status: 'passed'; issues: [] };
+  warnings?: string[];
 }
 
 export interface BuildDashboardCandidateXmlArgs {
@@ -132,17 +133,18 @@ export async function composeDashboardCore({
   }
 
   const pristineXml = workbookResult.value;
-  const resolved = resolveRenderedWorksheetNames(pristineXml, worksheetNames);
+  const resolved = resolveLiveWorksheetNames(pristineXml, worksheetNames);
   const missing = worksheetNames.filter((_, index) => !resolved[index]);
   if (missing.length > 0) {
     return failed(
       'input-validation',
       new ArgsValidationError(
-        `Missing live rendered worksheet name(s): ${missing.map((name) => `"${name}"`).join(', ')}.`,
+        `Missing live worksheet name(s): ${missing.map((name) => `"${name}"`).join(', ')}.`,
       ),
     );
   }
   const canonicalWorksheetNames = resolved as string[];
+  const emptyWorksheetNames = findBlankWorksheetNames(pristineXml, canonicalWorksheetNames);
   const existingDashboardName = listWorkbookDashboards(pristineXml).find((name) =>
     xmlNamesEqual(name, dashboardName),
   );
@@ -160,6 +162,7 @@ export async function composeDashboardCore({
     executor,
     signal,
     replaced: existingDashboardName !== undefined,
+    emptyWorksheetNames,
   });
 }
 
@@ -174,12 +177,14 @@ async function createDashboard({
   executor,
   signal,
   replaced,
+  emptyWorksheetNames,
 }: Omit<ComposeDashboardCoreArgs, 'worksheetNames'> & {
   candidateBaselineXml: string;
   validationBaselineXml: string;
   expectedWorkbookXml: string;
   worksheetNames: string[];
   replaced: boolean;
+  emptyWorksheetNames: string[];
 }): Promise<ComposeDashboardOutcome> {
   let candidateXml: string;
   try {
@@ -284,6 +289,9 @@ async function createDashboard({
       worksheets: worksheetNames,
       replaced,
       verification: { status: 'passed', issues: [] },
+      ...(emptyWorksheetNames.length > 0
+        ? { warnings: [emptyWorksheetWarning(emptyWorksheetNames)] }
+        : {}),
     },
   };
 }
@@ -514,7 +522,7 @@ export function validateComposeDashboardInput(
   return undefined;
 }
 
-export function resolveRenderedWorksheetNames(
+export function resolveLiveWorksheetNames(
   workbookXml: string,
   requestedNames: string[],
 ): Array<string | undefined> {
@@ -525,11 +533,30 @@ export function resolveRenderedWorksheetNames(
         parsedXmlNamesEqual(candidate.name, requestedName) &&
         worksheetWindowNames.some((windowName) => parsedXmlNamesEqual(windowName, candidate.name)),
     );
-    if (!worksheet || worksheet.state !== 'populated') {
+    if (!worksheet) {
       return undefined;
     }
     return worksheet.name;
   });
+}
+
+export function findBlankWorksheetNames(workbookXml: string, worksheetNames: string[]): string[] {
+  const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
+  return worksheetNames.flatMap((worksheetName) => {
+    const worksheet = worksheets.find(
+      (candidate) =>
+        parsedXmlNamesEqual(candidate.name, worksheetName) &&
+        worksheetWindowNames.some((windowName) => parsedXmlNamesEqual(windowName, candidate.name)),
+    );
+    return worksheet?.state === 'blank' ? [worksheet.name] : [];
+  });
+}
+
+export function emptyWorksheetWarning(worksheetNames: string[]): string {
+  if (worksheetNames.length === 1) {
+    return `Worksheet "${worksheetNames[0]}" is empty and will display as an empty tile on the dashboard.`;
+  }
+  return `${worksheetNames.length} worksheets are empty and will display as empty tiles on the dashboard.`;
 }
 
 function describeApplyError(error: Parameters<typeof loadFailureOutcome>[0]['error']): string {

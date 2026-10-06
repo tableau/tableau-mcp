@@ -85,6 +85,26 @@ describe('composeDashboardTool', () => {
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
+  it('adds a live empty worksheet and returns an advisory warning', async () => {
+    const pristineXml = LIVE_WORKBOOK.replace(
+      '</worksheets>',
+      '<worksheet name="Empty"><table><rows/><cols/></table></worksheet></worksheets>',
+    ).replace('</windows>', '<window class="worksheet" name="Empty"/></windows>');
+    const harness = setupHarness({ pristineXml });
+
+    const result = await getToolResult({
+      dashboardName: 'Dashboard with Empty Tile',
+      worksheetNames: ['Sales', 'Empty'],
+      getExecutor: harness.getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({
+      warnings: ['Worksheet "Empty" is empty and will display as an empty tile on the dashboard.'],
+    });
+    expect(harness.postedXml).toContain('name="Empty"');
+  });
+
   it('rejects duplicate worksheet input before dispatch', async () => {
     const getExecutor = vi.fn(async () => {
       throw new Error('executor must not be resolved for invalid input');

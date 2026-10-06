@@ -9,15 +9,15 @@ import {
   composeDashboardCore,
   type ComposeDashboardCoreArgs,
   dashboardCandidateReadbackIssues,
-  resolveRenderedWorksheetNames,
+  resolveLiveWorksheetNames,
 } from './composeDashboardCore.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
 // `<rows>`/`<cols>` text (any non-empty text, here just the field name) is enough for
-// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered; see the
-// `resolveRenderedWorksheetNames` describe block below for the blank-vs-populated distinction.
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
+// blank. Both states are eligible for explicit dashboard composition.
 const PRISTINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
@@ -257,8 +257,8 @@ describe('dashboardCandidateReadbackIssues', () => {
   });
 });
 
-describe('resolveRenderedWorksheetNames', () => {
-  it('does not resolve a named worksheet with a matching window whose table is blank', () => {
+describe('resolveLiveWorksheetNames', () => {
+  it('resolves a named worksheet with a matching window whose table is blank', () => {
     const workbookXml = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
@@ -269,7 +269,7 @@ describe('resolveRenderedWorksheetNames', () => {
   </windows>
 </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['Blank'])).toEqual([undefined]);
+    expect(resolveLiveWorksheetNames(workbookXml, ['Blank'])).toEqual(['Blank']);
   });
 
   it('resolves a worksheet that has a placed field reference even with empty rows/cols text', () => {
@@ -287,7 +287,7 @@ describe('resolveRenderedWorksheetNames', () => {
   </windows>
 </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['Rendered'])).toEqual(['Rendered']);
+    expect(resolveLiveWorksheetNames(workbookXml, ['Rendered'])).toEqual(['Rendered']);
   });
 
   it('still refuses names that lack a matching window, and names that do not exist at all', () => {
@@ -299,21 +299,18 @@ describe('resolveRenderedWorksheetNames', () => {
   <windows/>
 </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['NoWindow', 'Nonexistent'])).toEqual([
+    expect(resolveLiveWorksheetNames(workbookXml, ['NoWindow', 'Nonexistent'])).toEqual([
       undefined,
       undefined,
     ]);
   });
 
   it('resolves a genuinely rendered worksheet with a matching window', () => {
-    expect(resolveRenderedWorksheetNames(PRISTINE, ['Sales', 'Profit'])).toEqual([
-      'Sales',
-      'Profit',
-    ]);
+    expect(resolveLiveWorksheetNames(PRISTINE, ['Sales', 'Profit'])).toEqual(['Sales', 'Profit']);
   });
 
   it('resolves a populated worksheet with workbook, intermediate, and locally rebound namespaces', () => {
-    expect(resolveRenderedWorksheetNames(WITH_INHERITED_NAMESPACES, ['Namespaced'])).toEqual([
+    expect(resolveLiveWorksheetNames(WITH_INHERITED_NAMESPACES, ['Namespaced'])).toEqual([
       'Namespaced',
     ]);
   });
@@ -324,10 +321,12 @@ describe('resolveRenderedWorksheetNames', () => {
       <windows><window class="worksheet" name="Namespaced Blank"/></windows>
     </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['Namespaced Blank'])).toEqual([undefined]);
+    expect(resolveLiveWorksheetNames(workbookXml, ['Namespaced Blank'])).toEqual([
+      'Namespaced Blank',
+    ]);
   });
 
-  it('does not let an extension worksheet make the canonical blank worksheet renderable', () => {
+  it('resolves the canonical blank worksheet without using an extension worksheet', () => {
     const workbookXml = `<workbook>
       <extension><worksheets>
         <worksheet name="Canonical"><table><rows>[none:Extension:nk]</rows><cols/></table></worksheet>
@@ -336,7 +335,7 @@ describe('resolveRenderedWorksheetNames', () => {
       <windows><window class="worksheet" name="Canonical"/></windows>
     </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+    expect(resolveLiveWorksheetNames(workbookXml, ['Canonical'])).toEqual(['Canonical']);
   });
 
   it('does not let an extension window satisfy the canonical worksheet window check', () => {
@@ -348,13 +347,14 @@ describe('resolveRenderedWorksheetNames', () => {
       <windows><window class="dashboard" name="Canonical"/></windows>
     </workbook>`;
 
-    expect(resolveRenderedWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
+    expect(resolveLiveWorksheetNames(workbookXml, ['Canonical'])).toEqual([undefined]);
   });
 
   it('resolves worksheet names that differ only by one level of entity escaping independently', () => {
-    expect(
-      resolveRenderedWorksheetNames(WITH_ENTITY_DISTINCT_NAMES, ['A & B', 'A &amp; B']),
-    ).toEqual(['A & B', 'A &amp; B']);
+    expect(resolveLiveWorksheetNames(WITH_ENTITY_DISTINCT_NAMES, ['A & B', 'A &amp; B'])).toEqual([
+      'A & B',
+      'A &amp; B',
+    ]);
   });
 });
 
@@ -385,6 +385,33 @@ describe('composeDashboardCore', () => {
         focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
       }),
     );
+  });
+
+  it('adds an empty worksheet and reports an advisory warning after readback', async () => {
+    const pristineXml = PRISTINE.replace(
+      '</worksheets>',
+      '<worksheet name="Empty"><table><rows/><cols/></table></worksheet></worksheets>',
+    ).replace('</windows>', '<window class="worksheet" name="Empty"/></windows>');
+    const harness = setupHarness({ pristineXml });
+
+    const outcome = await composeDashboardCore({
+      dashboardName: 'Dashboard with Empty Tile',
+      worksheetNames: ['Sales', 'Empty'],
+      executor: harness.executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(outcome).toMatchObject({
+      state: 'applied',
+      receipt: {
+        worksheets: ['Sales', 'Empty'],
+        warnings: [
+          'Worksheet "Empty" is empty and will display as an empty tile on the dashboard.',
+        ],
+      },
+    });
+    expect(harness.postedXml).toHaveLength(1);
+    expect(harness.postedXml[0]).toContain('name="Empty"');
   });
 
   it('preserves inherited worksheet namespaces through candidate apply and readback', async () => {

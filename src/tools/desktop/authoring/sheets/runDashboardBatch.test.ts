@@ -287,21 +287,37 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
-  it('rejects missing or unrendered existing worksheets before writing', async () => {
+  it('rejects missing existing worksheets before writing', async () => {
     const missing = await callBatch([], { existingWorksheetNames: ['Missing'] });
+
+    expect(bodyOf(missing)).toMatchObject({ applied: false, retrySafe: true });
+  });
+
+  it('adds an existing empty worksheet and reports an advisory warning', async () => {
     const unrenderedXml = WORKBOOK_XML.replace(
       '</worksheets>',
-      '<worksheet name="Unrendered"><table/></worksheet></worksheets>',
-    );
+      '<worksheet name="Empty"><table/></worksheet></worksheets>',
+    ).replace('</windows>', '<window class="worksheet" name="Empty"/></windows>');
     const harness = statefulExecutor({ initialXml: unrenderedXml });
-    const unrendered = await callBatch([], {
-      existingWorksheetNames: ['Unrendered'],
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Empty'],
       executor: harness.executor,
     });
 
-    expect(bodyOf(missing)).toMatchObject({ applied: false, retrySafe: true });
-    expect(bodyOf(unrendered)).toMatchObject({ applied: false, retrySafe: true });
-    expect(harness.posts).toHaveLength(0);
+    expect(result.isError).toBe(false);
+    expect(harness.posts).toHaveLength(1);
+    expect(bodyOf(result)).toMatchObject({
+      steps: [
+        expect.objectContaining({
+          operation: 'dashboard',
+          worksheets: ['Empty'],
+          warnings: [
+            'Worksheet "Empty" is empty and will display as an empty tile on the dashboard.',
+          ],
+        }),
+      ],
+    });
   });
 
   it('rejects canonical worksheet collisions, dashboard collisions, and more than seven sheets', async () => {
@@ -471,7 +487,7 @@ describe('runDashboardBatchTool', () => {
         expect.objectContaining({
           stage: 'kpiWorksheet',
           error:
-            'Missing live rendered KPI worksheet name(s): "Missing KPI". Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.',
+            'Missing live KPI worksheet name(s): "Missing KPI". Create or render each KPI worksheet, or correct kpiWorksheetNames; then retry with the same executive-summary layout.',
         }),
       ],
     });
