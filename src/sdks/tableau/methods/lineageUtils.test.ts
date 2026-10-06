@@ -552,4 +552,160 @@ describe('lineageUtils', () => {
       },
     ]);
   });
+
+  it('requests owner in the workbook lineage query only when includeEmbeddedParents is set', () => {
+    const withParents = getWorkbookLineageQuery(['workbook-1'], { includeEmbeddedParents: true });
+    expect(withParents).toContain('owner {');
+    expect(withParents).toContain('username');
+
+    const withoutParents = getWorkbookLineageQuery(['workbook-1']);
+    expect(withoutParents).not.toContain('owner');
+  });
+
+  it('maps owner (luid->id, name->displayName, username) on published upstream datasources', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [
+                {
+                  luid: 'pub-1',
+                  name: 'Sales',
+                  owner: { luid: 'u-1', name: 'Jane Smith', username: 'jsmith@acme.com' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      {
+        luid: 'pub-1',
+        name: 'Sales',
+        owner: { id: 'u-1', displayName: 'Jane Smith', username: 'jsmith@acme.com' },
+      },
+    ]);
+  });
+
+  it('keeps the owner when a published datasource is surfaced only via embeddedDatasources', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [{ luid: 'pub-1', name: null }], // rollup: no name, no owner
+              embeddedDatasources: [
+                {
+                  upstreamDatasources: [
+                    {
+                      luid: 'pub-1',
+                      name: 'Superstore',
+                      owner: { luid: 'u-1', name: 'Jane', username: 'jane@acme.com' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([
+      {
+        luid: 'pub-1',
+        name: 'Superstore',
+        owner: { id: 'u-1', displayName: 'Jane', username: 'jane@acme.com' },
+      },
+    ]);
+  });
+
+  it('omits owner when the metadata owner has no luid', () => {
+    const lineageByLuid = getWorkbookLineageByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              upstreamDatasources: [
+                {
+                  luid: 'pub-1',
+                  name: 'Sales',
+                  owner: { name: 'Nameless', username: 'x@acme.com' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')).toEqual([{ luid: 'pub-1', name: 'Sales' }]);
+  });
+
+  it('maps owner onto the embedded published-parent', () => {
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              embeddedDatasources: [
+                {
+                  name: 'Has Parent',
+                  parentPublishedDatasources: [
+                    {
+                      luid: 'pub-1',
+                      name: 'Parent DS',
+                      owner: { luid: 'u-1', name: 'Jane', username: 'jane@acme.com' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')?.embeddedParents).toEqual(
+      new Map([
+        [
+          'Has Parent',
+          {
+            luid: 'pub-1',
+            name: 'Parent DS',
+            owner: { id: 'u-1', displayName: 'Jane', username: 'jane@acme.com' },
+          },
+        ],
+      ]),
+    );
+  });
+
+  it('maps the workbook owner from the lineage response', () => {
+    const lineageByLuid = getWorkbookLineageWithParentsByLuid({
+      data: {
+        workbooksConnection: {
+          nodes: [
+            {
+              luid: 'workbook-1',
+              owner: { luid: 'u-1', name: 'Jane Smith', username: 'jsmith@acme.com' },
+              upstreamDatasources: [],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(lineageByLuid.get('workbook-1')?.owner).toEqual({
+      id: 'u-1',
+      displayName: 'Jane Smith',
+      username: 'jsmith@acme.com',
+    });
+  });
 });

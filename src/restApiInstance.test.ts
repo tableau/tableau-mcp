@@ -137,6 +137,82 @@ describe('restApiInstance', () => {
       expect(restApi.signOut).toHaveBeenCalled();
     });
 
+    describe('UAT exchange site binding (Viewer on Site A / Admin on Site B)', () => {
+      const outerToken = (siteId: string) =>
+        ({
+          type: 'X-Tableau-Auth',
+          username: 'viewer-a@example.com',
+          server: mockHost,
+          siteName: 'tc25',
+          siteId,
+        }) as const;
+
+      beforeEach(() => {
+        vi.stubEnv('AUTH', 'uat');
+        vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+        vi.stubEnv('UAT_ISSUER', 'test-issuer');
+        vi.stubEnv('UAT_USERNAME_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('UAT_USERNAME_CLAIM_NAME', 'sub');
+        vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+        vi.stubEnv('UAT_KEY_ID', 'test-key-id');
+      });
+
+      function mockSignedInSite(
+        siteId: string,
+        signOut = vi.fn().mockResolvedValue(undefined),
+      ): typeof signOut {
+        vi.mocked(RestApi).mockImplementationOnce(
+          () =>
+            ({
+              signIn: vi.fn().mockResolvedValue(undefined),
+              signOut,
+              siteId,
+              userId: 'admin-b-luid',
+            }) as unknown as RestApi,
+        );
+        return signOut;
+      }
+
+      it('refuses the RestApi instance when the signed-in site differs from the outer token site', async () => {
+        const signOut = mockSignedInSite('luid-site-b');
+        const callback = vi.fn();
+
+        await expect(
+          useRestApi({
+            config: getConfig(),
+            requestId: mockRequestId,
+            server: new WebMcpServer(),
+            tableauAuthInfo: outerToken('luid-site-a'),
+            jwtScopes: [],
+            signal: new AbortController().signal,
+            ...defaultLuidGetters,
+            callback,
+          }),
+        ).rejects.toThrow(/Site binding violation/);
+
+        expect(callback).not.toHaveBeenCalled();
+        expect(signOut).toHaveBeenCalled();
+      });
+
+      it('returns the RestApi instance when the signed-in site matches the outer token site', async () => {
+        mockSignedInSite('luid-site-b');
+        const callback = vi.fn().mockResolvedValue('ok');
+
+        await expect(
+          useRestApi({
+            config: getConfig(),
+            requestId: mockRequestId,
+            server: new WebMcpServer(),
+            tableauAuthInfo: outerToken('luid-site-b'),
+            jwtScopes: [],
+            signal: new AbortController().signal,
+            ...defaultLuidGetters,
+            callback,
+          }),
+        ).resolves.toBe('ok');
+      });
+    });
+
     it('should set bearer token when auth is OAuth with Bearer token', async () => {
       vi.stubEnv('AUTH', 'oauth');
       vi.stubEnv('OAUTH_ISSUER', 'http://127.0.0.1:3927');

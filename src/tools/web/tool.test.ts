@@ -9,6 +9,7 @@ import {
   ServiceUnavailableError,
   ZodiosValidationError,
 } from '../../errors/mcpToolError.js';
+import * as loggerModule from '../../logging/logger.js';
 import { notifier } from '../../logging/notification.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
@@ -86,8 +87,6 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
-    vi.stubEnv('LOG_LEVEL', 'debug'); // Enable debug logs for this test
-
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
@@ -95,7 +94,7 @@ describe('Tool', () => {
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'notifyInvocation');
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -119,31 +118,18 @@ describe('Tool', () => {
       },
     });
 
-    // Assert that the invocation log line carries populated LUID fields
-    const logLines = stderrSpy.mock.calls
-      .map((call) => {
-        try {
-          return JSON.parse(call[0] as string);
-        } catch {
-          return null;
-        }
-      })
-      .filter((entry) => entry !== null);
-
-    const invocationLogCall = logLines.find(
-      (entry) => entry.logger === 'tool' && entry.message?.includes('invoked'),
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('get-datasource-metadata'),
+        level: 'debug',
+        logger: 'tool',
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      }),
+      mockExtra,
     );
 
-    expect(invocationLogCall).toBeDefined();
-    expect(invocationLogCall).toMatchObject({
-      message: expect.stringContaining('get-datasource-metadata'),
-      level: 'debug',
-      logger: 'tool',
-      site_luid: 'test-site-luid',
-      user_luid: 'test-user-luid',
-    });
-
-    stderrSpy.mockRestore();
+    logSpy.mockRestore();
   });
 
   it('should return error result when callback throws', async () => {
@@ -153,6 +139,7 @@ describe('Tool', () => {
       throw new Error(errorMessage);
     });
 
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -168,6 +155,22 @@ describe('Tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
+
+    // The error log must identify which tool failed and the request id as structured fields,
+    // since the debug-level invocation log that carries them may be gated off in prod.
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        level: 'error',
+        logger: 'tool',
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+        data: expect.objectContaining({ message: errorMessage }),
+      }),
+      mockExtra,
+    );
+
+    logSpy.mockRestore();
   });
 
   it('should constrain the success result', async () => {

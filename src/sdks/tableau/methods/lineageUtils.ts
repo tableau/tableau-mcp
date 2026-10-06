@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
-import { LineageContent, PublishedParent } from '../types/lineageContent.js';
+import { LineageContent, Owner, PublishedParent } from '../types/lineageContent.js';
 import { View } from '../types/view.js';
 import { Workbook, WorkbookConnection } from '../types/workbook.js';
 
-export type { LineageContent, PublishedParent };
+export type { LineageContent, Owner, PublishedParent };
+
+const metadataOwnerSchema = z.object({
+  luid: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
+  name: z.string().nullable().optional(), // Can only come from Metadata API
+});
 
 // Lenient wire-parse schema for Metadata-API GraphQL responses: luid is absent for embedded
 // datasources and name can be null, so both are optional here. collectPublishedLineage drops
@@ -12,6 +18,13 @@ export type { LineageContent, PublishedParent };
 const metadataLineageContentSchema = z.object({
   luid: z.string().optional(),
   name: z.string().nullable().optional(),
+  owner: metadataOwnerSchema.nullish(),
+});
+
+const metadataParentPublishedDatasourceSchema = z.object({
+  luid: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
+  owner: metadataOwnerSchema.nullish(),
 });
 
 // Published datasources connected via an embedded datasource are only reliably reachable by
@@ -29,14 +42,7 @@ const metadataLineageContentSchema = z.object({
 const metadataEmbeddedDatasourceSchema = z.object({
   name: z.string().nullable().optional(),
   upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
-  parentPublishedDatasources: z
-    .array(
-      z.object({
-        luid: z.string().nullable().optional(),
-        name: z.string().nullable().optional(),
-      }),
-    )
-    .nullish(),
+  parentPublishedDatasources: z.array(metadataParentPublishedDatasourceSchema).nullish(),
 });
 
 const workbookLineageResponseSchema = z.object({
@@ -45,6 +51,7 @@ const workbookLineageResponseSchema = z.object({
       nodes: z.array(
         z.object({
           luid: z.string(),
+          owner: metadataOwnerSchema.nullish(),
           upstreamDatasources: z.array(metadataLineageContentSchema).nullish(),
           embeddedDatasources: z.array(metadataEmbeddedDatasourceSchema).nullish(),
         }),
@@ -91,10 +98,18 @@ const viewLineageResponseSchema = z.object({
 // metadataEmbeddedDatasourceSchema). includeEmbeddedParents additionally fetches the name and
 // published-parent linkage that getWorkbook needs; other callers omit it to avoid over-fetching.
 function embeddedUpstreamSelection(includeEmbeddedParents: boolean): string {
+  // owner is only requested for getWorkbook (which sets includeEmbeddedParents), so search-content
+  // and list-workbooks lineage don't over-fetch it.
   return `embeddedDatasources {
             upstreamDatasources {
               luid
               name
+              ${
+                includeEmbeddedParents
+                  ? `
+              owner { luid name username }`
+                  : ''
+              }
             }${
               includeEmbeddedParents
                 ? `
@@ -102,6 +117,7 @@ function embeddedUpstreamSelection(includeEmbeddedParents: boolean): string {
             parentPublishedDatasources {
               luid
               name
+              owner { luid name username }
             }`
                 : ''
             }
@@ -111,11 +127,23 @@ function embeddedUpstreamSelection(includeEmbeddedParents: boolean): string {
 // Shared node selection for workbook lineage, used by both the single-workbook query and the
 // combined search-content query so the two never drift.
 function workbookLineageNodesSelection(includeEmbeddedParents = false): string {
+  // owner (for the workbook and its published upstream datasources) is get-workbook only; see
+  // embeddedUpstreamSelection.
   return `nodes {
-          luid
+          luid${
+            includeEmbeddedParents
+              ? `
+          owner { luid name username }`
+              : ''
+          }
           upstreamDatasources {
             luid
-            name
+            name${
+              includeEmbeddedParents
+                ? `
+            owner { luid name username }`
+                : ''
+            }
           }
           ${embeddedUpstreamSelection(includeEmbeddedParents)}
         }`;
@@ -211,7 +239,24 @@ export type WorkbookLineage = {
   // /connections LUID). Names without exactly one identifiable parent are omitted: a duplicated name
   // is an ambiguous join, and zero/multiple parents can't map to one publishedParent.
   embeddedParents: Map<string, PublishedParent>;
+  // The workbook's owner, when the Metadata API returned one. getWorkbook merges this onto the
+  // REST-sourced workbook.owner (which carries only the id).
+  owner?: Owner;
 };
+
+// Maps a Metadata-API owner (TableauUser subset) to the emitted Owner shape. Returns undefined when
+// there's no luid to use as the id, so owner is emitted best-effort. username/displayName are dropped
+// when null/empty rather than emitted as empty strings.
+function toOwner(owner: z.infer<typeof metadataOwnerSchema> | null | undefined): Owner | undefined {
+  if (!owner?.luid) {
+    return undefined;
+  }
+  return {
+    id: owner.luid,
+    ...(owner.username ? { username: owner.username } : {}),
+    ...(owner.name ? { displayName: owner.name } : {}),
+  };
+}
 
 // Returns both the published lineage and the embedded->published-parent map per workbook luid from a
 // single response. Used by getWorkbook, which needs both from one Metadata-API call.
@@ -220,16 +265,20 @@ export function getWorkbookLineageWithParentsByLuid(
 ): Map<string, WorkbookLineage> {
   const parsed = workbookLineageResponseSchema.parse(response);
   return new Map(
-    parsed.data.workbooksConnection.nodes.map((node) => [
-      node.luid,
-      {
-        upstreamDatasources: collectPublishedLineage(
-          node.upstreamDatasources,
-          node.embeddedDatasources,
-        ),
-        embeddedParents: buildEmbeddedParentMap(node.embeddedDatasources),
-      },
-    ]),
+    parsed.data.workbooksConnection.nodes.map((node): [string, WorkbookLineage] => {
+      const owner = toOwner(node.owner);
+      return [
+        node.luid,
+        {
+          upstreamDatasources: collectPublishedLineage(
+            node.upstreamDatasources,
+            node.embeddedDatasources,
+          ),
+          embeddedParents: buildEmbeddedParentMap(node.embeddedDatasources),
+          ...(owner ? { owner } : {}),
+        },
+      ];
+    }),
   );
 }
 
@@ -251,12 +300,20 @@ function buildEmbeddedParentMap(
     seenNames.add(name);
 
     const validParents = (parentPublishedDatasources ?? []).filter(
-      (parent): parent is { luid: string; name?: string | null } => !!parent.luid,
+      (
+        parent,
+      ): parent is z.infer<typeof metadataParentPublishedDatasourceSchema> & { luid: string } =>
+        !!parent.luid,
     );
     if (validParents.length === 1) {
       const parent = validParents[0];
+      const owner = toOwner(parent.owner);
       // || not ?? so an empty-string parent name (permitted by the wire schema) falls back to luid.
-      parents.set(name, { luid: parent.luid, name: parent.name || parent.luid });
+      parents.set(name, {
+        luid: parent.luid,
+        name: parent.name || parent.luid,
+        ...(owner ? { owner } : {}),
+      });
     }
   }
 
@@ -489,20 +546,31 @@ function collectPublishedLineage(
     ...(embeddedDatasources ?? []).flatMap((ds) => ds.upstreamDatasources ?? []),
   ];
 
-  const byLuid = new Map<string, { luid: string; name?: string }>();
+  const byLuid = new Map<string, { luid: string; name?: string; owner?: Owner }>();
   for (const content of combined) {
     if (!content.luid) {
       continue;
     }
+    const owner = toOwner(content.owner);
     const existing = byLuid.get(content.luid);
     if (!existing) {
-      byLuid.set(content.luid, { luid: content.luid, name: content.name ?? undefined });
-    } else if (existing.name == null && content.name != null) {
-      existing.name = content.name;
+      byLuid.set(content.luid, { luid: content.luid, name: content.name ?? undefined, owner });
+    } else {
+      // Same dedupe rule as name: the first non-null value wins so a later null can't mask it.
+      if (existing.name == null && content.name != null) {
+        existing.name = content.name;
+      }
+      if (!existing.owner && owner) {
+        existing.owner = owner;
+      }
     }
   }
 
-  return [...byLuid.values()].map(({ luid, name }) => ({ luid, name: name ?? luid }));
+  return [...byLuid.values()].map(({ luid, name, owner }) => ({
+    luid,
+    name: name ?? luid,
+    ...(owner ? { owner } : {}),
+  }));
 }
 
 export function filterLineageContentsByAllowedIds(

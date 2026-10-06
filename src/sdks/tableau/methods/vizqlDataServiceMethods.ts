@@ -98,15 +98,19 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   readMetadata = async (
     readMetadataRequest: ReadMetadataRequest,
-  ): Promise<Result<MetadataResponse, 'feature-disabled'>> => {
+  ): Promise<Result<MetadataResponse, 'feature-disabled' | 'workbook-datasource-not-enabled'>> => {
     try {
       return Ok(await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader }));
     } catch (error) {
-      if (
-        isErrorFromAlias(this._apiClient.api, 'readMetadata', error) &&
-        error.response.status === 404
-      ) {
-        return Err('feature-disabled');
+      if (isErrorFromAlias(this._apiClient.api, 'readMetadata', error)) {
+        // Detection keys off the message, not the status (see predicate), so this runs before the
+        // 404 branch to keep the gate from being mislabeled as VizQL-disabled.
+        if (isWorkbookDatasourceNotEnabled(error.response.data)) {
+          return Err('workbook-datasource-not-enabled');
+        }
+        if (error.response.status === 404) {
+          return Err('feature-disabled');
+        }
       }
 
       throw error;

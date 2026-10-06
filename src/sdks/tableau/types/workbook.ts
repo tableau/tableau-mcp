@@ -1,9 +1,15 @@
 import { z } from 'zod';
 
-import { lineageContentSchema } from './lineageContent.js';
+import { lineageContentSchema, Owner } from './lineageContent.js';
 import { projectSchema } from './project.js';
 import { tagsSchema } from './tags.js';
 import { viewSchema } from './view.js';
+
+// REST returns owner as { id, name } where `name` is the login username; rename it to `username`
+// to match the emitted Owner shape (`displayName` comes from the Metadata API). `name` is nullable.
+const restOwnerSchema = z
+  .object({ id: z.string(), name: z.string().nullish() })
+  .transform(({ id, name }): Owner => (name ? { id, username: name } : { id }));
 
 export const workbookSchema = z.object({
   id: z.string(),
@@ -12,11 +18,18 @@ export const workbookSchema = z.object({
   webpageUrl: z.string().optional(),
   contentUrl: z.string(),
   project: projectSchema.optional(),
-  owner: z
+  // The destination the server actually recorded: `type` is 'Project' or 'PersonalSpace'. Used to
+  // confirm a personal-space publish truly landed there — a personal-space landing has no `project`
+  // in the response at all, so the tool reads `location` to see where an auto-default landed.
+  location: z
     .object({
-      id: z.string(),
+      id: z.string().optional(),
+      type: z.string().optional(),
+      name: z.string().optional(),
     })
+    .passthrough()
     .optional(),
+  owner: restOwnerSchema.optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),
   tags: tagsSchema,

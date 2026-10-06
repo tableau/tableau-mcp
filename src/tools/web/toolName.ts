@@ -18,6 +18,7 @@ export const webToolNames = [
   'record-event',
   'get-workbook',
   'download-workbook',
+  'move-workbook',
   'get-view',
   'get-flow',
   'list-flow-runs',
@@ -50,6 +51,7 @@ export const webToolNames = [
   'query-knowledge-context',
   'inspect-knowledge-context',
   'manage-knowledge-context',
+  'scaffold-data-app',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -71,12 +73,13 @@ export const webToolGroupNames = [
   'admin-insights',
   'content',
   'knowledge',
+  'data-apps',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook', 'download-workbook'],
+  workbook: ['list-workbooks', 'get-workbook', 'download-workbook', 'move-workbook'],
   authoring: ['request-workbook-upload', 'publish-workbook'],
   project: ['list-projects'],
   view: [
@@ -122,6 +125,7 @@ export const webToolGroups = {
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
   knowledge: ['query-knowledge-context', 'inspect-knowledge-context', 'manage-knowledge-context'],
+  'data-apps': ['scaffold-data-app'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

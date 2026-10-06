@@ -23,10 +23,7 @@ import { registerPrompts } from './prompts/index.js';
 import { RestApiArgs } from './restApiInstance';
 import { roleRequiresEnforcement, siteRoleMeetsMinimum } from './sdks/tableau/types/user.js';
 import { ClientInfo, Server } from './server.js';
-import {
-  ClientCapabilitiesWithUiExtension,
-  clientSupportsMcpApps,
-} from './server/mcpUiCapability.js';
+import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
@@ -137,10 +134,6 @@ export class WebMcpServer extends Server {
 
     const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
-    // App tools are only rendered by clients that advertise the SEP-1724 UI capability during the
-    // `initialize` handshake; default to the plain-tool fallback when support is unknown/absent.
-    const supportsMcpApps = clientSupportsMcpApps(this.capabilities);
-
     // claude.ai over OAuth/HTTP advertises the UI capability but its MCP-Apps renderer is broken,
     // so force the plain-tool fallback for it regardless of what it declares. Reuses the existing
     // telemetry client_id → display-name mapping; undefined clientId (e.g. stdio) is never 'Claude'.
@@ -195,12 +188,18 @@ export class WebMcpServer extends Server {
           },
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
+          // True only when an MCP-Apps card can actually render for THIS client: the feature is on
+          // and it is not a known-incompatible renderer — the SAME condition that registers a tool
+          // as an app-tool below. Tools whose app path returns a card must gate on this (not on
+          // `mcpAppsEnabled` alone) so an app-incapable client falls back to a readable text result
+          // instead of an unrenderable payload (W-24212898).
+          mcpAppToolsRenderable: mcpAppsEnabled && !isKnownIncompatibleClient,
         };
 
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      if (mcpAppsEnabled && tool.app && supportsMcpApps && !isKnownIncompatibleClient) {
+      if (mcpAppsEnabled && tool.app && !isKnownIncompatibleClient) {
         await this._registerAppTool(tool, toolCallback);
       } else if (tool.app?.hideWhenUnsupported) {
         continue;

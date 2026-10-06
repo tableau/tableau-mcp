@@ -285,17 +285,60 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       `**Inactive threshold:** ${inactiveDays} days.`,
       `**Site roles in scope:** ${scopeRoles.join(', ')}.`,
       '',
-      `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` to retrieve all users on the site. ` +
-        'Filter client-side to users whose `siteRole` is one of the roles in scope above ' +
-        'and who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator).',
-      'Users whose `lastLogin` is null (never signed in) are also candidates — they were ' +
-        'provisioned but never used their license. Include them with Days Inactive = "Never".',
       ...(userIds.length > 0
         ? [
-            'After the call returns, narrow the working set client-side to the user IDs listed in **Scope** above. ' +
-              'If any requested ID is missing from the inventory, list it under "Missing users" in the final report and skip it.',
+            `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` to retrieve the requested users. ` +
+              'Target the requested IDs directly with an `id:in:` filter rather than fetching the whole site:',
+            '',
+            '```json',
+            JSON.stringify(
+              { filter: `id:in:${userIds.join('|')}`, limit: Math.min(userIds.length, 1000) },
+              null,
+              2,
+            ),
+            '```',
+            '',
+            'From the returned users, keep those who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator). ' +
+              'Users whose `lastLogin` is null (never signed in) are also candidates — they were provisioned but ' +
+              'never used their license. Include them with Days Inactive = "Never".',
+            '**Before declaring any requested ID "missing" (required).** After the call, inspect ' +
+              '`mcp.resultInfo.truncated`. If it is `true`, the inventory is PARTIAL — a requested user may exist ' +
+              'but fall outside the returned page. NEVER skip a requested user based on a truncated inventory: ' +
+              're-run narrowing the `filter` (e.g. fewer IDs per call) until `mcp.resultInfo.truncated` is `false`, ' +
+              'then list an ID under "Missing users" in the final report only if it is genuinely absent from a ' +
+              'complete (non-truncated) result.',
           ]
-        : []),
+        : [
+            `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` with the filter below to retrieve ` +
+              'licensed users matching the reclamation criteria. Pass an explicit `limit` so the candidate set is ' +
+              'bounded but as complete as one call allows — an unbounded call is capped at a default of 100 and any ' +
+              'single call is clamped to a hard ceiling of 1000:',
+            '',
+            '```json',
+            JSON.stringify(
+              {
+                filter: `siteRole:in:${scopeRoles.join('|')},lastLogin:lt:${cutoffIso}`,
+                limit: 1000,
+              },
+              null,
+              2,
+            ),
+            '```',
+            '',
+            'From the returned users, keep those who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator). ' +
+              'Users whose `lastLogin` is null (never signed in) are also candidates — they were provisioned but ' +
+              'never used their license. Include them with Days Inactive = "Never". (The `lastLogin:lt` filter ' +
+              'already matches null-lastLogin users, so they are in these results.)',
+            '**Completeness check (required).** After the call, inspect `mcp.resultInfo.truncated`. If it is ' +
+              '`true`, MORE inactive users match than were returned — the candidate set is PARTIAL. Because there ' +
+              'is no page offset, try narrowing the `filter` (a tighter `siteRole:in` subset or a smaller ' +
+              'inactivity window) and re-running per slice, combining results. But narrowing does NOT always ' +
+              'converge: a never-signed-in user has a null `lastLogin`, which matches every `lastLogin:lt` window ' +
+              "no matter how small, so an overflow concentrated in one role's never-signed-in population cannot " +
+              'be shrunk below the ceiling this way. If after narrowing as far as the criteria allow the result is ' +
+              'still truncated, STOP retrying — report the candidate set as PARTIAL in the final output (state ' +
+              'the `truncationReason`) rather than looping indefinitely or presenting it as complete.',
+          ]),
       '',
       `**Step 2 — Activity signals (read-only).** Make TWO \`${ADMIN_INSIGHTS_TOOL}\` calls.`,
       '',
