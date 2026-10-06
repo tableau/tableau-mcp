@@ -47,12 +47,13 @@ describe('authErrorMessage (W-23757363)', () => {
   });
 
   describe('buildPermissionErrorMessage', () => {
-    it('names the 403 cause, allows for a disabled capability, and rules out re-auth', () => {
+    it('names possible 403 causes without ruling out reauthorization', () => {
       const message = buildPermissionErrorMessage({ site: 'acme' });
       expect(message).toContain('Permission denied (403)');
       expect(message).toContain('may lack the required site role or permission');
       expect(message).toContain('the capability may not be enabled for this site');
-      expect(message).toContain('not an authentication failure');
+      expect(message).not.toContain('do not re-authenticate');
+      expect(message).not.toContain('not an authentication failure');
     });
   });
 

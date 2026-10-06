@@ -46,8 +46,8 @@ export function buildPermissionErrorMessage(target: AuthTarget = {}): string {
   return (
     'Permission denied (403): you are authenticated to this Tableau MCP server' +
     `${describeAuthTarget(target)} but this request was refused. Your account may lack the ` +
-    'required site role or permission, or the capability may not be enabled for this site. This ' +
-    'is not an authentication failure — do not re-authenticate. Use an account with the required ' +
+    'required site role or permission, or the capability may not be enabled for this site. ' +
+    'Use an account with the required ' +
     'permissions, or confirm the capability is enabled for this site.'
   );
 }
