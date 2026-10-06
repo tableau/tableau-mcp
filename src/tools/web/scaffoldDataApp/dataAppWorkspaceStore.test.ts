@@ -51,11 +51,13 @@ describe('createDataAppWorkspace', () => {
     it('serves the static, un-substituted template zip plus a postUnzip plan', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
+        allowedOrigins: ['https://example.com'],
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
+      expect(value.allowedOrigins).toEqual(['https://example.com']);
       invariant(value.filePath);
       expect(existsSync(value.filePath)).toBe(true);
       expect(statSync(value.filePath).size).toBeGreaterThan(0);
@@ -137,11 +139,13 @@ describe('createDataAppWorkspace', () => {
     it('uploads the on-disk template zip, then presigns a GET URL for what it uploaded', async () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
+        allowedOrigins: ['https://example.com'],
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
+      expect(value.allowedOrigins).toEqual(['https://example.com']);
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
@@ -179,6 +183,7 @@ describe('createDataAppWorkspace', () => {
 
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
+        allowedOrigins: ['https://example.com'],
         config: getConfig(),
       });
 
@@ -193,6 +198,7 @@ describe('createDataAppWorkspace', () => {
 
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
+        allowedOrigins: ['https://example.com'],
         config: getConfig(),
       });
 
