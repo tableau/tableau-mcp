@@ -107,11 +107,15 @@ describe('publishWorkbookTool', () => {
       workbookFilePath: expect.any(Object),
       name: expect.any(Object),
       projectId: expect.any(Object),
+      personalSpace: expect.any(Object),
       overwrite: expect.any(Object),
     });
     expect(annotations.destructiveHint).toBe(true);
     expect(paramsSchema.name.safeParse('').success).toBe(false);
     expect(tool.description).toContain('Personal Space');
+    expect(paramsSchema.personalSpace.safeParse(true).success).toBe(true);
+    expect(paramsSchema.personalSpace.safeParse(false).success).toBe(true);
+    expect(paramsSchema.personalSpace.safeParse('personal-space-luid').success).toBe(false);
   });
 
   it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
@@ -512,7 +516,56 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('defaults to the caller Personal Space when projectId is omitted and it is writable', async () => {
+  it.each([undefined, false])(
+    'rejects a missing destination when personalSpace is %s before any API or file access',
+    async (personalSpace) => {
+      const result = await getToolResult({
+        workbookUploadId: validArgs.workbookUploadId,
+        name: validArgs.name,
+        personalSpace,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('A publish destination is required');
+      expect(mocks.useRestApiCalls).toHaveLength(0);
+      expect(mocks.mockReadFile).not.toHaveBeenCalled();
+      expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+      expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects conflicting destinations before any API or file access', async () => {
+    const result = await getToolResult({ ...validArgs, personalSpace: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('but not both');
+    expect(mocks.useRestApiCalls).toHaveLength(0);
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('publishes to the project when personalSpace is explicitly false', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+
+    const result = await getToolResult({ ...validArgs, personalSpace: false });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('location');
+  });
+
+  it('publishes to the caller Personal Space when personalSpace is true and it is writable', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -531,6 +584,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(false);
@@ -548,11 +602,11 @@ describe('publishWorkbookTool', () => {
       location: 'personal-space-luid',
       overwrite: false,
     });
-    // Auto-default path must not pass projectId to the SDK.
+    // Personal Space path must not pass projectId to the SDK.
     expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('projectId');
   });
 
-  it('does not run the bounded-context check on the auto-default Personal Space path', async () => {
+  it('does not run the bounded-context check on the explicit Personal Space path', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -570,7 +624,7 @@ describe('publishWorkbookTool', () => {
 
     // A bounded context that would reject the personal-space luid if it were checked.
     const result = await getToolResult(
-      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name },
+      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name, personalSpace: true },
       { boundedProjectIds: new Set(['only-this-project']) },
     );
 
@@ -588,6 +642,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
@@ -603,11 +658,12 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('projectId is required');
+    expect(result.content[0].text).toContain('Could not resolve your Personal Space');
     expect(result.content[0].text).toContain('404 personalSpace not found');
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
@@ -643,10 +699,15 @@ describe('publishWorkbookTool', () => {
       location: { id: 'personal-space-luid', type: 'PersonalSpace' },
     });
 
-    await getToolResult({ workbookUploadId: validArgs.workbookUploadId, name: validArgs.name });
+    await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+      personalSpace: true,
+    });
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
+      'tableau:projects:read',
       'tableau:content:read',
     ]);
 
@@ -655,6 +716,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
+      'tableau:projects:read',
       'tableau:content:read',
     ]);
   });
@@ -678,6 +740,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
@@ -711,6 +774,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
@@ -763,6 +827,7 @@ describe('publishWorkbookTool', () => {
         workbookFilePath: undefined,
         name: validArgs.name,
         projectId: validArgs.projectId,
+        personalSpace: undefined,
         overwrite: false,
       },
       getMockRequestHandlerExtra(),
@@ -774,6 +839,7 @@ describe('publishWorkbookTool', () => {
       workbookFilePath: undefined,
       name: validArgs.name,
       projectId: validArgs.projectId,
+      personalSpace: undefined,
       overwrite: false,
     });
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
@@ -786,6 +852,7 @@ async function getToolResult(
     workbookFilePath?: string;
     name: string;
     projectId?: string;
+    personalSpace?: boolean;
     overwrite?: boolean;
   },
   options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
@@ -798,6 +865,7 @@ async function getToolResult(
       workbookFilePath: params.workbookFilePath,
       name: params.name,
       projectId: params.projectId,
+      personalSpace: params.personalSpace,
       overwrite: params.overwrite ?? false,
     },
     getMockExtra(options),
