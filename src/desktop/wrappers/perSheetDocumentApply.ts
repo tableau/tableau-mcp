@@ -52,24 +52,25 @@ const ITEM_LABEL: Record<PerSheetKind, string> = {
   storyboard: 'Storyboard',
 };
 
-/**
- * Apply one edited sheet fragment in place via its dedicated per-sheet `/document` POST route.
- *
- * Resolves the sheet name to its live id first; a name that does not resolve, or a build that lacks the
- * route, returns a non-`applied` outcome and the caller decides whether to surface it or fall back
- * to the whole-workbook apply. On a successful POST it dispatches the requested focus (best-effort,
- * never fails the landed apply).
- */
-export async function tryApplyViaPerSheetRoute({
+export type PreparedSheetApply = {
+  status: 'prepared';
+  liveDocumentXml?: string;
+  id: string;
+  name: string;
+  fragmentXml: string;
+};
+
+type UnappliedSheetOutcome = Exclude<PerSheetApplyOutcome, { status: 'applied' }>;
+
+/** Resolve identity, source fingerprint and validation before choosing a write route. */
+export async function preparePerSheetApply({
   kind,
   sheetName,
   fragmentXml,
   expectedSourceHash,
   validationContext,
-  focus,
   executor,
   signal,
-  expectedInstanceId,
 }: {
   kind: PerSheetKind;
   sheetName: string;
@@ -78,7 +79,9 @@ export async function tryApplyViaPerSheetRoute({
   validationContext?: ValidationContext;
   focus: ApplyFocus;
   expectedInstanceId?: string;
-} & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+} & WithExecutorAndAbortSignal): Promise<
+  Result<PreparedSheetApply | UnappliedSheetOutcome, ExecuteCommandError>
+> {
   const client = executor as ExternalApiToolExecutor;
 
   const listResult = await listSheetsOfKind(kind, client, signal);
@@ -139,13 +142,48 @@ export async function tryApplyViaPerSheetRoute({
     return retitledFragment;
   }
 
+  return Ok({
+    status: 'prepared',
+    liveDocumentXml,
+    id: resolved.value.id,
+    name: resolved.value.name,
+    fragmentXml: retitledFragment.value,
+  });
+}
+
+/** Check and apply one edited fragment through its dedicated per-sheet document route. */
+export async function tryApplyViaPerSheetRoute(
+  args: Parameters<typeof preparePerSheetApply>[0],
+): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  const prepared = await preparePerSheetApply(args);
+  if (prepared.isErr()) return prepared;
+  if (typeof prepared.value !== 'object' || !('status' in prepared.value))
+    return Ok(prepared.value);
+  return applyPreparedSheet({ ...args, prepared: prepared.value });
+}
+
+/** Dispatch a checked fragment while the caller still holds the apply lock. */
+export async function applyPreparedSheet({
+  kind,
+  prepared,
+  focus,
+  executor,
+  signal,
+  expectedInstanceId,
+}: {
+  kind: PerSheetKind;
+  prepared: PreparedSheetApply;
+  focus: ApplyFocus;
+  expectedInstanceId?: string;
+} & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  const client = executor as ExternalApiToolExecutor;
   // The route is addressed by stable id, but Desktop still requires the fragment's root name to
   // match the sheet's current display name. Reconcile a stale cached name before POST; otherwise a
   // rename between read and apply opens a blocking "Requested worksheet(s) not found" dialog.
   const applyResult = await applyDocumentForKind(
     kind,
-    resolved.value.id,
-    retitledFragment.value,
+    prepared.id,
+    prepared.fragmentXml,
     client,
     signal,
     expectedInstanceId,
@@ -162,25 +200,25 @@ export async function tryApplyViaPerSheetRoute({
     level: 'info',
     message: `per-sheet ${kind} document apply completed`,
     logger: 'workbookCommands',
-    data: { sheetName, id: resolved.value.id },
+    data: { sheetName: prepared.name, id: prepared.id },
   });
 
   // The POST moves the view whether we ask or not, so state where it belongs. Never fails the
   // apply that already landed.
   const resolvedFocus: ApplyFocus =
-    focus.navigate === 'artifact' ? { ...focus, sheetName: resolved.value.name } : focus;
+    focus.navigate === 'artifact' ? { ...focus, sheetName: prepared.name } : focus;
   await dispatchApplyFocus({
     focus: resolvedFocus,
-    postedXml: retitledFragment.value,
+    postedXml: prepared.fragmentXml,
     executor,
     signal,
   });
 
   return Ok({
     status: 'applied',
-    id: resolved.value.id,
-    name: resolved.value.name,
-    fragmentXml: retitledFragment.value,
+    id: prepared.id,
+    name: prepared.name,
+    fragmentXml: prepared.fragmentXml,
     documentWarnings: applyResult.value.warnings ?? [],
     ...(applyResult.value.diagnostics ? { diagnostics: applyResult.value.diagnostics } : {}),
     ...(applyResult.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),

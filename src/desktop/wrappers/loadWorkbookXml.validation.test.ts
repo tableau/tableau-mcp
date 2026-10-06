@@ -10,6 +10,41 @@ import { loadWorkbookXml } from './loadWorkbookXml.js';
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 describe('loadWorkbookXml validation preflight', () => {
+  it.each([false, true])(
+    'Rejects an introduced worksheet zone type before workbook apply (cachedLiveRelative=%s)',
+    async (cachedLiveRelative) => {
+      const baselineXml = `<workbook>
+        <worksheets><worksheet name="Pipeline Trend"><table><rows>[ds].[none:Region:nk]</rows></table></worksheet></worksheets>
+        <dashboards><dashboard name="Pipeline"><zones><zone name="Pipeline Trend" /></zones></dashboard></dashboards>
+      </workbook>`;
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ xml: baselineXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          ),
+      });
+
+      const result = await loadWorkbookXml({
+        xml: baselineXml.replace('<zone name=', '<zone type-v2="worksheet" name='),
+        baselineXml,
+        cachedLiveRelative,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type', severity: 'error' }),
+      ]);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+    },
+  );
+
   it('Miller World Cup repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
 <workbook>

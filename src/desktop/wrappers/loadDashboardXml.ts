@@ -3,22 +3,34 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
-import { dashboardFragmentSimpleId, upsertDashboardIntoWorkbook } from '../metadata/dashboards.js';
+import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
-import type { ParsedDashboard, ParsedZone } from '../metadata/types.js';
+import type { ParsedDashboard } from '../metadata/types.js';
 import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
-import { blockingValidationIssues, runValidation } from '../validation/registry.js';
+import {
+  blockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runValidation,
+} from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
 import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
+import {
+  composeDashboardWorkbook,
+  dashboardMembershipMatches,
+  dashboardWorksheetNames,
+  omitWorkbookActions,
+} from './dashboardViewpoints.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 import {
+  applyPreparedSheet,
   type PerSheetApplyOutcome,
   type PerSheetKind,
-  tryApplyViaPerSheetRoute,
+  preparePerSheetApply,
 } from './perSheetDocumentApply.js';
+import { pollReadback } from './pollReadback.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -33,6 +45,7 @@ export type LoadDashboardXmlError =
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string }
   | { type: 'source-drift'; message: string }
+  | { type: 'verification-failed'; message: string }
   // Only surfaced when a caller opts in with `requireExistingSheet` (apply-dashboard, apply-storyboard);
   // flag-off callers take the whole-workbook path and never see this (create sheet and apply).
   | { type: 'sheet-absent'; message: string }
@@ -120,64 +133,6 @@ function resolveCanonicalDashboardName(
 }
 
 /**
- * Worksheet-zone names referenced by the dashboard fragment's zones, at any nesting depth.
- * Uses the same worksheet-zone semantics as the authoritative `target-dashboard-invariant`
- * (see {@link file://../validation/targetDashboardInvariant.ts} `namedWorksheetZones`): a
- * `<zone>` element -- at ANY depth -- whose `@name` is set and whose `@type-v2` is either absent
- * or `'visual'` names a worksheet. Layout, text, blank, and object zones carry a non-visual
- * `@type-v2` and do not. The invariant walks every descendant `<zone>` via getElementsByTagName,
- * so worksheet zones nested under a layout container or a `zone-pane` wrapper still count; this
- * descends the whole zone subtree (following `<zone>` children through any intervening element)
- * to match. Returns `[]` (never throws) when the fragment has no `<dashboard>` root or no zones --
- * malformed/absent XML has nothing to say here, and is caught elsewhere.
- *
- * NOTE (code/code inconsistency, flagged to the maintainer): the older
- * `dashboard-zones-reference-included-worksheets` rule uses the narrower selector
- * `.//zone[@name and not(@type-v2)]`, which excludes `type-v2='visual'`. Both agree on every
- * current fixture (no fixture carries `type-v2='visual'`), but the invariant is authoritative,
- * so this guard adopts the invariant's inclusive predicate.
- */
-function collectWorksheetZoneNames(dashboardXml: string): string[] {
-  let dashboard: ParsedDashboard | undefined;
-  try {
-    dashboard = normalizeArray(parseXML(dashboardXml).dashboard as ParsedDashboard | undefined)[0];
-  } catch {
-    return [];
-  }
-  if (!dashboard?.zones) {
-    return [];
-  }
-
-  const names = new Set<string>();
-  const visitZone = (zone: ParsedZone): void => {
-    const type = zone['@_type-v2'];
-    if (zone['@_name'] && (!type || type === 'visual')) {
-      names.add(zone['@_name']);
-    }
-    descend(zone);
-  };
-  // Walk the parsed subtree, treating every `zone` key (object or array) as a nested <zone>
-  // element and recursing into all other element children so zones wrapped by a layout zone,
-  // a `zone-pane`, or any other container are still reached -- mirroring getElementsByTagName.
-  const descend = (node: unknown): void => {
-    if (!node || typeof node !== 'object') {
-      return;
-    }
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'zone') {
-        for (const child of normalizeArray(value as ParsedZone | ParsedZone[] | undefined)) {
-          visitZone(child);
-        }
-      } else if (value && typeof value === 'object') {
-        descend(value);
-      }
-    }
-  };
-  descend(dashboard.zones);
-  return [...names];
-}
-
-/**
  * Preflight render guard (pure). A dashboard zone can name a worksheet that exists in the live
  * workbook but has never been rendered (no mark/encoding -- a blank sheet skeleton). Desktop's
  * own HasVisualDoc check rejects that combination only AFTER dispatch
@@ -193,7 +148,7 @@ function collectWorksheetZoneNames(dashboardXml: string): string[] {
  * `[]` for a zone naming a worksheet missing from the snapshot: nothing to flag here).
  */
 function findBlankReferencedWorksheets(dashboardXml: string, liveWorkbookXml: string): string[] {
-  const worksheetZoneNames = collectWorksheetZoneNames(dashboardXml);
+  const worksheetZoneNames = dashboardWorksheetNames(dashboardXml);
   if (worksheetZoneNames.length === 0) {
     return [];
   }
@@ -227,8 +182,8 @@ function sheetNotRenderedError(
 // execute-command-error rather than silently disabling the protection. Both apply routes call
 // this from INSIDE their `withApplyLock` body so the read/check/apply run as one critical section.
 //
-// Returns the fetched live-workbook snapshot on success so a whole-workbook caller can reuse this
-// single fetch for its upsert (no second read). Returns `null` WITHOUT reading when the dashboard
+// Returns the fetched live-workbook snapshot so composition can reuse the guard's snapshot.
+// The atomic apply separately checks for drift and reads back the result. Returns `null` WITHOUT reading when the dashboard
 // names no worksheet zones -- there is nothing for the guard to check, so a zone-less apply
 // (per-sheet or whole-workbook) pays no guard fetch, exactly as before this guard existed.
 async function runRenderGuardInLock(
@@ -236,7 +191,7 @@ async function runRenderGuardInLock(
   dashboardXml: string,
   { executor, signal }: WithExecutorAndAbortSignal,
 ): Promise<Result<string | null, RenderGuardOrApplyError>> {
-  if (collectWorksheetZoneNames(dashboardXml).length === 0) {
+  if (dashboardWorksheetNames(dashboardXml).length === 0) {
     return Ok(null);
   }
   const workbookResult = await getWorkbookXml({ executor, signal });
@@ -280,10 +235,8 @@ export async function loadDashboardXml({
   xml: string;
   focus: ApplyFocus;
   kind?: LoadDashboardKind;
-  // Picks the External Client API call this apply uses.
-  // On/True (apply-dashboard, apply-storyboard): replace an existing dashboard/storyboard by id via the
-  // per-sheet `/document` route, leaving other sheets untouched. That route is replace-only, so a name
-  // that resolves to no live sheet surfaces a `sheet-absent` error instead of creating one.
+  // True resolves an existing sheet by id and rejects absent targets. Dashboard membership
+  // changes use an atomic workbook apply; ordinary layout/storyboard edits use the per-sheet route.
   // Off/False (build-and-apply-dashboard, apply-dashboard-with-viewpoints): the dashboard may be net-new, so
   // the whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
@@ -356,12 +309,55 @@ export async function loadDashboardXml({
         if (guard.isErr()) {
           return Err(guard.error);
         }
-        const applied = await tryApplyViaPerSheetRoute({
+        const prepared = await preparePerSheetApply({
           kind,
           sheetName: targetRef,
           fragmentXml: xml,
           expectedSourceHash,
-          validationContext: cachedApply ? 'dashboard' : undefined,
+          validationContext: 'dashboard',
+          focus: canonicalFocus,
+          executor,
+          signal,
+        });
+        if (prepared.isErr()) return Err({ type: 'execute-command-error', error: prepared.error });
+        if (typeof prepared.value !== 'object' || !('status' in prepared.value)) {
+          return Ok(prepared.value);
+        }
+        const checked = prepared.value;
+        let liveWorkbookXml = guard.value;
+        // Removing the final worksheet also changes membership. The candidate alone
+        // contains no worksheet zones in that case, so consult the checked live fragment.
+        if (
+          kind === 'dashboard' &&
+          liveWorkbookXml === null &&
+          checked.liveDocumentXml &&
+          dashboardWorksheetNames(checked.liveDocumentXml).length > 0
+        ) {
+          const current = await getWorkbookXml({ executor, signal });
+          if (current.isErr()) return Err({ type: 'execute-command-error', error: current.error });
+          liveWorkbookXml = current.value;
+        }
+        if (kind === 'dashboard' && liveWorkbookXml !== null) {
+          const names = dashboardWorksheetNames(checked.fragmentXml);
+          if (!dashboardMembershipMatches(liveWorkbookXml, checked.name, names)) {
+            const applied = await applyDashboardWithViewpointsInLock({
+              liveWorkbookXml,
+              dashboardName: checked.name,
+              xml: checked.fragmentXml,
+              focus:
+                canonicalFocus.navigate === 'artifact'
+                  ? { ...canonicalFocus, sheetName: checked.name }
+                  : canonicalFocus,
+              executor,
+              signal,
+            });
+            if (applied.isErr()) return applied;
+            return Ok({ ...checked, status: 'applied', documentWarnings: [] });
+          }
+        }
+        const applied = await applyPreparedSheet({
+          kind,
+          prepared: checked,
           focus: canonicalFocus,
           executor,
           signal,
@@ -484,17 +480,15 @@ async function loadDashboardXmlViaExternalApi({
       liveWorkbookXml = workbookResult.value;
     }
 
-    let workbookDoc: string;
-    try {
-      workbookDoc = upsertDashboardIntoWorkbook(liveWorkbookXml, dashboardName, xml);
-    } catch (error) {
-      return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-    }
-
-    const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
-    if (applyResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: applyResult.error });
-    }
+    const applyResult = await applyDashboardWithViewpointsInLock({
+      liveWorkbookXml,
+      dashboardName,
+      xml,
+      focus,
+      executor,
+      signal,
+    });
+    if (applyResult.isErr()) return applyResult;
 
     log({
       level: 'info',
@@ -505,6 +499,74 @@ async function loadDashboardXmlViaExternalApi({
 
     return Ok.EMPTY;
   });
+}
+
+/** The caller holds the apply lock for snapshot, validation, atomic write and readback. */
+async function applyDashboardWithViewpointsInLock({
+  liveWorkbookXml,
+  dashboardName,
+  xml,
+  focus,
+  executor,
+  signal,
+}: {
+  liveWorkbookXml: string;
+  dashboardName: string;
+  xml: string;
+  focus: ApplyFocus;
+} & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
+  let workbookDoc: string;
+  const names = dashboardWorksheetNames(xml);
+  try {
+    workbookDoc = composeDashboardWorkbook(liveWorkbookXml, dashboardName, xml);
+  } catch (error) {
+    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+  }
+  const introduced = introducedBlockingValidationIssues(
+    runValidation(liveWorkbookXml, 'workbook').issues,
+    runValidation(workbookDoc, 'workbook').issues,
+  );
+  if (introduced.length > 0)
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'validation-failed', issues: introduced },
+    });
+  // The mutex coordinates MCP writes; this comparison also catches intervening Desktop edits.
+  const current = await getWorkbookXml({ executor, signal });
+  if (current.isErr()) return Err({ type: 'execute-command-error', error: current.error });
+  if (current.value !== liveWorkbookXml)
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'source-drift',
+        message:
+          'The workbook changed before the dashboard apply. Re-read the dashboard and retry. No changes were sent to Tableau.',
+      },
+    });
+  // Actions are additive on this endpoint, unlike worksheet/dashboard documents. The
+  // candidate is validated with its existing actions, but this dashboard-only update
+  // leaves those live actions alone rather than appending copies on every layout edit.
+  const applied = await applyWorkbookText({
+    xml: omitWorkbookActions(workbookDoc),
+    focus,
+    executor,
+    signal,
+  });
+  if (applied.isErr()) return Err({ type: 'execute-command-error', error: applied.error });
+  const readback = await pollReadback({
+    read: () => getWorkbookXml({ executor, signal }),
+    settled: (value) => dashboardMembershipMatches(value, dashboardName, names),
+    signal,
+  });
+  if (!readback.ok || !readback.settled)
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'verification-failed',
+        message: `Tableau accepted the dashboard apply, but the worksheet zones and window registrations for "${dashboardName}" could not be verified. Changes may have been applied. Re-read the live dashboard before retrying.`,
+      },
+    });
+  return Ok.EMPTY;
 }
 
 function sheetAbsentMessage(kind: LoadDashboardKind, canonicalName: string): string {
