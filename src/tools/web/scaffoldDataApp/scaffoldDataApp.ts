@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getFeatureGate } from '../../../features/init.js';
@@ -16,8 +15,6 @@ import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspa
 // Data apps are hosted extension packages, which Tableau can only host on 2026.3.1+.
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
 const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
-
-type ScaffoldDataAppResult = DataAppWorkspaceResult & { allowedOrigins: string[] };
 
 const paramsSchema = {
   datappName: z
@@ -61,7 +58,7 @@ export const getScaffoldDataAppTool = (
       return !(flagOn && versionAllowed);
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
-      return await scaffoldDataAppTool.logAndExecute<ScaffoldDataAppResult>({
+      return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
         extra,
         args: { datappName },
         callback: async () => {
@@ -74,17 +71,10 @@ export const getScaffoldDataAppTool = (
               restApi.packagesMethods.getAllowedOrigins({ siteId: restApi.siteId }),
           });
 
-          const workspaceResult = await createDataAppWorkspace({
+          return await createDataAppWorkspace({
             datappName,
-            config: extra.config,
-          });
-          if (workspaceResult.isErr()) {
-            return workspaceResult;
-          }
-
-          return new Ok({
-            ...workspaceResult.value,
             allowedOrigins,
+            config: extra.config,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
