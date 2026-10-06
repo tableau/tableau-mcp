@@ -202,6 +202,7 @@ export class RestApi {
   get packagesMethods(): PackagesMethods {
     // Experimental endpoint lives under `/api/exp`, not the versioned `/api/3.x`
     // path, so it uses its own methods class with the `/api/exp` base URL.
+    // TODO: switch to the versioned REST base URL once allowed-origins ships in a numbered version.
     const baseUrl = `${RestApi.host}/api/exp`;
     const packagesMethods = new PackagesMethods(baseUrl, this.creds, {
       timeout: this._maxRequestTimeoutMs,
