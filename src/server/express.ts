@@ -22,6 +22,7 @@ import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
+import { getSessionBinding } from './oauth/siteBinding.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
 import { X_TABLEAU_MCP_CONFIG_HEADER } from './requestUtils.js';
@@ -148,12 +149,22 @@ export async function startExpressServer({
 
         let session: Session | undefined;
         if (sessionId && (session = getSession(sessionId))) {
+          if (!sessionBelongsToRequest(session, req)) {
+            rejectSessionMismatch(res);
+            return;
+          }
+
           transport = session.transport;
         } else if (!sessionId && isInitializeRequest(req.body)) {
           const clientInfo = req.body.params.clientInfo;
           const capabilities = req.body.params.capabilities;
           const clientId = req.auth?.clientId;
-          transport = createSession({ clientInfo, capabilities, clientId });
+          transport = createSession({
+            clientInfo,
+            capabilities,
+            clientId,
+            authBinding: getSessionBinding(getTableauAuthInfo(req.auth)),
+          });
 
           const server = new WebMcpServer({ clientInfo, capabilities, clientId });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
@@ -227,12 +238,39 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
   );
 }
 
-async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
+// A session is pinned to the principal, server, and site that initialized it. Any change between
+// requests (including a different valid bearer replayed with someone else's session ID) fails closed.
+function sessionBelongsToRequest(session: Session, req: AuthenticatedRequest): boolean {
+  return session.authBinding === getSessionBinding(getTableauAuthInfo(req.auth));
+}
+
+function rejectSessionMismatch(res: Response): void {
+  log({
+    message: 'Rejected request: session is bound to a different principal or site',
+    level: 'error',
+    logger: 'server',
+  });
+  res.status(403).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message: 'Forbidden: session does not match the authenticated identity',
+    },
+    id: null,
+  });
+}
+
+async function handleSessionRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
   const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
   let session: Session | undefined;
   if (!sessionId || !(session = getSession(sessionId))) {
     res.status(400).send('Invalid or missing session ID');
+    return;
+  }
+
+  if (!sessionBelongsToRequest(session, req)) {
+    rejectSessionMismatch(res);
     return;
   }
 

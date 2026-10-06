@@ -1,3 +1,4 @@
+import { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -6,7 +7,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getQueryKnowledgeContextTool } from './queryKnowledgeContext.js';
+import { advertisedInputSchema } from './knowledgeSchemaTestUtils.js';
+import { getQueryKnowledgeContextTool, validateQueryArgs } from './queryKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
@@ -92,20 +94,40 @@ describe('queryKnowledgeContextTool', () => {
     expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
   });
 
-  it('exposes only parameters relevant to each query intent', async () => {
-    const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema).toHaveProperty('safeParse', expect.any(Function));
-    if (!('safeParse' in schema)) return;
+  it('advertises a non-empty inputSchema carrying the intent enum', async () => {
+    // Reproduces the MCP SDK's own schema-advertisement conversion (see
+    // knowledgeSchemaTestUtils.ts). A z.discriminatedUnion (this tool's schema before the fix)
+    // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
+    // flat raw shape this tool now uses does not have that problem.
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
 
-    expect(schema.safeParse({ intent: 'sources', nodeType: 'WORKBOOK' }).success).toBe(true);
-    expect(schema.safeParse({ intent: 'sources', query: 'Sales Cloud' }).success).toBe(false);
-    expect(schema.safeParse({ intent: 'lineage' }).success).toBe(false);
-    expect(schema.safeParse({ intent: 'lineage', nodeId: 'pds-1' }).success).toBe(true);
+    expect(properties).toBeTruthy();
+    expect(Object.keys(properties ?? {}).length).toBeGreaterThan(0);
+    expect(properties?.intent?.enum).toEqual([
+      'ground',
+      'relationships',
+      'lineage',
+      'impact',
+      'sources',
+    ]);
+  });
+
+  it('rejects params irrelevant to the chosen query intent', () => {
+    expect(validateQueryArgs({ intent: 'sources', nodeType: 'WORKBOOK' })).toBeNull();
+    expect(validateQueryArgs({ intent: 'sources', query: 'Sales Cloud' })).toMatch(
+      /query is not used when intent is "sources"/,
+    );
+    expect(validateQueryArgs({ intent: 'lineage' })).toMatch(
+      /query or nodeId is required when intent is "lineage"/,
+    );
+    expect(validateQueryArgs({ intent: 'lineage', nodeId: 'pds-1' })).toBeNull();
     expect(
-      schema.safeParse({ intent: 'relationships', nodeId: 'pds-1', includeGlobal: true }).success,
-    ).toBe(false);
-    expect(schema.safeParse({ intent: 'ground', query: 'AOV', edgeType: 'HAS' }).success).toBe(
-      false,
+      validateQueryArgs({ intent: 'relationships', nodeId: 'pds-1', includeGlobal: true }),
+    ).toMatch(/includeGlobal is not used when intent is "relationships"/);
+    expect(validateQueryArgs({ intent: 'ground', query: 'AOV', edgeType: 'HAS' })).toMatch(
+      /edgeType is not used when intent is "ground"/,
     );
   });
 
@@ -116,7 +138,7 @@ describe('queryKnowledgeContextTool', () => {
     expect(tool.name).toBe('query-knowledge-context');
     expect(tool.minRequiredRole).toBe(SiteRole.VIEWER);
     expect(tool.registrationConditions).toEqual(['RequiresKnowledge']);
-    expect(paramsSchema).toHaveProperty('safeParse', expect.any(Function));
+    expect(paramsSchema).toMatchObject({ intent: expect.anything() });
     expect(tool.description).toContain('If relationships are truncated');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
@@ -304,9 +326,12 @@ describe('queryKnowledgeContextTool', () => {
   });
 
   it('rejects a node-based intent without either query or nodeId', async () => {
-    const result = await parseParams({ intent: 'impact' });
+    const result = await getResult({ intent: 'impact' });
 
-    expect(result.success).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('query or nodeId is required when intent is "impact"');
+    expect(mocks.getKnowledgeNodeImpact).not.toHaveBeenCalled();
   });
 });
 
@@ -317,12 +342,6 @@ function getTool(): ReturnType<typeof getQueryKnowledgeContextTool> {
 async function getResult(args: Record<string, unknown>): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args as never, getMockRequestHandlerExtra());
-}
-
-async function parseParams(args: Record<string, unknown>): Promise<{ success: boolean }> {
-  const schema = await Provider.from(getTool().paramsSchema);
-  invariant('safeParse' in schema);
-  return schema.safeParse(args);
 }
 
 function payload(result: CallToolResult): any {
