@@ -1,6 +1,6 @@
 import {
-  getDatasourceTagsByLuid,
-  getDatasourceTagsQuery,
+  getDatasourceNamesByLuid,
+  getDatasourceNamesQuery,
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
@@ -711,39 +711,39 @@ describe('lineageUtils', () => {
     });
   });
 
-  describe('getDatasourceTagsQuery', () => {
+  describe('getDatasourceNamesQuery', () => {
     it('filters published data sources by the given LUIDs', () => {
-      const query = getDatasourceTagsQuery(['ds-1', 'ds-2']);
+      const query = getDatasourceNamesQuery(['ds-1', 'ds-2']);
       expect(query).toContain(
         'publishedDatasourcesConnection(filter: { luidWithin: ["ds-1", "ds-2"] })',
       );
-      expect(query).toContain('tags');
+      expect(query).toContain('name');
     });
   });
 
-  describe('getDatasourceTagsByLuid', () => {
-    it('maps each data source LUID to its tag names', () => {
-      const tags = getDatasourceTagsByLuid({
+  describe('getDatasourceNamesByLuid', () => {
+    it('maps each data source LUID to its name', () => {
+      const names = getDatasourceNamesByLuid({
         data: {
           publishedDatasourcesConnection: {
             nodes: [
-              { luid: 'ds-1', tags: [{ name: 'MCP Enabled' }, { name: 'certified' }] },
-              { luid: 'ds-2', tags: null },
+              { luid: 'ds-1', name: 'Superstore' },
+              { luid: 'ds-2', name: 'Finance' },
             ],
           },
         },
       });
 
-      expect(tags).toEqual(
+      expect(names).toEqual(
         new Map([
-          ['ds-1', ['MCP Enabled', 'certified']],
-          ['ds-2', []],
+          ['ds-1', 'Superstore'],
+          ['ds-2', 'Finance'],
         ]),
       );
     });
 
     it('throws when the response does not have the expected shape', () => {
-      expect(() => getDatasourceTagsByLuid({ data: {} })).toThrow();
+      expect(() => getDatasourceNamesByLuid({ data: {} })).toThrow();
     });
   });
 });

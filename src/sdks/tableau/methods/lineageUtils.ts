@@ -488,42 +488,37 @@ export function getDatasourceDownstreamByLuid(
   );
 }
 
-const datasourceTagsResponseSchema = z.object({
+const datasourceNamesResponseSchema = z.object({
   data: z.object({
     publishedDatasourcesConnection: z.object({
       nodes: z.array(
         z.object({
           luid: z.string(),
-          tags: z.array(z.object({ name: z.string() })).nullish(),
+          name: z.string(),
         }),
       ),
     }),
   }),
 });
 
-export function getDatasourceTagsQuery(datasourceLuids: Array<string>): string {
+export function getDatasourceNamesQuery(datasourceLuids: Array<string>): string {
   return `
-    query datasourceTags {
+    query datasourceNames {
       publishedDatasourcesConnection(filter: { luidWithin: ${toGraphqlStringArray(datasourceLuids)} }) {
         nodes {
           luid
-          tags {
-            name
-          }
+          name
         }
       }
     }
   `;
 }
 
-/** Maps each published data source LUID in the response to its tag names. */
-export function getDatasourceTagsByLuid(response: unknown): Map<string, Array<string>> {
-  const parsed = datasourceTagsResponseSchema.parse(response);
+/** Maps each published data source LUID in the response to its name. */
+export function getDatasourceNamesByLuid(response: unknown): Map<string, string> {
+  const parsed = datasourceNamesResponseSchema.parse(response);
   return new Map(
-    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [
-      node.luid,
-      (node.tags ?? []).map((tag) => tag.name),
-    ]),
+    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [node.luid, node.name]),
   );
 }
 

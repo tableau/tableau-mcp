@@ -2,8 +2,8 @@ import { log } from '../../logging/logger.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
-  getDatasourceTagsByLuid,
-  getDatasourceTagsQuery,
+  getDatasourceNamesByLuid,
+  getDatasourceNamesQuery,
 } from '../../sdks/tableau/methods/lineageUtils.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Flow, FlowOutputStep } from '../../sdks/tableau/types/flow.js';
@@ -216,26 +216,41 @@ class ResourceAccessChecker {
       });
     }
 
-    // Reads the data source's tag labels from the Metadata API. Returns undefined when Metadata API
-    // requests are disabled, the request fails, or the data source is not in the response, so the
-    // caller can fall back to its original error.
-    async function getDatasourceTagLabelsFromMetadataApi(): Promise<Array<string> | undefined> {
+    // Finds the data source with the Query Data Sources (list) endpoint, which has no LUID filter, by
+    // filtering on its name from the Metadata API and matching the LUID.
+    // Returns undefined when Metadata API requests are disabled, either lookup fails, or no data source matches,
+    // so the caller can fall back to its original error.
+    async function findDatasourceByName(): Promise<DataSource | undefined> {
       if ((await extra.getConfigWithOverrides()).disableMetadataApiRequests) {
         return undefined;
       }
 
       try {
-        const response = await useRestApi({
+        return await useRestApi({
           ...extra,
           jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-          callback: async (restApi) =>
-            await restApi.metadataMethods.graphql(getDatasourceTagsQuery([datasourceLuid])),
+          callback: async (restApi) => {
+            const response = await restApi.metadataMethods.graphql(
+              getDatasourceNamesQuery([datasourceLuid]),
+            );
+            const name = getDatasourceNamesByLuid(response).get(datasourceLuid);
+            // Filter expressions are comma-delimited, so a name with a comma can't be filtered on.
+            if (!name || name.includes(',')) {
+              return undefined;
+            }
+
+            const { datasources } = await restApi.datasourcesMethods.listDatasources({
+              siteId: restApi.siteId,
+              filter: `name:eq:${name}`,
+              pageSize: 1000,
+            });
+            return datasources.find((ds) => ds.id === datasourceLuid);
+          },
         });
-        return getDatasourceTagsByLuid(response).get(datasourceLuid);
       } catch (error) {
         log(
           {
-            message: `Metadata API tag lookup failed for datasource ${datasourceLuid}`,
+            message: `Fallback lookup failed for datasource ${datasourceLuid}`,
             level: 'warning',
             logger: 'resource-access',
             data: getExceptionMessage(error),
@@ -248,27 +263,43 @@ class ResourceAccessChecker {
 
     // Query Data Source returns 403 when the user can't see the data source's parent project,
     // even if they can query the data source itself.
-    // Fall back to the Metadata API to read the tags, which is not subject to that check.
-    async function getDatasourceTagLabels(): Promise<Array<string>> {
+    // The list endpoint is not subject to that check and returns the same project and tags, so fall back to it.
+    async function getDatasourceWithFallback(): Promise<DataSource> {
       try {
-        datasource = await getDatasource();
-        return datasource.tags?.tag?.map((tag) => tag.label) ?? [];
+        const queriedDatasource = await getDatasource();
+        log(
+          {
+            message: `Found datasource ${datasourceLuid} with Query Data Source`,
+            level: 'debug',
+            logger: 'resource-access',
+          },
+          extra,
+        );
+        return queriedDatasource;
       } catch (error) {
-        const fallbackTagLabels =
+        const fallbackDatasource =
           error instanceof Error && getHttpStatus(error) === '403'
-            ? await getDatasourceTagLabelsFromMetadataApi()
+            ? await findDatasourceByName()
             : undefined;
-        if (!fallbackTagLabels) {
+        if (!fallbackDatasource) {
           throw error;
         }
-        return fallbackTagLabels;
+        log(
+          {
+            message: `Query Data Source returned 403 for datasource ${datasourceLuid}; found it by name with the list endpoint`,
+            level: 'debug',
+            logger: 'resource-access',
+          },
+          extra,
+        );
+        return fallbackDatasource;
       }
     }
 
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
     if (allowedProjectIds) {
       try {
-        datasource = await getDatasource();
+        datasource = await getDatasourceWithFallback();
 
         if (!datasource.project) {
           // Embedded (workbook) data sources have no project, so a project allowlist can't admit
@@ -316,11 +347,9 @@ class ResourceAccessChecker {
     const allowedTags = await this.getAllowedTags({ extra });
     if (allowedTags) {
       try {
-        const tagLabels = datasource
-          ? (datasource.tags?.tag?.map((tag) => tag.label) ?? [])
-          : await getDatasourceTagLabels();
+        datasource = datasource ?? (await getDatasourceWithFallback());
 
-        if (!tagLabels.some((label) => allowedTags.has(label))) {
+        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [
