@@ -74,7 +74,8 @@ export type TableauApiScope =
   | 'tableau:users:update'
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:permissions:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -173,11 +174,19 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
  * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
  * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
  * simplicity over narrowing the blast radius.
+ *
+ * `tableau:permissions:read` is requested so that, after publishing to a shared project,
+ * publish-workbook can read back the workbook's permission rules to disclose them to the caller
+ * (best-effort - a permissions-read failure never fails the publish). It follows the same
+ * always-requested-not-narrowed tradeoff above. NOTE: if a Tableau deployment rejects this scope at
+ * JWT-mint time, remove it here - the Query Workbook Permissions call is also covered by
+ * `tableau:content:read` and the best-effort path still returns the published workbook.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
   'tableau:content:read',
+  'tableau:permissions:read',
 ];
 
 /**

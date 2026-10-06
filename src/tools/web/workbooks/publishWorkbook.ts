@@ -11,9 +11,11 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
+import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
@@ -69,6 +71,10 @@ export type PublishWorkbookResult =
       data: Workbook;
       url: string;
       warnings: ValidationFinding[];
+      // Permission rules on the published workbook, disclosed for project publishes only. Absent for
+      // personal-space publishes (no shareable grantees) and when the best-effort read fails.
+      permissions?: GranteeCapability[];
+      permissionsNote?: string;
     }
   | {
       status: 'invalid';
@@ -207,6 +213,29 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
                 ).toErr();
               }
 
+              // Disclose the workbook's permission rules for project publishes only. Personal-space
+              // content has no shareable grantees, so skip the call there. Best-effort: a
+              // permissions-read failure must not fail an already-completed publish.
+              let permissions: GranteeCapability[] | undefined;
+              let permissionsNote: string | undefined;
+              if (personalSpace === undefined) {
+                try {
+                  permissions = await restApi.workbooksMethods.queryWorkbookPermissions({
+                    siteId: restApi.siteId,
+                    workbookId: publishedWorkbook.id,
+                  });
+                } catch (error) {
+                  permissionsNote =
+                    'Published successfully, but the workbook permission rules could not be retrieved.';
+                  log({
+                    message: 'publish-workbook: failed to fetch workbook permissions (best-effort)',
+                    level: 'warning',
+                    logger: 'publish-workbook',
+                    data: getExceptionMessage(error),
+                  });
+                }
+              }
+
               const url =
                 getDefaultViewWebUrl(publishedWorkbook, extra.config.server, extra.getSiteName()) ??
                 publishedWorkbook.webpageUrl ??
@@ -217,6 +246,8 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
                 data: publishedWorkbook,
                 url,
                 warnings: outcome.warnings,
+                ...(permissions !== undefined && { permissions }),
+                ...(permissionsNote !== undefined && { permissionsNote }),
               });
             },
           });

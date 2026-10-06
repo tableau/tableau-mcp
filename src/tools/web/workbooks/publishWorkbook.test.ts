@@ -13,6 +13,7 @@ import { getPublishWorkbookTool } from './publishWorkbook.js';
 const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockPublishWorkbook: vi.fn(),
+  mockQueryWorkbookPermissions: vi.fn(),
   mockValidateWorkbookAndUpload: vi.fn(),
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedWorkbookUpload: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       workbooksMethods: {
         validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
         publishWorkbook: mocks.mockPublishWorkbook,
+        queryWorkbookPermissions: mocks.mockQueryWorkbookPermissions,
       },
       publishingMethods: {
         uploadFileInChunks: mocks.mockUploadFileInChunks,
@@ -72,6 +74,7 @@ describe('publishWorkbookTool', () => {
     stubDefaultEnvVars();
     RestApi.version = '3.29';
     mocks.mockPublishWorkbook.mockReset();
+    mocks.mockQueryWorkbookPermissions.mockReset();
     mocks.mockValidateWorkbookAndUpload.mockReset();
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
@@ -89,6 +92,8 @@ describe('publishWorkbookTool', () => {
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    // Benign default so project-publish tests that don't assert on permissions stay green.
+    mocks.mockQueryWorkbookPermissions.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -648,6 +653,7 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:content:read',
+      'tableau:permissions:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
@@ -656,7 +662,90 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:content:read',
+      'tableau:permissions:read',
     ]);
+  });
+
+  it('discloses the workbook permission rules after a project publish', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
+    });
+    const granteeCapabilities = [
+      {
+        group: { id: 'group-1', name: 'Analysts' },
+        capabilities: { capability: [{ name: 'Read', mode: 'Allow' }] },
+      },
+    ];
+    mocks.mockQueryWorkbookPermissions.mockResolvedValue(granteeCapabilities);
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.permissions).toEqual(granteeCapabilities);
+    expect(response.permissionsNote).toBeUndefined();
+    expect(mocks.mockQueryWorkbookPermissions).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      workbookId: mockWorkbook.id,
+    });
+  });
+
+  it('does not fetch permissions for a Personal Space publish', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockGetPersonalSpace.mockResolvedValue({
+      luid: 'personal-space-luid',
+      ownerLuid: 'owner-luid',
+      readOnly: false,
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: undefined,
+      location: { id: 'personal-space-luid', type: 'PersonalSpace' },
+    });
+
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.permissions).toBeUndefined();
+    expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
+  });
+
+  it('still returns the published workbook when the permissions fetch fails', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      project: { id: 'target-project-id', name: 'Marketing Analytics' },
+    });
+    mocks.mockQueryWorkbookPermissions.mockRejectedValue(new Error('403 Forbidden'));
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.status).toBe('published');
+    expect(response.data.id).toBe(mockWorkbook.id);
+    expect(response.permissions).toBeUndefined();
+    expect(response.permissionsNote).toContain('could not be retrieved');
   });
 
   it('errors when a Personal Space publish silently lands in a project instead', async () => {

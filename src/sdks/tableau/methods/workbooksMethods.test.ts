@@ -91,6 +91,90 @@ describe('WorkbooksMethods', () => {
     });
   });
 
+  describe('queryWorkbookPermissions', () => {
+    it('returns the grantee capabilities and calls with site/workbook params', async () => {
+      const granteeCapabilities = [
+        {
+          user: { id: 'user-1', name: 'alice' },
+          capabilities: { capability: [{ name: 'Read', mode: 'Allow' }] },
+        },
+        {
+          group: { id: 'group-1', name: 'Analysts' },
+          capabilities: {
+            capability: [
+              { name: 'Read', mode: 'Allow' },
+              { name: 'Write', mode: 'Deny' },
+            ],
+          },
+        },
+      ];
+      const mockQueryWorkbookPermissions = vi.fn().mockResolvedValue({
+        permissions: { workbook: { id: 'wb-1', name: 'My Workbook' }, granteeCapabilities },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: mockQueryWorkbookPermissions,
+      };
+
+      const result = await workbooksMethods.queryWorkbookPermissions({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(result).toEqual(granteeCapabilities);
+      expect(mockQueryWorkbookPermissions).toHaveBeenCalledWith({
+        params: { siteId: 'site-1', workbookId: 'wb-1' },
+        headers: { Authorization: 'Bearer test' },
+      });
+    });
+
+    it('returns an empty array when the workbook has no grantee capabilities', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: vi.fn().mockResolvedValue({ permissions: {} }),
+      };
+
+      expect(
+        await workbooksMethods.queryWorkbookPermissions({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual([]);
+    });
+
+    it('passes through grantees that omit capabilities or the user/group name', async () => {
+      const granteeCapabilities = [
+        { user: { id: 'user-1' } },
+        {
+          group: { id: 'group-1' },
+          capabilities: { capability: [{ name: 'Read', mode: 'Allow' }] },
+        },
+      ];
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 't' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: vi
+          .fn()
+          .mockResolvedValue({ permissions: { granteeCapabilities } }),
+      };
+
+      expect(
+        await workbooksMethods.queryWorkbookPermissions({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual(granteeCapabilities);
+    });
+  });
+
   describe('updateWorkbook', () => {
     it('PUTs the new project id and returns the partial updated workbook', async () => {
       const mockUpdateWorkbook = vi.fn().mockResolvedValue({
