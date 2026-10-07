@@ -163,9 +163,10 @@ publishes skip this read. If the optional read fails, publishing still succeeds 
 `permissionsNote` explains that the rules could not be retrieved. When the flag is disabled, both
 fields are omitted. See [Feature Flags](../../developers/feature-flags.md).
 
-When task context identifies the workbook as a data app published to a project, lead with the
-publish confirmation and link, then give one concise access summary. Use Tableau UI labels and
-order for the required permissions:
+After every successful project publish, lead with the publish confirmation and link, then give
+one concise access summary. The publish result does not identify whether the workbook contains
+a data app, so there is no separate response branch for regular workbooks. Frame the following
+requirements as applying to data apps, using Tableau UI labels and order:
 
 | Resource | Tableau UI capability | API capability name |
 | --- | --- | --- |
@@ -177,22 +178,22 @@ order for the required permissions:
 AI Access is a separate capability and does not replace API Access for the data app. Avoid
 listing raw grantee IDs, every permission rule, or unrelated capabilities.
 
-For beta, the published parent data source requirement is fixed response guidance: when task
-context confirms one is used, state that viewers also need **API Access** on that source. Use
-its name if already known. This reminder applies regardless of the workbook permission result
-and requires no parent data source permission lookup or evaluation. It does not report a
-verified grant or denial on the source.
+For beta, the published parent data source requirement is fixed response guidance: when existing
+context confirms one is used, state that **for data apps**, viewers also need **API Access** on
+that source. Use its name if already known. This reminder applies regardless of the workbook
+permission result and requires no parent data source permission lookup or evaluation. It does
+not report a verified grant or denial on the source.
 
 Choose the access summary from the evidence already available:
 
 | Condition | Response guidance |
 | --- | --- |
-| Any required workbook capability is Denied, Unspecified, or missing from a returned user/group rule; or `permissions` is empty | Warn that, by default, some users with project access may not be able to view the data app. State the required workbook permissions and direct the user to adjust permissions for intended viewers in Tableau. |
-| The data app uses a published parent data source | Append the fixed reminder that viewers also need API Access on that source. No source permission check is required for beta. |
-| Every required workbook capability is explicitly Allowed in the returned rules | Give a positive summary of the workbook grants. Append the parent source requirement when applicable. |
-| Workbook permission rules are unavailable | Confirm publishing succeeded, say viewer access was not verified, and state the applicable requirements. Do not infer a denial or give an all-clear. |
-| Published parent source usage is unknown | State the source requirement conditionally; do not assume the workbook has no published parent source. |
-| Personal Space publish, or workbook not known to be a data app | Omit this project data-app access summary. |
+| Any required workbook capability is Denied, Unspecified, or missing from a returned user/group rule; or `permissions` is empty | Warn that, if the workbook contains a data app, some users with project access may not be able to view it by default. State the required workbook permissions for viewing data apps and direct the user to adjust permissions for intended viewers in Tableau. |
+| The workbook uses a published parent data source | Append the fixed reminder that, for data apps, viewers also need API Access on that source. No source permission check is required for beta. |
+| Every required workbook capability is explicitly Allowed in the returned rules | State that the returned rules grant the workbook permissions required for viewing data apps. Append the parent source requirement when applicable. |
+| Workbook permission rules are unavailable | Confirm publishing succeeded, say viewer access was not verified, and state the applicable requirements conditionally for data apps. Do not infer a denial or give an all-clear. |
+| Published parent source usage is unknown | State that, if the workbook contains a data app backed by a published data source, viewers also need API Access on that source. |
+| Personal Space publish | Omit this project access summary. |
 
 Denied and Unspecified/missing use the **same conservative warning**, while retaining their
 different meanings in the returned rules. An absent capability is not rewritten as an explicit
@@ -201,18 +202,19 @@ denial. An empty `permissions` array means no configured grants were returned; a
 
 Example warning without a published parent data source:
 
-> Published **Sales App** in **Default**. By default, some users with access to this project may
-> not be able to view your data app. In Tableau, make sure intended viewers have **View**,
-> **Full Data Query**, and **API Access** on **Sales App**.
+> Published **Sales Workbook** in **Default**. If this workbook contains a data app, some users
+> with access to this project may not be able to view it by default. In Tableau, make sure
+> intended data-app viewers have **View**, **Full Data Query**, and **API Access** on
+> **Sales Workbook**.
 
 If a published parent source is known, add:
 
-> They also need **API Access** on the published data source **Sales Data**.
+> For data apps, viewers also need **API Access** on the published data source **Sales Data**.
 
 Example positive workbook summary when a published parent source is used:
 
-> The returned rules grant the required workbook permissions for viewing your data app.
-> Viewers also need **API Access** on the published data source **Sales Data**.
+> The returned rules grant the workbook permissions required for viewing data apps.
+> For data apps, viewers also need **API Access** on the published data source **Sales Data**.
 
 These summaries describe configured defaults, not each viewer's effective access. Do not promise
 everyone with project access can view the data app. Other rules, site roles, and ownership affect
