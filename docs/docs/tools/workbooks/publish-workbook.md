@@ -5,12 +5,12 @@ sidebar_position: 5
 # Publish Workbook
 
 Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide
-`projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md) to
-discover project IDs). When the `data-apps` feature flag is enabled and `projectId` is omitted, the
-workbook is published into your Personal Space (`personalSpace` defaults to `true`) when the site
-supports direct-to-personal-space publishing. `projectId` always takes precedence over
-`personalSpace`; `personalSpace: false` without `projectId` returns an error before any file is
-uploaded.
+`projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md)
+with `capability: "Write"` to discover the projects you can publish to). When the `data-apps`
+feature flag is enabled and `projectId` is omitted, the workbook is published into your Personal
+Space (`personalSpace` defaults to `true`) when the site supports direct-to-personal-space
+publishing. `projectId` always takes precedence over `personalSpace`; `personalSpace: false`
+without `projectId` returns an error before any file is uploaded.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking
 errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau
@@ -91,9 +91,11 @@ Example: `/path/to/Superstore.twbx`
 ### `projectId`
 
 The Tableau project LUID to publish the workbook into. Use
-[List Projects](../projects/list-projects.md) to discover available project IDs. If this MCP server
-is configured with a bounded project context, publishing to a project outside that context returns
-an error instead of publishing. When provided, it is always used and `personalSpace` is ignored.
+[List Projects](../projects/list-projects.md) with
+[`capability: "Write"`](../projects/list-projects.md#capability) to discover the projects you can
+publish to. If this MCP server is configured with a bounded project context,
+publishing to a project outside that context returns an error instead of publishing. When
+provided, it is always used and `personalSpace` is ignored.
 
 Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
