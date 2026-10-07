@@ -54,6 +54,7 @@ const ITEM_LABEL: Record<PerSheetKind, string> = {
 
 export type PreparedSheetApply = {
   status: 'prepared';
+  expectedInstanceId?: string;
   liveDocumentXml?: string;
   id: string;
   name: string;
@@ -68,6 +69,7 @@ export async function preparePerSheetApply({
   sheetName,
   fragmentXml,
   expectedSourceHash,
+  expectedInstanceId,
   validationContext,
   executor,
   signal,
@@ -93,6 +95,9 @@ export async function preparePerSheetApply({
     }
     return Err(listResult.error);
   }
+  // Preserve the caller's snapshot pin, or pin the instance that resolved the target.
+  // Later document reads and POST rescans must not silently select a replacement instance.
+  const preparedInstanceId = expectedInstanceId ?? client.desktopInstanceId;
 
   const resolved = resolveItemByNameOrId(ITEM_LABEL[kind], sheetName, listResult.value);
   if (resolved.isErr()) {
@@ -144,6 +149,7 @@ export async function preparePerSheetApply({
 
   return Ok({
     status: 'prepared',
+    expectedInstanceId: preparedInstanceId,
     liveDocumentXml,
     id: resolved.value.id,
     name: resolved.value.name,
@@ -186,7 +192,7 @@ export async function applyPreparedSheet({
     prepared.fragmentXml,
     client,
     signal,
-    expectedInstanceId,
+    expectedInstanceId ?? prepared.expectedInstanceId,
   );
   if (applyResult.isErr()) {
     // A build with the list route but not the POST route (unlikely) still falls back cleanly.
@@ -316,8 +322,12 @@ async function applyDocumentForKind(
           } satisfies ApplyWorkbookDocumentOptions)
         : client.applyWorksheetDocument(id, documentXml, signal);
     case 'dashboard':
-      return client.applyDashboardDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyDashboardDocument(id, documentXml, signal, { expectedInstanceId })
+        : client.applyDashboardDocument(id, documentXml, signal);
     case 'storyboard':
-      return client.applyStoryboardDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyStoryboardDocument(id, documentXml, signal, { expectedInstanceId })
+        : client.applyStoryboardDocument(id, documentXml, signal);
   }
 }

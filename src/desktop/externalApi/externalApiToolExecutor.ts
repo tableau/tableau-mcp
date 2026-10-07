@@ -736,10 +736,12 @@ export class ExternalApiToolExecutor {
     dashboardId: string,
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(dashboardDocumentRoute(dashboardId), xml, signal),
       'apply-dashboard-document',
+      options,
     );
   }
 
@@ -747,10 +749,12 @@ export class ExternalApiToolExecutor {
     storyboardId: string,
     xml: string,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postXmlEnvelope(storyboardDocumentRoute(storyboardId), xml, signal),
       'apply-storyboard-document',
+      options,
     );
   }
 

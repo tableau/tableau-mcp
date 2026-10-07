@@ -313,11 +313,13 @@ export async function loadDashboardXml({
         if (guard.isErr()) {
           return Err(guard.error);
         }
+        const expectedInstanceId = guard.value?.instanceId ?? executor.desktopInstanceId;
         const prepared = await preparePerSheetApply({
           kind,
           sheetName: targetRef,
           fragmentXml: xml,
           expectedSourceHash,
+          expectedInstanceId,
           validationContext: 'dashboard',
           focus: canonicalFocus,
           executor,
@@ -357,6 +359,7 @@ export async function loadDashboardXml({
         const applied = await applyPreparedSheet({
           kind,
           prepared: checked,
+          expectedInstanceId,
           focus: canonicalFocus,
           executor,
           signal,
