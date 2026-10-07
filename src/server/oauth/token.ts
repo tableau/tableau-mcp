@@ -306,6 +306,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
     aud: AUDIENCE,
     iss: config.oauth.issuer,
     scope: formatScopes(tokenData.scopes),
+    tableauSiteContentUrl: tokenData.siteContentUrl,
     ...(config.auth === 'oauth'
       ? {
           tableauAccessToken: tokenData.tokens.accessToken,
@@ -314,7 +315,10 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
           tableauUserId: tokenData.user.id,
           tableauSiteId: getSiteLuidFromAccessToken(tokenData.tokens.accessToken),
         }
-      : {}),
+      : {
+          tableauUserId: tokenData.user.id,
+          tableauSiteId: getSiteLuidFromAccessToken(tokenData.tokens.accessToken),
+        }),
   });
 
   const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))
@@ -339,6 +343,7 @@ async function createClientCredentialsAccessToken(
     aud: AUDIENCE,
     iss: config.oauth.issuer,
     scope: formatScopes(scopes),
+    tableauSiteContentUrl: config.siteName,
   });
 
   const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))

@@ -8,11 +8,9 @@ import {
   ArgsValidationError,
   FeatureDisabledError,
   McpToolError,
-  ProjectNotAllowedError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
-import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
@@ -26,6 +24,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
+import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -54,15 +53,38 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects with capability "Write" to discover the projects the user can publish to. If omitted, the workbook is published to your Personal Space when the site supports it; an explicit value always takes precedence.',
+      'The Tableau project LUID to publish into (use list-projects with capability "Write" to find publishable projects). Takes precedence over personalSpace.',
+    ),
+  personalSpace: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Publish to your Personal Space when projectId is omitted. Defaults to true; set false to require projectId.',
     ),
   overwrite: z
     .boolean()
     .default(false)
     .describe(
-      'Whether to overwrite an existing workbook with the same name in the target project. Defaults to false.',
+      'Whether to overwrite an existing workbook with the same name in the selected destination. Defaults to false.',
     ),
 };
+
+const personalSpaceParamsSchema = z.object(paramsSchema).strict();
+const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true }).extend({
+  projectId: z
+    .string()
+    .min(1)
+    .describe(
+      'The Tableau project LUID to publish the workbook into. Use list-projects with capability "Write" to discover the projects the user can publish to.',
+    ),
+});
+// Both advertised schemas produce arguments accepted by the same execution path; the project
+// schema has no personalSpace, so it is optional on the shared output type.
+type PublishWorkbookParamsSchema = z.ZodType<
+  Omit<z.output<typeof personalSpaceParamsSchema>, 'personalSpace'> & { personalSpace?: boolean },
+  z.ZodTypeDef,
+  z.input<typeof personalSpaceParamsSchema>
+>;
 
 export type PublishWorkbookResult =
   | {
@@ -85,14 +107,28 @@ type ValidationFinding = {
   elementName: string;
 };
 
-export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
-  const tool = new WebTool({
+export const getPublishWorkbookTool = (
+  server: WebMcpServer,
+): WebTool<PublishWorkbookParamsSchema> => {
+  const tool = new WebTool<PublishWorkbookParamsSchema>({
     server,
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    description:
-      'Publishes a TWB or TWBX workbook from a local file path or staged upload id to a Tableau project. Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to); omit it to publish to your Personal Space when the site supports it, otherwise projectId is required. TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
-    paramsSchema,
+    description: new Provider(async () => {
+      const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+      return (
+        'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
+        (personalSpaceEnabled
+          ? 'Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
+          : 'Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to). ') +
+        'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
+      );
+    }),
+    paramsSchema: new Provider(async () =>
+      (await getFeatureGate().isFeatureEnabled('data-apps'))
+        ? personalSpaceParamsSchema
+        : projectParamsSchema,
+    ),
     annotations: {
       title: 'Publish Workbook',
       readOnlyHint: false,
@@ -105,10 +141,15 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
         isSlackClient(server.clientId),
     ),
-    callback: async (
-      { workbookUploadId, workbookFilePath, name, projectId, overwrite = false },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async (args, extra): Promise<CallToolResult> => {
+      const {
+        workbookUploadId,
+        workbookFilePath,
+        name,
+        projectId,
+        personalSpace,
+        overwrite = false,
+      } = args;
       return await tool.logAndExecute<PublishWorkbookResult>({
         extra,
         args: {
@@ -116,13 +157,23 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
           workbookFilePath: workbookFilePath ? '<redacted>' : undefined,
           name,
           projectId,
+          personalSpace,
           overwrite,
         },
         callback: async () => {
+          // Recheck at execution time in case the client cached a schema from before the flag changed.
+          const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+          // projectId always wins. Without it, the destination is Personal Space unless it is
+          // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
+          const usePersonalSpace =
+            projectId === undefined && personalSpaceEnabled && personalSpace !== false;
+          if (projectId === undefined && !usePersonalSpace) {
+            throw new ArgsValidationError('projectId is required to publish a workbook.');
+          }
           assertMinimumRestApiVersionSupported();
           const configWithOverrides = await extra.getConfigWithOverrides();
           // Only an explicit projectId is gated by the bounded-context allow-list. The
-          // auto-default path resolves the caller's own Personal Space, which an operator's
+          // personalSpace path resolves the caller's own Personal Space, which an operator's
           // "publish only into these shared projects" allow-list is not meant to block
           // (intentional, confirmed asymmetry — do not make symmetric).
           if (projectId !== undefined) {
@@ -133,15 +184,15 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              // Resolve Personal Space up front on the auto-default path so a read-only or
+              // Resolve Personal Space up front when explicitly selected so a read-only or
               // unresolvable space fails before uploading anything.
-              let personalSpace: PersonalSpace | undefined;
-              if (projectId === undefined) {
+              let personalSpaceTarget: PersonalSpace | undefined;
+              if (usePersonalSpace) {
                 const resolvedPersonalSpace = await resolvePersonalSpace(restApi);
                 if (resolvedPersonalSpace.isErr()) {
                   return resolvedPersonalSpace;
                 }
-                personalSpace = resolvedPersonalSpace.value;
+                personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
               const resolvedWorkbookFile = await resolveWorkbookInput({
@@ -170,7 +221,9 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
               }
 
               const destination =
-                personalSpace !== undefined ? { location: personalSpace.luid } : { projectId };
+                personalSpaceTarget !== undefined
+                  ? { location: personalSpaceTarget.luid }
+                  : { projectId };
 
               let publishedWorkbook: Workbook;
               try {
@@ -184,7 +237,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
                 });
               } catch (error) {
                 const mapped =
-                  personalSpace !== undefined ? mapPersonalSpacePublishError(error) : null;
+                  personalSpaceTarget !== undefined ? mapPersonalSpacePublishError(error) : null;
                 if (mapped) {
                   return mapped.toErr();
                 }
@@ -195,7 +248,7 @@ export const getPublishWorkbookTool = (server: WebMcpServer): WebTool<typeof par
               // default project instead. Treat a personal-space publish that didn't come back as
               // PersonalSpace as a failure, not a silent success.
               if (
-                personalSpace !== undefined &&
+                personalSpaceTarget !== undefined &&
                 publishedWorkbook.location?.type !== 'PersonalSpace'
               ) {
                 const landed = publishedWorkbook.project?.name ?? publishedWorkbook.location?.name;
@@ -351,6 +404,9 @@ function assertMinimumRestApiVersionSupported(): void {
   }
 }
 
+const PROJECT_ID_HINT =
+  'pass projectId (use list-projects with capability "Write") to publish to a project instead.';
+
 async function resolvePersonalSpace(
   restApi: RestApi,
 ): Promise<Result<PersonalSpace, McpToolError>> {
@@ -364,13 +420,14 @@ async function resolvePersonalSpace(
     });
   } catch (error) {
     return new ArgsValidationError(
-      `projectId is required: could not resolve your Personal Space to use as a default publish target (${getExceptionMessage(error)}).`,
+      `Could not resolve your Personal Space for publishing (${getExceptionMessage(error)}); ` +
+        PROJECT_ID_HINT,
     ).toErr();
   }
 
   if (personalSpace.readOnly) {
     return new ArgsValidationError(
-      'projectId is required: your Personal Space is read-only and cannot be used as a publish target.',
+      `Your Personal Space is read-only and cannot be used as a publish target; ${PROJECT_ID_HINT}`,
     ).toErr();
   }
 
@@ -394,18 +451,6 @@ function mapPersonalSpacePublishError(error: unknown): FeatureDisabledError | nu
     );
   }
   return null;
-}
-
-function assertProjectAllowedByBoundedContext(
-  projectId: string,
-  boundedContext: BoundedContext,
-): void {
-  const { projectIds } = boundedContext;
-  if (projectIds && !projectIds.has(projectId)) {
-    throw new ProjectNotAllowedError(
-      `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
-    );
-  }
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {

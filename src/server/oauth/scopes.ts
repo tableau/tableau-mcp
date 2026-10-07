@@ -35,11 +35,13 @@ export type McpScope =
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
   | 'tableau:mcp:users:write'
+  | 'tableau:mcp:workbook:write'
   | 'tableau:mcp:knowledge:read'
   | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
@@ -71,8 +73,10 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
+  | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:packages:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -90,6 +94,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
+  'tableau:mcp:workbook:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:flow:read',
@@ -165,16 +170,25 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 
 /**
+ * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
+ * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
+ */
+export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:packages:read',
+];
+
+/**
  * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
  * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
  * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
- * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * `tableau:projects:read` for the Personal Space lookup before ANY publish-workbook call succeeds,
+ * not just personal-space ones —
  * simplicity over narrowing the blast radius.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
-  'tableau:content:read',
+  'tableau:projects:read',
 ];
 
 /**
@@ -341,6 +355,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
+  'move-workbook': {
+    mcp: ['tableau:mcp:workbook:write'],
+    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -486,12 +504,12 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
-  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
-  // caller's/skill's responsibility, applied outside this tool.
+  // Requires the site's external allowed-origins policy before returning the bundled template
+  // (or uploading it to S3 and presigning a GET URL).
+  // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
-    api: new Set<TableauApiScope>([]),
+    api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
 };
 
@@ -567,6 +585,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
+    enabledTools.delete('move-workbook');
   }
 
   return enabledTools;

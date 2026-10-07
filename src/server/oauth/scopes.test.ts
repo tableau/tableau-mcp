@@ -237,6 +237,30 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:workbook:create');
     });
 
+    it('should exclude tableau:mcp:workbook:write when data-apps is disabled even if authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(claudeClientId);
+      expect(scopes).not.toContain('tableau:mcp:workbook:write');
+    });
+
+    it('should include tableau:mcp:workbook:write when data-apps is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'data-apps';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(claudeClientId);
+      expect(scopes).toContain('tableau:mcp:workbook:write');
+    });
+
     it('should always include other MCP scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -501,13 +525,45 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:create');
     });
 
-    it('should require base publish scopes plus content read for publish-workbook', () => {
+    it('should exclude tableau:workbooks:update when data-apps is disabled even if authoring-tools is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).not.toContain('tableau:workbooks:update');
+    });
+
+    it('should include tableau:workbooks:update when data-apps is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'data-apps';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(claudeClientId);
+      expect(scopes).toContain('tableau:workbooks:update');
+    });
+
+    it('should require only base publish scopes plus projects read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
       expect(scopes).toEqual([
         'tableau:workbooks:create',
         'tableau:file_uploads:create',
+        'tableau:projects:read',
+      ]);
+    });
+
+    it('should require workbooks update plus resource access scopes for move-workbook', () => {
+      expect(getRequiredApiScopesForTool('move-workbook')).toEqual([
+        'tableau:workbooks:update',
         'tableau:content:read',
+        'tableau:mcp_site_settings:read',
       ]);
     });
 
@@ -808,6 +864,25 @@ describe('scopes', () => {
       } as any);
 
       await expect(isValidScope('tableau:mcp:workbook:create', slackClientId)).resolves.toBe(false);
+    });
+
+    it('should return false for tableau:mcp:workbook:write when data-apps is disabled', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(false);
+    });
+
+    it('should return true for tableau:mcp:workbook:write when data-apps is enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'data-apps';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:write', claudeClientId)).resolves.toBe(true);
     });
 
     it('should return false for invalid scopes', async () => {

@@ -1,3 +1,6 @@
+import { AxiosError } from 'axios';
+
+import { OverridableConfig } from '../../overridableConfig.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './datasources/mockDatasources.js';
 import { mockFlow, mockOutputSteps } from './flows/getFlow/mockFlow.js';
@@ -15,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
   mockQueryDatasource: vi.fn(),
   mockQueryFlow: vi.fn(),
+  mockGraphql: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -32,6 +36,9 @@ vi.mock('../../restApiInstance.js', () => ({
       },
       flowsMethods: {
         queryFlow: mocks.mockQueryFlow,
+      },
+      metadataMethods: {
+        graphql: mocks.mockGraphql,
       },
       siteId: 'test-site-id',
     }),
@@ -149,6 +156,195 @@ describe('ResourceAccessChecker', () => {
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
+
+      it('should deny an embedded (project-less) datasource under a project allowlist', async () => {
+        // Embedded (workbook) data sources have no project, so a project allowlist can't admit them;
+        // fail closed with an embedded-specific message rather than throwing on `project.id`.
+        mocks.mockQueryDatasource.mockResolvedValue({
+          ...mockDatasource,
+          project: undefined,
+          parentType: 'Workbook',
+        });
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `The datasource with LUID ${mockDatasource.id} cannot be queried because it is an embedded (workbook) data source, which cannot be matched against the allowed projects.`,
+          ].join(' '),
+        });
+      });
+    });
+
+    describe('tag check when Query Data Source is forbidden', () => {
+      const allowedTag = mockDatasource.tags.tag[0].label;
+
+      function forbiddenError(status = 403): AxiosError {
+        const error = new AxiosError(`Request failed with status code ${status}`);
+        error.response = { status } as AxiosError['response'];
+        return error;
+      }
+
+      function metadataTagsResponse(luid: string, tagNames: Array<string>): unknown {
+        return {
+          data: {
+            publishedDatasourcesConnection: {
+              nodes: [{ luid, tags: tagNames.map((name) => ({ name })) }],
+            },
+          },
+        };
+      }
+
+      const lookupFailedMessage = (status = 403): string =>
+        [
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
+          `An error occurred while checking if the datasource with LUID ${mockDatasource.id} has one of the allowed tags:`,
+          `Request failed with status code ${status}`,
+        ].join(' ');
+
+      beforeEach(() => {
+        mocks.mockQueryDatasource.mockRejectedValue(forbiddenError());
+      });
+
+      it('should fall back to the Metadata API and allow the datasource when it has an allowed tag', async () => {
+        mocks.mockGraphql.mockResolvedValue(
+          metadataTagsResponse(mockDatasource.id, ['other-tag', allowedTag]),
+        );
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+          // No REST datasource was fetched, so there is no content for the caller to reuse.
+        ).toEqual({ allowed: true, content: undefined });
+        expect(mocks.mockGraphql).toHaveBeenCalledTimes(1);
+        expect(mocks.mockGraphql.mock.calls[0][0]).toContain(`"${mockDatasource.id}"`);
+      });
+
+      it('should fall back to the Metadata API and disallow the datasource when it has no allowed tag', async () => {
+        mocks.mockGraphql.mockResolvedValue(metadataTagsResponse(mockDatasource.id, ['other-tag']));
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+          ].join(' '),
+        });
+      });
+
+      it('should report the original error when the Metadata API does not return the datasource', async () => {
+        mocks.mockGraphql.mockResolvedValue({
+          data: { publishedDatasourcesConnection: { nodes: [] } },
+        });
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: false, message: lookupFailedMessage() });
+      });
+
+      it('should report the original error when the Metadata API request fails', async () => {
+        mocks.mockGraphql.mockRejectedValue(new Error('SITE_CATALOG_DISABLED'));
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: false, message: lookupFailedMessage() });
+      });
+
+      it('should not fall back when the Query Data Source error is not a 403', async () => {
+        mocks.mockQueryDatasource.mockRejectedValue(forbiddenError(500));
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: false, message: lookupFailedMessage(500) });
+        expect(mocks.mockGraphql).not.toHaveBeenCalled();
+      });
+
+      it('should not fall back when Metadata API requests are disabled', async () => {
+        const extraWithMetadataDisabled = getMockRequestHandlerExtra({
+          getConfigWithOverrides: vi
+            .fn()
+            .mockResolvedValue(new OverridableConfig({ DISABLE_METADATA_API_REQUESTS: 'true' })),
+        });
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: new Set([allowedTag]),
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra: extraWithMetadataDisabled,
+          }),
+        ).toEqual({ allowed: false, message: lookupFailedMessage() });
+        expect(mocks.mockGraphql).not.toHaveBeenCalled();
+      });
     });
   });
 

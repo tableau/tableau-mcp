@@ -36,10 +36,8 @@ async function getMcpSiteSettings({
     });
   }
 
-  const cacheKey = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo) || 'Default';
-  if (!cacheKey) {
-    throw new Error('Could not determine site ID/name');
-  }
+  const site = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo) || 'Default';
+  const cacheKey = `${config.server || tableauAuthInfo?.server || ''}|${site}`;
 
   const cachedSettings = mcpSiteSettingsCache.get(cacheKey);
   if (cachedSettings) {

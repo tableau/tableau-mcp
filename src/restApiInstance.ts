@@ -17,12 +17,14 @@ import {
 import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { assertSignedInSiteMatchesToken } from './server/oauth/siteBinding.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:content:read'
   | 'tableau:insight_definitions_metrics:read'
@@ -41,6 +43,7 @@ type JwtScopes =
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
+  | 'tableau:workbooks:update'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
@@ -56,7 +59,8 @@ type JwtScopes =
   | 'tableau:flow_runs:update'
   | 'tableau:flow_tasks:run'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:packages:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
@@ -142,6 +146,13 @@ const getNewRestApiInstanceAsync = async (
     const authConfig = buildAuthConfig({ config, tableauAuthInfo, scopes: jwtScopes });
     if (authConfig) {
       await restApi.signIn(authConfig);
+      try {
+        assertSignedInSiteMatchesToken({ signedInSiteId: restApi.siteId, tableauAuthInfo });
+      } catch (error) {
+        await restApi.signOut().catch(() => undefined);
+        throw error;
+      }
+
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
     } else {
