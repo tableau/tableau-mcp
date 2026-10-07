@@ -41,6 +41,7 @@ export type McpScope =
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
@@ -75,7 +76,8 @@ export type TableauApiScope =
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write'
-  | 'tableau:permissions:read';
+  | 'tableau:permissions:read'
+  | 'tableau:packages:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -169,22 +171,31 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 
 /**
+ * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
+ * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
+ */
+export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:packages:read',
+];
+
+/**
  * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
- * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * NOT narrow its base JWT scopes per call — it always requests this set via `tool.requiredApiScopes`
  * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
- * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * `tableau:projects:read` for the Personal Space lookup before ANY publish-workbook call succeeds,
+ * not just personal-space ones —
  * simplicity over narrowing the blast radius.
  *
- * `tableau:permissions:read` lets a project publish read back and disclose the workbook's
- * permission rules (best-effort). If a deployment rejects it at JWT-mint time, remove it:
- * the read also falls under `tableau:content:read`.
+ * The optional permissions read uses a separate REST session so a missing permissions scope
+ * cannot prevent publishing. Its scope is advertised only when the feature is enabled.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
-  'tableau:content:read',
-  'tableau:permissions:read',
+  'tableau:projects:read',
 ];
+
+export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -499,12 +510,12 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
-  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
-  // caller's/skill's responsibility, applied outside this tool.
+  // Requires the site's external allowed-origins policy before returning the bundled template
+  // (or uploading it to S3 and presigning a GET URL).
+  // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
-    api: new Set<TableauApiScope>([]),
+    api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
 };
 
@@ -601,12 +612,23 @@ export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
+export async function getSupportedApiScopes(
+  clientId?: string,
+  { includeOptionalScopes = true }: { includeOptionalScopes?: boolean } = {},
+): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
   const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
     'enforce-registration-conditions',
   );
+
+  if (
+    includeOptionalScopes &&
+    enabledTools.has('publish-workbook') &&
+    (await getFeatureGate().isFeatureEnabled('publish-workbook-permissions'))
+  ) {
+    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+  }
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {

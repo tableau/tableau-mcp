@@ -3,6 +3,7 @@
   "enforce-role-requirements": false,
   "enforce-registration-conditions": false,
   "authoring-tools": true,
+  "publish-workbook-permissions": false,
   "flow-tools": false,
   "knowledge-tools": false,
   "view-file-mode": false,

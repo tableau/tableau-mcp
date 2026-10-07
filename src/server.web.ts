@@ -27,6 +27,7 @@ import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import {
@@ -210,6 +211,7 @@ export class WebMcpServer extends Server {
     registerPrompts(this);
 
     await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   protected _getToolsToRegister = async (

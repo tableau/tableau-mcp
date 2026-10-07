@@ -24,6 +24,7 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:content:read'
   | 'tableau:insight_definitions_metrics:read'
@@ -59,7 +60,8 @@ type JwtScopes =
   | 'tableau:flow_tasks:run'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write'
-  | 'tableau:permissions:read';
+  | 'tableau:permissions:read'
+  | 'tableau:packages:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,

@@ -301,6 +301,27 @@ describe('scopes', () => {
   });
 
   describe('getSupportedApiScopes', () => {
+    it.each([
+      { enabled: false, authoring: true, clientId: claudeClientId, expected: false },
+      { enabled: true, authoring: true, clientId: claudeClientId, expected: true },
+      { enabled: true, authoring: true, clientId: undefined, expected: true },
+      { enabled: true, authoring: false, clientId: claudeClientId, expected: false },
+      { enabled: true, authoring: true, clientId: slackClientId, expected: false },
+    ])(
+      'advertises permissions scope only for enabled publishing: $enabled, $authoring, $clientId',
+      async ({ enabled, authoring, clientId, expected }) => {
+        mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
+          if (flag === 'publish-workbook-permissions') return enabled;
+          return flag === 'authoring-tools' && authoring;
+        });
+
+        const scopes = await getSupportedApiScopes(clientId);
+
+        expect(scopes.includes('tableau:permissions:read')).toBe(expected);
+      },
+    );
+
     it('should advertise both Knowledge API scopes', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (featureName: string) => featureName === 'knowledge-tools',
@@ -549,14 +570,13 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:update');
     });
 
-    it('should require base publish scopes plus content and permissions read for publish-workbook', () => {
+    it('should require base publish scopes plus projects read, excluding optional permissions read', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
       expect(scopes).toEqual([
         'tableau:workbooks:create',
         'tableau:file_uploads:create',
-        'tableau:content:read',
-        'tableau:permissions:read',
+        'tableau:projects:read',
       ]);
     });
 

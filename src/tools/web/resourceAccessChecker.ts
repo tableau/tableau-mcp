@@ -1,6 +1,10 @@
 import { log } from '../../logging/logger.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
+import {
+  getDatasourceTagsByLuid,
+  getDatasourceTagsQuery,
+} from '../../sdks/tableau/methods/lineageUtils.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Flow, FlowOutputStep } from '../../sdks/tableau/types/flow.js';
 import { View } from '../../sdks/tableau/types/view.js';
@@ -10,6 +14,7 @@ import {
   RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
 } from '../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../../utils/getHttpStatus.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
@@ -211,10 +216,72 @@ class ResourceAccessChecker {
       });
     }
 
+    // Reads the data source's tag labels from the Metadata API. Returns undefined when Metadata API
+    // requests are disabled, the request fails, or the data source is not in the response, so the
+    // caller can fall back to its original error.
+    async function getDatasourceTagLabelsFromMetadataApi(): Promise<Array<string> | undefined> {
+      if ((await extra.getConfigWithOverrides()).disableMetadataApiRequests) {
+        return undefined;
+      }
+
+      try {
+        const response = await useRestApi({
+          ...extra,
+          jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+          callback: async (restApi) =>
+            await restApi.metadataMethods.graphql(getDatasourceTagsQuery([datasourceLuid])),
+        });
+        return getDatasourceTagsByLuid(response).get(datasourceLuid);
+      } catch (error) {
+        log(
+          {
+            message: `Metadata API tag lookup failed for datasource ${datasourceLuid}`,
+            level: 'warning',
+            logger: 'resource-access',
+            data: getExceptionMessage(error),
+          },
+          extra,
+        );
+        return undefined;
+      }
+    }
+
+    // Query Data Source returns 403 when the user can't see the data source's parent project,
+    // even if they can query the data source itself.
+    // Fall back to the Metadata API to read the tags, which is not subject to that check.
+    async function getDatasourceTagLabels(): Promise<Array<string>> {
+      try {
+        datasource = await getDatasource();
+        return datasource.tags?.tag?.map((tag) => tag.label) ?? [];
+      } catch (error) {
+        const fallbackTagLabels =
+          error instanceof Error && getHttpStatus(error) === '403'
+            ? await getDatasourceTagLabelsFromMetadataApi()
+            : undefined;
+        if (!fallbackTagLabels) {
+          throw error;
+        }
+        return fallbackTagLabels;
+      }
+    }
+
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
     if (allowedProjectIds) {
       try {
         datasource = await getDatasource();
+
+        if (!datasource.project) {
+          // Embedded (workbook) data sources have no project, so a project allowlist can't admit
+          // them. Fail closed here; resolving the parent workbook's project for allowlist matching
+          // is tracked by W-23864479.
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed data sources that can be queried is limited by the server configuration.',
+              `The datasource with LUID ${datasourceLuid} cannot be queried because it is an embedded (workbook) data source, which cannot be matched against the allowed projects.`,
+            ].join(' '),
+          };
+        }
 
         if (!allowedProjectIds.has(datasource.project.id)) {
           return {
@@ -249,9 +316,11 @@ class ResourceAccessChecker {
     const allowedTags = await this.getAllowedTags({ extra });
     if (allowedTags) {
       try {
-        datasource = datasource ?? (await getDatasource());
+        const tagLabels = datasource
+          ? (datasource.tags?.tag?.map((tag) => tag.label) ?? [])
+          : await getDatasourceTagLabels();
 
-        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
+        if (!tagLabels.some((label) => allowedTags.has(label))) {
           return {
             allowed: false,
             message: [
