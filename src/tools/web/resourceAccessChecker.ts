@@ -297,10 +297,35 @@ class ResourceAccessChecker {
     }
 
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    if (allowedProjectIds) {
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (allowedProjectIds || allowedTags) {
       try {
         datasource = await getDatasourceWithFallback();
+      } catch (error) {
+        log(
+          {
+            message: `Resource access check failed for datasource ${datasourceLuid}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
+        const checks = [
+          ...(allowedProjectIds ? ['is in an allowed project'] : []),
+          ...(allowedTags ? ['has one of the allowed tags'] : []),
+        ].join(' and ');
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `An error occurred while checking if the datasource with LUID ${datasourceLuid} ${checks}:`,
+            getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
 
+      if (allowedProjectIds) {
         if (!datasource.project) {
           // Embedded (workbook) data sources have no project, so a project allowlist can't admit
           // them. Fail closed here; resolving the parent workbook's project for allowlist matching
@@ -323,57 +348,14 @@ class ResourceAccessChecker {
             ].join(' '),
           };
         }
-      } catch (error) {
-        log(
-          {
-            message: `Resource access check failed for datasource ${datasourceLuid}`,
-            level: 'error',
-            logger: 'resource-access',
-            data: error,
-          },
-          extra,
-        );
-        return {
-          allowed: false,
-          message: [
-            'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `An error occurred while checking if the datasource with LUID ${datasourceLuid} is in an allowed project:`,
-            getExceptionMessage(error),
-          ].join(' '),
-        };
       }
-    }
 
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (allowedTags) {
-      try {
-        datasource = datasource ?? (await getDatasourceWithFallback());
-
-        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
-          return {
-            allowed: false,
-            message: [
-              'The set of allowed data sources that can be queried is limited by the server configuration.',
-              `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
-            ].join(' '),
-          };
-        }
-      } catch (error) {
-        log(
-          {
-            message: `Resource access check failed for datasource ${datasourceLuid} tags`,
-            level: 'error',
-            logger: 'resource-access',
-            data: error,
-          },
-          extra,
-        );
+      if (allowedTags && !datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
         return {
           allowed: false,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `An error occurred while checking if the datasource with LUID ${datasourceLuid} has one of the allowed tags:`,
-            getExceptionMessage(error),
+            `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
           ].join(' '),
         };
       }

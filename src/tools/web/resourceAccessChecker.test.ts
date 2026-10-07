@@ -315,6 +315,29 @@ describe('ResourceAccessChecker', () => {
         });
       });
 
+      it('should name both checks in the error when projects and tags are configured and the fallback finds nothing', async () => {
+        mocks.mockListDatasources.mockResolvedValue({
+          pagination: mockDatasources.pagination,
+          datasources: [sameNameDatasource],
+        });
+
+        expect(
+          await createChecker({
+            projectIds: new Set([allowedProjectId]),
+            tags: new Set([allowedTag]),
+          }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, extra }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            baseMessage,
+            `An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project and has one of the allowed tags:`,
+            'Request failed with status code 403',
+          ].join(' '),
+        });
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+        expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
+      });
+
       it('should report the original error when the Metadata API does not return the datasource', async () => {
         mocks.mockGraphql.mockResolvedValue(metadataNamesResponse([]));
 
