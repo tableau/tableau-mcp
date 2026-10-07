@@ -792,7 +792,6 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
-      'tableau:content:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
@@ -801,7 +800,6 @@ describe('publishWorkbookTool', () => {
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
-      'tableau:content:read',
     ]);
   });
 

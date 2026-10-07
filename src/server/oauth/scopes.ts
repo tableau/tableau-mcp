@@ -189,7 +189,6 @@ export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
   'tableau:projects:read',
-  'tableau:content:read',
 ];
 
 /**
