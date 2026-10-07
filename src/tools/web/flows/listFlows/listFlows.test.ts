@@ -42,7 +42,8 @@ describe('listFlowsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listFlowsTool = getListFlowsTool(new WebMcpServer());
     expect(listFlowsTool.name).toBe('list-flows');
-    expect(listFlowsTool.description).toContain('Retrieves a list of Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Retrieves a list of published Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Flow drafts are excluded');
     expect(listFlowsTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
   });
 
