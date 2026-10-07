@@ -238,7 +238,9 @@ describe('listProjectsTool', () => {
     const result = await getToolResult({ capability: 'Write' });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('No projects were found that you can publish to.');
+    expect(result.content[0].text).toContain(
+      'No projects matching the request were found that you can publish to.',
+    );
   });
 
   it('should handle API errors gracefully', async () => {
@@ -284,7 +286,7 @@ describe('listProjectsTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No projects were found that you can publish to. You do not have Write permission on any matching project.',
+        'No projects matching the request were found that you can publish to. Either none match the filter, or you do not have Write permission on any that do.',
       );
     });
 

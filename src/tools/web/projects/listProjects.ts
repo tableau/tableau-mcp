@@ -53,7 +53,7 @@ const isProjectCapabilityFilterSupported = (): boolean => RestApi.versionIsAtLea
 const capabilityDescription = `
 
   **Finding projects to publish to**
-  Pass \`capability: "Write"\` to return only the projects the current user can publish or create content into. The server applies this filter, so \`totalAvailable\` counts only those projects. Use it whenever you ask the user where to publish, so they are only offered projects they can actually publish to. It combines with \`filter\`, e.g. \`capability: "Write"\` with \`filter: "parentProjectId:eq:abc-123"\` lists the publishable child projects of a parent.`;
+  Pass \`capability: "Write"\` to return only the projects the current user can publish or create content into. The server applies this filter, so \`totalAvailable\` counts only those projects. Sites where Tableau has not yet enabled the filter ignore it and return every viewable project, so a publish to a returned project can still fail with a permission error. Use it whenever you ask the user where to publish, so they are only offered projects they can actually publish to. It combines with \`filter\`, e.g. \`capability: "Write"\` with \`filter: "parentProjectId:eq:abc-123"\` lists the publishable child projects of a parent.`;
 
 export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsParamsSchema> => {
   const listProjectsTool = new WebTool<ListProjectsParamsSchema>({
@@ -187,7 +187,7 @@ export function constrainProjects({
       type: 'empty',
       message:
         capability === 'Write'
-          ? 'No projects were found that you can publish to. You do not have Write permission on any matching project.'
+          ? 'No projects matching the request were found that you can publish to. Either none match the filter, or you do not have Write permission on any that do.'
           : 'No projects were found. Either none exist or you do not have permission to view them.',
     };
   }
