@@ -188,8 +188,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     } finally {
       // Mirrors the web `tool_call` (src/tools/web/tool.ts). Desktop is stdio-only with no Tableau
       // OAuth/pod, so those fields are sent empty. session_id carries the stable Desktop session GUID
-      // (TABLEAU_DESKTOP_SESSION_LUID). This is NOT the same "session id" SessionManager resolves instances by
-      // (that one is the desktop app's process id) as the process id may be reused across sessions.
+      // (TABLEAU_DESKTOP_SESSION_LUID) — the desktop analog of the web path's mcp-session-id, so a run's
+      // desktop tool calls correlate the same way. The numeric Desktop PID (TABLEAU_DESKTOP_SESSION_ID)
+      // stays SessionManager's instance key and is no longer emitted as telemetry.
       // site_luid/user_luid carry the signed-in identity the agent forwarded; auth_type is 'desktop'.
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
@@ -202,7 +203,8 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         is_hyperforce: extra.config.isHyperforce,
         success,
         error_code: errorCode,
-        error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
+        // omitted for now due to including PII information
+        error_message: '',
         oauth_client_id: '',
         oauth_client_display_name: '',
         auth_type: 'desktop',

@@ -413,7 +413,7 @@ describe('DesktopTool product telemetry', () => {
       expect.objectContaining({
         success: false,
         error_code: '400',
-        error_message: 'invalid request',
+        error_message: '',
       }),
     );
   });
@@ -432,7 +432,7 @@ describe('DesktopTool product telemetry', () => {
       expect.objectContaining({
         success: false,
         error_code: '',
-        error_message: expect.stringContaining('boom'),
+        error_message: '',
       }),
     );
   });
