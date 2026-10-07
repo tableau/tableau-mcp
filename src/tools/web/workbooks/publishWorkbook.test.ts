@@ -667,7 +667,6 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
-      personalSpace: true,
     });
 
     expect(result.isError).toBe(false);
