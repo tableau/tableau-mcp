@@ -6,7 +6,7 @@ sidebar_position: 1
 
 Retrieves a list of Tableau Prep flows on a site.
 
-Only published flows are returned. Editing drafts are excluded, so Tableau's flow page may show a
+Only published flows are returned. Flow drafts are excluded, so Tableau's flow page may show a
 higher count.
 
 ## APIs called
