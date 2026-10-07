@@ -112,6 +112,7 @@ describe('publishWorkbookTool', () => {
     expect(
       paramsSchema.safeParse({ ...validArgs, personalSpace: 'personal-space-luid' }).success,
     ).toBe(false);
+    expect(paramsSchema.parse(validArgs).personalSpace).toBe(true);
   });
 
   it.each([false, true])('advertises Personal Space only when data-apps is %s', async (enabled) => {
@@ -155,7 +156,7 @@ describe('publishWorkbookTool', () => {
     }
   });
 
-  it('blocks a stale Personal Space call after data-apps is disabled before API or file access', async () => {
+  it('rejects a stale schema call without projectId after data-apps is disabled before API or file access', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
     const schema = await Provider.from(tool.paramsSchema);
     const args = schema.parse({
@@ -168,7 +169,9 @@ describe('publishWorkbookTool', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content).toEqual([
-      expect.objectContaining({ text: expect.stringContaining('data-apps feature flag') }),
+      expect.objectContaining({
+        text: expect.stringContaining('projectId is required to publish a workbook.'),
+      }),
     ]);
     expect(mocks.useRestApiCalls).toHaveLength(0);
     expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
@@ -186,6 +189,15 @@ describe('publishWorkbookTool', () => {
     expect((await Provider.from(tool.paramsSchema)).safeParse(validArgs).success).toBe(true);
     const result = await getToolResult(validArgs);
     expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: validArgs.projectId }),
+    );
+
+    // A defaulted personalSpace leaking through a stale schema must not block a projectId publish.
+    mocks.mockPublishWorkbook.mockClear();
+    const staleResult = await getToolResult({ ...validArgs, personalSpace: true });
+    expect(staleResult.isError).toBe(false);
     expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: validArgs.projectId }),
@@ -590,37 +602,34 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, false])(
-    'rejects a missing destination when personalSpace is %s before any API or file access',
-    async (personalSpace) => {
-      const result = await getToolResult({
-        workbookUploadId: validArgs.workbookUploadId,
-        name: validArgs.name,
-        personalSpace,
-      });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('A publish destination is required');
-      expect(mocks.useRestApiCalls).toHaveLength(0);
-      expect(mocks.mockReadFile).not.toHaveBeenCalled();
-      expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
-      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
-      expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-    },
-  );
-
-  it('rejects conflicting destinations before any API or file access', async () => {
-    const result = await getToolResult({ ...validArgs, personalSpace: true });
+  it('rejects personalSpace false without projectId before any API or file access', async () => {
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+      personalSpace: false,
+    });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('but not both');
+    expect(result.content[0].text).toContain('projectId is required');
     expect(mocks.useRestApiCalls).toHaveLength(0);
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('lets projectId win over personalSpace true', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+
+    const result = await getToolResult({ ...validArgs, personalSpace: true });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('location');
   });
 
   it('publishes to the project when personalSpace is explicitly false', async () => {
@@ -639,7 +648,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('location');
   });
 
-  it('publishes to the caller Personal Space when personalSpace is true and it is writable', async () => {
+  it('publishes to the caller Personal Space when projectId and personalSpace are both omitted', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -716,12 +725,12 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
-      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('read-only');
+    expect(result.content[0].text).toContain('pass projectId');
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
@@ -739,6 +748,7 @@ describe('publishWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Could not resolve your Personal Space');
     expect(result.content[0].text).toContain('404 personalSpace not found');
+    expect(result.content[0].text).toContain('pass projectId');
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });

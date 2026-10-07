@@ -6,10 +6,11 @@ sidebar_position: 5
 
 Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. Provide
 `projectId` to publish into a specific project (use [List Projects](../projects/list-projects.md) to
-discover project IDs), or, when the `data-apps` feature flag is enabled, set `personalSpace: true`
-to publish into your Personal Space when the site supports direct-to-personal-space publishing.
-Exactly one destination is required. Providing both `projectId` and `personalSpace: true`, or
-providing neither, returns an error before any file is uploaded.
+discover project IDs). When the `data-apps` feature flag is enabled and `projectId` is omitted, the
+workbook is published into your Personal Space (`personalSpace` defaults to `true`) when the site
+supports direct-to-personal-space publishing. `projectId` always takes precedence over
+`personalSpace`; `personalSpace: false` without `projectId` returns an error before any file is
+uploaded.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking
 errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau
@@ -25,11 +26,11 @@ defaults to `false` in `features.json`. It is unavailable unless an administrato
 
 :::info[Personal Space feature flag]
 
-Direct Personal Space publishing additionally requires the
-existing `data-apps` feature flag, which defaults to `false`. When it is off, `personalSpace` is
-omitted from the advertised tool schema and description, and `projectId` is required. The execution
-path also checks the flag, so a stale Personal Space call is rejected before API calls or file
-access. Project publishing remains available when `authoring-tools` is enabled.
+Direct Personal Space publishing additionally requires the existing `data-apps` feature flag, which
+defaults to `false`. When it is off, `personalSpace` is omitted from the advertised tool schema and
+description, and `projectId` is required. The execution path also checks the flag: with it off, a
+call with `projectId` publishes to that project, and a call without `projectId` is rejected before
+API calls or file access. Project publishing remains available when `authoring-tools` is enabled.
 
 After changing file-based flags, restart the MCP server and reconnect clients to refresh the schema.
 
@@ -83,14 +84,14 @@ S3 uploads are not configured (i.e. `MCP_S3_BUCKET` is unset).
 
 Example: `/path/to/Superstore.twbx`
 
-## Destination: `projectId` or `personalSpace: true`
+## Destination: `projectId` or Personal Space
 
 ### `projectId`
 
 The Tableau project LUID to publish the workbook into. Use
 [List Projects](../projects/list-projects.md) to discover available project IDs. If this MCP server
 is configured with a bounded project context, publishing to a project outside that context returns
-an error instead of publishing.
+an error instead of publishing. When provided, it is always used and `personalSpace` is ignored.
 
 Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
@@ -98,14 +99,15 @@ Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
 This parameter is advertised only when `data-apps` is enabled.
 
-Set this boolean to `true` to publish into your **Personal Space**. The tool resolves the caller's
-Personal Space LUID automatically and sends it as a location to Tableau; do not pass a Personal
-Space LUID as `projectId`.
+Defaults to `true`. When `projectId` is omitted, the workbook is published into your **Personal
+Space**. The tool resolves the caller's Personal Space LUID automatically and sends it as a location
+to Tableau; do not pass a Personal Space LUID as `projectId`.
 
-- `personalSpace: true` requires `projectId` to be omitted.
-- When `personalSpace` is omitted or `false`, `projectId` is required.
-- Omitting `projectId` alone no longer selects Personal Space. Existing callers using that behavior
-  must add `personalSpace: true`.
+- `projectId` provided: published to that project; `personalSpace` is ignored.
+- `projectId` omitted and `personalSpace` true or omitted: published to your Personal Space.
+- `projectId` omitted and `personalSpace: false`: returns an error asking for `projectId`.
+
+The tool never falls back to a shared or default project.
 
 The bounded project context is not applied to the caller's own Personal Space; it continues to gate
 only `projectId`. Personal Space resolution requires the `tableau:projects:read` OAuth scope, which
@@ -116,14 +118,12 @@ Example Personal Space request:
 ```json
 {
   "name": "Q3 Sales Overview",
-  "workbookFilePath": "/path/to/Superstore.twbx",
-  "personalSpace": true
+  "workbookFilePath": "/path/to/Superstore.twbx"
 }
 ```
 
-For Personal Space requests, the tool returns an error without publishing anything if:
+For Personal Space publishes, the tool returns an error without publishing anything if:
 
-- the `data-apps` feature flag is disabled,
 - your Personal Space could not be resolved,
 - your Personal Space is read-only, or
 - the site has direct-to-personal-space publishing disabled.
@@ -131,7 +131,7 @@ For Personal Space requests, the tool returns an error without publishing anythi
 In addition, some servers accept the request but silently land the workbook in a default project
 instead of honoring the Personal Space target. In that case the workbook **is** actually published —
 just to an unintended location — and the tool still returns an error so you can delete it there if
-unwanted, or republish by passing an explicit `projectId` without `personalSpace: true`.
+unwanted, or republish by passing an explicit `projectId`.
 
 ## Optional arguments
 

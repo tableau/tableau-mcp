@@ -53,13 +53,13 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs. Provide either projectId or personalSpace: true, but not both.',
+      'The Tableau project LUID to publish into (use list-projects). Takes precedence over personalSpace.',
     ),
   personalSpace: z
     .boolean()
-    .optional()
+    .default(true)
     .describe(
-      'Set to true to publish to your Personal Space when the site supports it. Provide either personalSpace: true or projectId, but not both. Omitting both does not select a destination.',
+      'Publish to your Personal Space when projectId is omitted. Defaults to true; set false to require projectId.',
     ),
   overwrite: z
     .boolean()
@@ -78,9 +78,10 @@ const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true
       'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
     ),
 });
-// Both advertised schemas produce arguments accepted by the same execution path.
+// Both advertised schemas produce arguments accepted by the same execution path; the project
+// schema has no personalSpace, so it is optional on the shared output type.
 type PublishWorkbookParamsSchema = z.ZodType<
-  z.output<typeof personalSpaceParamsSchema>,
+  Omit<z.output<typeof personalSpaceParamsSchema>, 'personalSpace'> & { personalSpace?: boolean },
   z.ZodTypeDef,
   z.input<typeof personalSpaceParamsSchema>
 >;
@@ -118,7 +119,7 @@ export const getPublishWorkbookTool = (
       return (
         'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
         (personalSpaceEnabled
-          ? 'Provide projectId to choose the target project (use list-projects to discover IDs), or set personalSpace to true to publish to your Personal Space when the site supports it. Exactly one destination is required; providing both or neither returns an error before upload. '
+          ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
           : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
         'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
       );
@@ -141,8 +142,14 @@ export const getPublishWorkbookTool = (
         isSlackClient(server.clientId),
     ),
     callback: async (args, extra): Promise<CallToolResult> => {
-      const { workbookUploadId, workbookFilePath, name, projectId, overwrite = false } = args;
-      const personalSpace = 'personalSpace' in args ? args.personalSpace : undefined;
+      const {
+        workbookUploadId,
+        workbookFilePath,
+        name,
+        projectId,
+        personalSpace,
+        overwrite = false,
+      } = args;
       return await tool.logAndExecute<PublishWorkbookResult>({
         extra,
         args: {
@@ -156,22 +163,12 @@ export const getPublishWorkbookTool = (
         callback: async () => {
           // Recheck at execution time in case the client cached a schema from before the flag changed.
           const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
-          if (personalSpace === true && !personalSpaceEnabled) {
-            throw new FeatureDisabledError(
-              'Direct publishing to Personal Space requires the data-apps feature flag. Publish to a project instead by passing projectId and omitting personalSpace.',
-            );
-          }
-          if (projectId !== undefined && personalSpace === true) {
-            throw new ArgsValidationError(
-              'Provide either projectId or personalSpace: true, but not both.',
-            );
-          }
-          if (projectId === undefined && personalSpace !== true) {
-            throw new ArgsValidationError(
-              personalSpaceEnabled
-                ? 'A publish destination is required: provide projectId or set personalSpace to true.'
-                : 'projectId is required to publish a workbook.',
-            );
+          // projectId always wins. Without it, the destination is Personal Space unless it is
+          // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
+          const usePersonalSpace =
+            projectId === undefined && personalSpaceEnabled && personalSpace !== false;
+          if (projectId === undefined && !usePersonalSpace) {
+            throw new ArgsValidationError('projectId is required to publish a workbook.');
           }
           assertMinimumRestApiVersionSupported();
           const configWithOverrides = await extra.getConfigWithOverrides();
@@ -190,7 +187,7 @@ export const getPublishWorkbookTool = (
               // Resolve Personal Space up front when explicitly selected so a read-only or
               // unresolvable space fails before uploading anything.
               let personalSpaceTarget: PersonalSpace | undefined;
-              if (personalSpace === true) {
+              if (usePersonalSpace) {
                 const resolvedPersonalSpace = await resolvePersonalSpace(restApi);
                 if (resolvedPersonalSpace.isErr()) {
                   return resolvedPersonalSpace;
@@ -407,6 +404,8 @@ function assertMinimumRestApiVersionSupported(): void {
   }
 }
 
+const PROJECT_ID_HINT = 'pass projectId (use list-projects) to publish to a project instead.';
+
 async function resolvePersonalSpace(
   restApi: RestApi,
 ): Promise<Result<PersonalSpace, McpToolError>> {
@@ -420,13 +419,14 @@ async function resolvePersonalSpace(
     });
   } catch (error) {
     return new ArgsValidationError(
-      `Could not resolve your Personal Space for publishing (${getExceptionMessage(error)}).`,
+      `Could not resolve your Personal Space for publishing (${getExceptionMessage(error)}); ` +
+        PROJECT_ID_HINT,
     ).toErr();
   }
 
   if (personalSpace.readOnly) {
     return new ArgsValidationError(
-      'Your Personal Space is read-only and cannot be used as a publish target.',
+      `Your Personal Space is read-only and cannot be used as a publish target; ${PROJECT_ID_HINT}`,
     ).toErr();
   }
 
