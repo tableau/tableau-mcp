@@ -127,46 +127,55 @@ describe('publishWorkbookTool', () => {
     expect(paramsSchema.parse(validArgs).personalSpace).toBe(true);
   });
 
-  it.each([false, true])('advertises Personal Space only when data-apps is %s', async (enabled) => {
-    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
-      flag === 'data-apps' ? enabled : true,
-    );
-    const { McpServer } = await vi.importActual<
-      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-    >('@modelcontextprotocol/sdk/server/mcp.js');
-    const server = new McpServer({ name: 'test', version: '0.0.0' });
-    const tool = getPublishWorkbookTool(new WebMcpServer());
-    const schema = await Provider.from(tool.paramsSchema);
-    server.registerTool(
-      tool.name,
-      {
-        description: await Provider.from(tool.description),
-        inputSchema: schema,
-      },
-      async () => ({ content: [] }),
-    );
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: 'test-client', version: '0.0.0' });
-    try {
-      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-      const { tools } = await client.listTools();
-      const listed = tools.find(({ name }) => name === 'publish-workbook');
-      expect(listed?.inputSchema.properties).toHaveProperty('projectId');
-      if (enabled) {
-        expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
-        expect(listed?.inputSchema.required).not.toContain('projectId');
-        expect(listed?.description).toContain('personalSpace');
-      } else {
-        expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
-        expect(listed?.inputSchema.required).toContain('projectId');
-        expect(listed?.description).not.toMatch(/personal.?space/i);
-        expect(schema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(false);
+  it.each([false, true])(
+    'advertises Personal Space and access guidance only when data-apps is %s',
+    async (enabled) => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
+        flag === 'data-apps' ? enabled : true,
+      );
+      const { McpServer } = await vi.importActual<
+        typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+      >('@modelcontextprotocol/sdk/server/mcp.js');
+      const server = new McpServer({ name: 'test', version: '0.0.0' });
+      const tool = getPublishWorkbookTool(new WebMcpServer());
+      const schema = await Provider.from(tool.paramsSchema);
+      server.registerTool(
+        tool.name,
+        {
+          description: await Provider.from(tool.description),
+          inputSchema: schema,
+        },
+        async () => ({ content: [] }),
+      );
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'test-client', version: '0.0.0' });
+      try {
+        await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+        const { tools } = await client.listTools();
+        const listed = tools.find(({ name }) => name === 'publish-workbook');
+        expect(listed?.inputSchema.properties).toHaveProperty('projectId');
+        if (enabled) {
+          expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
+          expect(listed?.inputSchema.required).not.toContain('projectId');
+          expect(listed?.description).toContain('personalSpace');
+          expect(listed?.description).toContain('Base 1 (Warning)');
+          expect(listed?.description).toContain('Base 2 (Workbook grants present)');
+          expect(listed?.description).toContain('Base 3 (Permissions unavailable)');
+          expect(listed?.description).toContain('beta PDS reminder');
+        } else {
+          expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
+          expect(listed?.inputSchema.required).toContain('projectId');
+          expect(listed?.description).not.toMatch(
+            /personal.?space|data app|permissions|PDS|base response/i,
+          );
+          expect(schema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(false);
+        }
+      } finally {
+        await client.close();
+        await server.close();
       }
-    } finally {
-      await client.close();
-      await server.close();
-    }
-  });
+    },
+  );
 
   it('rejects a stale schema call without projectId after data-apps is disabled before API or file access', async () => {
     const tool = getPublishWorkbookTool(new WebMcpServer());
@@ -778,7 +787,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('requests only the base publish scopes when permissions disclosure is disabled', async () => {
+  it('requests only the base publish scopes for Personal Space or when data-apps is disabled', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -806,6 +815,8 @@ describe('publishWorkbookTool', () => {
     ]);
 
     mocks.useRestApiCalls.length = 0;
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+    mocks.mockPublishWorkbook.mockResolvedValue(mockWorkbook);
     await getToolResult(validArgs);
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
@@ -860,7 +871,8 @@ describe('publishWorkbookTool', () => {
     },
   );
 
-  it('skips permissions and keeps publishing available when the flag is disabled', async () => {
+  it('skips permissions and keeps publishing available when data-apps is disabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -875,6 +887,24 @@ describe('publishWorkbookTool', () => {
     expect(response.status).toBe('published');
     expect(response).not.toHaveProperty('permissions');
     expect(response).not.toHaveProperty('permissionsNote');
+    expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
+    expect(mocks.mockPermissionsSignIn).not.toHaveBeenCalled();
+    expect(mocks.useRestApiCalls).toHaveLength(1);
+  });
+
+  it('skips the optional read if data-apps is disabled while publishing', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+    mocks.mockPublishWorkbook.mockImplementation(async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
+      return mockWorkbook;
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({ status: 'published' });
+    expect(result.structuredContent).not.toHaveProperty('permissions');
+    expect(result.structuredContent).not.toHaveProperty('permissionsNote');
     expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
     expect(mocks.mockPermissionsSignIn).not.toHaveBeenCalled();
     expect(mocks.useRestApiCalls).toHaveLength(1);
@@ -987,7 +1017,11 @@ describe('publishWorkbookTool', () => {
         uploadId: 'validated-upload-id',
       });
       mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
-        if (flag === 'publish-workbook-permissions' && failure === 'feature lookup') {
+        if (
+          flag === 'data-apps' &&
+          failure === 'feature lookup' &&
+          mocks.mockPublishWorkbook.mock.calls.length > 0
+        ) {
           throw new Error('Feature service unavailable');
         }
         return true;

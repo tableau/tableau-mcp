@@ -148,7 +148,7 @@ describe('initialize with optional post-publish permission disclosure', () => {
     vi.stubEnv('OAUTH_DISABLE_SCOPES', 'false');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
     mocks.isFeatureEnabled.mockImplementation(async (flag: string) =>
-      ['authoring-tools', 'publish-workbook-permissions'].includes(flag),
+      ['authoring-tools', 'data-apps'].includes(flag),
     );
   });
 

@@ -123,19 +123,23 @@ export const getPublishWorkbookTool = (
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description: new Provider(async () => {
-      const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+      const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
       return [
         'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
-          (personalSpaceEnabled
+          (dataAppsEnabled
             ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
             : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
           'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
-        'After every successful publish to a project, respond with the publish confirmation and link, then exactly one base response below, then the applicable published parent data source reminder. Do not show the base response numbers or labels to the user. Apply this access summary only to successful project publishes. The publish result does not identify whether the workbook contains a data app, so do not gate this summary on data-app detection. Required workbook permissions for viewing data apps, using Tableau UI labels and order, are View (Read), Full Data Query (Connect), and API Access (VizqlDataApiAccess). AI Access is not a substitute for API Access. Use only existing results and task context; do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
-        'Select the base response in this order: if the permissions field is absent, use Base 3 (Permissions unavailable). Otherwise, if permissions is an empty array, use Base 1 (Warning). For non-empty rules, use Base 2 (Workbook grants present) only when all three required workbook capabilities are explicitly Allow in every returned user/group rule; otherwise use Base 1. Denied, Unspecified, and missing required capabilities all route to Base 1. A permissionsNote may explain an unavailable read, but its absence does not turn an absent permissions field into an empty array or a grant.',
-        'Base 1 (Warning): "If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. This is conservative guidance about configured rules, not a claim that an omitted capability is an explicit denial or that a particular user is effectively denied.',
-        'Base 2 (Workbook grants present): "The returned rules grant the workbook permissions required for viewing data apps." This describes the returned workbook rules; do not promise everyone with project access can view the workbook or a data app it contains.',
-        'Base 3 (Permissions unavailable): "Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. Keep the successful publish confirmation; unavailable rules do not establish a denial or an all-clear.',
-        'After selecting any base response, append the beta PDS reminder using existing context only. Known published parent data source: "For data apps, viewers also need API Access on the published data source {source}." Use the source name if known, otherwise say "the published parent data source". Known no published parent: append nothing. Unknown parent usage: "If this workbook contains a data app backed by a published data source, viewers also need API Access on that source." Parent context changes only this reminder, not the selected workbook base response. No parent data source permission lookup or evaluation is required. Do not claim parent permissions were checked or granted, or use the publisher\'s successful query as proof of other viewers\' access.',
+        ...(dataAppsEnabled
+          ? [
+              'After every successful publish to a project, respond with the publish confirmation and link, then exactly one base response below, then the applicable published parent data source reminder. Do not show the base response numbers or labels to the user. Apply this access summary only to successful project publishes. The publish result does not identify whether the workbook contains a data app, so do not gate this summary on data-app detection. Required workbook permissions for viewing data apps, using Tableau UI labels and order, are View (Read), Full Data Query (Connect), and API Access (VizqlDataApiAccess). AI Access is not a substitute for API Access. Use only existing results and task context; do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
+              'Select the base response in this order: if the permissions field is absent, use Base 3 (Permissions unavailable). Otherwise, if permissions is an empty array, use Base 1 (Warning). For non-empty rules, use Base 2 (Workbook grants present) only when all three required workbook capabilities are explicitly Allow in every returned user/group rule; otherwise use Base 1. Denied, Unspecified, and missing required capabilities all route to Base 1. A permissionsNote may explain an unavailable read, but its absence does not turn an absent permissions field into an empty array or a grant.',
+              'Base 1 (Warning): "If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. This is conservative guidance about configured rules, not a claim that an omitted capability is an explicit denial or that a particular user is effectively denied.',
+              'Base 2 (Workbook grants present): "The returned rules grant the workbook permissions required for viewing data apps." This describes the returned workbook rules; do not promise everyone with project access can view the workbook or a data app it contains.',
+              'Base 3 (Permissions unavailable): "Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. Keep the successful publish confirmation; unavailable rules do not establish a denial or an all-clear.',
+              'After selecting any base response, append the beta PDS reminder using existing context only. Known published parent data source: "For data apps, viewers also need API Access on the published data source {source}." Use the source name if known, otherwise say "the published parent data source". Known no published parent: append nothing. Unknown parent usage: "If this workbook contains a data app backed by a published data source, viewers also need API Access on that source." Parent context changes only this reminder, not the selected workbook base response. No parent data source permission lookup or evaluation is required. Do not claim parent permissions were checked or granted, or use the publisher\'s successful query as proof of other viewers\' access.',
+            ]
+          : []),
       ].join('\n\n');
     }),
     paramsSchema: new Provider(async () =>
@@ -176,11 +180,11 @@ export const getPublishWorkbookTool = (
         },
         callback: async () => {
           // Recheck at execution time in case the client cached a schema from before the flag changed.
-          const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+          const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
           // projectId always wins. Without it, the destination is Personal Space unless it is
           // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
           const usePersonalSpace =
-            projectId === undefined && personalSpaceEnabled && personalSpace !== false;
+            projectId === undefined && dataAppsEnabled && personalSpace !== false;
           if (projectId === undefined && !usePersonalSpace) {
             throw new ArgsValidationError('projectId is required to publish a workbook.');
           }
@@ -282,7 +286,7 @@ export const getPublishWorkbookTool = (
               let permissionsNote: string | undefined;
               if (personalSpaceTarget === undefined) {
                 try {
-                  if (await getFeatureGate().isFeatureEnabled('publish-workbook-permissions')) {
+                  if (await getFeatureGate().isFeatureEnabled('data-apps')) {
                     // The optional read bypasses the tool's mandatory-scope middleware check.
                     // Honor the same OAuth consent boundary before minting its REST credentials.
                     if (

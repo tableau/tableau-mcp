@@ -312,7 +312,7 @@ describe('scopes', () => {
       async ({ enabled, authoring, clientId, expected }) => {
         mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
         mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
-          if (flag === 'publish-workbook-permissions') return enabled;
+          if (flag === 'data-apps') return enabled;
           return flag === 'authoring-tools' && authoring;
         });
 

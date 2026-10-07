@@ -58,7 +58,7 @@ Related tools: [Request Workbook Upload](request-workbook-upload.md),
 - [Initiate/Append File Upload](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_publish.htm)
   (TWBX files only)
 - [Query Workbook Permissions](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions)
-  (after a project publish, when `publish-workbook-permissions` is enabled)
+  (after a project publish, when `data-apps` is enabled)
 
 ## Required arguments
 
@@ -157,15 +157,16 @@ The tool returns one of two result shapes:
 
 ### Permissions after a project publish
 
-When the `publish-workbook-permissions` feature flag is enabled, a successful project publish also
-returns `permissions`: the workbook's configured user/group permission rules. Personal Space
+When the `data-apps` feature flag is enabled, a successful project publish also returns
+`permissions`: the workbook's configured user/group permission rules. Personal Space
 publishes skip this read. If the optional read fails, publishing still succeeds and
 `permissionsNote` explains that the rules could not be retrieved. When the flag is disabled, both
-fields are omitted. See [Feature Flags](../../developers/feature-flags.md).
+fields and the data-app access guidance are omitted; ordinary project publishing remains available.
+See [Feature Flags](../../developers/feature-flags.md).
 
-After every successful project publish, start with the **publish confirmation and link**, add
-**exactly one base response**, and append **the applicable PDS reminder**. Do not show the base
-response number or label to the user. The publish result does not identify whether the workbook
+With `data-apps` enabled, after every successful project publish, start with the
+**publish confirmation and link**, add **exactly one base response**, and append **the applicable
+PDS reminder**. Do not show the base response number or label to the user. The publish result does not identify whether the workbook
 contains a data app, so there is no separate response branch for regular workbooks. Frame the
 following requirements as applying to data apps, using Tableau UI labels and order:
 
@@ -187,7 +188,9 @@ flowchart TD
     A -->|No| E["Report the error; no access summary"]
     A -->|Yes| B{"Published to a project?"}
     B -->|"No: Personal Space"| C["Publish confirmation only"]
-    B -->|Yes| D{"permissions field present?"}
+    B -->|Yes| H{"data-apps enabled?"}
+    H -->|No| C
+    H -->|Yes| D{"permissions field present?"}
     D -->|No| R3["Base 3: Permissions unavailable"]
     D -->|Yes| F{"permissions array empty?"}
     F -->|Yes| R1["Base 1: Warning"]
@@ -206,8 +209,9 @@ Denied and Unspecified/missing use the **same conservative warning**, while reta
 different meanings in the returned rules. An absent capability is not rewritten as an explicit
 denial. An empty `permissions` array means no configured grants were returned and routes to
 Base 1; an absent `permissions` field means the rules are unavailable and routes to Base 3.
-The absence of `permissionsNote` does not imply that rules were returned: disabling disclosure
-omits both fields. A mix of complete and incomplete grantee rules routes to Base 1.
+The absence of `permissionsNote` does not imply that rules were returned. Disabling `data-apps`
+omits both fields and the access-summary guidance entirely. A mix of complete and incomplete
+grantee rules routes to Base 1.
 
 **Base 1 — Warning**
 

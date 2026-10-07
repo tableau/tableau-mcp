@@ -625,7 +625,7 @@ export async function getSupportedApiScopes(
   if (
     includeOptionalScopes &&
     enabledTools.has('publish-workbook') &&
-    (await getFeatureGate().isFeatureEnabled('publish-workbook-permissions'))
+    (await getFeatureGate().isFeatureEnabled('data-apps'))
   ) {
     scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
   }
