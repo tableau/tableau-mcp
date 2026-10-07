@@ -37,11 +37,12 @@ after a successful project publish. Set `"data-apps": true` to enable both. The 
 `publish-workbook` available.
 
 When disabled, project publishing remains available, skips the permissions request, and omits
-`permissions` and `permissionsNote`. Its tool description also omits the data-app access guidance.
+`permissions`, `permissionsNote`, and `permissionsMessage`. Its tool description also omits the data-app access guidance.
 The server also omits `tableau:permissions:read` from OAuth discovery. When enabled, the permissions
 read uses a separate REST session with that scope, so a permissions or
 authentication failure still returns the published workbook with a `permissionsNote`. Personal Space
-publishes always skip this read.
+publishes always skip this read and omit the permission fields. When enabled for a project publish,
+`permissionsMessage` contains the selected base response, including when the read fails.
 
 When OAuth API scope enforcement is enabled, the caller must already hold
 `tableau:permissions:read`; a missing grant skips disclosure and returns `permissionsNote`.

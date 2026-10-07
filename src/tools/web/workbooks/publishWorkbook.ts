@@ -100,6 +100,8 @@ export type PublishWorkbookResult =
       // Absent for Personal Space, disabled permissions disclosure, or a failed permissions read.
       permissions?: GranteeCapability[];
       permissionsNote?: string;
+      // Selected base response for data-app access guidance after a project publish.
+      permissionsMessage?: string;
     }
   | {
       status: 'invalid';
@@ -132,12 +134,8 @@ export const getPublishWorkbookTool = (
           'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
         ...(dataAppsEnabled
           ? [
-              'After every successful publish to a project, respond with the publish confirmation and link, then exactly one base response below, then the applicable published parent data source reminder. Do not show the base response numbers or labels to the user. Apply this access summary only to successful project publishes. The publish result does not identify whether the workbook contains a data app, so do not gate this summary on data-app detection. Required workbook permissions for viewing data apps, using Tableau UI labels and order, are View (Read), Full Data Query (Connect), and API Access (VizqlDataApiAccess). AI Access is not a substitute for API Access. Use only existing results and task context; do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
-              'Select the base response in this order: if the permissions field is absent, use Base 3 (Permissions unavailable). Otherwise, if permissions is an empty array, use Base 1 (Warning). For non-empty rules, use Base 2 (Workbook grants present) only when all three required workbook capabilities are explicitly Allow in every returned user/group rule; otherwise use Base 1. Denied, Unspecified, and missing required capabilities all route to Base 1. A permissionsNote may explain an unavailable read, but its absence does not turn an absent permissions field into an empty array or a grant.',
-              'Base 1 (Warning): "If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. This is conservative guidance about configured rules, not a claim that an omitted capability is an explicit denial or that a particular user is effectively denied.',
-              'Base 2 (Workbook grants present): "The returned rules grant the workbook permissions required for viewing data apps." This describes the returned workbook rules; do not promise everyone with project access can view the workbook or a data app it contains.',
-              'Base 3 (Permissions unavailable): "Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on {workbook}." Substitute the published workbook name. Keep the successful publish confirmation; unavailable rules do not establish a denial or an all-clear.',
-              'After selecting any base response, append the beta PDS reminder using existing context only. Known published parent data source: "For data apps, viewers also need API Access on the published data source {source}." Use the source name if known, otherwise say "the published parent data source". Known no published parent: append nothing. Unknown parent usage: "If this workbook contains a data app backed by a published data source, viewers also need API Access on that source." Parent context changes only this reminder, not the selected workbook base response. No parent data source permission lookup or evaluation is required. Do not claim parent permissions were checked or granted, or use the publisher\'s successful query as proof of other viewers\' access.',
+              'After a successful publish, show the confirmation and link, then relay permissionsMessage when present. The tool selects this base response from the returned workbook rules; do not reclassify those rules or substitute a different base response. If permissionsMessage is absent, omit the access summary and PDS reminder. The publish result does not identify whether the workbook contains a data app. These messages describe configured rules, not effective access for every viewer. Use only existing results and task context; do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
+              'After relaying permissionsMessage, append the beta PDS reminder using existing context only. Known published parent data source: "For data apps, viewers also need API Access on the published data source {source}." Use the source name if known, otherwise say "the published parent data source". Known no published parent: append nothing. Unknown parent usage: "If this workbook contains a data app backed by a published data source, viewers also need API Access on that source." Parent context changes only this reminder, not the selected workbook base response. No parent data source permission lookup or evaluation is required. Do not claim parent permissions were checked or granted, or use the publisher\'s successful query as proof of other viewers\' access.',
             ]
           : []),
       ].join('\n\n');
@@ -284,9 +282,12 @@ export const getPublishWorkbookTool = (
               // permissions-read failure must not fail an already-completed publish.
               let permissions: GranteeCapability[] | undefined;
               let permissionsNote: string | undefined;
+              let permissionsDisclosureEnabled = dataAppsEnabled;
               if (personalSpaceTarget === undefined) {
                 try {
-                  if (await getFeatureGate().isFeatureEnabled('data-apps')) {
+                  permissionsDisclosureEnabled =
+                    await getFeatureGate().isFeatureEnabled('data-apps');
+                  if (permissionsDisclosureEnabled) {
                     // The optional read bypasses the tool's mandatory-scope middleware check.
                     // Honor the same OAuth consent boundary before minting its REST credentials.
                     if (
@@ -332,6 +333,13 @@ export const getPublishWorkbookTool = (
                 warnings: outcome.warnings,
                 ...(permissions !== undefined && { permissions }),
                 ...(permissionsNote !== undefined && { permissionsNote }),
+                ...(personalSpaceTarget === undefined &&
+                  permissionsDisclosureEnabled && {
+                    permissionsMessage: getWorkbookPermissionsMessage(
+                      publishedWorkbook.name,
+                      permissions,
+                    ),
+                  }),
               });
             },
           });
@@ -350,6 +358,34 @@ export const getPublishWorkbookTool = (
 
   return tool;
 };
+
+// Summarize configured rules only; this does not calculate any user's effective access.
+function getWorkbookPermissionsMessage(
+  workbookName: string,
+  permissions: GranteeCapability[] | undefined,
+): string {
+  if (permissions === undefined) {
+    return `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${workbookName}.`;
+  }
+
+  const requiredCapabilities = ['Read', 'Connect', 'VizqlDataApiAccess'];
+  const grantsPresent =
+    permissions.length > 0 &&
+    permissions.every((rule) =>
+      requiredCapabilities.every((name) => {
+        const entries = rule.capabilities?.capability?.filter((entry) => entry.name === name);
+        return (
+          entries !== undefined &&
+          entries.length > 0 &&
+          entries.every((entry) => entry.mode === 'Allow')
+        );
+      }),
+    );
+
+  return grantsPresent
+    ? 'The returned rules grant the workbook permissions required for viewing data apps.'
+    : `If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on ${workbookName}.`;
+}
 
 type ValidationOutcome =
   | { status: 'invalid'; errors: ValidationFinding[]; warnings: ValidationFinding[] }

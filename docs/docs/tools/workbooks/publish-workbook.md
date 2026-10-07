@@ -158,17 +158,22 @@ The tool returns one of two result shapes:
 ### Permissions after a project publish
 
 When the `data-apps` feature flag is enabled, a successful project publish also returns
-`permissions`: the workbook's configured user/group permission rules. Personal Space
-publishes skip this read. If the optional read fails, publishing still succeeds and
-`permissionsNote` explains that the rules could not be retrieved. When the flag is disabled, both
-fields and the data-app access guidance are omitted; ordinary project publishing remains available.
+`permissions`: the workbook's configured user/group permission rules, and `permissionsMessage`: the
+selected user-facing base response. The same fields appear in `structuredContent` and the JSON text
+content. Personal Space publishes skip this read and omit these fields. If the optional read fails,
+publishing still succeeds;
+`permissionsNote` explains that the rules could not be retrieved, and `permissionsMessage` contains
+the permissions-unavailable response. When the flag is disabled, all three permission fields and
+the data-app access guidance are omitted; ordinary project publishing remains available.
 See [Feature Flags](../../developers/feature-flags.md).
 
-With `data-apps` enabled, after every successful project publish, start with the
-**publish confirmation and link**, add **exactly one base response**, and append **the applicable
-PDS reminder**. Do not show the base response number or label to the user. The publish result does not identify whether the workbook
-contains a data app, so there is no separate response branch for regular workbooks. Frame the
-following requirements as applying to data apps, using Tableau UI labels and order:
+With `data-apps` enabled, the tool selects exactly one base response and returns it as
+`permissionsMessage`. Show the **publish confirmation and link**, relay that message, then append
+**the applicable PDS reminder** using existing context. The agent does not need to select or compose
+the base response. If `permissionsMessage` is absent, omit the access summary and PDS reminder.
+
+The publish result does not identify whether the workbook contains a data app, so there is no
+separate response branch for regular workbooks. Requirements use Tableau UI labels and order:
 
 | Resource | Tableau UI capability | API capability name |
 | --- | --- | --- |
@@ -180,7 +185,8 @@ following requirements as applying to data apps, using Tableau UI labels and ord
 AI Access is a separate capability and does not replace API Access for the data app. Avoid
 listing raw grantee IDs, every permission rule, or unrelated capabilities.
 
-Route the existing results in this order:
+The tool selects `permissionsMessage` from the existing results in this order. The final PDS
+reminder is still appended by the agent, because parent-source context is not a publish-tool input:
 
 ```mermaid
 flowchart TD
@@ -210,7 +216,7 @@ different meanings in the returned rules. An absent capability is not rewritten 
 denial. An empty `permissions` array means no configured grants were returned and routes to
 Base 1; an absent `permissions` field means the rules are unavailable and routes to Base 3.
 The absence of `permissionsNote` does not imply that rules were returned. Disabling `data-apps`
-omits both fields and the access-summary guidance entirely. A mix of complete and incomplete
+omits all three permission fields and the access-summary guidance entirely. A mix of complete and incomplete
 grantee rules routes to Base 1.
 
 **Base 1 — Warning**
@@ -228,8 +234,14 @@ grantee rules routes to Base 1.
 > Viewer access was not verified. If this workbook contains a data app, intended viewers need
 > **View, Full Data Query, and API Access** on **{workbook}**.
 
-Substitute the published workbook name in Bases 1 and 3. These base responses always follow
-the successful publish confirmation and link.
+The tool substitutes the returned workbook name in Bases 1 and 3. Relay `permissionsMessage`
+after the successful publish confirmation and link. For example, Base 2 is returned as:
+
+```json
+{
+  "permissionsMessage": "The returned rules grant the workbook permissions required for viewing data apps."
+}
+```
 
 For beta, append the PDS reminder using existing context only:
 
