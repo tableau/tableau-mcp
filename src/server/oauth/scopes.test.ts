@@ -549,13 +549,13 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:update');
     });
 
-    it('should require base publish scopes plus content read for publish-workbook', () => {
+    it('should require only base publish scopes plus projects read for publish-workbook', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
       expect(scopes).toEqual([
         'tableau:workbooks:create',
         'tableau:file_uploads:create',
-        'tableau:content:read',
+        'tableau:projects:read',
       ]);
     });
 

@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
 
@@ -101,17 +103,105 @@ describe('publishWorkbookTool', () => {
     const paramsSchema = await Provider.from(tool.paramsSchema);
 
     expect(tool.name).toBe('publish-workbook');
-    expect(tool.description).toContain('Publishes a TWB or TWBX workbook');
-    expect(paramsSchema).toMatchObject({
-      workbookUploadId: expect.any(Object),
-      workbookFilePath: expect.any(Object),
-      name: expect.any(Object),
-      projectId: expect.any(Object),
-      overwrite: expect.any(Object),
-    });
+    expect(await Provider.from(tool.description)).toContain('Publishes a TWB or TWBX workbook');
     expect(annotations.destructiveHint).toBe(true);
-    expect(paramsSchema.name.safeParse('').success).toBe(false);
-    expect(tool.description).toContain('Personal Space');
+    expect(paramsSchema.safeParse({ ...validArgs, name: '' }).success).toBe(false);
+    expect(await Provider.from(tool.description)).toContain('Personal Space');
+    expect(paramsSchema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(true);
+    expect(paramsSchema.safeParse({ ...validArgs, personalSpace: false }).success).toBe(true);
+    expect(
+      paramsSchema.safeParse({ ...validArgs, personalSpace: 'personal-space-luid' }).success,
+    ).toBe(false);
+    expect(paramsSchema.parse(validArgs).personalSpace).toBe(true);
+  });
+
+  it.each([false, true])('advertises Personal Space only when data-apps is %s', async (enabled) => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
+      flag === 'data-apps' ? enabled : true,
+    );
+    const { McpServer } = await vi.importActual<
+      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+    >('@modelcontextprotocol/sdk/server/mcp.js');
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
+    server.registerTool(
+      tool.name,
+      {
+        description: await Provider.from(tool.description),
+        inputSchema: schema,
+      },
+      async () => ({ content: [] }),
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const { tools } = await client.listTools();
+      const listed = tools.find(({ name }) => name === 'publish-workbook');
+      expect(listed?.inputSchema.properties).toHaveProperty('projectId');
+      if (enabled) {
+        expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
+        expect(listed?.inputSchema.required).not.toContain('projectId');
+        expect(listed?.description).toContain('personalSpace');
+      } else {
+        expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
+        expect(listed?.inputSchema.required).toContain('projectId');
+        expect(listed?.description).not.toMatch(/personal.?space/i);
+        expect(schema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(false);
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('rejects a stale schema call without projectId after data-apps is disabled before API or file access', async () => {
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    const schema = await Provider.from(tool.paramsSchema);
+    const args = schema.parse({
+      name: validArgs.name,
+      workbookFilePath: '/tmp/demo.twbx',
+      personalSpace: true,
+    });
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag !== 'data-apps');
+    const result = await (await Provider.from(tool.callback))(args, getMockExtra({}));
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining('projectId is required to publish a workbook.'),
+      }),
+    ]);
+    expect(mocks.useRestApiCalls).toHaveLength(0);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('keeps project publishing available when data-apps is disabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag !== 'data-apps');
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+    const tool = getPublishWorkbookTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect((await Provider.from(tool.paramsSchema)).safeParse(validArgs).success).toBe(true);
+    const result = await getToolResult(validArgs);
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: validArgs.projectId }),
+    );
+
+    // A defaulted personalSpace leaking through a stale schema must not block a projectId publish.
+    mocks.mockPublishWorkbook.mockClear();
+    const staleResult = await getToolResult({ ...validArgs, personalSpace: true });
+    expect(staleResult.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: validArgs.projectId }),
+    );
   });
 
   it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
@@ -512,7 +602,53 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
-  it('defaults to the caller Personal Space when projectId is omitted and it is writable', async () => {
+  it('rejects personalSpace false without projectId before any API or file access', async () => {
+    const result = await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+      personalSpace: false,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('projectId is required');
+    expect(mocks.useRestApiCalls).toHaveLength(0);
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('lets projectId win over personalSpace true', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+
+    const result = await getToolResult({ ...validArgs, personalSpace: true });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('location');
+  });
+
+  it('publishes to the project when personalSpace is explicitly false', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
+      timestamp: '2026-06-10T14:32:18.456Z',
+      uploadId: 'validated-upload-id',
+    });
+
+    const result = await getToolResult({ ...validArgs, personalSpace: false });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project-id' }),
+    );
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('location');
+  });
+
+  it('publishes to the caller Personal Space when projectId and personalSpace are both omitted', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -548,11 +684,11 @@ describe('publishWorkbookTool', () => {
       location: 'personal-space-luid',
       overwrite: false,
     });
-    // Auto-default path must not pass projectId to the SDK.
+    // Personal Space path must not pass projectId to the SDK.
     expect(mocks.mockPublishWorkbook.mock.calls[0][0]).not.toHaveProperty('projectId');
   });
 
-  it('does not run the bounded-context check on the auto-default Personal Space path', async () => {
+  it('does not run the bounded-context check on the explicit Personal Space path', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -570,7 +706,7 @@ describe('publishWorkbookTool', () => {
 
     // A bounded context that would reject the personal-space luid if it were checked.
     const result = await getToolResult(
-      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name },
+      { workbookUploadId: validArgs.workbookUploadId, name: validArgs.name, personalSpace: true },
       { boundedProjectIds: new Set(['only-this-project']) },
     );
 
@@ -593,6 +729,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('read-only');
+    expect(result.content[0].text).toContain('pass projectId');
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
@@ -603,12 +740,14 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('projectId is required');
+    expect(result.content[0].text).toContain('Could not resolve your Personal Space');
     expect(result.content[0].text).toContain('404 personalSpace not found');
+    expect(result.content[0].text).toContain('pass projectId');
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
@@ -643,11 +782,15 @@ describe('publishWorkbookTool', () => {
       location: { id: 'personal-space-luid', type: 'PersonalSpace' },
     });
 
-    await getToolResult({ workbookUploadId: validArgs.workbookUploadId, name: validArgs.name });
+    await getToolResult({
+      workbookUploadId: validArgs.workbookUploadId,
+      name: validArgs.name,
+      personalSpace: true,
+    });
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
-      'tableau:content:read',
+      'tableau:projects:read',
     ]);
 
     mocks.useRestApiCalls.length = 0;
@@ -655,7 +798,7 @@ describe('publishWorkbookTool', () => {
     expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
-      'tableau:content:read',
+      'tableau:projects:read',
     ]);
   });
 
@@ -678,6 +821,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
@@ -711,6 +855,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult({
       workbookUploadId: validArgs.workbookUploadId,
       name: validArgs.name,
+      personalSpace: true,
     });
 
     expect(result.isError).toBe(true);
@@ -763,6 +908,7 @@ describe('publishWorkbookTool', () => {
         workbookFilePath: undefined,
         name: validArgs.name,
         projectId: validArgs.projectId,
+        personalSpace: undefined,
         overwrite: false,
       },
       getMockRequestHandlerExtra(),
@@ -774,6 +920,7 @@ describe('publishWorkbookTool', () => {
       workbookFilePath: undefined,
       name: validArgs.name,
       projectId: validArgs.projectId,
+      personalSpace: undefined,
       overwrite: false,
     });
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
@@ -786,6 +933,7 @@ async function getToolResult(
     workbookFilePath?: string;
     name: string;
     projectId?: string;
+    personalSpace?: boolean;
     overwrite?: boolean;
   },
   options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
@@ -798,6 +946,7 @@ async function getToolResult(
       workbookFilePath: params.workbookFilePath,
       name: params.name,
       projectId: params.projectId,
+      personalSpace: params.personalSpace,
       overwrite: params.overwrite ?? false,
     },
     getMockExtra(options),

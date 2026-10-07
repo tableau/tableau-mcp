@@ -21,7 +21,7 @@ export default class PersonalSpaceMethods extends AuthenticatedMethods<typeof pe
   /**
    * Returns the calling user's Personal Space on the specified site.
    *
-   * Required scopes: `tableau:content:read`
+   * Required scopes: `tableau:projects:read`
    *
    * @param siteId - The Tableau site ID
    */
