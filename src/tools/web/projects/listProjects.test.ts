@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { OverridableConfig } from '../../../overridableConfig.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
@@ -38,13 +39,33 @@ describe('listProjectsTool', () => {
     vi.clearAllMocks();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const listProjectsTool = getListProjectsTool(new WebMcpServer());
     expect(listProjectsTool.name).toBe('list-projects');
-    expect(listProjectsTool.description).toContain(
+    expect(await Provider.from(listProjectsTool.description)).toContain(
       'Retrieves a list of projects on a Tableau site',
     );
     expect(listProjectsTool.paramsSchema).toMatchObject({});
+  });
+
+  it('should advertise capability on REST API 3.30 and later', async () => {
+    const listProjectsTool = getListProjectsTool(new WebMcpServer());
+    const schema = await Provider.from(listProjectsTool.paramsSchema);
+    expect(schema.safeParse({ capability: 'Write' }).data).toEqual({ capability: 'Write' });
+    expect(await Provider.from(listProjectsTool.description)).toContain('capability: "Write"');
+  });
+
+  it('should not advertise capability below REST API 3.30', async () => {
+    const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
+    try {
+      const listProjectsTool = getListProjectsTool(new WebMcpServer());
+      const schema = await Provider.from(listProjectsTool.paramsSchema);
+      expect(schema.safeParse({ capability: 'Write' }).data).toEqual({});
+      expect(await Provider.from(listProjectsTool.description)).not.toContain('capability');
+    } finally {
+      RestApi.versionIsAtLeast = originalVersionIsAtLeast;
+    }
   });
 
   it('should successfully query projects', async () => {

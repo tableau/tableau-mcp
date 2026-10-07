@@ -53,7 +53,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'The Tableau project LUID to publish into (use list-projects with capability "Write" to find publishable projects). Takes precedence over personalSpace.',
+      'The Tableau project LUID to publish into (use list-projects). Takes precedence over personalSpace.',
     ),
   personalSpace: z
     .boolean()
@@ -75,7 +75,7 @@ const projectParamsSchema = personalSpaceParamsSchema.omit({ personalSpace: true
     .string()
     .min(1)
     .describe(
-      'The Tableau project LUID to publish the workbook into. Use list-projects with capability "Write" to discover the projects the user can publish to.',
+      'The Tableau project LUID to publish the workbook into. Use list-projects to discover available project IDs.',
     ),
 });
 // Both advertised schemas produce arguments accepted by the same execution path; the project
@@ -119,8 +119,8 @@ export const getPublishWorkbookTool = (
       return (
         'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
         (personalSpaceEnabled
-          ? 'Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
-          : 'Provide projectId to choose the target project (use list-projects with capability "Write" to discover the projects the user can publish to). ') +
+          ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
+          : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
         'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
       );
     }),
@@ -404,8 +404,7 @@ function assertMinimumRestApiVersionSupported(): void {
   }
 }
 
-const PROJECT_ID_HINT =
-  'pass projectId (use list-projects with capability "Write") to publish to a project instead.';
+const PROJECT_ID_HINT = 'pass projectId (use list-projects) to publish to a project instead.';
 
 async function resolvePersonalSpace(
   restApi: RestApi,

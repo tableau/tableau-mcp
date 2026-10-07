@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import { Provider } from '../../../utils/provider.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
@@ -38,12 +40,28 @@ const paramsSchema = {
     ),
 };
 
-export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
-  const listProjectsTool = new WebTool({
+const capabilityParamsSchema = z.object(paramsSchema);
+const baseParamsSchema = capabilityParamsSchema.omit({ capability: true });
+type ListProjectsParamsSchema = z.ZodType<
+  z.output<typeof capabilityParamsSchema>,
+  z.ZodTypeDef,
+  z.input<typeof capabilityParamsSchema>
+>;
+
+const isProjectCapabilityFilterSupported = (): boolean => RestApi.versionIsAtLeast('3.30');
+
+const capabilityDescription = `
+
+  **Finding projects to publish to**
+  Pass \`capability: "Write"\` to return only the projects the current user can publish or create content into. The server applies this filter, so \`totalAvailable\` counts only those projects. Use it whenever you ask the user where to publish, so they are only offered projects they can actually publish to. It combines with \`filter\`, e.g. \`capability: "Write"\` with \`filter: "parentProjectId:eq:abc-123"\` lists the publishable child projects of a parent.`;
+
+export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsParamsSchema> => {
+  const listProjectsTool = new WebTool<ListProjectsParamsSchema>({
     server,
     name: 'list-projects',
     minRequiredRole: SiteRole.VIEWER,
-    description: `
+    description: new Provider(
+      () => `
   Retrieves a list of projects on a Tableau site including their metadata such as name, description, parent project, content permissions, owner, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Default) for precise project discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.
 
@@ -69,16 +87,16 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   - List child projects of a specific parent:
       filter: "parentProjectId:eq:abc-123"
   - List projects updated after January 1, 2023:
-      filter: "updatedAt:gt:2023-01-01T00:00:00Z"
-
-  **Finding projects to publish to**
-  Pass \`capability: "Write"\` to return only the projects the current user can publish or create content into. The server applies this filter, so \`totalAvailable\` counts only those projects. Use it whenever you ask the user where to publish, so they are only offered projects they can actually publish to. It combines with \`filter\`, e.g. \`capability: "Write"\` with \`filter: "parentProjectId:eq:abc-123"\` lists the publishable child projects of a parent.
+      filter: "updatedAt:gt:2023-01-01T00:00:00Z"${isProjectCapabilityFilterSupported() ? capabilityDescription : ''}
 
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
   The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
   To get just the count of projects matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
-    paramsSchema,
+    ),
+    paramsSchema: new Provider(() =>
+      isProjectCapabilityFilterSupported() ? capabilityParamsSchema : baseParamsSchema,
+    ),
     annotations: {
       title: 'List Projects',
       readOnlyHint: true,

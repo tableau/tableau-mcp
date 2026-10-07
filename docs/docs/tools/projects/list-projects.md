@@ -31,6 +31,13 @@ asking the user where to publish so they are only offered projects they can publ
 It combines with [`filter`](#filter), for example `capability: "Write"` with
 `filter: "parentProjectId:eq:abc-123"` lists the publishable child projects of a parent.
 
+:::info[Minimum REST API version]
+
+`capability` requires Tableau REST API version 3.30 or later (Tableau Server 2026.3+). On older
+servers it is not advertised, because they ignore it and return every project the user can view.
+
+:::
+
 Example: `Write`
 
 <hr />
