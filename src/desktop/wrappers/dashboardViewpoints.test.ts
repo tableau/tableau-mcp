@@ -2,6 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 
 import {
   composeDashboardWorkbook,
+  createDashboardReadbackVerifier,
   dashboardMembershipMatches,
   dashboardWorksheetNames,
   omitWorkbookActions,
@@ -135,5 +136,128 @@ describe('dashboard viewpoint registration', () => {
     expect(dashboardMembershipMatches(retained, 'D', ['A'])).toBe(true);
     expect(dashboardMembershipMatches(registered, 'D', ['B'])).toBe(false);
     expect(dashboardMembershipMatches(registered, 'Missing', [])).toBe(false);
+  });
+});
+
+describe('dashboard content readback', () => {
+  const dashboard = `<dashboard name="D"><size minwidth="1000" minheight="800"/>
+    <zones><zone id="1" type-v2="layout-basic"><zone id="2" name="A" x="100" y="200" w="300" h="400">
+    <zone-style><format attr="margin" value="4"/></zone-style></zone>
+    <zone id="3" type-v2="text"><formatted-text><run>Sales &amp; Profit</run></formatted-text></zone></zone></zones>
+    <devicelayouts><devicelayout name="Phone"><size minheight="700"/>
+    <zones><zone id="2" name="A" x="200" y="300" w="400" h="500"/></zones>
+    </devicelayout></devicelayouts></dashboard>`;
+  const candidate = `<workbook><dashboards>${dashboard}</dashboards><windows>
+    <window class="dashboard" name="D"><viewpoints><viewpoint name="A"><zoom type="standard"/>
+    <highlight field="Category"/></viewpoint></viewpoints></window></windows></workbook>`;
+  const matches = createDashboardReadbackVerifier(candidate, 'D');
+
+  it('ignores XML presentation and added metadata while preserving all authored content', () => {
+    const serialized = candidate
+      .replace('id="2" name="A" x="100"', 'name="A" x="101" id="2"')
+      .replace('</dashboard>', '<simple-id uuid="generated"/></dashboard>')
+      .replace(
+        '<viewpoints>',
+        '<viewpoints><viewpoint name="Removed"><zoom type="fit-width"/></viewpoint>',
+      )
+      .replaceAll('/>', ' />')
+      .replaceAll('"', "'")
+      .replaceAll('\n', '\n  ');
+    expect(matches(serialized)).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'missing Phone layout',
+      change: (xml: string) => xml.replace(/<devicelayouts>[\s\S]*?<\/devicelayouts>/, ''),
+    },
+    {
+      name: 'changed Phone geometry',
+      change: (xml: string) => xml.replace('w="400" h="500"', 'w="900" h="500"'),
+    },
+    {
+      name: 'missing main layout despite a matching Phone worksheet',
+      change: (xml: string) => xml.replace(/<zones>[\s\S]*?<\/zones>/, '<zones/>'),
+    },
+    {
+      name: 'changed dashboard size',
+      change: (xml: string) => xml.replace('minwidth="1000"', 'minwidth="900"'),
+    },
+    {
+      name: 'dropped zone styling',
+      change: (xml: string) => xml.replace(/<zone-style>[\s\S]*?<\/zone-style>/, ''),
+    },
+    {
+      name: 'changed title',
+      change: (xml: string) => xml.replace('Sales &amp; Profit', 'Other title'),
+    },
+    {
+      name: 'changed retained zoom',
+      change: (xml: string) => xml.replace('type="standard"', 'type="entire-view"'),
+    },
+    {
+      name: 'dropped retained highlight',
+      change: (xml: string) => xml.replace('<highlight field="Category"/>', ''),
+    },
+    {
+      name: 'duplicate view registration',
+      change: (xml: string) => xml.replace('<viewpoints>', '<viewpoints><viewpoint name="A"/>'),
+    },
+    {
+      name: 'duplicate dashboard identity',
+      change: (xml: string) => xml.replace('</dashboards>', '<dashboard name="D"/></dashboards>'),
+    },
+    {
+      name: 'duplicate window identity',
+      change: (xml: string) =>
+        xml.replace('</windows>', '<window class="dashboard" name="D"/></windows>'),
+    },
+    {
+      name: 'changed zone nesting',
+      change: (xml: string) =>
+        xml.replace(
+          /<zone id="1" type-v2="layout-basic">([\s\S]*?)<\/zone><\/zones>/,
+          '$1</zones>',
+        ),
+    },
+    {
+      name: 'extra layout object',
+      change: (xml: string) => xml.replace('</zones>', '<zone id="99" type-v2="text"/></zones>'),
+    },
+  ])('rejects $name even when worksheet membership still matches', ({ change }) => {
+    const actual = change(candidate);
+    expect(actual).not.toBe(candidate);
+    expect(dashboardMembershipMatches(actual, 'D', ['A'])).toBe(true);
+    expect(matches(actual)).toBe(false);
+  });
+
+  it('does not treat missing empty attributes as preserved', () => {
+    const withEmptyAttribute = candidate.replace('<run>', '<run fontname="">');
+    expect(createDashboardReadbackVerifier(withEmptyAttribute, 'D')(candidate)).toBe(false);
+  });
+
+  it('matches namespaced settings by namespace while requiring their values', () => {
+    const expected = candidate.replace(
+      '<dashboard name="D">',
+      '<dashboard name="D" xmlns:user="urn:tableau:user" user:setting="keep">',
+    );
+    const actual = expected
+      .replaceAll('xmlns:user=', 'xmlns:other=')
+      .replaceAll('user:setting=', 'other:setting=');
+    const verify = createDashboardReadbackVerifier(expected, 'D');
+    expect(verify(actual)).toBe(true);
+    expect(verify(actual.replace('other:setting="keep"', 'other:setting="lost"'))).toBe(false);
+    expect(verify(actual.replace(' other:setting="keep"', ''))).toBe(false);
+  });
+
+  it('rejects empty zone coordinates rather than interpreting them as zero', () => {
+    const expected = candidate.replace('x="100"', 'x="0"');
+    expect(createDashboardReadbackVerifier(expected, 'D')(expected.replace('x="0"', 'x=""'))).toBe(
+      false,
+    );
+  });
+
+  it('rejects malformed readback', () => {
+    expect(matches('<workbook><dashboard')).toBe(false);
   });
 });

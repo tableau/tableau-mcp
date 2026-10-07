@@ -47,7 +47,185 @@ function fixture(
 }
 
 describe('dashboard membership apply', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each([{ names: [] }, { names: ['A'] }])(
+    'pins the snapshot instance for a create-capable apply: $names',
+    async ({ names }) => {
+      const { executor, live } = fixture(names);
+      Object.defineProperty(executor, 'desktopInstanceId', { value: 'different-cached-instance' });
+      vi.mocked(executor.getWorkbookDocument).mockImplementation(async () =>
+        Ok({
+          xml: live(),
+          instanceId: 'snapshot-instance',
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      );
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(names),
+        focus,
+        executor,
+        signal,
+      });
+      expect(result.isOk()).toBe(true);
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(expect.any(String), signal, {
+        expectedInstanceId: 'snapshot-instance',
+      });
+    },
+  );
+
+  it('rejects a restarted instance during freshness checking even if its workbook XML is identical', async () => {
+    const { executor, original } = fixture(['A']);
+    vi.mocked(executor.getWorkbookDocument)
+      .mockResolvedValueOnce(
+        Ok({
+          xml: original,
+          instanceId: 'before-restart',
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      )
+      .mockResolvedValue(
+        Ok({
+          xml: original,
+          instanceId: 'after-restart',
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      );
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A']),
+      focus,
+      executor,
+      signal,
+    });
+    expect(result).toMatchObject({ error: { error: { type: 'source-drift' } } });
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('passes the original pin through dispatch and propagates a restart rejection without retrying', async () => {
+    const { executor, original } = fixture(['A']);
+    vi.mocked(executor.getWorkbookDocument).mockResolvedValue(
+      Ok({
+        xml: original,
+        instanceId: 'snapshot-instance',
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+    const restartError = {
+      type: 'command-failed',
+      error: { code: 'instance-mismatch', message: 'Desktop restarted', recoverable: false },
+    } as const;
+    vi.mocked(executor.applyWorkbookDocument).mockImplementation(async (_xml, _signal, options) => {
+      expect(options?.expectedInstanceId).toBe('snapshot-instance');
+      return Err(restartError);
+    });
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A']),
+      focus,
+      executor,
+      signal,
+    });
+    expect(result).toMatchObject({ error: { type: 'execute-command-error', error: restartError } });
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['Phone layout', 'retained settings', 'Desktop instance'])(
+    'reports uncertain after accepted apply loses %s',
+    async (loss) => {
+      vi.useFakeTimers();
+      const { executor, original, live } = fixture(['A']);
+      const xml = fragment(['A']).replace(
+        '<simple-id',
+        '<devicelayouts><devicelayout name="Phone"><zones><zone id="4" name="A"/></zones></devicelayout></devicelayouts><simple-id',
+      );
+      vi.mocked(executor.getWorkbookDocument)
+        .mockResolvedValueOnce(
+          Ok({
+            xml: original,
+            instanceId: 'snapshot-instance',
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        )
+        .mockResolvedValueOnce(
+          Ok({
+            xml: original,
+            instanceId: 'snapshot-instance',
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        )
+        .mockImplementation(async () =>
+          Ok({
+            xml:
+              loss === 'Phone layout'
+                ? live().replace(/<devicelayouts>[\s\S]*?<\/devicelayouts>/, '')
+                : loss === 'retained settings'
+                  ? live().replace('type="standard"', 'type="entire-view"')
+                  : live(),
+            instanceId: loss === 'Desktop instance' ? 'restarted-instance' : 'snapshot-instance',
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        );
+      const pending = loadDashboardXml({ dashboardName: 'D', xml, focus, executor, signal });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(result).toMatchObject({
+        error: {
+          error: {
+            type: 'verification-failed',
+            message: expect.stringContaining('Changes may have been applied'),
+          },
+        },
+      });
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('waits for layout and settings to settle before returning verified registrations', async () => {
+    vi.useFakeTimers();
+    const { executor, original, live } = fixture(['A']);
+    vi.mocked(executor.getWorkbookDocument)
+      .mockResolvedValueOnce(
+        Ok({ xml: original, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      )
+      .mockResolvedValueOnce(
+        Ok({ xml: original, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      )
+      .mockImplementationOnce(async () =>
+        Ok({
+          xml: live().replace('type="standard"', 'type="entire-view"'),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      )
+      .mockImplementation(async () =>
+        Ok({ xml: live(), applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      );
+    const pending = loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A']),
+      focus,
+      executor,
+      signal,
+    });
+    await vi.runAllTimersAsync();
+    expect((await pending).unwrap().verifiedWorksheetNames).toEqual(['A']);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(4);
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
 
   it('checks the changed dashboard without running the workbook registry over a wide datasource', async () => {
     const { executor, original } = fixture([], ['A']);

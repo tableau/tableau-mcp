@@ -2,7 +2,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
-import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  WithExecutorAndAbortSignal,
+  WorkbookDocument,
+} from '../externalApi/executorTypes.js';
 import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
@@ -14,12 +18,11 @@ import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import {
   composeDashboardWorkbook,
-  dashboardMembershipMatches,
+  createDashboardReadbackVerifier,
   dashboardWorksheetNames,
   omitWorkbookActions,
   unregisteredDashboardWorksheets,
 } from './dashboardViewpoints.js';
-import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 import {
   applyPreparedSheet,
@@ -191,15 +194,15 @@ async function runRenderGuardInLock(
   canonicalName: string,
   dashboardXml: string,
   { executor, signal }: WithExecutorAndAbortSignal,
-): Promise<Result<string | null, RenderGuardOrApplyError>> {
+): Promise<Result<WorkbookDocument | null, RenderGuardOrApplyError>> {
   if (dashboardWorksheetNames(dashboardXml).length === 0) {
     return Ok(null);
   }
-  const workbookResult = await getWorkbookXml({ executor, signal });
+  const workbookResult = await executor.getWorkbookDocument(signal);
   if (workbookResult.isErr()) {
     return Err({ type: 'execute-command-error', error: workbookResult.error });
   }
-  const liveWorkbookXml = workbookResult.value;
+  const liveWorkbookXml = workbookResult.value.xml;
   const blankNames = findBlankReferencedWorksheets(dashboardXml, liveWorkbookXml);
   if (blankNames.length > 0) {
     log({
@@ -213,7 +216,7 @@ async function runRenderGuardInLock(
       error: sheetNotRenderedError(canonicalName, blankNames),
     });
   }
-  return Ok(liveWorkbookXml);
+  return Ok(workbookResult.value);
 }
 
 type RenderGuardOrApplyError =
@@ -329,7 +332,7 @@ export async function loadDashboardXml({
           const names = dashboardWorksheetNames(checked.fragmentXml);
           let missing: string[];
           try {
-            missing = unregisteredDashboardWorksheets(guard.value, checked.name, names);
+            missing = unregisteredDashboardWorksheets(guard.value.xml, checked.name, names);
           } catch (error) {
             return Err({
               type: 'execute-command-error',
@@ -471,17 +474,18 @@ async function loadDashboardXmlViaExternalApi({
     if (guard.isErr()) {
       return Err(guard.error);
     }
-    let liveWorkbookXml = guard.value;
-    if (liveWorkbookXml === null) {
-      const workbookResult = await getWorkbookXml({ executor, signal });
+    let snapshot = guard.value;
+    if (snapshot === null) {
+      const workbookResult = await executor.getWorkbookDocument(signal);
       if (workbookResult.isErr()) {
         return Err({ type: 'execute-command-error', error: workbookResult.error });
       }
-      liveWorkbookXml = workbookResult.value;
+      snapshot = workbookResult.value;
     }
 
     const applyResult = await applyDashboardWithViewpointsInLock({
-      liveWorkbookXml,
+      liveWorkbookXml: snapshot.xml,
+      expectedInstanceId: snapshot.instanceId ?? executor.desktopInstanceId,
       dashboardName,
       xml,
       focus,
@@ -504,6 +508,7 @@ async function loadDashboardXmlViaExternalApi({
 /** Legacy create-capable route. The MCP lock does not prevent concurrent Desktop edits. */
 async function applyDashboardWithViewpointsInLock({
   liveWorkbookXml,
+  expectedInstanceId,
   dashboardName,
   xml,
   focus,
@@ -511,11 +516,13 @@ async function applyDashboardWithViewpointsInLock({
   signal,
 }: {
   liveWorkbookXml: string;
+  expectedInstanceId: string | undefined;
   dashboardName: string;
   xml: string;
   focus: ApplyFocus;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   let workbookDoc: string;
+  let matchesReadback: (workbookXml: string) => boolean;
   const names = dashboardWorksheetNames(xml);
   try {
     // The authored fragment was validated above. Only dashboard membership and identity
@@ -529,20 +536,24 @@ async function applyDashboardWithViewpointsInLock({
       });
     }
     workbookDoc = composed.value.xml;
+    matchesReadback = createDashboardReadbackVerifier(workbookDoc, dashboardName);
   } catch (error) {
     return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
   }
   // Best-effort check for edits already visible now; the API has no atomic revision precondition.
   // Existing-sheet callers must use the surgical endpoint instead of this legacy create route.
-  const current = await getWorkbookXml({ executor, signal });
+  const current = await executor.getWorkbookDocument(signal);
   if (current.isErr()) return Err({ type: 'execute-command-error', error: current.error });
-  if (current.value !== liveWorkbookXml)
+  const sameInstance = (document: WorkbookDocument): boolean =>
+    expectedInstanceId === undefined ||
+    (document.instanceId ?? executor.desktopInstanceId) === expectedInstanceId;
+  if (!sameInstance(current.value) || current.value.xml !== liveWorkbookXml)
     return Err({
       type: 'load-dashboard-xml-error',
       error: {
         type: 'source-drift',
         message:
-          'The workbook changed before the dashboard apply. Re-read the dashboard and retry. No changes were sent to Tableau.',
+          'The workbook or Desktop instance changed before the dashboard apply. Re-read the dashboard and retry. No changes were sent to Tableau.',
       },
     });
   // Actions are additive on this endpoint, unlike worksheet/dashboard documents.
@@ -552,11 +563,12 @@ async function applyDashboardWithViewpointsInLock({
     focus,
     executor,
     signal,
+    applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applied.isErr()) return Err({ type: 'execute-command-error', error: applied.error });
   const readback = await pollReadback({
-    read: () => getWorkbookXml({ executor, signal }),
-    settled: (value) => dashboardMembershipMatches(value, dashboardName, names),
+    read: () => executor.getWorkbookDocument(signal),
+    settled: (value) => sameInstance(value) && matchesReadback(value.xml),
     signal,
   });
   if (!readback.ok || !readback.settled)
@@ -564,7 +576,7 @@ async function applyDashboardWithViewpointsInLock({
       type: 'load-dashboard-xml-error',
       error: {
         type: 'verification-failed',
-        message: `Tableau accepted the dashboard apply, but the worksheet zones and window registrations for "${dashboardName}" could not be verified. Changes may have been applied. Re-read the live dashboard before retrying.`,
+        message: `Tableau accepted the dashboard apply, but the submitted layout and worksheet view settings for "${dashboardName}" could not be verified on the original Desktop instance. Changes may have been applied. Re-read the live dashboard before retrying; do not blindly repeat the apply.`,
       },
     });
   return Ok({ verifiedWorksheetNames: names });

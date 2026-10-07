@@ -229,6 +229,134 @@ export function dashboardMembershipMatches(
   }
 }
 
+/** Prepare once before the POST; each readback parses only the returned workbook. */
+export function createDashboardReadbackVerifier(
+  candidateXml: string,
+  dashboardName: string,
+): (readbackXml: string) => boolean {
+  const expected = dashboardReadbackState(parse(candidateXml), dashboardName);
+  if (!expected) throw new Error('Expected an unambiguous dashboard and window.');
+  const expectedNames = worksheetNamesIn(expected.dashboard);
+  return (readbackXml) => {
+    try {
+      const actual = dashboardReadbackState(parse(readbackXml), dashboardName);
+      if (!actual || !containsAuthoredContent(expected.dashboard, actual.dashboard)) return false;
+      const actualNames = worksheetNamesIn(actual.dashboard);
+      if (
+        actualNames.length !== expectedNames.length ||
+        actualNames.some(
+          (name) => !expectedNames.some((other) => parsedXmlNamesEqual(name, other)),
+        ) ||
+        expectedNames.some(
+          (name) =>
+            actual.viewpoints.filter((viewpoint) =>
+              parsedXmlNamesEqual(viewpoint.getAttribute('name') ?? '', name),
+            ).length !== 1,
+        )
+      )
+        return false;
+      // Desktop can retain unused viewpoints and reorder them. Each requested view must
+      // still be unique and retain the submitted settings, not merely its worksheet name.
+      return expected.viewpoints.every((viewpoint) => {
+        const matches = actual.viewpoints.filter((other) =>
+          parsedXmlNamesEqual(
+            other.getAttribute('name') ?? '',
+            viewpoint.getAttribute('name') ?? '',
+          ),
+        );
+        return matches.length === 1 && containsAuthoredContent(viewpoint, matches[0]);
+      });
+    } catch {
+      return false;
+    }
+  };
+}
+
+function dashboardReadbackState(
+  doc: Document,
+  dashboardName: string,
+): { dashboard: Element; viewpoints: Element[] } | undefined {
+  const root = doc.documentElement;
+  if (!root || root.tagName !== 'workbook') return undefined;
+  const dashboards = children(root, 'dashboards').flatMap((container) =>
+    children(container, 'dashboard').filter((dashboard) =>
+      parsedXmlNamesEqual(dashboard.getAttribute('name') ?? '', dashboardName),
+    ),
+  );
+  const windows = children(root, 'windows').flatMap((container) =>
+    children(container, 'window').filter(
+      (window) =>
+        window.getAttribute('class') === 'dashboard' &&
+        parsedXmlNamesEqual(window.getAttribute('name') ?? '', dashboardName),
+    ),
+  );
+  if (dashboards.length !== 1 || windows.length !== 1) return undefined;
+  const containers = children(windows[0], 'viewpoints');
+  if (containers.length > 1) return undefined;
+  return {
+    dashboard: dashboards[0],
+    viewpoints: containers.flatMap((container) => children(container, 'viewpoint')),
+  };
+}
+
+function expandedName(element: Element): string {
+  return `${element.namespaceURI ?? ''}:${element.localName ?? element.tagName}`;
+}
+
+/**
+ * Compare every submitted attribute, ordered layout node, style and text value. Allow
+ * Desktop to add defaults/metadata that were not authored (for example a new simple-id).
+ * Never allow added/removed/reordered zones or device layouts inside authored collections.
+ */
+function containsAuthoredContent(expected: Element, actual: Element): boolean {
+  if (expandedName(expected) !== expandedName(actual)) return false;
+  for (const attribute of Array.from(expected.attributes)) {
+    if (attribute.namespaceURI === 'http://www.w3.org/2000/xmlns/') continue;
+    const localName = attribute.localName ?? attribute.name;
+    const present = attribute.namespaceURI
+      ? actual.hasAttributeNS(attribute.namespaceURI, localName)
+      : actual.hasAttribute(attribute.name);
+    if (!present) return false;
+    const actualValue = attribute.namespaceURI
+      ? actual.getAttributeNS(attribute.namespaceURI, localName)
+      : actual.getAttribute(attribute.name);
+    if (actualValue === null) return false;
+    if (attribute.name === 'name') {
+      if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
+    } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
+      // Desktop rounds zone coordinates during serialization (as in compose-dashboard).
+      if (
+        !attribute.value.trim() ||
+        !actualValue.trim() ||
+        !Number.isInteger(Number(attribute.value)) ||
+        !Number.isInteger(Number(actualValue)) ||
+        Math.abs(Number(attribute.value) - Number(actualValue)) > 1
+      )
+        return false;
+    } else if (attribute.value !== actualValue) return false;
+  }
+  const text = (element: Element): string => {
+    const value = Array.from(element.childNodes)
+      .filter((node) => node.nodeType === 3 || node.nodeType === 4)
+      .map((node) => node.nodeValue ?? '')
+      .join('');
+    return element.tagName === 'run' || value.trim() ? value : '';
+  };
+  if (text(expected) !== text(actual)) return false;
+  const expectedChildren = children(expected);
+  const expectedTags = new Set(expectedChildren.map(expandedName));
+  const actualChildren = children(actual).filter(
+    (child) =>
+      ['zones', 'devicelayouts'].includes(expected.tagName) ||
+      (expected.tagName === 'zone' && child.tagName === 'zone') ||
+      expectedTags.has(expandedName(child)),
+  );
+  return (
+    expectedChildren.length === actualChildren.length &&
+    expectedChildren.every((child, index) => containsAuthoredContent(child, actualChildren[index]))
+  );
+}
+
 /** A surgical dashboard POST cannot create missing window registrations. */
 export function unregisteredDashboardWorksheets(
   workbookXml: string,
