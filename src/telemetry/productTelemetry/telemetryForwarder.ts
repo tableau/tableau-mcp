@@ -7,6 +7,9 @@ type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
+/** Default product-telemetry endpoint; override via PRODUCT_TELEMETRY_ENDPOINT. */
+export const DEFAULT_PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
+
 export type TelemetryEventType = 'tool_call' | 'tableau_mcp_event';
 
 export type ProductTelemetryBase = {

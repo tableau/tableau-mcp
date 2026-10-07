@@ -22,6 +22,7 @@ const mockGetProductTelemetry = vi.hoisted(() =>
 );
 vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   getProductTelemetry: mockGetProductTelemetry,
+  DEFAULT_PRODUCT_TELEMETRY_ENDPOINT: 'https://prod.telemetry.tableausoftware.com',
 }));
 
 const tmpDirs: string[] = [];
@@ -330,7 +331,6 @@ describe('DesktopTool product telemetry', () => {
       extra: extraWithConfig({
         desktopSessionId: '4242',
         desktopSessionLuid: guid,
-        isHyperforce: true,
       }),
       args: { session: 'S1' },
       callback: async () => new Ok({ ok: true }),
@@ -345,7 +345,6 @@ describe('DesktopTool product telemetry', () => {
       user_luid: '',
       chat_id: '',
       podname: '',
-      is_hyperforce: true,
       success: true,
       error_code: '',
       error_message: '',

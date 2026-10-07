@@ -12,6 +12,7 @@ import {
   providerConfigSchema as sessionStoreProviderConfigSchema,
   SessionStoreConfig,
 } from './sessionStore/types.js';
+import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetry/productTelemetry/telemetryForwarder.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
@@ -299,8 +300,7 @@ export class Config extends BaseConfig {
     }
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
-    this.productTelemetryEndpoint =
-      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
+    this.productTelemetryEndpoint = productTelemetryEndpoint || DEFAULT_PRODUCT_TELEMETRY_ENDPOINT;
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
     this.isHyperforce = isHyperforce === 'true';
 

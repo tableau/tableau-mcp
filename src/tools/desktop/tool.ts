@@ -206,7 +206,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         user_luid: extra.config.userLuid,
         chat_id: extra.config.chatId,
         podname: extra.config.podName,
-        is_hyperforce: extra.config.isHyperforce,
         success,
         error_code: errorCode,
         // omitted for now due to including PII information

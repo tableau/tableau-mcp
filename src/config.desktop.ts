@@ -10,11 +10,8 @@ import {
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
 import { parseSessionLuid } from './desktop/session/parseSessionLuid.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
+import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetry/productTelemetry/telemetryForwarder.js';
 import { parseNumber } from './utils/parseNumber.js';
-
-// Mirrors the web server's default (see src/config.ts) so desktop tool calls forward to the
-// same product-telemetry pipeline.
-const DEFAULT_PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
 
 export class Config extends BaseConfig {
   // toolProfile lives on BaseConfig (shared with web/combined); desktop consumes it via
@@ -80,16 +77,11 @@ export class Config extends BaseConfig {
   chatId: string;
 
   /**
-   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event. Mirrors the
-   * web server's config (same `PRODUCT_TELEMETRY_ENDPOINT` / `PRODUCT_TELEMETRY_ENABLED` env vars
-   * and default endpoint) so desktop tool calls land in the same pipeline. Enabled by default; set
-   * `PRODUCT_TELEMETRY_ENABLED=false` to turn off.
+   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event. 
+   * Enabled by default; set `PRODUCT_TELEMETRY_ENABLED=false` to turn off.
    */
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
-
-  /** Whether this deployment runs on Hyperforce; forwarded as the telemetry `is_hyperforce` flag. */
-  isHyperforce: boolean;
 
   /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
@@ -126,7 +118,6 @@ export class Config extends BaseConfig {
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
-      IS_HYPERFORCE: isHyperforce,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -151,7 +142,6 @@ export class Config extends BaseConfig {
 
     this.productTelemetryEndpoint = productTelemetryEndpoint || DEFAULT_PRODUCT_TELEMETRY_ENDPOINT;
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
-    this.isHyperforce = isHyperforce === 'true';
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,

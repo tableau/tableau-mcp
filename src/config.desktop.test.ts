@@ -196,14 +196,5 @@ describe('DesktopConfig', () => {
       vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', 'false');
       expect(new Config().productTelemetryEnabled).toBe(false);
     });
-
-    it('should default isHyperforce to false', () => {
-      expect(new Config().isHyperforce).toBe(false);
-    });
-
-    it('should set isHyperforce from IS_HYPERFORCE', () => {
-      vi.stubEnv('IS_HYPERFORCE', 'true');
-      expect(new Config().isHyperforce).toBe(true);
-    });
   });
 });
