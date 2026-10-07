@@ -63,11 +63,11 @@ export class Config extends BaseConfig {
   desktopSessionLuid: string | undefined;
 
   /**
-   * Signed-in Tableau site and user LUID of the launching Desktop session, forwarded by the agent
-   * from `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch). Sent as
-   * the product-telemetry `site_luid` / `user_luid`, the desktop analog of the per-request site/user
-   * identity the web path reads from Tableau auth. Empty string when the launcher did not provide them.
+   * Signed-in Tableau pod name and site and user LUID of the launching Desktop session, forwarded by the agent
+   * from `TABLEAU_POD_NAME` / `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch). 
+   * Empty string when the launcher did not provide them.
    */
+  podName: string;
   siteLuid: string;
   userLuid: string;
 
@@ -118,6 +118,7 @@ export class Config extends BaseConfig {
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
+      TABLEAU_POD_NAME: podName,
       TABLEAU_SITE_LUID: siteLuid,
       TABLEAU_USER_LUID: userLuid,
       TABLEAU_CHAT_ID: chatId,
@@ -143,6 +144,7 @@ export class Config extends BaseConfig {
         ? desktopSessionLuid
         : undefined;
 
+    this.podName = podName || '';
     this.siteLuid = siteLuid || '';
     this.userLuid = userLuid || '';
     this.chatId = chatId || '';

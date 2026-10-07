@@ -15,7 +15,6 @@ import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
-import { extractToolErrorMessage } from '../../utils/extractToolErrorMessage.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
@@ -85,10 +84,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     const productTelemetryForwarder = getProductTelemetry(
       extra.config.productTelemetryEndpoint,
       extra.config.productTelemetryEnabled,
-      '',
+      extra.config.podName,
     );
     let success = false;
+    // McpToolError's HTTP statusCode, errorType is its stable `type` slug (with subtype when set),
+    // errorReason its bounded failure-shape code.
+    // All stay empty unless a typed McpToolError is in play. See the finally for the wire keys —
+    // errorType rides `error_type` and errorReason rides `error_message`.
     let errorCode = '';
+    let errorType = '';
+    let errorReason = '';
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -123,7 +128,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         return toolResult;
       }
 
-      errorCode = result.error instanceof McpToolError ? String(result.error.statusCode) : '';
+      if (result.error instanceof McpToolError) {
+        errorCode = String(result.error.statusCode);
+        errorType = result.error.getTelemetryType();
+        errorReason = result.error.getTelemetryMessage();
+      }
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
         isError: true,
@@ -150,7 +159,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } catch (error) {
       const timedOut = isDesktopCallTimeout(error);
-      errorCode = error instanceof McpToolError ? String(error.statusCode) : '';
+      if (error instanceof McpToolError) {
+        errorCode = String(error.statusCode);
+      }
       log({
         message: timedOut
           ? 'Tool execution exceeded the Desktop call deadline'
@@ -186,28 +197,24 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       });
       return toolResult;
     } finally {
-      // Mirrors the web `tool_call` (src/tools/web/tool.ts). Desktop is stdio-only with no Tableau
-      // OAuth/pod, so those fields are sent empty. session_id carries the stable Desktop session GUID
-      // (TABLEAU_DESKTOP_SESSION_LUID) — the desktop analog of the web path's mcp-session-id, so a run's
-      // desktop tool calls correlate the same way. The numeric Desktop PID (TABLEAU_DESKTOP_SESSION_ID)
-      // stays SessionManager's instance key and is no longer emitted as telemetry.
-      // site_luid/user_luid carry the signed-in identity the agent forwarded; auth_type is 'desktop'.
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
+        // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
         session_id: extra.config.desktopSessionLuid ?? '',
         site_luid: extra.config.siteLuid,
         user_luid: extra.config.userLuid,
         chat_id: extra.config.chatId,
-        podname: '',
+        podname: extra.config.podName,
         is_hyperforce: extra.config.isHyperforce,
         success,
         error_code: errorCode,
         // omitted for now due to including PII information
         error_message: '',
+        auth_type: 'desktop',
+        // oauth is omitted due to using stdio for desktop
         oauth_client_id: '',
         oauth_client_display_name: '',
-        auth_type: 'desktop',
       });
     }
   }

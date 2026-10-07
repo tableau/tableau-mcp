@@ -307,6 +307,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
+    ['compose-dashboard', 1078], // raised 2026-10-07 (signed off): Empty worksheets are added as empty dashboard tiles with a warning
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

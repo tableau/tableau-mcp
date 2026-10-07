@@ -17,10 +17,11 @@ import { DesktopToolName } from './toolName.js';
 // Mock product telemetry so tool calls never hit the network and the `tool_call` payload can be
 // asserted directly (mirrors src/tools/web/tool.test.ts).
 const mockTelemetrySend = vi.hoisted(() => vi.fn());
+const mockGetProductTelemetry = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ send: mockTelemetrySend }),
+);
 vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
-  getProductTelemetry: vi.fn().mockReturnValue({
-    send: mockTelemetrySend,
-  }),
+  getProductTelemetry: mockGetProductTelemetry,
 }));
 
 const tmpDirs: string[] = [];
@@ -46,6 +47,7 @@ afterEach(() => {
   resetEpisodeEventsForTests();
   sessionRouteState.clear();
   mockTelemetrySend.mockClear();
+  mockGetProductTelemetry.mockClear();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -382,6 +384,39 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ chat_id: 'chat-abc-123' }),
+    );
+  });
+
+  it('forwards the Tableau pod name from config as podname', async () => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ podName: 'some-pod-name' }),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ podname: 'some-pod-name' }),
+    );
+  });
+
+  it('builds the telemetry forwarder with the config pod name as the event pod', async () => {
+    const extra = extraWithConfig({
+      podName: 'some-pod-name',
+      productTelemetryEndpoint: 'https://telemetry.example.com',
+      productTelemetryEnabled: true,
+    });
+
+    await makeTool().logAndExecute({
+      extra,
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+    });
+
+    expect(mockGetProductTelemetry).toHaveBeenCalledWith(
+      'https://telemetry.example.com',
+      true,
+      'some-pod-name',
     );
   });
 
