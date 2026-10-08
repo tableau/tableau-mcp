@@ -129,9 +129,7 @@ export const getPublishWorkbookTool = (
             ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
             : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
           'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
-        'Project publishes also return the workbook permission rules in permissions when available. If that optional read fails, permissionsNote reports the failure without failing the publish. ' +
-          (dataAppsEnabled ? 'Personal Space publishes omit these fields. ' : '') +
-          "Returned rules do not determine each viewer's effective access.",
+        'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
       ].join('\n\n');
     }),
     paramsSchema: new Provider(async () =>
@@ -271,45 +269,6 @@ export const getPublishWorkbookTool = (
                 ).toErr();
               }
 
-              // Disclose the workbook's permission rules for project publishes only. Personal-space
-              // content has no shareable grantees, so skip the call there. Best-effort: a
-              // permissions-read failure must not fail an already-completed publish.
-              let permissions: GranteeCapability[] | undefined;
-              let permissionsNote: string | undefined;
-              if (personalSpaceTarget === undefined) {
-                try {
-                  // The optional read bypasses the tool's mandatory-scope middleware check.
-                  // Honor the same OAuth consent boundary before minting its REST credentials.
-                  if (
-                    (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
-                    extra.config.oauth.enforceScopes &&
-                    extra.config.oauth.advertiseApiScopes &&
-                    !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
-                  ) {
-                    throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
-                  }
-                  // Keep optional permissions authentication outside the completed publish session.
-                  permissions = await useRestApi({
-                    ...extra,
-                    jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
-                    callback: async (permissionsApi) =>
-                      permissionsApi.workbooksMethods.queryWorkbookPermissions({
-                        siteId: permissionsApi.siteId,
-                        workbookId: publishedWorkbook.id,
-                      }),
-                  });
-                } catch (error) {
-                  permissionsNote =
-                    'Published successfully, but the workbook permission rules could not be retrieved.';
-                  log({
-                    message: 'publish-workbook: failed to fetch workbook permissions (best-effort)',
-                    level: 'warning',
-                    logger: 'publish-workbook',
-                    data: getExceptionMessage(error),
-                  });
-                }
-              }
-
               const url =
                 getDefaultViewWebUrl(publishedWorkbook, extra.config.server, extra.getSiteName()) ??
                 publishedWorkbook.webpageUrl ??
@@ -320,13 +279,52 @@ export const getPublishWorkbookTool = (
                 data: publishedWorkbook,
                 url,
                 warnings: outcome.warnings,
-                ...(permissions !== undefined && { permissions }),
-                ...(permissionsNote !== undefined && { permissionsNote }),
               });
             },
           });
 
-          return result;
+          // Disclose the workbook's permission rules for project publishes only. Personal-space
+          // content has no shareable grantees. Runs after the publish session has signed out: a
+          // second sign-in with the same PAT can invalidate a still-open first session.
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
+          if (usePersonalSpace || result.isErr() || result.value.status !== 'published') {
+            return result;
+          }
+          const published = result.value;
+          try {
+            // The optional read bypasses the tool's mandatory-scope middleware check.
+            // Honor the same OAuth consent boundary before minting its REST credentials.
+            if (
+              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+              extra.config.oauth.enforceScopes &&
+              extra.config.oauth.advertiseApiScopes &&
+              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
+            ) {
+              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
+            }
+            const permissions = await useRestApi({
+              ...extra,
+              jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
+              callback: async (permissionsApi) =>
+                permissionsApi.workbooksMethods.queryWorkbookPermissions({
+                  siteId: permissionsApi.siteId,
+                  workbookId: published.data.id,
+                }),
+            });
+            return new Ok({ ...published, permissions });
+          } catch (error) {
+            log({
+              message: 'publish-workbook: failed to fetch workbook permissions (best-effort)',
+              level: 'warning',
+              logger: 'publish-workbook',
+              data: getExceptionMessage(error),
+            });
+            return new Ok({
+              ...published,
+              permissionsNote:
+                'Published successfully, but the workbook permission rules could not be retrieved.',
+            });
+          }
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
+  sessionEvents: [] as string[],
 }));
 
 vi.mock('fs/promises', () => ({
@@ -33,23 +34,29 @@ vi.mock('fs/promises', () => ({
 vi.mock('../../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async (opts) => {
     mocks.useRestApiCalls.push({ jwtScopes: opts.jwtScopes });
-    if (opts.jwtScopes.includes('tableau:permissions:read')) {
+    const session = opts.jwtScopes.includes('tableau:permissions:read') ? 'permissions' : 'publish';
+    mocks.sessionEvents.push(`open:${session}`);
+    if (session === 'permissions') {
       await mocks.mockPermissionsSignIn();
     }
-    return opts.callback({
-      workbooksMethods: {
-        validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
-        publishWorkbook: mocks.mockPublishWorkbook,
-        queryWorkbookPermissions: mocks.mockQueryWorkbookPermissions,
-      },
-      publishingMethods: {
-        uploadFileInChunks: mocks.mockUploadFileInChunks,
-      },
-      personalSpaceMethods: {
-        getPersonalSpace: mocks.mockGetPersonalSpace,
-      },
-      siteId: 'test-site-id',
-    });
+    try {
+      return await opts.callback({
+        workbooksMethods: {
+          validateWorkbookAndUpload: mocks.mockValidateWorkbookAndUpload,
+          publishWorkbook: mocks.mockPublishWorkbook,
+          queryWorkbookPermissions: mocks.mockQueryWorkbookPermissions,
+        },
+        publishingMethods: {
+          uploadFileInChunks: mocks.mockUploadFileInChunks,
+        },
+        personalSpaceMethods: {
+          getPersonalSpace: mocks.mockGetPersonalSpace,
+        },
+        siteId: 'test-site-id',
+      });
+    } finally {
+      mocks.sessionEvents.push(`close:${session}`);
+    }
   }),
 }));
 
@@ -90,6 +97,7 @@ describe('publishWorkbookTool', () => {
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockGetPersonalSpace.mockReset();
     mocks.useRestApiCalls.length = 0;
+    mocks.sessionEvents.length = 0;
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
@@ -868,6 +876,14 @@ describe('publishWorkbookTool', () => {
         { jwtScopes: ['tableau:permissions:read'] },
       ]);
       expect(mocks.mockPublishWorkbook).toHaveBeenCalledBefore(mocks.mockPermissionsSignIn);
+      // The permissions session must not overlap the publish session (a second PAT sign-in can
+      // invalidate the first).
+      expect(mocks.sessionEvents).toEqual([
+        'open:publish',
+        'close:publish',
+        'open:permissions',
+        'close:permissions',
+      ]);
     },
   );
 

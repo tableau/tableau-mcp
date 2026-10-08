@@ -58,7 +58,7 @@ Related tools: [Request Workbook Upload](request-workbook-upload.md),
 - [Initiate/Append File Upload](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_publish.htm)
   (TWBX files only)
 - [Query Workbook Permissions](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions)
-  (after a project publish, when `data-apps` is enabled)
+  (after a project publish)
 
 ## Required arguments
 
