@@ -10,7 +10,7 @@ const CSV_CONTENT_TYPE = 'text/csv; charset=utf-8';
  * Builds the S3 object key for a view's CSV data. The key namespaces objects
  * under the configured prefix and the source resource id (view or custom view
  * LUID), with a random UUID to avoid collisions between concurrent exports of
- * the same resource.
+ * the same resource. Callers pass a tenant-scoped prefix (joinTenantS3Prefix in buildDataToolResult).
  */
 export function buildDataS3Key(keyPrefix: string, resourceId: string): string {
   const normalizedPrefix = keyPrefix.replace(/^\/+/, '').replace(/\/*$/, '/');

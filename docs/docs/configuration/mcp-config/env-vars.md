@@ -700,17 +700,23 @@ AWS_DEFAULT_REGION=us-east-1
 
 ## `MCP_IMAGE_PREFIX`
 
-The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
-view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
-normalized automatically.
+The base key prefix (folder path) under which uploaded objects are stored in the bucket. Each tool
+appends the caller's Tableau site and user LUIDs and then its own segment to this base, so objects
+are namespaced per tenant and per tool. Slashes are normalized automatically.
 
-- Default: unset (empty). When unset, each tool uses only its own segment.
+- Default: unset (empty). When unset, keys start at the site LUID.
 - Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
-  `custom-view-images/`.
-- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
-  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
-  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
-  and `custom-view-images/...` respectively.
+  `custom-view-images/`, `get-view-data` → `view-data/`, `get-custom-view-data` →
+  `custom-view-data/`, `download-workbook` → `workbook-files/`, `request-workbook-upload` /
+  `publish-workbook` → `workbook-uploads/`.
+- Objects are keyed as `<base><siteLuid>/<userLuid>/<tool-segment>...`. For example, with
+  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under
+  `tableau/<siteLuid>/<userLuid>/view-images/<viewId>/<uuid>.png` and a staged workbook upload
+  under `tableau/<siteLuid>/<userLuid>/workbook-uploads/<uploadId>/workbook.twbx`.
+- The site and user LUIDs come from the authenticated session, never from tool input. A request
+  whose session has no valid site or user LUID fails instead of writing an unscoped object.
+- The shared `scaffold-data-app` template is the exception: it is keyed under
+  `<base>data-app-templates/` without tenant LUIDs.
 - Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
 
 **Example:**

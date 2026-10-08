@@ -1,11 +1,13 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+import { McpToolError } from '../../errors/mcpToolError.js';
+import invariant from '../../utils/invariant.js';
+import { getTenantLuids, joinS3Prefix, joinTenantS3Prefix } from './s3Client.js';
 import {
   BucketS3Config,
   buildImageS3Key,
   exportedForTesting,
-  joinImageS3Prefix,
   uploadImageToS3,
 } from './uploadImageToS3.js';
 
@@ -23,6 +25,9 @@ vi.mock('@aws-sdk/client-s3', () => ({
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
+
+const MOCK_SITE_LUID = '0a1b2c3d-1111-4222-8333-444455556666';
+const MOCK_USER_LUID = '9f8e7d6c-aaaa-4bbb-8ccc-ddddeeeeffff';
 
 const baseConfig: BucketS3Config = {
   bucket: 'tableau-images',
@@ -186,25 +191,71 @@ describe('buildImageS3Key', () => {
   });
 });
 
-describe('joinImageS3Prefix', () => {
+describe('joinS3Prefix', () => {
   it('joins a base and a per-tool segment with a single slash and a trailing slash', () => {
-    expect(joinImageS3Prefix('tableau/', 'view-images/')).toBe('tableau/view-images/');
+    expect(joinS3Prefix('tableau/', 'view-images/')).toBe('tableau/view-images/');
   });
 
   it('falls back to just the segment when the base is empty', () => {
-    expect(joinImageS3Prefix('', 'view-images/')).toBe('view-images/');
+    expect(joinS3Prefix('', 'view-images/')).toBe('view-images/');
   });
 
   it('returns just the base when the segment is empty', () => {
-    expect(joinImageS3Prefix('tableau/', '')).toBe('tableau/');
+    expect(joinS3Prefix('tableau/', '')).toBe('tableau/');
   });
 
   it('returns an empty string when both parts are empty', () => {
-    expect(joinImageS3Prefix('', '')).toBe('');
+    expect(joinS3Prefix('', '')).toBe('');
   });
 
   it('normalizes leading, trailing, and interior slashes', () => {
-    expect(joinImageS3Prefix('/tableau', 'view-images')).toBe('tableau/view-images/');
-    expect(joinImageS3Prefix('tableau//', '//view-images//')).toBe('tableau/view-images/');
+    expect(joinS3Prefix('/tableau', 'view-images')).toBe('tableau/view-images/');
+    expect(joinS3Prefix('tableau//', '//view-images//')).toBe('tableau/view-images/');
+  });
+});
+
+describe('joinTenantS3Prefix', () => {
+  it('places the site and user LUIDs between the base and the per-tool segment', () => {
+    expect(joinTenantS3Prefix('/mcp/', MOCK_SITE_LUID, MOCK_USER_LUID, 'view-images/')).toBe(
+      `mcp/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-images/`,
+    );
+  });
+
+  it('starts at the site LUID when the base is empty', () => {
+    expect(joinTenantS3Prefix('', MOCK_SITE_LUID, MOCK_USER_LUID, 'view-data')).toBe(
+      `${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-data/`,
+    );
+  });
+
+  it.each([
+    ['empty site', '', MOCK_USER_LUID],
+    ['empty user', MOCK_SITE_LUID, ''],
+    ['path traversal', '../other-site', MOCK_USER_LUID],
+    ['non-uuid', MOCK_SITE_LUID, 'test-user-luid'],
+  ])('rejects an invalid tenant (%s)', (_, siteLuid, userLuid) => {
+    expect(() => joinTenantS3Prefix('mcp/', siteLuid, userLuid, 'view-images/')).toThrow(
+      'Invalid tenant LUIDs for S3 key prefix.',
+    );
+  });
+});
+
+describe('getTenantLuids', () => {
+  it('returns the session site and user LUIDs', () => {
+    const result = getTenantLuids({
+      getSiteLuid: () => MOCK_SITE_LUID,
+      getUserLuid: () => MOCK_USER_LUID,
+    });
+    invariant(result.isOk());
+    expect(result.value).toEqual({ siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID });
+  });
+
+  it.each([
+    ['empty site', '', MOCK_USER_LUID],
+    ['empty user', MOCK_SITE_LUID, ''],
+    ['path traversal', MOCK_SITE_LUID, `../${MOCK_USER_LUID}`],
+  ])('returns an McpToolError for an invalid identity (%s)', (_, siteLuid, userLuid) => {
+    const result = getTenantLuids({ getSiteLuid: () => siteLuid, getUserLuid: () => userLuid });
+    invariant(result.isErr());
+    expect(result.error).toBeInstanceOf(McpToolError);
   });
 });

@@ -116,16 +116,15 @@ export const getGetViewImageTool = (
           // Offload to S3 (returning a presigned URL) when configured, otherwise
           // carry the raw bytes for inline base64. Falls back to inline on any
           // S3 failure.
-          return new Ok(
-            await buildImageToolResult({
-              imageData: imageResult.value,
-              format,
-              resourceId: viewId,
-              config: extra.config,
-              toolName: getViewImageTool.name,
-              keyPrefixSegment: 'view-images/',
-            }),
-          );
+          return await buildImageToolResult({
+            imageData: imageResult.value,
+            format,
+            resourceId: viewId,
+            config: extra.config,
+            toolName: getViewImageTool.name,
+            keyPrefixSegment: 'view-images/',
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (imageToolResult) => {
           return {

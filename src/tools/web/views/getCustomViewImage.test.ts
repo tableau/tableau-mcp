@@ -7,7 +7,7 @@ import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetCustomViewImageTool } from './getCustomViewImage.js';
 import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
@@ -328,12 +328,12 @@ describe('getCustomViewImageTool', () => {
         resourceId: mockCustomView.id,
         config: expect.objectContaining({
           bucket: 'tableau-images',
-          keyPrefix: 'custom-view-images/',
+          keyPrefix: `${MOCK_SITE_LUID}/${MOCK_USER_LUID}/custom-view-images/`,
         }),
       });
     });
 
-    it('prefixes the S3 key with the base prefix followed by the custom-view-images segment', async () => {
+    it('prefixes the S3 key with the base prefix, then the site and user LUIDs, then the custom-view-images segment', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
@@ -344,7 +344,9 @@ describe('getCustomViewImageTool', () => {
       expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(
         mockPngData,
         expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/custom-view-images/' }),
+          config: expect.objectContaining({
+            keyPrefix: `tableau/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/custom-view-images/`,
+          }),
         }),
       );
     });

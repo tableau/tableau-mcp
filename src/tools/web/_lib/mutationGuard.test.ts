@@ -3,7 +3,7 @@ import type { MockedFunction } from 'vitest';
 
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID } from '../toolContext.mock.js';
 import { auditRecordSchema } from './auditRecord.js';
 import { EvidenceStrategy, NoEvidence, RegistryEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
@@ -242,7 +242,7 @@ describe('guardMutation', () => {
     const record = auditRecordSchema.parse(auditCall![0].data);
     expect(record.schemaVersion).toBe(2);
     expect(typeof record.timestamp).toBe('string');
-    expect(record.actor.siteLuid).toBe('test-site-luid');
+    expect(record.actor.siteLuid).toBe(MOCK_SITE_LUID);
     expect(record.actor.siteName).toBe('tc25');
   });
 

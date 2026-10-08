@@ -1,16 +1,22 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { WebMcpServer } from '../../../server.web.js';
+import { PUBLISH_WORKBOOK_API_SCOPES } from '../../../server/oauth/scopes.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getRequestWorkbookUploadTool } from './requestWorkbookUpload.js';
 import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
   mockRequestStagedWorkbookUpload: vi.fn(),
+  mockUseRestApi: vi.fn(),
+}));
+
+vi.mock('../../../restApiInstance.js', () => ({
+  useRestApi: mocks.mockUseRestApi,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -28,6 +34,7 @@ describe('requestWorkbookUploadTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    mocks.mockUseRestApi.mockImplementation(async (opts) => opts.callback({}));
     mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://s3.example.com/signed-put',
@@ -122,7 +129,54 @@ describe('requestWorkbookUploadTool', () => {
         bucket: 'tableau-workbooks',
         region: 'us-east-1',
       }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
+  });
+
+  it("signs in with publish-workbook's scopes and stages under the signed-in identity", async () => {
+    const signedIn = {
+      siteLuid: '11111111-2222-4333-8444-555555555555',
+      userLuid: '66666666-7777-4888-9999-000000000000',
+    };
+    mocks.mockUseRestApi.mockImplementation(async (opts) => {
+      opts.setSiteLuid(signedIn.siteLuid);
+      opts.setUserLuid(signedIn.userLuid);
+      return opts.callback({});
+    });
+    let siteLuid = MOCK_SITE_LUID;
+    let userLuid = MOCK_USER_LUID;
+
+    const result = await getToolResult(
+      { fileName: 'BoltBikes Workbook.twb' },
+      {
+        getSiteLuid: () => siteLuid,
+        getUserLuid: () => userLuid,
+        setSiteLuid: (luid: string) => {
+          siteLuid = luid;
+        },
+        setUserLuid: (luid: string) => {
+          userLuid = luid;
+        },
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockUseRestApi).toHaveBeenCalledTimes(1);
+    expect(mocks.mockUseRestApi.mock.calls[0][0].jwtScopes).toEqual(PUBLISH_WORKBOOK_API_SCOPES);
+    expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant: signedIn }),
+    );
+  });
+
+  it('fails closed without staging when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult({ fileName: 'BoltBikes Workbook.twb' }, { _siteLuid: '' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Unable to determine the signed-in Tableau site and user',
+    );
+    expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
   });
 
   it('returns a staged upload URL for a .twbx filename', async () => {
@@ -142,6 +196,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockRequestStagedWorkbookUpload).toHaveBeenCalledWith({
       fileName: 'BoltBikes Workbook.twbx',
       config: expect.objectContaining({ enabled: true }),
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
   });
 
@@ -187,6 +242,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Passthrough authentication');
+    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
     expect(mocks.mockRequestStagedWorkbookUpload).not.toHaveBeenCalled();
   });
 
@@ -227,10 +283,9 @@ async function getToolResult(
 function getMockExtra(
   overrides: Partial<ReturnType<typeof getMockRequestHandlerExtra>> = {},
 ): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(overrides);
   return {
     ...extra,
-    ...overrides,
     config: {
       ...extra.config,
       bucketS3: {

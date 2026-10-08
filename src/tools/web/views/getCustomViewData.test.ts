@@ -5,7 +5,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetCustomViewDataTool } from './getCustomViewData.js';
 import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
@@ -170,7 +170,7 @@ describe('getCustomViewDataTool', () => {
         resourceId: mockCustomView.id,
         config: expect.objectContaining({
           bucket: 'tableau-data',
-          keyPrefix: 'custom-view-data/',
+          keyPrefix: `${MOCK_SITE_LUID}/${MOCK_USER_LUID}/custom-view-data/`,
         }),
       });
     });

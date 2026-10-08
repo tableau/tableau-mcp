@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { BucketS3Config, exportedForTesting, joinS3Prefix, uploadBufferToS3 } from './s3Client.js';
+import { BucketS3Config, exportedForTesting, uploadBufferToS3 } from './s3Client.js';
 
 // Re-exported for existing importers/tests that reference the shared helpers
 // through this module.
-export { BucketS3Config, exportedForTesting, joinS3Prefix as joinImageS3Prefix };
+export { BucketS3Config, exportedForTesting };
 
 function contentTypeFor(format: 'PNG' | 'SVG'): string {
   return format === 'SVG' ? 'image/svg+xml' : 'image/png';
@@ -18,7 +18,7 @@ function extensionFor(format: 'PNG' | 'SVG'): string {
  * Builds the S3 object key for a rendered image. The key namespaces objects
  * under the configured prefix and the source resource id (view or custom view
  * LUID), with a random UUID to avoid collisions between concurrent renders of
- * the same resource.
+ * the same resource. Callers pass a tenant-scoped prefix (joinTenantS3Prefix in buildImageToolResult).
  */
 export function buildImageS3Key(
   keyPrefix: string,

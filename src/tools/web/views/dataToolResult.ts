@@ -1,10 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { joinS3Prefix } from '../s3Client.js';
+import { getTenantLuids, joinTenantS3Prefix, TenantIdentitySource } from '../s3Client.js';
 import { uploadCsvToS3 } from '../uploadDataToS3.js';
 
 /**
@@ -33,8 +35,10 @@ export type DataToolResult = { kind: 'url'; url: string } | { kind: 'inline'; cs
  * attempt a doomed upload on every request.
  *
  * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-data/`); it is
- * appended to the shared base prefix (MCP_IMAGE_PREFIX) so each tool namespaces
- * its objects distinctly while still honoring an operator-configured base.
+ * appended to the shared base prefix (MCP_IMAGE_PREFIX) and the caller's
+ * `<siteLuid>/<userLuid>/` so each tool and tenant namespaces its objects
+ * distinctly while still honoring an operator-configured base. A missing or
+ * invalid tenant returns an error rather than falling back, so nothing is uploaded unscoped.
  */
 export async function buildDataToolResult({
   csv,
@@ -42,29 +46,41 @@ export async function buildDataToolResult({
   config,
   toolName,
   keyPrefixSegment,
+  tenant,
 }: {
   csv: string;
   resourceId: string;
   config: Config;
   toolName: string;
   keyPrefixSegment: string;
-}): Promise<DataToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<DataToolResult, McpToolError>> {
   if (
     !config.bucketS3.enabled ||
     !(await getFeatureGate().isFeatureEnabled('view-data-file-mode'))
   ) {
-    return { kind: 'inline', csv };
+    return new Ok({ kind: 'inline', csv });
   }
 
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  const { siteLuid, userLuid } = tenantLuids.value;
   try {
     const url = await uploadCsvToS3(csv, {
       resourceId,
       config: {
         ...config.bucketS3,
-        keyPrefix: joinS3Prefix(config.bucketS3.keyPrefix, keyPrefixSegment),
+        keyPrefix: joinTenantS3Prefix(
+          config.bucketS3.keyPrefix,
+          siteLuid,
+          userLuid,
+          keyPrefixSegment,
+        ),
       },
     });
-    return { kind: 'url', url };
+    return new Ok({ kind: 'url', url });
   } catch (error) {
     // The full CSV is still in hand, so we can always fall back to inline. Log
     // the key facts (never the presigned URL / signature).
@@ -75,7 +91,7 @@ export async function buildDataToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return { kind: 'inline', csv };
+    return new Ok({ kind: 'inline', csv });
   }
 }
 

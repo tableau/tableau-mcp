@@ -262,7 +262,9 @@ const toolScopeMap: Record<
   },
   'request-workbook-upload': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set([]),
+    // Signs in only to resolve the tenant for the staged key; mirrors publish-workbook so the
+    // upload and the publish sign in identically.
+    api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
