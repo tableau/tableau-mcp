@@ -24,7 +24,7 @@ import { getPlanDashboardCreationTool } from './planDashboardCreation.js';
 
 const cache = vi.hoisted(() => ({ directory: '' }));
 const workbook =
-  '<workbook><datasources><datasource name="Superstore"><column name="[Sales]" datatype="real" role="measure" type="quantitative"/><column name="[Category]" datatype="string" role="dimension" type="nominal"/></datasource></datasources><worksheets/><dashboards/><windows/></workbook>';
+  '<workbook><datasources><datasource name="Superstore"><column name="[Sales]" datatype="real" role="measure" type="quantitative"/><column name="[Category]" datatype="string" role="dimension" type="nominal"/><column name="[Order Date]" datatype="date" role="dimension" type="ordinal"/><column name="[Order Timestamp]" datatype="datetime" role="dimension" type="ordinal"/></datasource></datasources><worksheets/><dashboards/><windows/></workbook>';
 // Isolate the file boundary, not the planner, metadata, wrappers, or validation.
 vi.mock('../../../../desktop/cache.js', () => ({
   DesktopCache: class {
@@ -62,6 +62,17 @@ describe('planned dashboard creation through live dashboard apply', () => {
       prefix:
         ({ count: 'cnt', countd: 'ctd' } as Record<string, string>)[aggregation] ?? aggregation,
     })),
+    ...['Order Date', 'Order Timestamp'].flatMap((field) =>
+      ['min', 'max'].flatMap((prefix) =>
+        [undefined, 'insights__bar_chart'].map((template) => ({
+          template,
+          query: `${prefix} of ${field}`,
+          field,
+          derivation: prefix === 'min' ? 'Min' : 'Max',
+          prefix,
+        })),
+      ),
+    ),
     { template: undefined, query: '[Superstore].[sum:Sales:qk]', derivation: 'Sum', prefix: 'sum' },
     {
       template: undefined,
@@ -73,6 +84,7 @@ describe('planned dashboard creation through live dashboard apply', () => {
   ])(
     'executes production worksheet calls before registered dashboard apply (aggregation=%j)',
     async ({ template, query, derivation, prefix, ...options }) => {
+      const field = ('field' in options ? options.field : undefined) ?? 'Sales';
       let live = workbook;
       const completed = Ok({ command_id: 'apply', status: 'completed', submitted_at: '' } as const);
       const executor = makeExecutorMock({
@@ -220,15 +232,24 @@ describe('planned dashboard creation through live dashboard apply', () => {
       for (const name of ['A', 'B']) {
         const sheet = extractSheetXml(live, name)!;
         const doc = new DOMParser().parseFromString(sheet, 'text/xml');
-        const salesInstances = Array.from(doc.getElementsByTagName('column-instance')).filter(
-          (instance) => instance.getAttribute('column') === '[Sales]',
+        const instances = Array.from(doc.getElementsByTagName('column-instance')).filter(
+          (instance) => instance.getAttribute('column') === `[${field}]`,
         );
-        expect(salesInstances.length).toBeGreaterThan(0);
+        expect(instances.length).toBeGreaterThan(0);
         expect(
-          salesInstances.every((instance) => instance.getAttribute('derivation') === derivation),
+          instances.every((instance) => instance.getAttribute('derivation') === derivation),
         ).toBe(true);
-        expect(sheet).toContain(`[${prefix}:Sales:qk]`);
-        if (prefix !== 'sum') expect(sheet).not.toContain('[sum:Sales:qk]');
+        expect(sheet).toContain(`[${prefix}:${field}:qk]`);
+        if (prefix !== 'sum') expect(sheet).not.toContain(`[sum:${field}:qk]`);
+        if (field !== 'Sales') {
+          const source = Array.from(doc.getElementsByTagName('column')).find(
+            (column) => column.getAttribute('name') === `[${field}]`,
+          )!;
+          expect(source.getAttribute('datatype')).toBe(
+            field === 'Order Date' ? 'date' : 'datetime',
+          );
+          expect(source.getAttribute('type')).toBe('ordinal');
+        }
       }
       const worksheetWrites = vi.mocked(executor.applyWorkbookDocument).mock.calls.length;
       const unregistered = await apply(applyTask, extra);
@@ -336,6 +357,39 @@ describe('planned dashboard creation through live dashboard apply', () => {
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ...['Order Date', 'Order Timestamp'].flatMap((field) =>
+      ['sum', 'avg'].map((aggregation) => `${aggregation} of ${field}`),
+    ),
+    'min of Category',
+    'max of Category',
+  ])('rejects illegal aggregation %s before writes', async (query) => {
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: workbook })),
+    });
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    };
+    const planner = await Provider.from(
+      getPlanDashboardCreationTool(new DesktopMcpServer()).callback,
+    );
+    const result = await planner(
+      {
+        session: 'workflow-test',
+        dashboardName: 'D',
+        title: undefined,
+        layout: undefined,
+        worksheets: [{ name: 'A', type: 'kpi', fields: [query] }],
+      },
+      extra,
+    );
+    expect(result.isError).toBe(true);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+  });
 
   it('refuses two aggregations of the same source rather than silently dropping one', async () => {
     const executor = makeExecutorMock({

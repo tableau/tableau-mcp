@@ -28,6 +28,8 @@ const SAMPLE_WORKBOOK_XML = `<?xml version="1.0" encoding="utf-8"?>
       <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
       <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
       <column name="[Revenue]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[Order Date]" datatype="date" role="dimension" type="ordinal"/>
+      <column name="[Order Timestamp]" datatype="datetime" role="dimension" type="ordinal"/>
       <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
     </datasource>
     <datasource name="ds1"><column name="[Profit]" datatype="real" role="measure" type="quantitative"/></datasource>
@@ -139,6 +141,34 @@ describe('planDashboardCreationTool', () => {
       expect(Object.values(params.derivationOverrides)).toContain(derivation);
       expect(Object.values(params.fieldMapping)).toContain(
         `[Sample Superstore].[${derivation}:Sales:qk]`,
+      );
+    },
+  );
+
+  it.each(
+    ['Order Date', 'Order Timestamp'].flatMap((field) =>
+      ['min', 'max'].map((aggregation) => ({ field, aggregation })),
+    ),
+  )(
+    'plans $aggregation of $field with the requested derivation',
+    async ({ field, aggregation }) => {
+      vi.mocked(resolveField).mockImplementation((_, query) => ({
+        kind: 'rewritten',
+        query,
+        datasource: 'Sample Superstore',
+        column_ref: `[Sample Superstore].[${aggregation}:${field}:ok]`,
+        rewrites: ['parsed-aggregation-prefix'],
+      }));
+      const result = await getResult({
+        session: SESSION,
+        dashboardName: 'D',
+        worksheets: [{ name: 'A', type: 'kpi', fields: [`${aggregation} of ${field}`] }],
+      });
+      expect(result.isError).toBe(false);
+      const params = extractPlan(result).phase2Parallel.tasks[0].build.params;
+      expect(Object.values(params.derivationOverrides)).toContain(aggregation);
+      expect(Object.values(params.fieldMapping)).toContain(
+        `[Sample Superstore].[${aggregation}:${field}:qk]`,
       );
     },
   );

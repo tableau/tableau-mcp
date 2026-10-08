@@ -20,6 +20,7 @@ import {
   type Blocker,
   columnInstanceSuffix,
   effectiveSlotDerivation,
+  slotAcceptsSource,
   validateBinding,
 } from './validate.js';
 
@@ -279,7 +280,16 @@ function buildProposalFromOrderedRefs(
   const assignedOverrides = { ...derivationOverrides };
   const orderedSlots = manifest.slots.filter((slot) => slot.bindable);
   for (const [index, slot] of orderedSlots.entries()) {
-    if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
+    if (
+      shouldReserveCategoricalSource(
+        slot,
+        orderedSlots.slice(index + 1),
+        sources,
+        used,
+        requestedDerivations,
+        derivationOverrides,
+      )
+    ) {
       continue;
     }
     const effectiveDerivation = derivationOverrides[slot.slot_id] ?? slot.derivation;
@@ -323,11 +333,21 @@ function shouldReserveCategoricalSource(
   laterSlots: SlotSpec[],
   sources: ResolvedSource[],
   used: Set<SchemaField>,
+  requestedDerivations: Record<string, Derivation>,
+  derivationOverrides: Record<string, Derivation>,
 ): boolean {
   if (slot.required || slot.kind !== 'categorical') return false;
   const compatible = sources.filter(
     (source) =>
-      !source.field.isGroup && !used.has(source.field) && kindCompatible(slot.kind, source.field),
+      !source.field.isGroup &&
+      !used.has(source.field) &&
+      slotAcceptsSource(
+        slot,
+        derivationOverrides[slot.slot_id] ?? requestedDerivations[source.raw] ?? slot.derivation,
+        source.field,
+        requestedDerivations[source.raw] !== undefined &&
+          derivationOverrides[slot.slot_id] === undefined,
+      ),
   );
   const laterRequired = laterSlots.filter(
     (candidate) => candidate.required && candidate.kind === 'categorical',
@@ -389,6 +409,7 @@ function takeCompatibleSource(
       slot,
       requestedDerivations[reusable.raw] ?? effectiveDerivation,
       reusable.field,
+      requestedDerivations[reusable.raw] !== undefined,
     )
   ) {
     return { source: reusable, affinityPlaced: false };
@@ -403,6 +424,7 @@ function takeCompatibleSource(
           slot,
           requestedDerivations[source.raw] ?? effectiveDerivation,
           source.field,
+          requestedDerivations[source.raw] !== undefined,
         ) &&
         fieldNameMatchesSlot(source.field, slot),
     );
@@ -422,6 +444,7 @@ function takeCompatibleSource(
         slot,
         requestedDerivations[source.raw] ?? effectiveDerivation,
         source.field,
+        requestedDerivations[source.raw] !== undefined,
       )
     )
       continue;
@@ -538,43 +561,6 @@ function parseColumnRef(raw: string): { datasource?: string; base: string } | nu
   // Keep bare instances for legacy explicit mappings; fields.ts only accepts full refs.
   const instance = parseColumnInstanceRef(trimmed);
   return instance ? { base: instance.localFieldName } : null;
-}
-
-const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
-const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
-
-function slotAcceptsSource(
-  slot: SlotSpec,
-  effectiveDerivation: Derivation,
-  field: SchemaField,
-): boolean {
-  if (kindCompatible(slot.kind, field)) return true;
-  return (
-    field.role === 'dimension' &&
-    COUNT_AGGREGATION_DERIVATIONS.has(effectiveDerivation) &&
-    (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical')
-  );
-}
-
-function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
-  switch (kind) {
-    case 'quantitative':
-      return f.role === 'measure' || f.isAggregated;
-    case 'categorical':
-      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
-    case 'quantitative-or-categorical':
-      return (
-        f.role === 'measure' ||
-        f.isAggregated ||
-        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
-      );
-    case 'temporal':
-      return TEMPORAL_DATATYPES.has(f.datatype);
-    case 'geo':
-      return f.role === 'dimension';
-    default:
-      return false;
-  }
 }
 
 function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAssignment[]): void {
