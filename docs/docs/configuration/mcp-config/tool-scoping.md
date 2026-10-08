@@ -30,7 +30,8 @@ The following optional environment variables can be used to configure the tool s
 
 A comma-separated list of project IDs by which to constrain tool arguments and results. Only data
 sources and workbooks (or views from those workbooks) that are members of the provided projects can
-be queried or will be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+be queried or will be included in the results of the tools. This variable is site and request
+overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set by the Tableau MCP server, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -40,6 +41,8 @@ be queried or will be included in the results of the tools. This variable is sit
   [List Workbooks](../../tools/workbooks/list-workbooks.md), and
   [List Views](../../tools/views/list-views.md) tools (assuming tool scoping is disabled).
 - Has no impact on the results of the Pulse-related tools.
+- Checking a data source's project may require additional permissions. See
+  [Data source permissions](#data-source-permissions).
 
 Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5`
 
@@ -60,7 +63,8 @@ Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5,861566`
 
 A comma-separated list of data source IDs by which to constrain tool arguments and results. Only
 data sources or Pulse metrics and definitions derived from those data sources can be queried or will
-be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+be included in the results of the tools. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -78,7 +82,8 @@ Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
 A comma-separated list of workbook IDs by which to constrain tool arguments and results. Only
 workbooks or views from those workbooks can be queried or will be included in the results of the
-tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -95,9 +100,10 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 ### `INCLUDE_VIEW_IDS`
 
-A comma-separated list of view IDs by which to constrain tool arguments and results. Only
-the specified views can be queried, fetched as images, or returned by listing tools. This variable
-is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+A comma-separated list of view IDs by which to constrain tool arguments and results. Only the
+specified views can be queried, fetched as images, or returned by listing tools. This variable is
+site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -116,7 +122,8 @@ Example: `4d18c547-bbb1-4187-ae5a-7f78b35adf2d`
 
 A comma-separated list of case-sensitive tags by which to constrain tool arguments and results. Only
 data sources, workbooks, or views with the provided tags can be queried or will be included in the
-results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+results of the tools. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -128,5 +135,24 @@ results of the tools. This variable is site and request overridable, see [Site S
   and
   [views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view).
 - Has no impact on the results of the Pulse-related tools.
+- Checking a data source's tags may require additional permissions. See
+  [Data source permissions](#data-source-permissions).
 
 Example: `sales,marketing`
+
+## Data source permissions
+
+When [`INCLUDE_PROJECT_IDS`](#include_project_ids) and/or [`INCLUDE_TAGS`](#include_tags) is set,
+the Tableau MCP server checks a data source's project and/or tags before a tool can use it. It looks
+these up with the
+[Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
+REST API, which requires the user to have **View** permission on the data source's parent project,
+even though querying the data source itself does not.
+
+If that request is denied due to missing permissions on the project, the server falls back to the
+[Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html), which is only
+available on Tableau Enterprise.
+
+The fall back to the Metadata API will fail if either Metadata API is not available or if
+[`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is set, in which case
+users will need **View** permission on the datasources' parent project.
