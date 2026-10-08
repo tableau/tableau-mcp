@@ -16,7 +16,8 @@ Choose this tool over [Run Flow](run-flow.md) when the user wants to trigger a f
 schedule/task_ right now (you have a _task id_ from [List Flow Tasks](list-flow-tasks.md)) rather than
 an ad-hoc run with caller-chosen output steps.
 
-:::warning This tool changes server state
+:::warning[This tool changes server state]
+
 It runs the flow (consuming Tableau Prep Conductor capacity and overwriting outputs) and is **not
 idempotent**. Only registered when both `FLOW_TOOLS_ENABLED=true` and
 `FLOW_WRITE_TOOLS_ENABLED=true`.
@@ -27,6 +28,7 @@ idempotent**. Only registered when both `FLOW_TOOLS_ENABLED=true` and
    enqueuing it and returns a single-use `confirmationToken`.
 2. **Run** (`confirm: true`): requires the token from a matching preview. Present the proposed run to
    the user and get explicit approval before making the confirmed call.
+
 :::
 
 ## APIs called
