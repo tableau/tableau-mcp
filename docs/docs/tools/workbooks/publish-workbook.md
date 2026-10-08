@@ -157,22 +157,22 @@ The tool returns one of two result shapes:
 
 ### Permissions after a project publish
 
-When the `data-apps` feature flag is enabled, a successful project publish also returns
+A successful project publish attempts an optional permissions read and returns
 `permissions`: the workbook's configured user/group permission rules. These rules are returned
 unchanged in both `structuredContent` and the JSON text content. The tool does not select an
 access message or append a published-data-source reminder; the authoring skill interprets the
 output using existing task context.
 
 If the optional read fails, publishing still succeeds and `permissionsNote` explains that the
-rules could not be retrieved. Personal Space publishes and project publishes with `data-apps`
-disabled skip the read and omit both permission fields. Ordinary project publishing remains
-available. See [Feature Flags](../../developers/feature-flags.md).
+rules could not be retrieved. Personal Space publishes skip the read and omit both permission
+fields. Project permission disclosure is independent of the `data-apps` flag. See
+[Feature Flags](../../developers/feature-flags.md).
 
 | Publish outcome | Permission fields |
 | --- | --- |
 | Project publish; permission read succeeds | `permissions` contains the returned rules, including an empty array if none were returned. |
 | Project publish; permission read fails or consent is unavailable | `permissionsNote` explains the unavailable read; `permissions` is absent. |
-| Project publish; `data-apps` disabled | Neither field is returned; no permission read occurs. |
+| Project publish; `data-apps` disabled | Same permission read and fields as any other project publish. |
 | Personal Space publish | Neither field is returned; no permission read occurs. |
 
 An omitted capability is not rewritten as a denial. An empty array means no configured rules

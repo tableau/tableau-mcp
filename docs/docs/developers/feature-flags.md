@@ -29,25 +29,6 @@ Create a `features.json` file in the project root:
 
 **Location:** `features.json` in project root (no environment variable needed)
 
-## Workbook permissions after publishing
-
-The existing `data-apps` flag controls workbook permission disclosure after a successful
-project publish. Set `"data-apps": true` to enable it. The flag defaults to `false`;
-omitted flags are also disabled. It requires the existing `authoring-tools` flag to make
-`publish-workbook` available.
-
-When disabled, project publishing remains available, skips the permissions request, and omits
-`permissions` and `permissionsNote`. The server also omits `tableau:permissions:read` from OAuth
-discovery. When enabled, the permissions read uses a separate REST session with that scope,
-so a permissions or authentication failure still returns the published workbook with a
-`permissionsNote`. Personal Space publishes always skip this read and omit the permission fields.
-
-The tool returns the permission rules without interpreting them or composing an access summary.
-The authoring skill owns user-facing guidance based on the returned rules and existing context.
-
-When OAuth API scope enforcement is enabled, the caller must already hold
-`tableau:permissions:read`; a missing grant skips disclosure and returns `permissionsNote`.
-
 ## Usage in Code
 
 ```typescript

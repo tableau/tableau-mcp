@@ -129,7 +129,7 @@ describe('publishWorkbookTool', () => {
   });
 
   it.each([false, true])(
-    'advertises Personal Space and permission fields only when data-apps is %s',
+    'always advertises permission fields and gates Personal Space when data-apps is %s',
     async (enabled) => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
         flag === 'data-apps' ? enabled : true,
@@ -155,21 +155,17 @@ describe('publishWorkbookTool', () => {
         const { tools } = await client.listTools();
         const listed = tools.find(({ name }) => name === 'publish-workbook');
         expect(listed?.inputSchema.properties).toHaveProperty('projectId');
+        expect(listed?.description).toContain('workbook permission rules');
+        expect(listed?.description).toContain('permissionsNote');
+        expect(listed?.description).not.toMatch(/permissionsMessage|PDS reminder|Full Data Query/);
         if (enabled) {
           expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
           expect(listed?.inputSchema.required).not.toContain('projectId');
           expect(listed?.description).toContain('personalSpace');
-          expect(listed?.description).toContain('workbook permission rules');
-          expect(listed?.description).toContain('permissionsNote');
-          expect(listed?.description).not.toMatch(
-            /permissionsMessage|PDS reminder|Full Data Query/,
-          );
         } else {
           expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
           expect(listed?.inputSchema.required).toContain('projectId');
-          expect(listed?.description).not.toMatch(
-            /personal.?space|data app|permissions|PDS|base response/i,
-          );
+          expect(listed?.description).not.toMatch(/personal.?space|data app|PDS|base response/i);
           expect(schema.safeParse({ ...validArgs, personalSpace: true }).success).toBe(false);
         }
       } finally {
@@ -789,7 +785,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('requests only the base publish scopes for Personal Space or when data-apps is disabled', async () => {
+  it('keeps optional permission scopes separate from the base publish scopes', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
       uploadId: 'validated-upload-id',
@@ -820,11 +816,13 @@ describe('publishWorkbookTool', () => {
     mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
     mocks.mockPublishWorkbook.mockResolvedValue(mockWorkbook);
     await getToolResult(validArgs);
-    expect(mocks.useRestApiCalls.at(-1)?.jwtScopes).toEqual([
+    expect(mocks.useRestApiCalls[0]?.jwtScopes).toEqual([
       'tableau:workbooks:create',
       'tableau:file_uploads:create',
       'tableau:projects:read',
     ]);
+    expect(mocks.useRestApiCalls[1]?.jwtScopes).toEqual(['tableau:permissions:read']);
+    expect(mocks.useRestApiCalls).toHaveLength(2);
   });
 
   it.each([undefined, true, false])(
@@ -944,7 +942,7 @@ describe('publishWorkbookTool', () => {
     );
   });
 
-  it('skips permissions and keeps publishing available when data-apps is disabled', async () => {
+  it('returns permissions when data-apps is disabled', async () => {
     mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
       timestamp: '2026-06-10T14:32:18.456Z',
@@ -958,15 +956,15 @@ describe('publishWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     const response = JSON.parse(result.content[0].text);
     expect(response.status).toBe('published');
-    expect(response).not.toHaveProperty('permissions');
+    expect(response.permissions).toEqual([]);
     expect(response).not.toHaveProperty('permissionsNote');
     expect(response).not.toHaveProperty('permissionsMessage');
-    expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
-    expect(mocks.mockPermissionsSignIn).not.toHaveBeenCalled();
-    expect(mocks.useRestApiCalls).toHaveLength(1);
+    expect(mocks.mockQueryWorkbookPermissions).toHaveBeenCalledOnce();
+    expect(mocks.mockPermissionsSignIn).toHaveBeenCalledOnce();
+    expect(mocks.useRestApiCalls).toHaveLength(2);
   });
 
-  it('skips the optional read if data-apps is disabled while publishing', async () => {
+  it('still reads permissions if data-apps is disabled while publishing', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
     mocks.mockPublishWorkbook.mockImplementation(async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag === 'authoring-tools');
@@ -977,23 +975,29 @@ describe('publishWorkbookTool', () => {
 
     expect(result.isError).toBe(false);
     expect(result.structuredContent).toMatchObject({ status: 'published' });
-    expect(result.structuredContent).not.toHaveProperty('permissions');
+    expect(result.structuredContent).toHaveProperty('permissions', []);
     expect(result.structuredContent).not.toHaveProperty('permissionsNote');
     expect(result.structuredContent).not.toHaveProperty('permissionsMessage');
-    expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
-    expect(mocks.mockPermissionsSignIn).not.toHaveBeenCalled();
-    expect(mocks.useRestApiCalls).toHaveLength(1);
+    expect(mocks.mockQueryWorkbookPermissions).toHaveBeenCalledOnce();
+    expect(mocks.mockPermissionsSignIn).toHaveBeenCalledOnce();
+    expect(mocks.useRestApiCalls).toHaveLength(2);
   });
 
-  it.each([
-    { granted: false, enforceScopes: true, advertiseApiScopes: true, expected: false },
-    { granted: true, enforceScopes: true, advertiseApiScopes: true, expected: true },
-    { granted: false, enforceScopes: false, advertiseApiScopes: true, expected: true },
-    { granted: false, enforceScopes: true, advertiseApiScopes: false, expected: true },
-  ])(
-    'respects optional OAuth scope consent: $granted, $enforceScopes, $advertiseApiScopes',
-    async ({ granted, enforceScopes, advertiseApiScopes, expected }) => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+  it.each(
+    [false, true].flatMap((dataAppsEnabled) =>
+      [
+        { granted: false, enforceScopes: true, advertiseApiScopes: true, expected: false },
+        { granted: true, enforceScopes: true, advertiseApiScopes: true, expected: true },
+        { granted: false, enforceScopes: false, advertiseApiScopes: true, expected: true },
+        { granted: false, enforceScopes: true, advertiseApiScopes: false, expected: true },
+      ].map((entry) => ({ ...entry, dataAppsEnabled })),
+    ),
+  )(
+    'respects optional OAuth scope consent: $granted, $enforceScopes, $advertiseApiScopes, data-apps=$dataAppsEnabled',
+    async ({ granted, enforceScopes, advertiseApiScopes, expected, dataAppsEnabled }) => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (flag) =>
+        flag === 'data-apps' ? dataAppsEnabled : true,
+      );
       mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
         timestamp: '2026-06-10T14:32:18.456Z',
         uploadId: 'validated-upload-id',
@@ -1087,41 +1091,22 @@ describe('publishWorkbookTool', () => {
     expect(response).not.toHaveProperty('permissionsMessage');
   });
 
-  it.each(['authentication', 'feature lookup'])(
-    'still returns the published workbook when optional permissions %s fails',
-    async (failure) => {
-      mocks.mockValidateWorkbookAndUpload.mockResolvedValue({
-        timestamp: '2026-06-10T14:32:18.456Z',
-        uploadId: 'validated-upload-id',
-      });
-      mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
-        if (
-          flag === 'data-apps' &&
-          failure === 'feature lookup' &&
-          mocks.mockPublishWorkbook.mock.calls.length > 0
-        ) {
-          throw new Error('Feature service unavailable');
-        }
-        return true;
-      });
-      if (failure === 'authentication') {
-        mocks.mockPermissionsSignIn.mockRejectedValue(new Error('Scope not granted'));
-      }
+  it('still returns the published workbook when optional permissions authentication fails', async () => {
+    mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
+    mocks.mockPermissionsSignIn.mockRejectedValue(new Error('Scope not granted'));
 
-      const result = await getToolResult(validArgs);
+    const result = await getToolResult(validArgs);
 
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      const response = JSON.parse(result.content[0].text);
-      expect(response.status).toBe('published');
-      expect(response.data.id).toBe(mockWorkbook.id);
-      expect(response.permissions).toBeUndefined();
-      expect(response.permissionsNote).toContain('could not be retrieved');
-      expect(response).not.toHaveProperty('permissionsMessage');
-      expect(mocks.mockPublishWorkbook).toHaveBeenCalledOnce();
-      expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
-    },
-  );
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      status: 'published',
+      data: { id: mockWorkbook.id },
+      permissionsNote: expect.stringContaining('could not be retrieved'),
+    });
+    expect(result.structuredContent).not.toHaveProperty('permissions');
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledOnce();
+    expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
+  });
 
   it('errors when a Personal Space publish silently lands in a project instead', async () => {
     mocks.mockValidateWorkbookAndUpload.mockResolvedValue({

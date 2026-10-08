@@ -187,7 +187,8 @@ export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
  * simplicity over narrowing the blast radius.
  *
  * The optional permissions read uses a separate REST session so a missing permissions scope
- * cannot prevent publishing. Its scope is advertised only when the feature is enabled.
+ * cannot prevent publishing. Its scope is advertised when publishing is enabled and optional
+ * scopes are requested.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
@@ -622,11 +623,7 @@ export async function getSupportedApiScopes(
     'enforce-registration-conditions',
   );
 
-  if (
-    includeOptionalScopes &&
-    enabledTools.has('publish-workbook') &&
-    (await getFeatureGate().isFeatureEnabled('data-apps'))
-  ) {
+  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
     scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
   }
 
