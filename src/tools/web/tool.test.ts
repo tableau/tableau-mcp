@@ -24,6 +24,8 @@ vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   getProductTelemetry: vi.fn().mockReturnValue({
     send: mockTelemetrySend,
   }),
+  // config.ts reads this constant from the module; the mock must re-export it.
+  DEFAULT_PRODUCT_TELEMETRY_ENDPOINT: 'https://prod.telemetry.tableausoftware.com',
 }));
 
 // Mock for MonCloud telemetry - tracks calls to recordMetric()

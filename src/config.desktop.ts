@@ -61,7 +61,7 @@ export class Config extends BaseConfig {
 
   /**
    * Signed-in Tableau pod name and site and user LUID of the launching Desktop session, forwarded by the agent
-   * from `TABLEAU_POD_NAME` / `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch). 
+   * from `TABLEAU_POD_NAME` / `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch).
    * Empty string when the launcher did not provide them.
    */
   podName: string;
@@ -77,7 +77,7 @@ export class Config extends BaseConfig {
   chatId: string;
 
   /**
-   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event. 
+   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event.
    * Enabled by default; set `PRODUCT_TELEMETRY_ENABLED=false` to turn off.
    */
   productTelemetryEndpoint: string;
