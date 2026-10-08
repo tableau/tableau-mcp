@@ -36,7 +36,7 @@ const paramsSchema = {
 };
 
 // Tableau error code returned by the flow-document endpoint when the
-// experimental `GetFlowDocumentRestApi` feature flag is OFF (monolith code).
+// experimental `getFlowDocumentRestApi` feature flag is OFF (monolith code).
 const FLOW_DOCUMENT_API_DISABLED_CODE = '403201';
 
 /**
