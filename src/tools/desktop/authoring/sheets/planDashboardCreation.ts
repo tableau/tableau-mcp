@@ -6,8 +6,10 @@ import {
   bindExplicitTemplate,
   formatExplicitBindErrors,
 } from '../../../../desktop/binder/explicit-bind.js';
+import type { Derivation } from '../../../../desktop/binder/manifest-types.js';
 import { summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveField } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { listTemplateNames, readBookmark } from '../../../../desktop/templates/templatePath.js';
@@ -21,7 +23,10 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { buildWorksheetsFromTemplatesParamsSchema } from '../templates/buildWorksheetsFromTemplates.js';
+import {
+  buildWorksheetsFromTemplatesParamsSchema,
+  worksheetAggregationSchema,
+} from '../templates/buildWorksheetsFromTemplates.js';
 import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
 
 type PlannerField = string | { query: string; datasource?: string };
@@ -33,6 +38,7 @@ type PlannerFieldResolution = {
   columnRef: string | null;
   datasource: string | null;
   reason?: string;
+  requestedDerivation?: Derivation;
   candidates: string[];
 };
 
@@ -158,6 +164,11 @@ export const getPlanDashboardCreationTool = (
                 requestedField.query,
                 requestedField.datasource ? { datasource: requestedField.datasource } : undefined,
               );
+              const aggregation = worksheetAggregationSchema.safeParse(
+                resolution.column_ref
+                  ? parseCanonicalColumnRef(resolution.column_ref)?.derivation
+                  : undefined,
+              );
               const resolved: PlannerFieldResolution = {
                 query: requestedField.query,
                 datasourceSelector: requestedField.datasource,
@@ -165,6 +176,12 @@ export const getPlanDashboardCreationTool = (
                 columnRef: resolution.column_ref ?? null,
                 datasource: resolution.datasource ?? null,
                 reason: resolution.reason,
+                ...((resolution.rewrites?.includes('parsed-aggregation-prefix') ||
+                  parseCanonicalColumnRef(requestedField.query)) &&
+                !resolution.rewrites?.includes('ignored-redundant-aggregation') &&
+                aggregation.success
+                  ? { requestedDerivation: aggregation.data }
+                  : {}),
                 candidates: (resolution.candidates ?? []).map((c) => c.column_ref),
               };
               switch (resolution.kind) {
@@ -289,6 +306,11 @@ export const getPlanDashboardCreationTool = (
               contract: snapshot.descriptor,
               title: ws.name,
               datasource: resolvedDatasources[0],
+              requestedDerivations: Object.fromEntries(
+                resolvedEntries
+                  .filter((entry) => entry.requestedDerivation !== undefined)
+                  .map((entry) => [entry.columnRef!, entry.requestedDerivation!]),
+              ),
             });
             if (!binding.ok) {
               return new ArgsValidationError(
@@ -315,6 +337,7 @@ export const getPlanDashboardCreationTool = (
               title: ws.name,
               datasource: binding.datasource,
               fieldMapping,
+              derivationOverrides: binding.derivationOverrides,
             });
             if (!buildArgs.success) {
               return new ArgsValidationError(

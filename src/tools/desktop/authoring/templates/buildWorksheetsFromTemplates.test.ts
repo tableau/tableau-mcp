@@ -110,9 +110,9 @@ describe('build-worksheets-from-templates', () => {
       derivationOverrides: expect.any(Object),
       topN: expect.any(Object),
     });
-    expect(schema.fieldMapping.description).toBe('Map slot ID to exact returned column_ref.');
-    expect(schema.derivationOverrides.description).toBe('Count derivation by slot ID.');
-    expect(schema.topN.description).toBe('Rank limit (1-50).');
+    expect(schema.fieldMapping.description).toBe('Slot to column_ref.');
+    expect(schema.derivationOverrides.description).toBe('Aggregation by slot.');
+    expect(schema.topN.description).toBe('Rank limit.');
     expect(schema).not.toHaveProperty('templates');
     expect(schema).not.toHaveProperty('workbookFile');
     expect(schema).not.toHaveProperty('confirmation');

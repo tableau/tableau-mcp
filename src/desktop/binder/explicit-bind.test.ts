@@ -1393,3 +1393,64 @@ describe('schemaSummaryFromAvailableFields', () => {
     expect(summary.fields[0].name).toBe('Sales');
   });
 });
+
+describe('explicit field derivations in ordered planner bindings', () => {
+  it('preserves requested average only when explicitly supplied and keeps legacy defaults', () => {
+    const ref = '[Superstore].[avg:Sales:qk]';
+    const legacy = bindExplicitTemplate('kpi-text', [ref], SUMMARY, { contract: KPI });
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) return;
+    expect(legacy.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[sum:Sales:qk]');
+    const requested = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+      contract: KPI,
+      requestedDerivations: { [ref]: 'avg' },
+    });
+    expect(requested.ok).toBe(true);
+    if (!requested.ok) return;
+    expect(requested.derivationOverrides).toEqual({ field_base_1: 'avg' });
+    expect(requested.fieldMapping['{{field_base_1}}']).toBe(ref);
+  });
+
+  it('uses the requested count to assign a dimension to a quantitative slot', () => {
+    const ref = '[Superstore].[ctd:Order ID:nk]';
+    const result = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+      contract: KPI,
+      requestedDerivations: { [ref]: 'ctd' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.derivationOverrides).toEqual({ field_base_1: 'ctd' });
+    expect(result.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[ctd:Order ID:qk]');
+  });
+
+  it('refuses changing aggregation when the same template field feeds an authored calculation', () => {
+    const ref = '[Superstore].[avg:Sales:qk]';
+    const result = bindExplicitTemplate('x-count-calc', [ref], SUMMARY, {
+      contract: COUNT_CALC,
+      requestedDerivations: { [ref]: 'avg' },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((error) => error.detail.includes('leaving the calculation'))).toBe(
+      true,
+    );
+  });
+
+  it('does not reinterpret the template default date grain', () => {
+    const contract: TemplateBindingContract = {
+      ...KPI,
+      template: 'date-test',
+      slots: [{ ...KPI.slots[0], kind: 'temporal', derivation: 'yr' }],
+    };
+    const result = bindExplicitTemplate(
+      'date-test',
+      ['[Superstore].[none:Order Date:ok]'],
+      SUMMARY,
+      { contract, requestedDerivations: {} },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping['{{field_base_1}}']).toContain('[yr:Order Date:');
+    expect(result.derivationOverrides).toBeUndefined();
+  });
+});

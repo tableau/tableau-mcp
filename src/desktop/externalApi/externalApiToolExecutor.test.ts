@@ -1,6 +1,10 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as logger from '../../logging/logger.js';
+import { DesktopMcpServer } from '../../server.desktop.js';
+import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style/formatDashboardZones.js';
+import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
+import { Provider } from '../../utils/provider.js';
 import { INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE } from '../callDeadline.js';
 import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
@@ -144,6 +148,82 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.method).toBe('POST');
       expect(last?.path).toBe('/v0/workbook/document');
       expect(last?.body).toBe(xml);
+    });
+
+    it.each([
+      '<zones><zone id="1" name="Sales" type-v2="worksheet"/></zones>',
+      '<devicelayouts><devicelayout name="Phone"><zones><zone id="1" name="Sales" type-v2="worksheet"/></zones></devicelayout></devicelayouts>',
+    ])(
+      'blocks crash-producing dashboard XML at the shared boundary without dispatch: %s',
+      async (zones) => {
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+        const onDispatch = vi.fn();
+        const result = await executor.applyDashboardDocument(
+          'dashboard-sales',
+          `<dashboard name="D">${zones}</dashboard>`,
+          signal,
+          {
+            onDispatch,
+            expectedInstanceId: 'inst-exec',
+          },
+        );
+        expect(result.isErr()).toBe(true);
+        expect(JSON.stringify(result.unwrapErr())).toContain(
+          'dashboard-document-validation-failed',
+        );
+        expect(onDispatch).not.toHaveBeenCalled();
+        expect(server.requests.filter((request) => request.method === 'POST')).toHaveLength(0);
+      },
+    );
+
+    it('allows a repaired canonical worksheet zone through the shared boundary', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+      const xml =
+        '<dashboard name="Executive Dashboard"><zones><zone id="1" name="Sales"><zone-style/></zone></zones></dashboard>';
+      const onDispatch = vi.fn();
+      const result = await executor.applyDashboardDocument('dash-exec', xml, signal, {
+        onDispatch,
+        expectedInstanceId: 'inst-exec',
+      });
+      expect(result.isOk()).toBe(true);
+      expect(onDispatch).toHaveBeenCalledTimes(1);
+      const writes = server.requests.filter((request) => request.method === 'POST');
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        path: '/v0/workbook/dashboards/dash-exec/document',
+        body: xml,
+      });
+    });
+
+    it('blocks formatter writes through the production dashboard apply boundary', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+      vi.spyOn(executor, 'listDashboards').mockResolvedValue(
+        Ok({ dashboards: [{ id: 'dashboard-sales', name: 'D', hidden: false }] }),
+      );
+      vi.spyOn(executor, 'getDashboardDocument').mockResolvedValue(
+        Ok({
+          xml: '<dashboard name="D"><zones><zone id="1" name="Sales" type-v2="worksheet"><zone-style/></zone></zones></dashboard>',
+          applicationVersion: '2026.2',
+          xsdPayloadVersion: undefined,
+        }),
+      );
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue(executor),
+      };
+      const formatter = await Provider.from(
+        getFormatDashboardZonesTool(new DesktopMcpServer()).callback,
+      );
+      const result = await formatter(
+        { session: 'test', dashboardName: 'D', cornerRadius: 10, scope: 'all', zoneIds: undefined },
+        extra,
+      );
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('unsupported type-v2');
+      expect(server.requests.filter((request) => request.method === 'POST')).toHaveLength(0);
     });
 
     it('retains terminal workbook diagnostics beside independent operation warnings', async () => {

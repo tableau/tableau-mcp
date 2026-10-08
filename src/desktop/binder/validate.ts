@@ -596,19 +596,23 @@ export function validateBinding(
 
     if (
       (countDimensionInMeasureSlot && feedsCalc) ||
-      (hasCountOverride &&
+      (override !== undefined &&
         override !== slot.derivation &&
         calcInputTemplateFields.has(slot.template_field))
     ) {
       const countSource =
-        override !== undefined ? 'requested count override' : 'template count derivation';
+        override !== undefined
+          ? hasCountOverride
+            ? 'requested count override'
+            : 'requested aggregation override'
+          : 'template count derivation';
       blockers.push({
         code: 'aggregation-level-mismatch',
         slot_id: slotId,
         detail:
           `slot '${slotId}' maps template field '${slot.template_field}' used by a template calculation, so ` +
           `${countSource} '${effDeriv}' would change mapped shelf instances while leaving the calculation's ` +
-          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested count.",
+          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested aggregation.",
       });
       continue;
     }

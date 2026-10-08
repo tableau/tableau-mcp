@@ -47,6 +47,8 @@ export interface ExplicitBindOptions {
   datasource?: string;
   passthroughFieldMapping?: Record<string, string>;
   derivationOverrides?: Record<string, Derivation>;
+  /** Explicit user intent keyed by resolved ref, applied only to its assigned slot. */
+  requestedDerivations?: Record<string, Derivation>;
 }
 
 export interface ExplicitBindError {
@@ -66,6 +68,7 @@ export type ExplicitBindResult =
       fieldMetadata: Record<string, FieldMetadataOverride>;
       consumedFieldRefs: string[];
       templateSlots: SlotSpec[];
+      derivationOverrides?: Record<string, Derivation>;
       optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
@@ -87,6 +90,7 @@ interface ProposalBuild {
   proposal: BindingProposal;
   fieldBySlot: Map<string, SchemaField>;
   warnings: string[];
+  derivationOverrides?: Record<string, Derivation>;
 }
 
 interface GreedyAssignment {
@@ -171,7 +175,14 @@ export function bindExplicitTemplate(
 
   const warnings: string[] = [];
   const built = Array.isArray(input)
-    ? buildProposalFromOrderedRefs(contract, input, schema, opts.title, opts.derivationOverrides)
+    ? buildProposalFromOrderedRefs(
+        contract,
+        input,
+        schema,
+        opts.title,
+        opts.derivationOverrides,
+        opts.requestedDerivations,
+      )
     : buildProposalFromFieldMapping(contract, input, schema, opts.title, opts.derivationOverrides);
   warnings.push(...built.warnings);
 
@@ -209,10 +220,15 @@ export function bindExplicitTemplate(
     ok: true,
     template: templateName,
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
-    fieldMapping: emitRawFieldMapping(contract, built.fieldBySlot, opts.derivationOverrides),
+    fieldMapping: emitRawFieldMapping(
+      contract,
+      built.fieldBySlot,
+      built.derivationOverrides ?? opts.derivationOverrides,
+    ),
     fieldMetadata: fieldMetadataFor(contract, built.fieldBySlot),
     consumedFieldRefs: consumedFieldRefsFor(contract, built.fieldBySlot),
     templateSlots: contract.slots,
+    ...(built.derivationOverrides ? { derivationOverrides: built.derivationOverrides } : {}),
     optionalFieldPrunes: optionalFieldPrunesFor(contract, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
@@ -243,6 +259,7 @@ function buildProposalFromOrderedRefs(
   schema: SchemaSummary,
   title?: string,
   derivationOverrides: Record<string, Derivation> = {},
+  requestedDerivations: Record<string, Derivation> = {},
 ): ProposalBuild {
   const warnings: string[] = [];
   const sources: ResolvedSource[] = [];
@@ -259,6 +276,7 @@ function buildProposalFromOrderedRefs(
   const bindings: BindingProposal['bindings'] = [];
   const greedyAssignments: GreedyAssignment[] = [];
 
+  const assignedOverrides = { ...derivationOverrides };
   const orderedSlots = manifest.slots.filter((slot) => slot.bindable);
   for (const [index, slot] of orderedSlots.entries()) {
     if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
@@ -271,16 +289,19 @@ function buildProposalFromOrderedRefs(
       sources,
       used,
       reusableByTemplateField,
+      derivationOverrides[slot.slot_id] === undefined ? requestedDerivations : {},
     );
     if (!selection) continue;
     const { source, affinityPlaced } = selection;
+    const requested = derivationOverrides[slot.slot_id] ?? requestedDerivations[source.raw];
+    if (requested !== undefined) assignedOverrides[slot.slot_id] = requested;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({
       slot_id: slot.slot_id,
       field: source.field.column_ref,
-      ...(derivationOverrides[slot.slot_id] !== undefined
-        ? { derivation: derivationOverrides[slot.slot_id] }
+      ...(assignedOverrides[slot.slot_id] !== undefined
+        ? { derivation: assignedOverrides[slot.slot_id] }
         : {}),
     });
     greedyAssignments.push({ slot, field: source.field, affinityPlaced });
@@ -291,6 +312,9 @@ function buildProposalFromOrderedRefs(
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
+    ...(Object.keys(requestedDerivations).length > 0
+      ? { derivationOverrides: assignedOverrides }
+      : {}),
   };
 }
 
@@ -356,9 +380,17 @@ function takeCompatibleSource(
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
+  requestedDerivations: Record<string, Derivation>,
 ): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && slotAcceptsSource(slot, effectiveDerivation, reusable.field)) {
+  if (
+    reusable &&
+    slotAcceptsSource(
+      slot,
+      requestedDerivations[reusable.raw] ?? effectiveDerivation,
+      reusable.field,
+    )
+  ) {
     return { source: reusable, affinityPlaced: false };
   }
 
@@ -367,7 +399,11 @@ function takeCompatibleSource(
       (source) =>
         !used.has(source.field) &&
         !source.field.isGroup &&
-        kindCompatible(slot.kind, source.field) &&
+        slotAcceptsSource(
+          slot,
+          requestedDerivations[source.raw] ?? effectiveDerivation,
+          source.field,
+        ) &&
         fieldNameMatchesSlot(source.field, slot),
     );
     if (affine.length === 1) {
@@ -381,7 +417,14 @@ function takeCompatibleSource(
   for (const source of sources) {
     if (used.has(source.field)) continue;
     if (source.field.isGroup) continue;
-    if (!slotAcceptsSource(slot, effectiveDerivation, source.field)) continue;
+    if (
+      !slotAcceptsSource(
+        slot,
+        requestedDerivations[source.raw] ?? effectiveDerivation,
+        source.field,
+      )
+    )
+      continue;
     const score = slotAffinity(slot, source.field);
     if (score > bestScore) {
       best = source;

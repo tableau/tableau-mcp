@@ -161,6 +161,8 @@ const NON_TOOL_VOCABULARY = [
   'output-serialization-failed',
   'packaged-workbook',
   'param-domain-type',
+  // Field resolver transformation marker, not a callable tool.
+  'parsed-aggregation-prefix',
   'part-to-whole-waterfall',
   'post-apply',
   'post-apply-read',

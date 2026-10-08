@@ -47,9 +47,32 @@ describe('planned dashboard creation through live dashboard apply', () => {
     rmSync(cache.directory, { recursive: true, force: true });
   });
 
-  it.each([undefined, 'insights__bar_chart'])(
-    'executes production worksheet calls before registered dashboard apply (chart template=%s)',
-    async (template) => {
+  it.each([
+    { template: undefined, query: 'Sales', derivation: 'Sum', prefix: 'sum' },
+    { template: 'insights__bar_chart', query: 'Sales', derivation: 'Sum', prefix: 'sum' },
+    ...['avg', 'min', 'max', 'count', 'countd'].map((aggregation) => ({
+      template: undefined,
+      query: `${aggregation} of Sales`,
+      derivation: (
+        { avg: 'Avg', min: 'Min', max: 'Max', count: 'Count', countd: 'CountD' } as Record<
+          string,
+          string
+        >
+      )[aggregation],
+      prefix:
+        ({ count: 'cnt', countd: 'ctd' } as Record<string, string>)[aggregation] ?? aggregation,
+    })),
+    { template: undefined, query: '[Superstore].[sum:Sales:qk]', derivation: 'Sum', prefix: 'sum' },
+    {
+      template: undefined,
+      query: 'avg of Sales',
+      derivation: 'Avg',
+      prefix: 'avg',
+      category: '[Superstore].[none:Category:nk]',
+    },
+  ])(
+    'executes production worksheet calls before registered dashboard apply (aggregation=%j)',
+    async ({ template, query, derivation, prefix, ...options }) => {
       let live = workbook;
       const completed = Ok({ command_id: 'apply', status: 'completed', submitted_at: '' } as const);
       const executor = makeExecutorMock({
@@ -105,13 +128,18 @@ describe('planned dashboard creation through live dashboard apply', () => {
           title: undefined,
           layout: undefined,
           worksheets: [
-            { name: 'A', type: 'kpi' as const, fields: ['Sales'] },
-            { name: 'B', type: 'chart' as const, template, fields: ['Sales', 'Category'] },
+            { name: 'A', type: 'kpi' as const, fields: [query] },
+            {
+              name: 'B',
+              type: 'chart' as const,
+              template,
+              fields: [query, ('category' in options ? options.category : undefined) ?? 'Category'],
+            },
           ],
         },
         extra,
       );
-      expect(planned.isError).toBe(false);
+      expect(planned.isError, payloadText(planned)).toBe(false);
       const plan = payload(planned).plan;
       expect(plan.metadata.automaticCompletionSupported).toBe(false);
       expect(plan.phase2Parallel.tasks.map((task: any) => task.task_type)).toEqual([
@@ -188,6 +216,20 @@ describe('planned dashboard creation through live dashboard apply', () => {
           applied: true,
         });
       }
+      // Inspect the real builder output after production apply/readback, not just the plan.
+      for (const name of ['A', 'B']) {
+        const sheet = extractSheetXml(live, name)!;
+        const doc = new DOMParser().parseFromString(sheet, 'text/xml');
+        const salesInstances = Array.from(doc.getElementsByTagName('column-instance')).filter(
+          (instance) => instance.getAttribute('column') === '[Sales]',
+        );
+        expect(salesInstances.length).toBeGreaterThan(0);
+        expect(
+          salesInstances.every((instance) => instance.getAttribute('derivation') === derivation),
+        ).toBe(true);
+        expect(sheet).toContain(`[${prefix}:Sales:qk]`);
+        if (prefix !== 'sum') expect(sheet).not.toContain('[sum:Sales:qk]');
+      }
       const worksheetWrites = vi.mocked(executor.applyWorkbookDocument).mock.calls.length;
       const unregistered = await apply(applyTask, extra);
       expect(unregistered.isError).toBe(true);
@@ -251,6 +293,11 @@ describe('planned dashboard creation through live dashboard apply', () => {
 
   it.each([
     { template: undefined, fields: ['Sales'], message: 'Explicit template binding BLOCKED' },
+    {
+      template: undefined,
+      fields: ['[Superstore].[avg:Sales:qk]', 'Category'],
+      message: 'not_found',
+    },
     { template: 'missing-template', fields: ['Sales', 'Category'], message: 'is not available' },
     { template: '../outside', fields: ['Sales', 'Category'], message: 'Invalid template name' },
     {
@@ -289,6 +336,34 @@ describe('planned dashboard creation through live dashboard apply', () => {
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
     },
   );
+
+  it('refuses two aggregations of the same source rather than silently dropping one', async () => {
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: workbook })),
+    });
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(executor),
+    };
+    const planner = await Provider.from(
+      getPlanDashboardCreationTool(new DesktopMcpServer()).callback,
+    );
+    const result = await planner(
+      {
+        session: 'workflow-test',
+        dashboardName: 'D',
+        title: undefined,
+        layout: undefined,
+        worksheets: [
+          { name: 'A', type: 'chart', fields: ['avg of Sales', 'sum of Sales', 'Category'] },
+        ],
+      },
+      extra,
+    );
+    expect(result.isError).toBe(true);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+  });
 
   it('refuses a cross-datasource worksheet plan before any write', async () => {
     const xml = workbook.replace(

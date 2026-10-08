@@ -15,6 +15,7 @@ import {
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
+import { runAlwaysBlockingValidation } from '../validation/registry.js';
 import { apiVersionAtLeast, SCREENSHOT_MIN_API_VERSION } from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
@@ -738,6 +739,19 @@ export class ExternalApiToolExecutor {
     signal: AbortSignal,
     options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    const validation = runAlwaysBlockingValidation(xml, 'dashboard');
+    if (!validation.valid) {
+      return Err({
+        type: 'command-failed',
+        error: {
+          code: 'dashboard-document-validation-failed',
+          message: validation.issues
+            .map((issue) => `${issue.message} ${issue.suggestion ?? ''}`)
+            .join('\n'),
+          recoverable: true,
+        },
+      });
+    }
     return this.applyDocument(
       (http) => http.postXmlEnvelope(dashboardDocumentRoute(dashboardId), xml, signal),
       'apply-dashboard-document',

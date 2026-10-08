@@ -115,6 +115,34 @@ describe('planDashboardCreationTool', () => {
     expect(plan.phase4Dashboard.fileBinding).toContain('do not reuse the Phase 1 paths');
   });
 
+  it.each(['avg', 'min', 'max', 'cnt', 'ctd'])(
+    'preserves explicit %s in executable build arguments',
+    async (derivation) => {
+      vi.mocked(resolveField).mockImplementation((_, query) =>
+        query === 'Category'
+          ? makeExactResolution(query)
+          : {
+              kind: 'rewritten',
+              query,
+              datasource: 'Sample Superstore',
+              column_ref: `[Sample Superstore].[${derivation}:Sales:qk]`,
+              rewrites: ['parsed-aggregation-prefix'],
+            },
+      );
+      const result = await getResult({
+        session: SESSION,
+        dashboardName: 'D',
+        worksheets: [{ name: 'A', type: 'chart', fields: [`${derivation} of Sales`, 'Category'] }],
+      });
+      expect(result.isError).toBe(false);
+      const params = extractPlan(result).phase2Parallel.tasks[0].build.params;
+      expect(Object.values(params.derivationOverrides)).toContain(derivation);
+      expect(Object.values(params.fieldMapping)).toContain(
+        `[Sample Superstore].[${derivation}:Sales:qk]`,
+      );
+    },
+  );
+
   it('does not require registration for an empty dashboard', async () => {
     const result = await getResult({ session: SESSION, dashboardName: 'Empty', worksheets: [] });
     expect(result.isError).toBeFalsy();
