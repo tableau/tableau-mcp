@@ -87,13 +87,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       extra.config.podName,
     );
     let success = false;
-    // McpToolError's HTTP statusCode, errorType is its stable `type` slug (with subtype when set),
-    // errorReason its bounded failure-shape code.
-    // All stay empty unless a typed McpToolError is in play. See the finally for the wire keys —
-    // errorType rides `error_type` and errorReason rides `error_message`.
+    // errorCode is McpToolError's HTTP statusCode; errorType its stable `type` slug (e.g.
+    // 'args-validation'). Both stay empty unless a typed McpToolError is in play. We send only the
+    // slug as `error_message` — the human-readable message is omitted to keep PII off the wire.
     let errorCode = '';
     let errorType = '';
-    let errorReason = '';
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -130,8 +128,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
 
       if (result.error instanceof McpToolError) {
         errorCode = String(result.error.statusCode);
-        errorType = result.error.getTelemetryType();
-        errorReason = result.error.getTelemetryMessage();
+        errorType = result.error.type;
       }
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
@@ -161,6 +158,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       const timedOut = isDesktopCallTimeout(error);
       if (error instanceof McpToolError) {
         errorCode = String(error.statusCode);
+        errorType = error.type;
       }
       log({
         message: timedOut
@@ -208,8 +206,9 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         podname: extra.config.podName,
         success,
         error_code: errorCode,
-        // omitted for now due to including PII information
-        error_message: '',
+        // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
+        // omitted to keep PII off the wire.
+        error_message: errorType,
         auth_type: 'desktop',
         // oauth is omitted due to using stdio for desktop
         oauth_client_id: '',

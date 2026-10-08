@@ -432,13 +432,17 @@ describe('DesktopTool product telemetry', () => {
     );
   });
 
-  it('reports the McpToolError status code and message on a Result.Err', async () => {
+  it('reports the McpToolError status code and type slug on a Result.Err', async () => {
     await makeTool().logAndExecute({
       extra: extraWithConfig({ desktopSessionLuid: guid }),
       args: { session: 'S1' },
       callback: async () =>
         new Err(
-          new McpToolError({ type: 'invalid-args', message: 'invalid request', statusCode: 400 }),
+          new McpToolError({
+            type: 'args-validation',
+            message: 'invalid request',
+            statusCode: 400,
+          }),
         ),
     });
 
@@ -447,7 +451,30 @@ describe('DesktopTool product telemetry', () => {
       expect.objectContaining({
         success: false,
         error_code: '400',
-        error_message: '',
+        error_message: 'args-validation',
+      }),
+    );
+  });
+
+  it('reports the McpToolError status code and type slug on a thrown McpToolError', async () => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ desktopSessionLuid: guid }),
+      args: { session: 'S1' },
+      callback: async () => {
+        throw new McpToolError({
+          type: 'args-validation',
+          message: 'invalid request',
+          statusCode: 400,
+        });
+      },
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        success: false,
+        error_code: '400',
+        error_message: 'args-validation',
       }),
     );
   });
