@@ -116,7 +116,7 @@ export class FlowNotAllowedError extends McpToolError {
  * The experimental flow-document REST API is not enabled on this server.
  *
  * The endpoint returns 403 with Tableau error code `403201` when its
- * `GetFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * `getFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
  * specific code into this clearer, actionable error — any other 403 (insufficient
  * download permission, insufficient token scope, generic forbidden) is surfaced
  * as a {@link FlowDocumentForbiddenError} so a permission problem is never
