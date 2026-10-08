@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';

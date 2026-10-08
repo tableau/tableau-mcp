@@ -7,7 +7,7 @@ import {
   luidSchema,
   pathParamGuardPlugin,
   RouteSafetyError,
-} from './routeSafety';
+} from './index.js';
 
 const LUID = '11111111-1111-1111-1111-111111111111';
 

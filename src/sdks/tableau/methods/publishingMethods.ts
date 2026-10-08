@@ -1,9 +1,9 @@
 import { Zodios, ZodiosEndpointDefinitions } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { buildRestPath } from '../../routeSafety/core.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
-import { buildRestPath } from '../routeSafety.js';
 import { FileUpload, fileUploadResponseSchema } from '../types/fileUpload.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 

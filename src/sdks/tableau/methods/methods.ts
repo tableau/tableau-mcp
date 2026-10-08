@@ -1,6 +1,6 @@
 import { ZodiosClass, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 
-import { assertNoTraversal, pathParamGuardPlugin } from '../routeSafety.js';
+import { installRouteGuards } from '../../routeSafety/zodios.js';
 
 export default class Methods<T extends ZodiosEndpointDefinitions> {
   protected _apiClient: ZodiosInstance<T>;
@@ -8,11 +8,7 @@ export default class Methods<T extends ZodiosEndpointDefinitions> {
   constructor(apiClient: ZodiosInstance<T>) {
     this._apiClient = apiClient;
     // Route-safety guards: every endpoint of every client inherits them.
-    apiClient.use(pathParamGuardPlugin);
-    apiClient.axios.interceptors.request.use((c) => {
-      assertNoTraversal(c.url ?? '');
-      return c;
-    });
+    installRouteGuards(apiClient);
   }
 
   get interceptors(): ZodiosClass<T>['axios']['interceptors'] {

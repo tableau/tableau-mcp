@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { luidPathParam } from '../routeSafety.js';
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
@@ -84,7 +84,7 @@ const listPulseMetricsFromMetricDefinitionIdRestEndpoint = makeEndpoint({
   path: '/pulse/definitions/:pulseMetricDefinitionID/metrics',
   alias: 'listPulseMetricsFromMetricDefinitionId',
   description: 'Returns a list of published Pulse Metrics for a specific Pulse Metric Definition.',
-  parameters: [luidPathParam('pulseMetricDefinitionID')],
+  parameters: [pathParam('pulseMetricDefinitionID')],
   response: z.object({
     metrics: z.array(pulseMetricSchema),
     total_available: z.number(),

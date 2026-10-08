@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { luidPathParam } from '../routeSafety.js';
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   flowConnectionSchema,
   flowOutputStepSchema,
@@ -46,12 +46,8 @@ const runFlowNowEndpoint = makeEndpoint({
   description:
     'Runs the specified flow on demand and returns the async background job (job id + flow run id).',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    luidPathParam('flowId'),
+    pathParam('siteId', 'segment'),
+    pathParam('flowId'),
     {
       name: 'body',
       type: 'Body',
@@ -69,11 +65,7 @@ const queryFlowsForSiteEndpoint = makeEndpoint({
     'Returns the flows on a site. If the user is not an administrator, the method returns just the flows that the user has permissions to view.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -103,7 +95,7 @@ const queryFlowEndpoint = makeEndpoint({
   alias: 'queryFlow',
   description:
     'Returns information about the specified flow, including information about the project, owner, and output steps.',
-  parameters: [luidPathParam('flowId')],
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowId')],
   response: z.object({
     flowOutputSteps: z
       .object({
@@ -119,7 +111,7 @@ const queryFlowConnectionsEndpoint = makeEndpoint({
   path: '/sites/:siteId/flows/:flowId/connections',
   alias: 'queryFlowConnections',
   description: 'Returns a list of data connections for the specified flow.',
-  parameters: [luidPathParam('flowId')],
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowId')],
   response: z.object({
     connections: z.object({
       connection: z.optional(z.array(flowConnectionSchema)),
@@ -135,11 +127,7 @@ const getFlowRunsEndpoint = makeEndpoint({
     'Returns flow runs on a site. Supports filtering by predefined fields such as flowId, userId, progress, startedAt, and completedAt.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -184,14 +172,7 @@ const cancelFlowRunEndpoint = makeEndpoint({
   alias: 'cancelFlowRun',
   description:
     'Requests cancellation of a queued or in-progress flow run. No request body; returns HTTP 200 (body {} on success, or an { error } envelope for some failures).',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    luidPathParam('flowRunId'),
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowRunId')],
   response: cancelFlowRunResponseSchema,
 });
 

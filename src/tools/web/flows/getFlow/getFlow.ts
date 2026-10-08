@@ -6,8 +6,8 @@ import { getConfig } from '../../../../config.js';
 import { FlowNotAllowedError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
-import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
 import {
   Flow,
   FlowConnection,

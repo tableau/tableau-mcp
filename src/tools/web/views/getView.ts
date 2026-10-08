@@ -4,12 +4,12 @@ import { Ok } from 'ts-results-es';
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   getViewLineageByLuid,
   getViewLineageQuery,
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';

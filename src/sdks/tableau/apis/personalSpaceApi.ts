@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { personalSpaceSchema } from '../types/personalSpace.js';
 
 const getPersonalSpaceEndpoint = makeEndpoint({
@@ -8,13 +9,7 @@ const getPersonalSpaceEndpoint = makeEndpoint({
   path: '/sites/:siteId/personalSpace',
   alias: 'getPersonalSpace',
   description: "Returns the calling user's Personal Space on the specified site.",
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment')],
   response: z.object({ personalSpace: personalSpaceSchema }),
 });
 

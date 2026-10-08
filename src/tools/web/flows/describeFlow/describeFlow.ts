@@ -12,7 +12,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
-import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';

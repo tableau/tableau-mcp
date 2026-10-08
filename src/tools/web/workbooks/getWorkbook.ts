@@ -5,6 +5,7 @@ import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { QueryPermissionResource } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import {
   filterLineageContentsByAllowedIds,
@@ -18,7 +19,6 @@ import {
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook, WorkbookConnection } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';

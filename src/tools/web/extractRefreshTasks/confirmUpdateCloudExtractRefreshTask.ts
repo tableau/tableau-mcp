@@ -5,7 +5,7 @@ import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';

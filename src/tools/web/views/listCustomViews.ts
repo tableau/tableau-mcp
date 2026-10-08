@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';

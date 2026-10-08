@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../../restApiInstance.js';
-import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { PulseMetric } from '../../../../sdks/tableau/types/pulse.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';

@@ -8,9 +8,9 @@ import {
   WorkbookDatasourceNotEnabledError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';

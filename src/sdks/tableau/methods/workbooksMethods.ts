@@ -1,10 +1,11 @@
 import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { buildRestPath } from '../../routeSafety/core.js';
+import { luidSchema } from '../../routeSafety/ids.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
-import { buildRestPath, luidSchema } from '../routeSafety.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { GranteeCapability } from '../types/permissions.js';

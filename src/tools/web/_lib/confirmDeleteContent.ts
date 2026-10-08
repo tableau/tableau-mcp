@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
