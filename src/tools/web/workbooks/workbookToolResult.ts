@@ -7,8 +7,16 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
+import { Ok, Result } from 'ts-results-es';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import {
+  buildTenantBlobKey,
+  getTenantLuids,
+  TenantIdentitySource,
+  TenantLuids,
+} from '../../../blobStorage/tenantKey.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -25,18 +33,24 @@ type BuildWorkbookToolResultParams = {
   filename: string;
   resourceId: string;
   toolName: string;
+  tenant: TenantIdentitySource;
   maxBytes?: number;
 };
 
 /**
  * Streams workbook content to blob storage, or to a temp file when storage is off, without ever
- * holding it in memory whole. Throws once the content exceeds `maxBytes`.
+ * holding it in memory whole. Throws once the content exceeds `maxBytes`. A missing or invalid
+ * tenant returns an error rather than falling back, so nothing is uploaded unscoped.
  */
 export async function buildWorkbookToolResult(
   params: BuildWorkbookToolResultParams,
-): Promise<WorkbookToolResult> {
+): Promise<Result<WorkbookToolResult, McpToolError>> {
   try {
-    return await buildWorkbookToolResultInner(params);
+    const result = await buildWorkbookToolResultInner(params);
+    if (result.isErr()) {
+      discard(params.content);
+    }
+    return result;
   } catch (error) {
     // Release the source on every failure path; a no-op if it was already consumed or destroyed.
     discard(params.content);
@@ -51,8 +65,9 @@ async function buildWorkbookToolResultInner({
   filename,
   resourceId,
   toolName,
+  tenant,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
-}: BuildWorkbookToolResultParams): Promise<WorkbookToolResult> {
+}: BuildWorkbookToolResultParams): Promise<Result<WorkbookToolResult, McpToolError>> {
   if (contentLength !== undefined && contentLength > maxBytes) {
     throw tooLargeError(maxBytes);
   }
@@ -61,14 +76,20 @@ async function buildWorkbookToolResultInner({
   const capped = capBytes(content, maxBytes, () => (started = true));
 
   if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
-    return await persistWorkbookToTempPath({ content: capped, mimeType, filename });
+    return new Ok(await persistWorkbookToTempPath({ content: capped, mimeType, filename }));
+  }
+
+  // Resolved outside the try so a missing tenant fails closed instead of falling back.
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
   }
 
   let url: string;
   try {
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
     ({ url } = await getBlobStorageProvider().upload({
-      key: buildWorkbookKey(resourceId, ext),
+      key: buildWorkbookKey(tenantLuids.value, resourceId, ext),
       data: capped,
       contentType: mimeType,
       contentLength,
@@ -88,23 +109,25 @@ async function buildWorkbookToolResultInner({
       logger: 'tool',
     });
     // Fresh wrapper: the provider may have closed `capped` without reading the source.
-    return await persistWorkbookToTempPath({
-      content: capBytes(content, maxBytes, () => undefined),
-      mimeType,
-      filename,
-    });
+    return new Ok(
+      await persistWorkbookToTempPath({
+        content: capBytes(content, maxBytes, () => undefined),
+        mimeType,
+        filename,
+      }),
+    );
   }
 
   // `started` flips on the first pull, so a provider that drained an empty stream still counts.
   if (!started) {
     throw new Error('Blob storage provider returned without reading the upload data.');
   }
-  return { kind: 'url', url, mimeType, filename };
+  return new Ok({ kind: 'url', url, mimeType, filename });
 }
 
-/** Builds the blob storage key for a workbook; any base path is the provider's concern. */
-function buildWorkbookKey(resourceId: string, ext: 'twb' | 'twbx'): string {
-  return `workbook-files/${resourceId}/${randomUUID()}.${ext}`;
+/** Builds the tenant-scoped blob key for a workbook; any base path is the provider's concern. */
+function buildWorkbookKey(tenant: TenantLuids, resourceId: string, ext: 'twb' | 'twbx'): string {
+  return buildTenantBlobKey(tenant, `workbook-files/${resourceId}/${randomUUID()}.${ext}`);
 }
 
 export function workbookToolResultToCallToolResult(result: WorkbookToolResult): CallToolResult {

@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok, Result } from 'ts-results-es';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import {
+  buildTenantBlobKey,
+  getTenantLuids,
+  TenantIdentitySource,
+  TenantLuids,
+} from '../../../blobStorage/tenantKey.js';
 import { toUploadData } from '../../../blobStorage/uploadData.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -34,12 +42,12 @@ function extensionFor(format: 'PNG' | 'SVG'): string {
 }
 
 /**
- * Builds the blob storage key for a rendered image. Namespacing/prefixing
- * beyond this logical key (e.g. an operator-configured base path) is the
+ * Builds the tenant-scoped blob storage key for a rendered image. Namespacing/
+ * prefixing beyond this key (e.g. an operator-configured base path) is the
  * custom provider's own concern.
  */
-function buildImageKey(resourceId: string, format: 'PNG' | 'SVG'): string {
-  return `images/${resourceId}/${randomUUID()}.${extensionFor(format)}`;
+function buildImageKey(tenant: TenantLuids, resourceId: string, format: 'PNG' | 'SVG'): string {
+  return buildTenantBlobKey(tenant, `images/${resourceId}/${randomUUID()}.${extensionFor(format)}`);
 }
 
 /**
@@ -55,31 +63,39 @@ function buildImageKey(resourceId: string, format: 'PNG' | 'SVG'): string {
  * `convertViewImageUrlToToolResult`) only exist on the `kind: 'url'` branch, so
  * disabling the flag keeps both behind the gate and preserves the original
  * inline-base64 behavior. The `isBlobStorageEnabled()` check keeps an enabled
- * flag without a configured provider on the inline path.
+ * flag without a configured provider on the inline path. A missing or invalid
+ * tenant returns an error rather than falling back, so nothing is uploaded unscoped.
  */
 export async function buildImageToolResult({
   imageData,
   format,
   resourceId,
   toolName,
+  tenant,
 }: {
   imageData: Buffer | string;
   format: 'PNG' | 'SVG' | undefined;
   resourceId: string;
   toolName: string;
-}): Promise<ImageToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ImageToolResult, McpToolError>> {
   if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
-    return { kind: 'inline', imageData, format };
+    return new Ok({ kind: 'inline', imageData, format });
+  }
+
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
   }
 
   try {
     const resolvedFormat = format ?? 'PNG';
     const { url } = await getBlobStorageProvider().upload({
-      key: buildImageKey(resourceId, resolvedFormat),
+      key: buildImageKey(tenantLuids.value, resourceId, resolvedFormat),
       ...toUploadData(imageData),
       contentType: contentTypeFor(resolvedFormat),
     });
-    return { kind: 'url', url, format };
+    return new Ok({ kind: 'url', url, format });
   } catch (error) {
     // The full image buffer is still in hand, so we can always fall back to
     // inline base64. Log the key facts (never the URL / signature).
@@ -90,7 +106,7 @@ export async function buildImageToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return { kind: 'inline', imageData, format };
+    return new Ok({ kind: 'inline', imageData, format });
   }
 }
 

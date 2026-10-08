@@ -7,7 +7,7 @@ import type { PulseMetricSubscription } from '../../../../sdks/tableau/types/pul
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_USER_LUID } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
@@ -62,7 +62,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(false);
     expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
-      'test-user-luid',
+      MOCK_USER_LUID,
     );
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);

@@ -715,7 +715,14 @@ BLOB_STORAGE_PROVIDER_CONFIG='{"module":"./my-blob-storage-provider.js"}'
 The custom provider module should export a default class (or named export `BlobStorageProvider`)
 that implements the [`BlobStorageProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/blobStorage/blobStorageProvider.ts)
 interface. Bucket/region/key-prefix/URL-expiry concerns are entirely the custom provider's own
-concern — tableau-mcp only passes it a logical, unprefixed key.
+concern — tableau-mcp only passes it a logical key with no base prefix.
+
+Keys are tenant-scoped: tableau-mcp places the caller's Tableau site and user LUIDs first, as
+`<siteLuid>/<userLuid>/<tool-segment>...` (e.g. `<siteLuid>/<userLuid>/images/<viewId>/<uuid>.png`
+or `<siteLuid>/<userLuid>/workbook-uploads/<uploadId>/workbook.twbx`). The LUIDs come from the
+authenticated session, never from tool input, and a request whose session has no valid site or user
+LUID fails instead of writing an unscoped object. The shared data app template is the exception: it
+is keyed under `data-app-templates/` without tenant LUIDs.
 
 `upload` receives `data` as an `AsyncIterable<Uint8Array>` plus an optional `contentLength` (the
 exact byte count, when known). With S3:
