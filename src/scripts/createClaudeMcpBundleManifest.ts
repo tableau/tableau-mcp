@@ -644,7 +644,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable Tableau Prep flow MCP tools',
     description:
-      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" and enable the "flow-tools" feature flag to enable the flow tool family.',
+      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). describe-flow additionally requires Tableau Server 2026.3+ and the server feature flag `features.getFlowDocumentRestApi`. This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" and enable the "flow-tools" feature flag to enable the flow tool family.',
     required: false,
     sensitive: false,
   },

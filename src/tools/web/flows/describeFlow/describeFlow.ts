@@ -7,18 +7,21 @@ import {
   FlowDocumentApiDisabledError,
   FlowDocumentForbiddenError,
   FlowDocumentNotFoundError,
+  FlowDocumentVersionUnsupportedError,
   FlowNotAllowedError,
   McpToolError,
 } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
+import { ProductVersion } from '../../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { DESCRIBE_FLOW_API_SCOPES } from '../../../../server/oauth/scopes.js';
 import { isAxiosError } from '../../../../utils/axios.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
+import { getResultForTableauVersion } from '../../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../../utils/provider.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
@@ -36,14 +39,15 @@ const paramsSchema = {
 };
 
 // Tableau error code returned by the flow-document endpoint when the
-// experimental `GetFlowDocumentRestApi` feature flag is OFF. Verified live.
-const FLOW_DOCUMENT_API_DISABLED_CODE = '403200';
+// experimental `getFlowDocumentRestApi` feature flag is OFF (monolith code).
+const FLOW_DOCUMENT_API_DISABLED_CODE = '403201';
+const FLOW_DOCUMENT_MIN_TABLEAU_VERSION = '2026.3.0';
 
 /**
- * Reads the Tableau REST error code (e.g. "403200") from an Axios error. Tableau
+ * Reads the Tableau REST error code (e.g. "403201") from an Axios error. Tableau
  * serializes REST errors as `{ error: { code, summary, detail } }` in the body
  * and also echoes the code in the `tableau_error_code` response header, so we
- * check both. Used to distinguish the feature-flag-off 403 (code 403200) from an
+ * check both. Used to distinguish the feature-flag-off 403 (code 403201) from an
  * ordinary forbidden / insufficient-permission 403.
  */
 function getTableauErrorCode(error: unknown): string | undefined {
@@ -61,7 +65,10 @@ function getTableauErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getDescribeFlowTool = (
+  server: WebMcpServer,
+  productVersion: ProductVersion,
+): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
   const describeFlowTool = new WebTool({
@@ -77,7 +84,10 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
 
   **describe-flow vs get-flow**
   - \`get-flow\` returns catalog *metadata* (name, owner, project, tags, output step names, input connections, recent run history). Use it for "who owns this?", "did the last run succeed?".
-  - \`describe-flow\` returns the flow's *internal design*: its inputs and their data connections, its output destinations, the transformation steps in between, and the step-to-step lineage. Use it to understand the flow's purpose and data movement.
+  - \`describe-flow\` returns a structured view of the flow's *internal design*: its inputs, outputs, steps, lineage, and connections. Use it to understand the flow's purpose and data movement.
+
+  **Requirements**
+  Requires Tableau Server 2026.3 or later and the server feature flag \`features.getFlowDocumentRestApi\` enabled. On older servers, use \`get-flow\` for metadata; if the flag is disabled, ask a server administrator to enable it and apply pending TSM changes.
 
   **Returned fields (structured summary, not the raw document)**
   - \`flow\`: identity — id, name, description, project, owner, fileType, updatedAt, webpageUrl, tags.
@@ -94,7 +104,7 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
   The document is fetched through a server-side sanitized endpoint: credentials, secrets, and email-shaped PII are redacted before the document leaves Tableau. This tool surfaces only structural/topology fields and never returns passwords or tokens.
 
   **Availability & errors**
-  - This relies on an experimental Tableau REST API (\`/api/exp/.../flows/{id}/document\`). If the server has not enabled it, the call fails with a clear "experimental flow-document API is not enabled" message — fall back to \`get-flow\` for metadata.
+  - This relies on an experimental Tableau REST API (\`/api/exp/.../flows/{id}/document\`). It requires Tableau Server 2026.3+ and \`features.getFlowDocumentRestApi\`; if the flag is off, the call explains how to enable it. Fall back to \`get-flow\` for metadata.
   - If the flow id is unknown, not visible to the caller, or has no stored document (e.g. a metadata-only seeded flow), the call fails with a "no flow document available" message — use \`list-flows\` to find a valid flow id.
 
   **Example usage**
@@ -116,6 +126,14 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
         extra,
         args: { flowId, includeFieldSchemas },
         callback: async () => {
+          const versionSupported = getResultForTableauVersion({
+            productVersion,
+            mappings: { [FLOW_DOCUMENT_MIN_TABLEAU_VERSION]: true, default: false },
+          });
+          if (!versionSupported) {
+            return new FlowDocumentVersionUnsupportedError(productVersion.value).toErr();
+          }
+
           // Bounded-context gate (mirrors get-flow). When the instance is
           // restricted via PROJECT_IDS / TAGS, reject flows outside the allowed
           // set BEFORE downloading any document. When no bounded context is
@@ -150,13 +168,13 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
                     const status = error instanceof Error ? getHttpStatus(error) : '';
                     if (status === '403') {
                       // A 403 has two very different meanings here. Only Tableau
-                      // error code 403200 means the experimental API is disabled.
+                      // error code 403201 means the experimental API is disabled.
                       // Any other 403 is an authorization failure (no download
                       // permission, insufficient token scope, generic forbidden)
                       // and must NOT be reported as a feature-flag problem.
                       if (getTableauErrorCode(error) === FLOW_DOCUMENT_API_DISABLED_CODE) {
                         throw new FlowDocumentApiDisabledError(
-                          `The experimental flow-document API is not enabled on this Tableau server, so the flow's design cannot be read. Ask a server administrator to enable it, or use get-flow for this flow's metadata instead. (flowId: ${flowId})`,
+                          `The experimental flow-document API is not enabled on Tableau Server ${productVersion.value} (error 403201). This functionality requires the server feature flag \`features.getFlowDocumentRestApi\`. Ask a server administrator to run \`tsm configuration set -k features.getFlowDocumentRestApi -v true --force-keys\` and then \`tsm pending-changes apply\` (which may restart the server). Use get-flow for this flow's metadata instead. (flowId: ${flowId})`,
                         );
                       }
                       throw new FlowDocumentForbiddenError(

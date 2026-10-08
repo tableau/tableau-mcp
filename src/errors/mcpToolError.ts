@@ -112,11 +112,22 @@ export class FlowNotAllowedError extends McpToolError {
   }
 }
 
+/** The flow-document endpoint requires Tableau Server 2026.3 or later. */
+export class FlowDocumentVersionUnsupportedError extends McpToolError {
+  constructor(serverVersion: string) {
+    super({
+      type: 'flow-document-version-unsupported',
+      message: `describe-flow requires Tableau Server 2026.3 or later. The connected server is version ${serverVersion}. Upgrade Tableau Server to read flow designs; use get-flow for flow metadata in the meantime.`,
+      statusCode: 501,
+    });
+  }
+}
+
 /**
  * The experimental flow-document REST API is not enabled on this server.
  *
- * The endpoint returns 403 with Tableau error code `403200` when its
- * `GetFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * The endpoint returns 403 with Tableau error code `403201` when its
+ * `getFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
  * specific code into this clearer, actionable error — any other 403 (insufficient
  * download permission, insufficient token scope, generic forbidden) is surfaced
  * as a {@link FlowDocumentForbiddenError} so a permission problem is never
@@ -135,7 +146,7 @@ export class FlowDocumentApiDisabledError extends McpToolError {
  * failures — the caller lacks permission to download the flow (the same
  * permission as downloading its `.tfl`/`.tflx` file in Tableau) or the token
  * lacks the `tableau:flows:download` scope. These are distinct from the
- * feature-flag-off case (Tableau error code `403200`), which maps to
+ * feature-flag-off case (Tableau error code `403201`), which maps to
  * {@link FlowDocumentApiDisabledError}.
  */
 export class FlowDocumentForbiddenError extends McpToolError {
