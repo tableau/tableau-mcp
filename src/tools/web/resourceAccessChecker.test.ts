@@ -94,6 +94,8 @@ describe('ResourceAccessChecker', () => {
 
           const expectedNumberOfCalls = projectIds || tags ? 1 : 0;
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);
+          expect(mocks.mockGraphql).not.toHaveBeenCalled();
+          expect(mocks.mockListDatasources).not.toHaveBeenCalled();
         },
       );
     });
@@ -134,13 +136,13 @@ describe('ResourceAccessChecker', () => {
             sentences.push(
               `Querying the datasource with LUID ${mockDatasource.id} is not allowed.`,
             );
-          } else if (projectIds) {
-            sentences.push(
-              `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
-            );
           } else if (tags) {
             sentences.push(
               `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+            );
+          } else if (projectIds) {
+            sentences.push(
+              `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
             );
           }
 
@@ -207,8 +209,19 @@ describe('ResourceAccessChecker', () => {
         return error;
       }
 
-      function metadataNamesResponse(nodes: Array<{ luid: string; name: string }>): unknown {
-        return { data: { publishedDatasourcesConnection: { nodes } } };
+      function metadataResponse(
+        nodes: Array<{ luid: string; name: string; tags: Array<string> }>,
+      ): unknown {
+        return {
+          data: {
+            publishedDatasourcesConnection: {
+              nodes: nodes.map(({ tags, ...node }) => ({
+                ...node,
+                tags: tags.map((name) => ({ name })),
+              })),
+            },
+          },
+        };
       }
 
       function createChecker({
@@ -234,10 +247,22 @@ describe('ResourceAccessChecker', () => {
           `Request failed with status code ${status}`,
         ].join(' ');
 
+      const projectLookupFailedMessage = (status = 403): string =>
+        [
+          baseMessage,
+          `An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project:`,
+          `Request failed with status code ${status}`,
+        ].join(' ');
+
+      const projectUndeterminedMessage = (): string =>
+        `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because its project could not be determined.`;
+
       beforeEach(() => {
         mocks.mockQueryDatasource.mockRejectedValue(forbiddenError());
         mocks.mockGraphql.mockResolvedValue(
-          metadataNamesResponse([{ luid: mockDatasource.id, name: mockDatasource.name }]),
+          metadataResponse([
+            { luid: mockDatasource.id, name: mockDatasource.name, tags: [allowedTag] },
+          ]),
         );
         mocks.mockListDatasources.mockResolvedValue({
           pagination: mockDatasources.pagination,
@@ -245,22 +270,53 @@ describe('ResourceAccessChecker', () => {
         });
       });
 
-      it('should find the datasource by name and allow it when it has an allowed tag', async () => {
+      it('should read the tags from the Metadata API and allow it when it has an allowed tag', async () => {
         expect(
           await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
             datasourceLuid: mockDatasource.id,
             extra,
           }),
-        ).toEqual({ allowed: true, content: mockDatasource });
+        ).toEqual({ allowed: true, content: undefined });
         expect(mocks.mockGraphql.mock.calls[0][0]).toContain(`"${mockDatasource.id}"`);
-        expect(mocks.mockListDatasources).toHaveBeenCalledWith(
-          expect.objectContaining({ filter: `name:eq:${mockDatasource.name}` }),
-        );
+        // Only the project check needs the list endpoint.
+        expect(mocks.mockListDatasources).not.toHaveBeenCalled();
       });
 
-      it('should find the datasource by name and disallow it when it has no allowed tag', async () => {
+      it('should read the tags from the Metadata API and disallow it when it has no allowed tag', async () => {
         expect(
           await createChecker({ tags: new Set(['other-tag']) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+        });
+      });
+
+      it('should read the tags from the Metadata API when the datasource name contains a comma', async () => {
+        mocks.mockGraphql.mockResolvedValue(
+          metadataResponse([
+            { luid: mockDatasource.id, name: 'Sales, Finance', tags: [allowedTag] },
+          ]),
+        );
+
+        expect(
+          await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: true, content: undefined });
+        expect(mocks.mockListDatasources).not.toHaveBeenCalled();
+      });
+
+      it('should disallow the datasource when the Metadata API returns no tags', async () => {
+        mocks.mockGraphql.mockResolvedValue(
+          metadataResponse([{ luid: mockDatasource.id, name: mockDatasource.name, tags: [] }]),
+        );
+
+        expect(
+          await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
             datasourceLuid: mockDatasource.id,
             extra,
           }),
@@ -277,9 +333,34 @@ describe('ResourceAccessChecker', () => {
             tags: new Set([allowedTag]),
           }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, extra }),
         ).toEqual({ allowed: true, content: mockDatasource });
-        // The project and tag checks share the one fallback lookup.
         expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+        expect(mocks.mockGraphql).toHaveBeenCalledTimes(1);
         expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
+        expect(mocks.mockListDatasources).toHaveBeenCalledWith(
+          expect.objectContaining({ filter: `name:eq:${mockDatasource.name}` }),
+        );
+      });
+
+      it('should return the datasource found by name when only projects are configured', async () => {
+        expect(
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: true, content: mockDatasource });
+      });
+
+      it('should not look up the project when the Metadata API tags are not allowed', async () => {
+        expect(
+          await createChecker({
+            projectIds: new Set([allowedProjectId]),
+            tags: new Set(['other-tag']),
+          }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, extra }),
+        ).toEqual({
+          allowed: false,
+          message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+        });
+        expect(mocks.mockListDatasources).not.toHaveBeenCalled();
       });
 
       it('should find the datasource by name and disallow it when it is not in an allowed project', async () => {
@@ -294,7 +375,7 @@ describe('ResourceAccessChecker', () => {
         });
       });
 
-      it('should report the original error from the project check when the fallback finds nothing', async () => {
+      it('should say the project could not be determined when the list finds no datasource with its LUID', async () => {
         mocks.mockListDatasources.mockResolvedValue({
           pagination: mockDatasources.pagination,
           datasources: [sameNameDatasource],
@@ -305,41 +386,11 @@ describe('ResourceAccessChecker', () => {
             datasourceLuid: mockDatasource.id,
             extra,
           }),
-        ).toEqual({
-          allowed: false,
-          message: [
-            baseMessage,
-            `An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project:`,
-            'Request failed with status code 403',
-          ].join(' '),
-        });
-      });
-
-      it('should name both checks in the error when projects and tags are configured and the fallback finds nothing', async () => {
-        mocks.mockListDatasources.mockResolvedValue({
-          pagination: mockDatasources.pagination,
-          datasources: [sameNameDatasource],
-        });
-
-        expect(
-          await createChecker({
-            projectIds: new Set([allowedProjectId]),
-            tags: new Set([allowedTag]),
-          }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, extra }),
-        ).toEqual({
-          allowed: false,
-          message: [
-            baseMessage,
-            `An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project and has one of the allowed tags:`,
-            'Request failed with status code 403',
-          ].join(' '),
-        });
-        expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
-        expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
+        ).toEqual({ allowed: false, message: projectUndeterminedMessage() });
       });
 
       it('should report the original error when the Metadata API does not return the datasource', async () => {
-        mocks.mockGraphql.mockResolvedValue(metadataNamesResponse([]));
+        mocks.mockGraphql.mockResolvedValue(metadataResponse([]));
 
         expect(
           await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
@@ -350,17 +401,17 @@ describe('ResourceAccessChecker', () => {
         expect(mocks.mockListDatasources).not.toHaveBeenCalled();
       });
 
-      it('should report the original error when the datasource name contains a comma', async () => {
+      it('should say the project could not be determined when the datasource name contains a comma', async () => {
         mocks.mockGraphql.mockResolvedValue(
-          metadataNamesResponse([{ luid: mockDatasource.id, name: 'Sales, Finance' }]),
+          metadataResponse([{ luid: mockDatasource.id, name: 'Sales, Finance', tags: [] }]),
         );
 
         expect(
-          await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
             datasourceLuid: mockDatasource.id,
             extra,
           }),
-        ).toEqual({ allowed: false, message: tagLookupFailedMessage() });
+        ).toEqual({ allowed: false, message: projectUndeterminedMessage() });
         expect(mocks.mockListDatasources).not.toHaveBeenCalled();
       });
 
@@ -375,31 +426,44 @@ describe('ResourceAccessChecker', () => {
         ).toEqual({ allowed: false, message: tagLookupFailedMessage() });
       });
 
-      it('should report the original error when the list request fails', async () => {
+      it('should say the project could not be determined when the list request fails', async () => {
         mocks.mockListDatasources.mockRejectedValue(forbiddenError(400));
 
         expect(
-          await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
             datasourceLuid: mockDatasource.id,
             extra,
           }),
-        ).toEqual({ allowed: false, message: tagLookupFailedMessage() });
+        ).toEqual({ allowed: false, message: projectUndeterminedMessage() });
       });
 
-      it('should disallow the datasource when the one found by name has no tags', async () => {
-        mocks.mockListDatasources.mockResolvedValue({
-          pagination: mockDatasources.pagination,
-          datasources: [{ ...mockDatasource, tags: {} }],
-        });
+      it('should report the original error from the project check when the Metadata API request fails', async () => {
+        mocks.mockGraphql.mockRejectedValue(new Error('SITE_CATALOG_DISABLED'));
 
         expect(
-          await createChecker({ tags: new Set([allowedTag]) }).isDatasourceAllowed({
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
             datasourceLuid: mockDatasource.id,
             extra,
           }),
+        ).toEqual({ allowed: false, message: projectLookupFailedMessage() });
+        expect(mocks.mockListDatasources).not.toHaveBeenCalled();
+      });
+
+      it('should name both checks in the error when projects and tags are configured and the fallback fails', async () => {
+        mocks.mockGraphql.mockRejectedValue(new Error('SITE_CATALOG_DISABLED'));
+
+        expect(
+          await createChecker({
+            projectIds: new Set([allowedProjectId]),
+            tags: new Set([allowedTag]),
+          }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, extra }),
         ).toEqual({
           allowed: false,
-          message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+          message: [
+            baseMessage,
+            `An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project and has one of the allowed tags:`,
+            'Request failed with status code 403',
+          ].join(' '),
         });
       });
 
@@ -414,7 +478,7 @@ describe('ResourceAccessChecker', () => {
             datasourceLuid: mockDatasource.id,
             extra,
           }),
-        ).toEqual({ allowed: true, content: mockDatasource });
+        ).toEqual({ allowed: true, content: undefined });
       });
 
       it('should not fall back when the Query Data Source error is not a 403', async () => {
@@ -426,6 +490,18 @@ describe('ResourceAccessChecker', () => {
             extra,
           }),
         ).toEqual({ allowed: false, message: tagLookupFailedMessage(500) });
+        expect(mocks.mockGraphql).not.toHaveBeenCalled();
+      });
+
+      it('should not fall back from the project check when the Query Data Source error is not a 403', async () => {
+        mocks.mockQueryDatasource.mockRejectedValue(forbiddenError(500));
+
+        expect(
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: false, message: projectLookupFailedMessage(500) });
         expect(mocks.mockGraphql).not.toHaveBeenCalled();
       });
 

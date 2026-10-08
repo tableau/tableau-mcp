@@ -488,37 +488,46 @@ export function getDatasourceDownstreamByLuid(
   );
 }
 
-const datasourceNamesResponseSchema = z.object({
+const datasourceNamesAndTagsResponseSchema = z.object({
   data: z.object({
     publishedDatasourcesConnection: z.object({
       nodes: z.array(
         z.object({
           luid: z.string(),
           name: z.string(),
+          tags: z.array(z.object({ name: z.string() })).nullish(),
         }),
       ),
     }),
   }),
 });
 
-export function getDatasourceNamesQuery(datasourceLuids: Array<string>): string {
+export function getDatasourceNamesAndTagsQuery(datasourceLuids: Array<string>): string {
   return `
-    query datasourceNames {
+    query datasourceNamesAndTags {
       publishedDatasourcesConnection(filter: { luidWithin: ${toGraphqlStringArray(datasourceLuids)} }) {
         nodes {
           luid
           name
+          tags {
+            name
+          }
         }
       }
     }
   `;
 }
 
-/** Maps each published data source LUID in the response to its name. */
-export function getDatasourceNamesByLuid(response: unknown): Map<string, string> {
-  const parsed = datasourceNamesResponseSchema.parse(response);
+/** Maps each published data source LUID in the response to its name and tag names. */
+export function getDatasourceNamesAndTagsByLuid(
+  response: unknown,
+): Map<string, { name: string; tags: Array<string> }> {
+  const parsed = datasourceNamesAndTagsResponseSchema.parse(response);
   return new Map(
-    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [node.luid, node.name]),
+    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [
+      node.luid,
+      { name: node.name, tags: (node.tags ?? []).map((tag) => tag.name) },
+    ]),
   );
 }
 
