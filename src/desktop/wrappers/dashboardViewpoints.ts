@@ -382,12 +382,3 @@ export function unregisteredDashboardWorksheets(
   );
   return worksheetNames.filter((name) => !registered.has(normalizeParsedXmlName(name)));
 }
-
-/** The workbook endpoint appends actions. Dashboard-only writes must not resubmit them. */
-export function omitWorkbookActions(workbookXml: string): string {
-  const doc = parse(workbookXml);
-  const root = doc.documentElement;
-  if (!root || root.tagName !== 'workbook') throw new Error('Expected a workbook document.');
-  for (const actions of children(root, 'actions')) root.removeChild(actions);
-  return new XMLSerializer().serializeToString(doc);
-}

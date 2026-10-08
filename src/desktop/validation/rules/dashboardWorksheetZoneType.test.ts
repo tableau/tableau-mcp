@@ -69,10 +69,10 @@ describe('dashboard-worksheet-zone-type', () => {
     );
   });
 
-  it('detects an additional malformed zone even when an equivalent issue exists in the baseline', () => {
+  it('blocks every malformed zone even when an equivalent issue exists in the baseline', () => {
     const baseline = dashboardWorksheetZoneTypeRule.validate(dashboard(malformed));
     const candidate = dashboardWorksheetZoneTypeRule.validate(dashboard(malformed + malformed));
 
-    expect(introducedBlockingValidationIssues(baseline, candidate)).toHaveLength(1);
+    expect(introducedBlockingValidationIssues(baseline, candidate)).toEqual(candidate);
   });
 });

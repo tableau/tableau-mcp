@@ -177,7 +177,11 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
   });
 
   it('rejects retrying or claiming success when native registrations are unavailable', async () => {
-    const scenario = new DashboardApplyScenario(dashboardApplyCases[7]);
+    const testCase = dashboardApplyCases.find(
+      (candidate) => candidate.registrationRequired && candidate.before.length === 0,
+    );
+    invariant(testCase, 'Missing empty-dashboard registration refusal scenario');
+    const scenario = new DashboardApplyScenario(testCase);
     const result = await scenario.invoke('apply_dashboard', applyArgs);
     expect(result.text).toContain('No changes were sent to Tableau');
     expect(result.text).toContain('whole-workbook replacement');

@@ -11,7 +11,11 @@ import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
-import { blockingValidationIssues, runValidation } from '../validation/registry.js';
+import {
+  alwaysBlockingValidationIssues,
+  blockingValidationIssues,
+  runValidation,
+} from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
 import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
@@ -247,7 +251,9 @@ export async function loadDashboardXml({
 
   const validation = runValidation(xml, 'dashboard');
   const cachedApply = requireExistingSheet;
-  const blockingIssues = cachedApply ? [] : blockingValidationIssues(validation.issues);
+  const blockingIssues = cachedApply
+    ? alwaysBlockingValidationIssues(validation.issues)
+    : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
       level: 'error',

@@ -17,7 +17,6 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
 import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
-import { type ViewpointAccounting } from './viewpointAccounting.js';
 
 const paramsSchema = {
   session: z.string().optional(),
@@ -35,7 +34,7 @@ type BuildAndApplyDashboardResult = {
   kpiCount: number;
   chartCount: number;
   viewpointCount: number;
-  viewpointState: ViewpointAccounting['state'];
+  viewpointState: 'success';
 };
 
 const title = 'Building dashboard';

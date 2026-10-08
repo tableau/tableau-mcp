@@ -28,6 +28,7 @@ type DashboardApplyCase = {
   after: string[];
   registered?: string[];
   malformed?: boolean;
+  malformedBaseline?: boolean;
   blank?: boolean;
   layoutOnly?: boolean;
   registrationRequired?: boolean;
@@ -73,6 +74,13 @@ export const dashboardApplyCases: DashboardApplyCase[] = [
     before: [],
     after: ['Empty'],
     blank: true,
+  },
+  {
+    name: 'repair unsupported worksheet types already present in the live dashboard',
+    before: ['Sales'],
+    after: ['Sales'],
+    malformed: true,
+    malformedBaseline: true,
   },
   {
     name: 'refuse first apply requiring new view registrations without replacing the workbook',
@@ -152,6 +160,12 @@ function sameXml(left: Element, right: Element): boolean {
 }
 
 function workbook(testCase: DashboardApplyCase): string {
+  const dashboard = testCase.malformedBaseline
+    ? dashboardFragment(testCase.before).replace(
+        / name="Sales"/g,
+        ' name="Sales" type-v2="worksheet"',
+      )
+    : dashboardFragment(testCase.before);
   const worksheets = ['Sales', 'Profit', 'Quantity', 'Empty']
     .map(
       (name) =>
@@ -162,7 +176,7 @@ function workbook(testCase: DashboardApplyCase): string {
     .map((name) => `<viewpoint name="${name}"><zoom type="entire-view"/></viewpoint>`)
     .join('');
   return `<workbook><datasources><datasource name="Sample"/></datasources><worksheets>${worksheets}</worksheets>
-    <dashboards>${dashboardFragment(testCase.before)}<dashboard name="Unrelated"><style/><zones/></dashboard></dashboards>
+    <dashboards>${dashboard}<dashboard name="Unrelated"><style/><zones/></dashboard></dashboards>
     <windows><window class="dashboard" name="${dashboardName}"><viewpoints>${views}</viewpoints><active id="20"/></window>
     <window class="dashboard" name="Unrelated"><viewpoints/></window></windows>
     <actions><action name="Existing filter"/></actions></workbook>`;

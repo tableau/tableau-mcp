@@ -5,7 +5,6 @@ import {
   createDashboardReadbackVerifier,
   dashboardMembershipMatches,
   dashboardWorksheetNames,
-  omitWorkbookActions,
   synchronizeDashboardViewpoints,
 } from './dashboardViewpoints.js';
 
@@ -75,14 +74,6 @@ describe('dashboard viewpoint registration', () => {
       '<dashboard name="D"><zones><zone name="A &amp; Café"/></zones></dashboard>',
     ).unwrap();
     expect(dashboardMembershipMatches(result.xml, 'D', ['A & Café'])).toBe(true);
-  });
-  it('omits existing root actions from dashboard-only posts without removing other content', () => {
-    const source =
-      '<workbook><actions><action name="Existing"/></actions><worksheets><worksheet name="A"/></worksheets><dashboards><dashboard name="D"/></dashboards></workbook>';
-    const posted = omitWorkbookActions(source);
-    expect(posted).not.toContain('<actions');
-    expect(posted).toContain('<worksheet name="A"/>');
-    expect(posted).toContain('<dashboard name="D"/>');
   });
   it('collects nested and device-only worksheets once, excluding objects', () => {
     expect(

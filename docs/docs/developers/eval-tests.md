@@ -101,14 +101,15 @@ npm run test:eval -- run tests/eval/removeFieldScenario.test.ts tests/eval/base.
 
 ## Desktop dashboard apply evals
 
-`tests/eval/dashboardApply.test.ts` covers W-24366364 with eight model-driven cases: adding an
-already registered worksheet to an empty dashboard, replacing membership while retaining view
-settings, removing the final worksheet, ordinary layout edits, recovery from unsupported worksheet
-zone types in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe refusal
-of missing registrations in both empty and populated dashboards. Existing-dashboard edits use the
-surgical dashboard endpoint. Until Desktop supports safe registration updates, the model must
-explain that blocker without attempting a whole-workbook replacement or discarding the requested
-membership.
+`tests/eval/dashboardApply.test.ts` covers W-24366364 with ten model-driven cases: adding an already
+registered worksheet to an empty dashboard, replacing membership while retaining view settings,
+removing the final worksheet, ordinary layout edits, recovery from unsupported worksheet zone types
+in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe refusal of missing
+registrations in both empty and populated dashboards, preserving concurrent Desktop edits, and
+repairing unsafe zone types already present in the live dashboard. Known crash hazards cannot be
+grandfathered from the live baseline. Existing-dashboard edits use the surgical dashboard endpoint.
+Until Desktop supports safe registration updates, the model must explain that blocker without
+attempting a whole-workbook replacement or discarding the requested membership.
 
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and

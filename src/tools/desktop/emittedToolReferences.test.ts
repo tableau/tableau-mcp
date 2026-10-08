@@ -218,7 +218,6 @@ const NON_TOOL_VOCABULARY = [
   'studio-theme',
   'style-rule',
   'style-theme',
-  'success-already-present',
   'summary-data',
   'tableau-agent-idempotency-key',
   'target-changed',

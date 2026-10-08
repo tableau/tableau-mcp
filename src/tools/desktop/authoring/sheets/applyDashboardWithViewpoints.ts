@@ -17,7 +17,6 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { type ViewpointAccounting } from './viewpointAccounting.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -30,7 +29,7 @@ type ApplyDashboardWithViewpointsResult = {
   message: string;
   dashboardName: string;
   viewpointCount: number;
-  viewpointState: ViewpointAccounting['state'];
+  viewpointState: 'success';
 };
 
 const title = 'Finalizing dashboard';

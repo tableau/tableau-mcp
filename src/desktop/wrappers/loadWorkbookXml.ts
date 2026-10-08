@@ -11,6 +11,7 @@ import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import {
   blockingValidationIssues,
   introducedBlockingValidationIssues,
+  runAlwaysBlockingValidation,
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
@@ -78,15 +79,15 @@ export async function loadWorkbookXml({
 
   // Preflight semantic validation — catches known failure patterns before
   // sending XML to Tableau. Rules are extensible via src/validation/rules/.
-  // Skipped entirely on the trusted deterministic path (skipValidation); otherwise
-  // fail only on blocking issues, or on baseline-introduced ones when a baseline is given.
+  // Trusted deterministic paths skip ordinary checks, but never known crash hazards.
+  // Other baseline defects may be preserved while repairing the submitted document.
   let validation = { valid: true, issues: [] as ValidationIssue[] };
-  if (!cachedLiveRelative) {
+  if (!cachedLiveRelative || skipValidation) {
     validation = skipValidation
-      ? { valid: true, issues: [] as ValidationIssue[] }
+      ? runAlwaysBlockingValidation(xml, 'workbook')
       : runValidation(xml, 'workbook');
     const blockingIssues = skipValidation
-      ? []
+      ? blockingValidationIssues(validation.issues)
       : baselineXml === undefined
         ? blockingValidationIssues(validation.issues)
         : introducedBlockingValidationIssues(
