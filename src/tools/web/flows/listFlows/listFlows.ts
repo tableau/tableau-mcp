@@ -99,7 +99,7 @@ export const getListFlowsTool = (server: WebMcpServer): WebTool<typeof paramsSch
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
     ),
     description: `
-  Retrieves a list of Tableau Prep flows on a Tableau site, including each flow's metadata such as name, description, owner, project, tags, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:DailySalesCleanup) and sorting (e.g., createdAt:desc) for precise discovery. Use this tool when a user requests to list, search, or filter Tableau Prep flows on a site.
+  Retrieves a list of published Tableau Prep flows on a Tableau site, including each flow's metadata such as name, description, owner, project, tags, and timestamps. Flow drafts are excluded, so Tableau's flow page may show a higher count. Supports optional filtering via field:operator:value expressions (e.g., name:eq:DailySalesCleanup) and sorting (e.g., createdAt:desc) for precise discovery. Use this tool when a user requests to list, search, or filter Tableau Prep flows on a site.
 
   **Caller-role visibility (important for sizing)**
   - **Non-admin** callers get only flows they can view — on shared sites usually far more than they own, so an unfiltered call is rarely "just my flows".
