@@ -60,6 +60,7 @@ type JwtScopes =
   | 'tableau:flow_tasks:run'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write'
+  | 'tableau:permissions:read'
   | 'tableau:packages:read';
 
 export type RestApiArgs = Pick<

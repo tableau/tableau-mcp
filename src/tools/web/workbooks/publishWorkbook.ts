@@ -11,14 +11,17 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
+import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/scopes.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
@@ -92,6 +95,10 @@ export type PublishWorkbookResult =
       data: Workbook;
       url: string;
       warnings: ValidationFinding[];
+      // Configured grantee rules, not effective user access; returned modes remain unchanged.
+      // Absent for Personal Space or a failed permissions read.
+      permissions?: GranteeCapability[];
+      permissionsNote?: string;
     }
   | {
       status: 'invalid';
@@ -115,14 +122,15 @@ export const getPublishWorkbookTool = (
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description: new Provider(async () => {
-      const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
-      return (
+      const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+      return [
         'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
-        (personalSpaceEnabled
-          ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
-          : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
-        'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
-      );
+          (dataAppsEnabled
+            ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
+            : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
+          'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+        'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
+      ].join('\n\n');
     }),
     paramsSchema: new Provider(async () =>
       (await getFeatureGate().isFeatureEnabled('data-apps'))
@@ -162,11 +170,11 @@ export const getPublishWorkbookTool = (
         },
         callback: async () => {
           // Recheck at execution time in case the client cached a schema from before the flag changed.
-          const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+          const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
           // projectId always wins. Without it, the destination is Personal Space unless it is
           // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
           const usePersonalSpace =
-            projectId === undefined && personalSpaceEnabled && personalSpace !== false;
+            projectId === undefined && dataAppsEnabled && personalSpace !== false;
           if (projectId === undefined && !usePersonalSpace) {
             throw new ArgsValidationError('projectId is required to publish a workbook.');
           }
@@ -275,7 +283,48 @@ export const getPublishWorkbookTool = (
             },
           });
 
-          return result;
+          // Disclose the workbook's permission rules for project publishes only. Personal-space
+          // content has no shareable grantees. Runs after the publish session has signed out: a
+          // second sign-in with the same PAT can invalidate a still-open first session.
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
+          if (usePersonalSpace || result.isErr() || result.value.status !== 'published') {
+            return result;
+          }
+          const published = result.value;
+          try {
+            // The optional read bypasses the tool's mandatory-scope middleware check.
+            // Honor the same OAuth consent boundary before minting its REST credentials.
+            if (
+              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+              extra.config.oauth.enforceScopes &&
+              extra.config.oauth.advertiseApiScopes &&
+              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
+            ) {
+              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
+            }
+            const permissions = await useRestApi({
+              ...extra,
+              jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
+              callback: async (permissionsApi) =>
+                permissionsApi.workbooksMethods.queryWorkbookPermissions({
+                  siteId: permissionsApi.siteId,
+                  workbookId: published.data.id,
+                }),
+            });
+            return new Ok({ ...published, permissions });
+          } catch (error) {
+            log({
+              message: 'publish-workbook: failed to fetch workbook permissions (best-effort)',
+              level: 'warning',
+              logger: 'publish-workbook',
+              data: getExceptionMessage(error),
+            });
+            return new Ok({
+              ...published,
+              permissionsNote:
+                'Published successfully, but the workbook permission rules could not be retrieved.',
+            });
+          }
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

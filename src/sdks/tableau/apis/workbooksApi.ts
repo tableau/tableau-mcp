@@ -2,6 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { paginationSchema } from '../types/pagination.js';
+import { workbookPermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
 import { workbookConnectionSchema, workbookSchema } from '../types/workbook.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -103,6 +104,19 @@ const queryWorkbookConnectionsEndpoint = makeEndpoint({
 });
 
 /**
+ * Query Workbook Permissions
+ * GET /api/api-version/sites/site-id/workbooks/workbook-id/permissions
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions
+ */
+const queryWorkbookPermissionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/permissions',
+  alias: 'queryWorkbookPermissions',
+  description: 'Returns the permissions (grantee capabilities) for the specified workbook.',
+  response: workbookPermissionsSchema,
+});
+
+/**
  * Update Workbook
  * PUT /api/api-version/sites/site-id/workbooks/workbook-id
  * Modifies the project of the specified workbook.
@@ -130,6 +144,7 @@ const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
   queryWorkbookConnectionsEndpoint,
+  queryWorkbookPermissionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
   updateWorkbookEndpoint,

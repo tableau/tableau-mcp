@@ -76,6 +76,7 @@ export type TableauApiScope =
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write'
+  | 'tableau:permissions:read'
   | 'tableau:packages:read';
 
 /**
@@ -179,17 +180,23 @@ export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 
 /**
  * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
- * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * NOT narrow its base JWT scopes per call — it always requests this set via `tool.requiredApiScopes`
  * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
  * `tableau:projects:read` for the Personal Space lookup before ANY publish-workbook call succeeds,
  * not just personal-space ones —
  * simplicity over narrowing the blast radius.
+ *
+ * The optional permissions read uses a separate REST session so a missing permissions scope
+ * cannot prevent publishing. Its scope is advertised when publishing is enabled and optional
+ * scopes are requested.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
   'tableau:projects:read',
 ];
+
+export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -606,12 +613,19 @@ export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
+export async function getSupportedApiScopes(
+  clientId?: string,
+  { includeOptionalScopes = true }: { includeOptionalScopes?: boolean } = {},
+): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
   const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
     'enforce-registration-conditions',
   );
+
+  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
+    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+  }
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
