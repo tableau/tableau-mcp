@@ -20,7 +20,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
-const paramsSchema = {
+export const buildWorksheetsFromTemplatesParamsSchema = {
   session: z.string().optional().describe('Desktop PID.'),
   templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
   title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
@@ -34,6 +34,7 @@ const paramsSchema = {
     .describe('Count derivation by slot ID.'),
   topN: z.number().int().min(1).max(50).optional().describe('Rank limit (1-50).'),
 };
+const paramsSchema = buildWorksheetsFromTemplatesParamsSchema;
 
 interface BuildWorksheetsFromTemplatesDependencies {
   store: TemplateArtifactStore;

@@ -2,18 +2,26 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+} from '../../../../desktop/binder/explicit-bind.js';
+import { summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { resolveField } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readBookmark } from '../../../../desktop/templates/templatePath.js';
+import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { buildWorksheetsFromTemplatesParamsSchema } from '../templates/buildWorksheetsFromTemplates.js';
 import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
 
 type PlannerField = string | { query: string; datasource?: string };
@@ -60,9 +68,9 @@ const paramsSchema = {
     .optional(),
   worksheets: z.array(
     z.object({
-      name: z.string(),
+      name: z.string().trim(),
       type: z.enum(['kpi', 'chart']),
-      template: z.string().optional(),
+      template: z.string().trim().optional(),
       fields: z.array(plannerFieldSchema),
     }),
   ),
@@ -237,7 +245,10 @@ export const getPlanDashboardCreationTool = (
           });
 
           // Build worksheet tasks
-          const worksheetTasks = worksheets.map((ws) => {
+          const schema = summarizeSchema(workbookXml);
+          const snapshots = new Map<string, ReturnType<typeof createTemplateRuntimeSnapshot>>();
+          const worksheetTasks = [];
+          for (const ws of worksheets) {
             const safeWsName = ws.name.replace(/[^a-zA-Z0-9]/g, '_');
             const worksheetFile = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             const templateName = selectTemplate(ws);
@@ -249,17 +260,82 @@ export const getPlanDashboardCreationTool = (
             const resolvedDatasources = [
               ...new Set(resolvedEntries.map((r) => r.datasource).filter((d): d is string => !!d)),
             ];
-            return {
+            if (resolvedDatasources.length !== 1) {
+              return new ArgsValidationError(
+                `Worksheet "${ws.name}" requires fields from exactly one datasource.`,
+              ).toErr();
+            }
+            let snapshot = snapshots.get(templateName);
+            if (!snapshot) {
+              try {
+                const bookmark = readBookmark(templateName);
+                if (bookmark === null) {
+                  return new ArgsValidationError(
+                    `Template "${templateName}" is not available.`,
+                  ).toErr();
+                }
+                snapshot = createTemplateRuntimeSnapshot(templateName, bookmark);
+                snapshots.set(templateName, snapshot);
+              } catch (error) {
+                return new ArgsValidationError(getExceptionMessage(error)).toErr();
+              }
+            }
+            if (!snapshot.eligibility.pass1_eligible) {
+              return new ArgsValidationError(
+                `Template "${templateName}" is not eligible for worksheet template application.`,
+              ).toErr();
+            }
+            const binding = bindExplicitTemplate(templateName, resolvedFields, schema, {
+              contract: snapshot.descriptor,
+              title: ws.name,
+              datasource: resolvedDatasources[0],
+            });
+            if (!binding.ok) {
+              return new ArgsValidationError(
+                `Worksheet "${ws.name}": ${formatExplicitBindErrors(templateName, binding.errors)}`,
+              ).toErr();
+            }
+            if (binding.consumedFieldRefs.length < new Set(resolvedFields).size) {
+              return new ArgsValidationError(
+                `Worksheet "${ws.name}": template "${templateName}" cannot use every requested field. Choose a compatible template or fewer fields.`,
+              ).toErr();
+            }
+            const fieldMapping = Object.fromEntries(
+              binding.templateSlots.flatMap((slot) => {
+                const key = slot.qualified_key_required
+                  ? `${slot.template_field}@${slot.derivation}`
+                  : slot.template_field;
+                const field = binding.fieldMapping[key];
+                return field === undefined ? [] : [[slot.slot_id, field]];
+              }),
+            );
+            const buildArgs = z.object(buildWorksheetsFromTemplatesParamsSchema).safeParse({
+              session: resolvedSession,
+              templateName,
+              title: ws.name,
+              datasource: binding.datasource,
+              fieldMapping,
+            });
+            if (!buildArgs.success) {
+              return new ArgsValidationError(
+                `Worksheet "${ws.name}" has invalid template build inputs: ${buildArgs.error.message}`,
+              ).toErr();
+            }
+            worksheetTasks.push({
               task_type: 'worksheet' as const,
               worksheetName: ws.name,
               worksheetFile,
-              type: ws.type,
-              template: templateName,
-              fields: resolvedFields,
-              datasource: resolvedDatasources.length === 1 ? resolvedDatasources[0] : null,
-              workbookFile,
-            };
-          });
+              build: {
+                tool: 'build-worksheets-from-templates',
+                params: buildArgs.data,
+              },
+              apply: {
+                tool: 'apply-worksheet',
+                params: { session: resolvedSession, worksheetName: ws.name },
+                artifactBinding: { from: 'build', resultPath: 'artifactId', bindTo: 'artifactId' },
+              },
+            });
+          }
 
           const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
           const dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
@@ -382,12 +458,16 @@ export const getPlanDashboardCreationTool = (
           if (canParallelize) {
             lines.push(
               `Spawn ${worksheetTasks.length} worksheet subagents in parallel.`,
-              'Each subagent: reads the cached file, builds the worksheet, then applies it.',
               'Tools: build-worksheets-from-templates then apply-worksheet. Do not apply the dashboard in parallel.',
             );
           } else {
             lines.push('Build and apply worksheet tasks sequentially.');
           }
+
+          lines.push(
+            'For each worksheet: call task.build.tool with task.build.params, then pass its returned artifactId to task.apply.tool with task.apply.params.',
+            'Build each artifact after Phase 1 creates the worksheet. Do not pass the scaffold worksheetFile with artifactId; these are separate apply modes.',
+          );
 
           lines.push(
             '',
