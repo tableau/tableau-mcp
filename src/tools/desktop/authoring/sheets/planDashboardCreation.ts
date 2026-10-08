@@ -14,6 +14,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
 
 type PlannerField = string | { query: string; datasource?: string };
 type PlannerFieldRequest = { query: string; datasource?: string };
@@ -88,7 +89,7 @@ export const getPlanDashboardCreationTool = (
     server,
     name: 'plan-dashboard-creation',
     title: toolTitle,
-    description: 'Plan dashboard tasks. parallel plan.',
+    description: 'Plan tasks; manual registration.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -264,7 +265,7 @@ export const getPlanDashboardCreationTool = (
           const dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
 
           const canParallelize = worksheets.length >= 5;
-          const recommendedParallelism = Math.min(worksheets.length + 1, 10);
+          const recommendedParallelism = Math.min(worksheets.length, 10);
 
           const layoutType = layout?.type || 'auto-grid';
           const layoutSpec = {
@@ -278,6 +279,7 @@ export const getPlanDashboardCreationTool = (
 
           const dashboardTask = {
             task_type: 'dashboard' as const,
+            session: resolvedSession,
             dashboardName,
             dashboardFile,
             title,
@@ -286,12 +288,16 @@ export const getPlanDashboardCreationTool = (
             workbookFile,
           };
 
-          const allTasks = [...worksheetTasks, dashboardTask];
+          const registration = dashboardCreationPrerequisite(
+            dashboardName,
+            dashboardTask.worksheetNames,
+          );
 
           const plan = {
             dashboardName,
             title,
             metadata: {
+              automaticCompletionSupported: !registration.required,
               totalWorksheets: worksheets.length,
               canParallelize,
               recommendedParallelism,
@@ -305,6 +311,7 @@ export const getPlanDashboardCreationTool = (
                 'Batch create all sheets + dashboard and cache empty working copies (single tool call)',
               tool: 'batch-create-and-cache-sheets',
               params: {
+                session: resolvedSession,
                 worksheetNames: worksheets.map((ws) => ws.name),
                 dashboardName,
               },
@@ -319,10 +326,37 @@ export const getPlanDashboardCreationTool = (
             },
             phase2Parallel: {
               description:
-                'Build and apply ALL tasks in parallel (worksheets + dashboard together)',
+                'Build and apply worksheet tasks only; wait for every worksheet to finish before registration',
               canParallelize,
               recommendedParallelism,
-              tasks: allTasks,
+              tasks: worksheetTasks,
+            },
+            phase3Registration: {
+              ...registration,
+              dependsOn: 'phase2Parallel',
+            },
+            phase4Dashboard: {
+              dependsOn: 'phase3Registration',
+              description:
+                'Apply the dashboard only after Desktop has registered every requested worksheet view',
+              refreshCaches: [
+                {
+                  tool: 'get-workbook-xml',
+                  params: { session: resolvedSession, mode: 'file' },
+                  resultPath: 'file',
+                  bindTo: 'workbookFile',
+                },
+                {
+                  tool: 'get-dashboard-xml',
+                  params: { session: resolvedSession, dashboardName, mode: 'file' },
+                  resultPath: 'file',
+                  bindTo: 'dashboardFile',
+                },
+              ],
+              tool: 'build-and-apply-dashboard',
+              task: dashboardTask,
+              fileBinding:
+                "Replace task.workbookFile and task.dashboardFile with the refreshed tools' returned file paths; do not reuse the Phase 1 paths.",
             },
           };
 
@@ -330,24 +364,42 @@ export const getPlanDashboardCreationTool = (
             'DASHBOARD CREATION PLAN',
             `Dashboard: "${dashboardName}"${title ? `\nTitle: "${title}"` : ''}`,
             `Worksheets: ${worksheets.length}`,
+            ...(registration.required
+              ? [
+                  'AUTOMATIC COMPLETION BLOCKED: new dashboard views require registration in Tableau Desktop.',
+                  'This plan requires a user action after worksheet apply. Do not start Phase 1 expecting unattended completion.',
+                ]
+              : []),
             '',
             'PHASE 1: Batch Create & Cache',
             'Tool: batch-create-and-cache-sheets',
             `  worksheetNames: [${worksheets.map((ws) => `"${ws.name}"`).join(', ')}]`,
             `  dashboardName: "${dashboardName}"`,
             '',
-            `PHASE 2: Build and Apply (${canParallelize ? 'PARALLELIZE' : 'Sequential'})`,
+            `PHASE 2: Build and Apply Worksheets (${canParallelize ? 'PARALLELIZE' : 'Sequential'})`,
           ];
 
           if (canParallelize) {
             lines.push(
-              `Spawn ${allTasks.length} subagents in parallel (${worksheetTasks.length} worksheets + 1 dashboard).`,
-              'Each subagent: reads the cached file, builds the worksheet or dashboard, then applies it.',
-              'Tools: build-worksheets-from-templates then apply-worksheet (worksheets), build-and-apply-dashboard (dashboard)',
+              `Spawn ${worksheetTasks.length} worksheet subagents in parallel.`,
+              'Each subagent: reads the cached file, builds the worksheet, then applies it.',
+              'Tools: build-worksheets-from-templates then apply-worksheet. Do not apply the dashboard in parallel.',
             );
           } else {
-            lines.push('Build and apply tasks sequentially.');
+            lines.push('Build and apply worksheet tasks sequentially.');
           }
+
+          lines.push(
+            '',
+            'PHASE 3: Register Views in Tableau Desktop (required user action)',
+            ...(registration.required
+              ? registration.instructions
+              : ['No worksheets requested; no registration needed.']),
+            '',
+            'PHASE 4: Refresh Caches and Apply Dashboard',
+            'Only after Phase 3: get-workbook-xml and get-dashboard-xml with mode="file", then build-and-apply-dashboard using their returned file paths.',
+            'Dashboard apply checks the live registrations and verifies readback. A missing registration stops the apply without a write.',
+          );
 
           if (aggregationWarnings.length > 0) {
             lines.push('', `WARNING: Redundant aggregation: ${aggregationWarnings.join('; ')}`);

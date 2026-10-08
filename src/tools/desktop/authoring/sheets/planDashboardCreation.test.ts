@@ -58,7 +58,7 @@ describe('planDashboardCreationTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getPlanDashboardCreationTool(new DesktopMcpServer());
     expect(tool.name).toBe('plan-dashboard-creation');
-    expect(tool.description).toContain('parallel');
+    expect(tool.description).toContain('manual registration');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
@@ -67,7 +67,7 @@ describe('planDashboardCreationTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: true });
   });
 
-  it('should return a plan with phase1 and phase2 on success', async () => {
+  it('plans worksheet work but gates dashboard apply on manual registration and fresh caches', async () => {
     vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
 
     const result = await getResult({
@@ -82,6 +82,33 @@ describe('planDashboardCreationTool', () => {
     expect(result.content[0].text).toContain('batch-create-and-cache-sheets');
     expect(result.content[0].text).toContain('task_type');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
+    expect(result.content[0].text).toContain('AUTOMATIC COMPLETION BLOCKED');
+    const plan = extractPlan(result);
+    expect(plan.metadata.automaticCompletionSupported).toBe(false);
+    expect(plan.phase2Parallel.tasks.map((task: any) => task.task_type)).toEqual(['worksheet']);
+    expect(plan.phase3Registration).toMatchObject({
+      required: true,
+      kind: 'manual',
+      dependsOn: 'phase2Parallel',
+    });
+    expect(plan.phase4Dashboard).toMatchObject({
+      dependsOn: 'phase3Registration',
+      tool: 'build-and-apply-dashboard',
+    });
+    expect(plan.phase4Dashboard.refreshCaches.map((step: any) => step.tool)).toEqual([
+      'get-workbook-xml',
+      'get-dashboard-xml',
+    ]);
+    expect(plan.phase4Dashboard.fileBinding).toContain('do not reuse the Phase 1 paths');
+  });
+
+  it('does not require registration for an empty dashboard', async () => {
+    const result = await getResult({ session: SESSION, dashboardName: 'Empty', worksheets: [] });
+    expect(result.isError).toBeFalsy();
+    const plan = extractPlan(result);
+    expect(plan.metadata.automaticCompletionSupported).toBe(true);
+    expect(plan.phase3Registration).toMatchObject({ required: false, status: 'ready' });
+    expect(plan.phase2Parallel.tasks).toEqual([]);
   });
 
   it('should block planning when a field is ambiguous', async () => {
@@ -313,6 +340,13 @@ describe('planDashboardCreationTool', () => {
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('PARALLELIZE');
+    const plan = extractPlan(result);
+    expect(plan.phase2Parallel.tasks).toHaveLength(5);
+    expect(plan.phase2Parallel.tasks.every((task: any) => task.task_type === 'worksheet')).toBe(
+      true,
+    );
+    expect(plan.metadata.recommendedParallelism).toBe(5);
+    expect(result.content[0].text).toContain('Do not apply the dashboard in parallel');
   });
 
   it('should not recommend parallelization for fewer than 5 worksheets', async () => {

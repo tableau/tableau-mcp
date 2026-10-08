@@ -301,7 +301,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1143], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
-    ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
+    ['plan-dashboard-creation', 1374], // Manual-registration description trim; do not grow.
     ['build-and-apply-dashboard', 1421], // ratcheted down after removing viewpoint injection; do not grow
     ['author-action', 2582], // raised 2026-09-30 (+166, signed off): parameter-mode onClear enum distinguishes an empty-string reset from keep-current; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
