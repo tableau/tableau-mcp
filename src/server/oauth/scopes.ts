@@ -526,11 +526,13 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   const slackClient = isSlackClient(clientId);
-  // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
-  // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
-  // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
+  // Authoring tools require the `authoring-tools` flag; Slack clients additionally require
+  // `authoring-with-slack`. Undefined `client_id` (stdio and generic discovery metadata) and
+  // unknown/non-Slack clients are allowed, mirroring the per-client `disabled` provider on the
+  // authoring tool registrations.
   const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
+    (await featureGate.isFeatureEnabled('authoring-tools')) &&
+    (!slackClient || (await featureGate.isFeatureEnabled('authoring-with-slack')));
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');

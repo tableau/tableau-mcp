@@ -48,7 +48,8 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
+        (isSlackClient(server.clientId) &&
+          !(await getFeatureGate().isFeatureEnabled('authoring-with-slack'))),
     ),
     callback: async ({ workbookId, includeExtract }, extra): Promise<CallToolResult> => {
       return await downloadWorkbookTool.logAndExecute<WorkbookToolResult>({

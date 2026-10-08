@@ -41,7 +41,8 @@ export const getRequestWorkbookUploadTool = (
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
+        (isSlackClient(server.clientId) &&
+          !(await getFeatureGate().isFeatureEnabled('authoring-with-slack'))),
     ),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({
