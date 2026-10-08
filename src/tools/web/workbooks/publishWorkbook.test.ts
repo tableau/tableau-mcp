@@ -10,7 +10,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
 
@@ -344,6 +344,7 @@ describe('publishWorkbookTool', () => {
     });
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -505,12 +506,25 @@ describe('publishWorkbookTool', () => {
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
+      tenant: { siteLuid: MOCK_SITE_LUID, userLuid: MOCK_USER_LUID },
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.twb',
       workbook: Buffer.from('<workbook source="new" />'),
     });
+  });
+
+  it('fails closed without reading the staged upload when the session has no valid tenant LUIDs', async () => {
+    const result = await getToolResult(validArgs, { extraOverrides: { _userLuid: 'not-a-luid' } });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Unable to determine the signed-in Tableau site and user',
+    );
+    expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('validates and publishes a local workbook file path', async () => {
@@ -1279,7 +1293,7 @@ async function getToolResult(
     personalSpace?: boolean;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; blobStorageEnabled?: boolean } = {},
+  options: Parameters<typeof getMockExtra>[0] = {},
 ): Promise<CallToolResult> {
   if (options.blobStorageEnabled !== undefined) {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(options.blobStorageEnabled);
@@ -1301,10 +1315,13 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
+  extraOverrides = {},
 }: {
   boundedProjectIds?: Set<string> | null;
+  blobStorageEnabled?: boolean;
+  extraOverrides?: Parameters<typeof getMockRequestHandlerExtra>[0];
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
-  const extra = getMockRequestHandlerExtra();
+  const extra = getMockRequestHandlerExtra(extraOverrides);
   return {
     ...extra,
     getConfigWithOverrides: vi.fn().mockResolvedValue({

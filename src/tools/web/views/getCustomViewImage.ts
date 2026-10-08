@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -116,14 +115,13 @@ export const getGetCustomViewImageTool = (
           // Offload to blob storage (returning a URL) when configured,
           // otherwise carry the raw bytes for inline base64. Falls back to
           // inline on any upload failure.
-          return new Ok(
-            await buildImageToolResult({
-              imageData: imageResult.value,
-              format,
-              resourceId: customViewId,
-              toolName: getCustomViewImageTool.name,
-            }),
-          );
+          return await buildImageToolResult({
+            imageData: imageResult.value,
+            format,
+            resourceId: customViewId,
+            toolName: getCustomViewImageTool.name,
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (imageToolResult) => {
           return {

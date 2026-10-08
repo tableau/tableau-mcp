@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -75,13 +74,12 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
           // Offload to blob storage (returning a URL) when configured,
           // otherwise carry the raw CSV for an inline text result. Falls back
           // to inline on any upload failure.
-          return new Ok(
-            await buildDataToolResult({
-              csv,
-              resourceId: customViewId,
-              toolName: getCustomViewDataTool.name,
-            }),
-          );
+          return await buildDataToolResult({
+            csv,
+            resourceId: customViewId,
+            toolName: getCustomViewDataTool.name,
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (dataToolResult) => {
           return {
