@@ -25,6 +25,7 @@ export default class FlowDocumentMethods extends AuthenticatedMethods<typeof flo
    * Returns the specified flow's document as sanitized JSON.
    *
    * Experimental: `GET {host}/api/exp/sites/:siteId/flows/:flowId/document`.
+   * Requires Tableau Server 2026.3+ and `features.getFlowDocumentRestApi=true`.
    * The response has credential/secret connection attributes and Tableau
    * identity attributes removed and email-shaped PII redacted server-side.
    *

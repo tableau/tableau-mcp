@@ -50,7 +50,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
 | [list-flow-runs](tools/flows/list-flow-runs.md)                                                                       | Retrieves the run history (executions) of Tableau Prep flows on a site ([REST API][list-flow-runs])                                 | All SKUs     |
 | [list-flow-tasks](tools/flows/list-flow-tasks.md)                                                                     | Retrieves the scheduled flow run tasks (schedules) for Tableau Prep flows on a site ([REST API][list-flow-tasks])                   | All SKUs     |
-| [describe-flow](tools/flows/describe-flow.md)                                                                         | Summarizes a Tableau Prep flow's design — inputs, outputs, steps, lineage, and connections ([REST API][describe-flow])               | All SKUs     |
+| [describe-flow](tools/flows/describe-flow.md)                                                                         | Summarizes flow design — requires Server 2026.3+ and `features.getFlowDocumentRestApi`                                                | All SKUs     |
 | [get-flow-task](tools/flows/get-flow-task.md)                                                                         | Retrieves a single scheduled flow run task by id ([REST API][get-flow-task])                                        | All SKUs     |
 | [run-flow](tools/flows/run-flow.md)                                                                                   | Opt-in mutating tool. Runs a Tableau Prep flow on demand, returning the async job ([REST API][run-flow-now])        | All SKUs     |
 | [run-flow-task](tools/flows/run-flow-task.md)                                                                         | Opt-in mutating tool. Runs an existing scheduled flow run task now, returning the async job ([REST API][run-flow-task]) | All SKUs     |
@@ -104,7 +104,6 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_runs
 [list-flow-tasks]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_tasks
-[describe-flow]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm
 [delete-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
