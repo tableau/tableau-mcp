@@ -55,14 +55,19 @@ vi.mock('../../../../config.js', () => ({
  * carrying a Tableau REST error code in the response body (the shape Tableau
  * uses: `{ error: { code, summary, detail } }`).
  */
-function axiosError(status: number, tableauErrorCode?: string): Error {
+function axiosError(
+  status: number,
+  tableauErrorCode?: string,
+  tableauErrorCodeHeader?: string,
+): Error {
   const error = new Error(`HTTP ${status}`) as Error & {
     isAxiosError: boolean;
-    response: { status: number; data?: unknown };
+    response: { status: number; data?: unknown; headers?: Record<string, string> };
   };
   error.isAxiosError = true;
   error.response = {
     status,
+    headers: tableauErrorCodeHeader ? { tableau_error_code: tableauErrorCodeHeader } : {},
     ...(tableauErrorCode
       ? { data: { error: { code: tableauErrorCode, summary: 'Forbidden', detail: 'test' } } }
       : {}),
@@ -167,8 +172,8 @@ describe('describeFlowTool', () => {
     expect(mocks.mockGetFlowDocument).not.toHaveBeenCalled();
   });
 
-  it('maps a 403 with Tableau code 403200 to a clear "experimental API not enabled" error', async () => {
-    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403200'));
+  it('maps a 403 with Tableau code 403201 to a clear "experimental API not enabled" error', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403201'));
 
     const result = await getToolResult({ flowId: mockFlow.id });
     expect(result.isError).toBe(true);
@@ -176,7 +181,26 @@ describe('describeFlowTool', () => {
     expect(result.content[0].text).toContain('experimental flow-document API is not enabled');
   });
 
-  it('maps a non-403200 403 to a forbidden/download-permission error (not "API disabled")', async () => {
+  it('recognizes the disabled code from Tableau response headers', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, undefined, '403201'));
+
+    const result = await getToolResult({ flowId: mockFlow.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('experimental flow-document API is not enabled');
+  });
+
+  it('does not misclassify Tableau code 403200 as the disabled API', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403200'));
+
+    const result = await getToolResult({ flowId: mockFlow.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('experimental flow-document API is not enabled');
+    expect(result.content[0].text).toContain('Not authorized to download');
+  });
+
+  it('maps other 403s to a forbidden/download-permission error (not "API disabled")', async () => {
     // A readable flow whose caller lacks download permission / scope returns a
     // 403 with a different Tableau code; it must NOT be reported as the API
     // being disabled.

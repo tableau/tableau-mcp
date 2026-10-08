@@ -36,14 +36,14 @@ const paramsSchema = {
 };
 
 // Tableau error code returned by the flow-document endpoint when the
-// experimental `GetFlowDocumentRestApi` feature flag is OFF. Verified live.
-const FLOW_DOCUMENT_API_DISABLED_CODE = '403200';
+// experimental `GetFlowDocumentRestApi` feature flag is OFF (monolith code).
+const FLOW_DOCUMENT_API_DISABLED_CODE = '403201';
 
 /**
- * Reads the Tableau REST error code (e.g. "403200") from an Axios error. Tableau
+ * Reads the Tableau REST error code (e.g. "403201") from an Axios error. Tableau
  * serializes REST errors as `{ error: { code, summary, detail } }` in the body
  * and also echoes the code in the `tableau_error_code` response header, so we
- * check both. Used to distinguish the feature-flag-off 403 (code 403200) from an
+ * check both. Used to distinguish the feature-flag-off 403 (code 403201) from an
  * ordinary forbidden / insufficient-permission 403.
  */
 function getTableauErrorCode(error: unknown): string | undefined {
@@ -150,7 +150,7 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
                     const status = error instanceof Error ? getHttpStatus(error) : '';
                     if (status === '403') {
                       // A 403 has two very different meanings here. Only Tableau
-                      // error code 403200 means the experimental API is disabled.
+                      // error code 403201 means the experimental API is disabled.
                       // Any other 403 is an authorization failure (no download
                       // permission, insufficient token scope, generic forbidden)
                       // and must NOT be reported as a feature-flag problem.

@@ -134,7 +134,7 @@ may genuinely be empty, or the experimental document format may have changed.
 
 ## Errors
 
-- **Experimental API not enabled** (HTTP 403, Tableau error code `403200`): the experimental
+- **Experimental API not enabled** (HTTP 403, Tableau error code `403201`): the experimental
   flow-document API is not enabled on this server. Use [Get Flow](get-flow.md) for metadata
   instead.
 - **Not authorized to download** (HTTP 403, any other code): the caller lacks permission to download
