@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import {
-  ArgsValidationError,
   DatasourceNotAllowedError,
   McpToolError,
   PreviewNotRunError,
@@ -20,6 +19,7 @@ import {
   getDatasourceDownstreamQuery,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -108,12 +108,10 @@ const paramsSchema = {
   resourceType: resourceTypeSchema.describe(
     'The kind of resource to delete: "workbook", "datasource", or "extract-refresh-task".',
   ),
-  resourceId: z
-    .string()
-    .describe(
-      'The LUID of the workbook or data source, or the UUID of the extract refresh task. ' +
-        'For extract-refresh-task, must be a valid UUID.',
-    ),
+  resourceId: luidSchema.describe(
+    'The LUID of the workbook or data source, or the UUID of the extract refresh task. ' +
+      'For extract-refresh-task, must be a valid UUID.',
+  ),
   confirm: z
     .boolean()
     .optional()
@@ -192,18 +190,6 @@ permanent.
         extra,
         args: { resourceType, resourceId, confirm, tag, confirmationToken },
         callback: async () => {
-          // Reject bad resourceId shape before opening a Tableau REST session. Only
-          // extract-refresh-task requires a UUID; workbook/datasource accept any LUID string and
-          // let the REST call surface a 404 if it's genuinely unknown.
-          if (resourceType === 'extract-refresh-task') {
-            const uuidCheck = z
-              .string()
-              .uuid('resourceId must be a valid UUID for extract-refresh-task')
-              .safeParse(resourceId);
-            if (!uuidCheck.success) {
-              return new ArgsValidationError(uuidCheck.error.issues[0].message).toErr();
-            }
-          }
           // Whether an MCP-Apps confirm card can ACTUALLY render for THIS client — not merely whether
           // the `mcp-apps` flag is on. A flag-on-but-app-incapable client is registered as a PLAIN
           // tool, so returning the app-card payload here would degrade to an unreadable raw JSON blob

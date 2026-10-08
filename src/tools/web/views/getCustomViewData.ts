@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -15,7 +16,7 @@ import {
 } from './dataToolResult.js';
 
 const paramsSchema = {
-  customViewId: z.string(),
+  customViewId: luidSchema,
   viewFilters: z
     .record(z.string())
     .optional()

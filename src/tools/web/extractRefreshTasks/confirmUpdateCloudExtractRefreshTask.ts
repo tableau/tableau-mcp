@@ -1,11 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -17,7 +17,7 @@ import { WebTool } from '../tool.js';
 import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 
 const paramsSchema = {
-  taskId: z.string().uuid('taskId must be a valid UUID'),
+  taskId: luidSchema,
   schedule: updateCloudExtractRefreshScheduleSchema,
 };
 

@@ -7,6 +7,7 @@ import { McpToolError, PreviewNotRunError } from '../../../../errors/mcpToolErro
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
+import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -18,7 +19,7 @@ import { mapCancelFlowRunError } from '../flowWriteErrors.js';
 const MIN_CANCEL_FLOW_RUN_REST_VERSION = '3.10';
 
 const paramsSchema = {
-  flowRunId: z.string().nonempty(),
+  flowRunId: luidSchema,
   confirm: z.boolean().optional(),
   confirmationToken: z.string().optional(),
 };

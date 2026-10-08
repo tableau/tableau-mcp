@@ -18,6 +18,7 @@ import {
   querySchema,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -45,7 +46,7 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: luidSchema,
   query: querySchema,
   limit: z.number().int().min(1).optional(),
 };

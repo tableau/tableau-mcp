@@ -1,10 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -13,13 +13,10 @@ import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 
 const paramsSchema = {
-  workbookId: z.string().min(1).describe('The LUID of the workbook to move.'),
-  projectId: z
-    .string()
-    .min(1)
-    .describe(
-      'The LUID of the destination project. Use list-projects to discover available project IDs.',
-    ),
+  workbookId: luidSchema.describe('The LUID of the workbook to move.'),
+  projectId: luidSchema.describe(
+    'The LUID of the destination project. Use list-projects to discover available project IDs.',
+  ),
 };
 
 export type MoveWorkbookResult = {

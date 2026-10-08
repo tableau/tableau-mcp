@@ -6,6 +6,7 @@ import { AxiosRequestConfig, getStringResponseHeader, isAxiosError } from '../..
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { buildRestPath, luidSchema } from '../routeSafety.js';
 import { CustomView } from '../types/customView.js';
 import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
@@ -236,7 +237,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     }
 
     const response = await this._apiClient.axios.get<string>(
-      `/sites/${siteId}/views/${viewId}/data`,
+      buildRestPath('sites', siteId, 'views', luidSchema.parse(viewId), 'data'),
       {
         ...this.authHeader,
         params: queries,
@@ -273,7 +274,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     }
 
     const response = await this._apiClient.axios.get<Uint8Array>(
-      `/sites/${siteId}/views/${viewId}/allData`,
+      buildRestPath('sites', siteId, 'views', luidSchema.parse(viewId), 'allData'),
       {
         ...this.authHeader,
         params: queries,

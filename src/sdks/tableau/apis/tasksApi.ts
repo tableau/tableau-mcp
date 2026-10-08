@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import {
   extractRefreshTaskSchema,
   updateCloudExtractRefreshTaskRequestSchema,
@@ -134,11 +135,7 @@ const deleteExtractRefreshTaskEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('taskId'),
   ],
   response: z.void(),
 });
@@ -163,11 +160,7 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('taskId'),
     {
       name: 'body',
       type: 'Body',
@@ -188,11 +181,7 @@ const getFlowRunTaskEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('taskId'),
   ],
   response: z.object({
     task: z.object({
@@ -213,11 +202,7 @@ const runFlowTaskEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('taskId'),
   ],
   response: runFlowJobResponseSchema,
 });

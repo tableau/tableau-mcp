@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import {
   ArgsValidationError,
@@ -11,6 +10,7 @@ import {
 import { useRestApi } from '../../../restApiInstance.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -92,7 +92,7 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
   }`;
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: luidSchema,
 };
 
 export type GetDatasourceMetadataError =

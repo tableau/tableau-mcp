@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import { paginationSchema } from '../types/pagination.js';
 import { workbookPermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
@@ -13,6 +14,7 @@ const getWorkbookEndpoint = makeEndpoint({
   alias: 'getWorkbook',
   description:
     'Returns information about the specified workbook, including information about views and tags.',
+  parameters: [luidPathParam('workbookId')],
   response: z.object({ workbook: workbookSchema }),
 });
 
@@ -56,11 +58,7 @@ const deleteWorkbookEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('workbookId'),
   ],
   response: z.void(),
 });
@@ -76,11 +74,7 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',
@@ -96,6 +90,7 @@ const queryWorkbookConnectionsEndpoint = makeEndpoint({
   alias: 'queryWorkbookConnections',
   description:
     'Returns a list of data connections for the specified workbook, including the datasource each connection points to.',
+  parameters: [luidPathParam('workbookId')],
   response: z.object({
     connections: z.object({
       connection: z.optional(z.array(workbookConnectionSchema)),
@@ -130,7 +125,7 @@ const updateWorkbookEndpoint = makeEndpoint({
   description: 'Modifies the project of the specified workbook.',
   parameters: [
     { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'workbookId', type: 'Path', schema: z.string() },
+    luidPathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',

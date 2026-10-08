@@ -7,6 +7,7 @@ import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { parseViewAllData } from '../../../sdks/tableau/methods/viewAllData.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -18,7 +19,7 @@ import {
 } from './dataToolResult.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  viewId: luidSchema,
   viewFilters: z
     .record(z.string())
     .optional()

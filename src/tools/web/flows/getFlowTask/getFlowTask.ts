@@ -1,11 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -16,7 +16,7 @@ import { WebTool } from '../../tool.js';
 import { extractTableauError, formatTableauError } from '../flowErrors.js';
 
 const paramsSchema = {
-  taskId: z.string().nonempty(),
+  taskId: luidSchema,
 };
 
 export type GetFlowTaskResult = {

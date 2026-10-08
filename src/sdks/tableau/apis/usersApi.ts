@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import { paginationSchema } from '../types/pagination.js';
 import { userSchema } from '../types/user.js';
 
@@ -93,10 +94,7 @@ const getUserOnSiteEndpoint = makeEndpoint({
   path: '/sites/:siteId/users/:userId',
   alias: 'getUserOnSite',
   description: 'Returns information about the specified user',
-  parameters: [
-    { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'userId', type: 'Path', schema: z.string() },
-  ],
+  parameters: [{ name: 'siteId', type: 'Path', schema: z.string() }, luidPathParam('userId')],
   response: z.object({ user: userSchema }),
 });
 
@@ -114,7 +112,7 @@ const updateUserEndpoint = makeEndpoint({
   description: 'Modifies information about the specified user',
   parameters: [
     { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'userId', type: 'Path', schema: z.string() },
+    luidPathParam('userId'),
     { name: 'body', type: 'Body', schema: z.object({ user: z.object({ siteRole: z.string() }) }) },
   ],
   response: z.object({ user: userSchema.partial() }),

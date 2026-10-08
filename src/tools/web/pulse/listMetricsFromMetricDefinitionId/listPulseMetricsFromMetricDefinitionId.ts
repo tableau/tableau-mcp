@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/tableau/routeSafety.js';
 import { PulseMetric } from '../../../../sdks/tableau/types/pulse.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -9,7 +9,7 @@ import { WebTool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
-  pulseMetricDefinitionID: z.string().length(36),
+  pulseMetricDefinitionID: luidSchema,
 };
 
 export const getListPulseMetricsFromMetricDefinitionIdTool = (

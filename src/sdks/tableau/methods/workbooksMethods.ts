@@ -4,6 +4,7 @@ import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
+import { buildRestPath, luidSchema } from '../routeSafety.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
 import { GranteeCapability } from '../types/permissions.js';
@@ -151,7 +152,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
     const response = await this._apiClient.axios.get<ArrayBuffer>(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/${workbookId}/content`,
+      buildRestPath('sites', siteId, 'workbooks', luidSchema.parse(workbookId), 'content'),
       {
         params: { includeExtract },
         ...this.authHeader,

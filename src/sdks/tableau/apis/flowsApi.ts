@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import {
   flowConnectionSchema,
   flowOutputStepSchema,
@@ -50,11 +51,7 @@ const runFlowNowEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'flowId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('flowId'),
     {
       name: 'body',
       type: 'Body',
@@ -106,6 +103,7 @@ const queryFlowEndpoint = makeEndpoint({
   alias: 'queryFlow',
   description:
     'Returns information about the specified flow, including information about the project, owner, and output steps.',
+  parameters: [luidPathParam('flowId')],
   response: z.object({
     flowOutputSteps: z
       .object({
@@ -121,6 +119,7 @@ const queryFlowConnectionsEndpoint = makeEndpoint({
   path: '/sites/:siteId/flows/:flowId/connections',
   alias: 'queryFlowConnections',
   description: 'Returns a list of data connections for the specified flow.',
+  parameters: [luidPathParam('flowId')],
   response: z.object({
     connections: z.object({
       connection: z.optional(z.array(flowConnectionSchema)),
@@ -191,11 +190,7 @@ const cancelFlowRunEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'flowRunId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('flowRunId'),
   ],
   response: cancelFlowRunResponseSchema,
 });

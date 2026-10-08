@@ -3,6 +3,7 @@ import { Zodios, ZodiosEndpointDefinitions } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
+import { buildRestPath } from '../routeSafety.js';
 import { FileUpload, fileUploadResponseSchema } from '../types/fileUpload.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -88,7 +89,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     ]);
 
     const response = await this._apiClient.axios.put(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/fileUploads/${uploadSessionId}`,
+      buildRestPath('sites', siteId, 'fileUploads', uploadSessionId),
       body,
       {
         headers: {

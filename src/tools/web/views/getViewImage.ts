@@ -8,6 +8,7 @@ import {
   ViewNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -21,7 +22,7 @@ import {
 } from './imageToolResult.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  viewId: luidSchema,
   width: z.number().gt(0).int().optional(),
   height: z.number().gt(0).int().optional(),
   format: z

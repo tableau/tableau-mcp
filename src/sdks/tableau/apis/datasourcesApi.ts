@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import { dataSourceSchema, publishedDataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
@@ -39,6 +40,7 @@ const queryDatasourceEndpoint = makeEndpoint({
   path: '/sites/:siteId/datasources/:datasourceId',
   alias: 'queryDatasource',
   description: 'Returns information about the specified data source.',
+  parameters: [luidPathParam('datasourceId')],
   response: z.object({
     datasource: dataSourceSchema,
   }),
@@ -68,11 +70,7 @@ const deleteDatasourceEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'datasourceId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('datasourceId'),
   ],
   response: z.void(),
 });
@@ -88,11 +86,7 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
       type: 'Path',
       schema: z.string(),
     },
-    {
-      name: 'datasourceId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    luidPathParam('datasourceId'),
     {
       name: 'body',
       type: 'Body',

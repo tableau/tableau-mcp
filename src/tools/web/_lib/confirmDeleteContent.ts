@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -22,9 +23,9 @@ const paramsSchema = {
   resourceType: resourceTypeSchema.describe(
     'The kind of resource to delete: "workbook", "datasource", or "extract-refresh-task".',
   ),
-  resourceId: z
-    .string()
-    .describe('The LUID of the workbook or data source, or the UUID of the extract refresh task.'),
+  resourceId: luidSchema.describe(
+    'The LUID of the workbook or data source, or the UUID of the extract refresh task.',
+  ),
   tag: z
     .string()
     .max(200)

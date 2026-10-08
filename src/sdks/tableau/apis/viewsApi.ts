@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { luidPathParam } from '../routeSafety.js';
 import { customViewSchema } from '../types/customView.js';
 import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
@@ -12,6 +13,7 @@ const getViewEndpoint = makeEndpoint({
   alias: 'getView',
   description: 'Gets the details of a specific view.',
   parameters: [
+    luidPathParam('viewId'),
     {
       name: 'includeUsageStatistics',
       type: 'Query',
@@ -49,6 +51,7 @@ const getCustomViewEndpoint = makeEndpoint({
   path: '/sites/:siteId/customviews/:customViewId',
   alias: 'getCustomView',
   description: 'Gets the details of a specified custom view.',
+  parameters: [luidPathParam('customViewId')],
   response: z.object({ customView: customViewSchema }),
 });
 
@@ -59,6 +62,7 @@ const getCustomViewDataEndpoint = makeEndpoint({
   description:
     'Returns a specified custom view rendered as data in comma separated value (CSV) format.',
   parameters: [
+    luidPathParam('customViewId'),
     {
       name: 'dummy',
       type: 'Query',
@@ -75,6 +79,7 @@ const getCustomViewImageEndpoint = makeEndpoint({
   alias: 'getCustomViewImage',
   description: 'Returns an image of the specified custom view.',
   parameters: [
+    luidPathParam('customViewId'),
     {
       name: 'vizWidth',
       type: 'Query',
@@ -124,6 +129,7 @@ const queryViewDataEndpoint = makeEndpoint({
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
   parameters: [
+    luidPathParam('viewId'),
     {
       name: 'dummy',
       type: 'Query',
@@ -140,6 +146,7 @@ const queryViewImageEndpoint = makeEndpoint({
   alias: 'queryViewImage',
   description: 'Returns an image of the specified view.',
   parameters: [
+    luidPathParam('viewId'),
     {
       name: 'vizWidth',
       type: 'Query',
@@ -190,6 +197,7 @@ const queryViewsForWorkbookEndpoint = makeEndpoint({
   description:
     'Returns all the views for the specified workbook, optionally including usage statistics.',
   parameters: [
+    luidPathParam('workbookId'),
     {
       name: 'includeUsageStatistics',
       type: 'Query',

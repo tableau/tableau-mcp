@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/tableau/routeSafety.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -16,7 +17,7 @@ import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {
-  workbookId: z.string().min(1),
+  workbookId: luidSchema,
   filter: z.string().optional(),
   limit: z.number().int().gt(0).max(MAX_PAGE_SIZE).optional(),
 };
