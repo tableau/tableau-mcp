@@ -14,9 +14,9 @@ or "walk me through this flow".
 - [Get Flow](get-flow.md) returns catalog **metadata** — name, owner, project, tags, output step
   names, input connections, recent run history. Use it for "who owns this?" or "did the last run
   succeed?".
-- **Describe Flow** returns the flow's **internal design** — its inputs and their data connections,
-  its output destinations, the transformation steps in between, and the step-to-step lineage. Use it
-  to understand the flow's purpose and how data moves through it.
+- **Describe Flow** returns a structured view of the flow's **internal design** — its inputs, outputs,
+  steps, lineage, and connections. Use it to understand the flow's purpose and how data moves through
+  it.
 
 ## APIs called
 
