@@ -52,6 +52,49 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
     );
   });
 
+  it('runs the viewpoint helper through production surgical apply and preserves a last-moment Desktop edit', async () => {
+    const scenario = new DashboardApplyScenario({
+      ...dashboardApplyCases[0],
+      concurrentEdit: true,
+    });
+    await scenario.invoke('apply_dashboard_with_viewpoints', {
+      ...applyArgs,
+      worksheetNames: ['Sales'],
+    });
+    await scenario.invoke('get_dashboard_xml', readbackArgs);
+    expect(scenario.grade()).toEqual([]);
+    expect(scenario.executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(scenario.executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('refuses an extra helper viewpoint before applying the otherwise valid layout', async () => {
+    const scenario = new DashboardApplyScenario({
+      ...dashboardApplyCases[0],
+      registrationRequired: true,
+    });
+    const result = await scenario.invoke('apply_dashboard_with_viewpoints', {
+      ...applyArgs,
+      worksheetNames: ['Sales', 'Profit'],
+    });
+    expect(result.text).toContain('Profit');
+    expect(scenario.grade()).toEqual([]);
+    expect(scenario.executor.applyDashboardDocument).not.toHaveBeenCalled();
+    expect(scenario.executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('detects a snapshot replacement that loses an unrelated edit despite matching dashboard readback', async () => {
+    const scenario = new DashboardApplyScenario({
+      ...dashboardApplyCases[0],
+      concurrentEdit: true,
+    });
+    const snapshot = (
+      await scenario.executor.getWorkbookDocument(new AbortController().signal)
+    ).unwrap().xml;
+    await complete(scenario);
+    await scenario.executor.applyWorkbookDocument(snapshot, new AbortController().signal);
+    expect(scenario.grade()).toContain('Unrelated datasources changed');
+  });
+
   it('seeds recovery with the production diagnostic for both layouts', async () => {
     const scenario = new DashboardApplyScenario(dashboardApplyCases[5]);
     const prompt = await scenario.getPrompt();

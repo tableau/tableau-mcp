@@ -52,8 +52,91 @@ describe('dashboard membership apply', () => {
     vi.useRealTimers();
   });
 
+  it.each([true, false, undefined])(
+    'checks additional requested registrations before any write (requireExistingSheet=%s)',
+    async (requireExistingSheet) => {
+      const { executor, original, live } = fixture(['A']);
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(['A']),
+        worksheetNames: ['A', 'B'],
+        requireExistingSheet,
+        verifyReadback: true,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({
+        error: { error: { type: 'registration-required', worksheetNames: ['B'] } },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(live()).toBe(original);
+    },
+  );
+
+  it.each(['absent', 'ambiguous', 'route-missing', 'list-error', 'post-error'] as const)(
+    'never falls back to replacing the workbook when the helper target is %s',
+    async (condition) => {
+      const { executor, original, live } = fixture(['A']);
+      const missingRoute = {
+        type: 'command-failed',
+        error: { code: 'not-found', message: 'No route matches', recoverable: false },
+      } as const;
+      if (condition === 'absent')
+        vi.mocked(executor.listDashboards).mockResolvedValue(Ok({ dashboards: [] }));
+      if (condition === 'ambiguous')
+        vi.mocked(executor.listDashboards).mockResolvedValue(
+          Ok({
+            dashboards: [
+              { id: 'one', name: 'D', hidden: false },
+              { id: 'two', name: 'D', hidden: false },
+            ],
+          }),
+        );
+      if (condition === 'route-missing')
+        vi.mocked(executor.listDashboards).mockResolvedValue(Err(missingRoute));
+      if (condition === 'list-error')
+        vi.mocked(executor.listDashboards).mockResolvedValue(
+          Err({ type: 'invalid-response', error: new Error('unavailable') }),
+        );
+      if (condition === 'post-error')
+        vi.mocked(executor.applyDashboardDocument).mockResolvedValue(Err(missingRoute));
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(['A']).replace('<simple-id uuid="dash-1"/>', ''),
+        focus,
+        executor,
+        signal,
+      });
+      expect(result.isErr()).toBe(true);
+      expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(
+        condition === 'post-error' ? 1 : 0,
+      );
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(live()).toBe(original);
+    },
+  );
+
+  it('verifies requested viewpoints outside the submitted zones without injecting or replacing anything', async () => {
+    const { executor } = fixture(['A'], ['A', 'B']);
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A']),
+      worksheetNames: ['A', 'B'],
+      requireExistingSheet: true,
+      verifyReadback: true,
+      focus,
+      executor,
+      signal,
+    });
+    expect(result.unwrap().verifiedWorksheetNames).toEqual(['A', 'B']);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it.each([{ names: [] }, { names: ['A'] }])(
-    'pins the snapshot instance for a create-capable apply: $names',
+    'pins the snapshot instance for a default helper apply: $names',
     async ({ names }) => {
       const { executor, live } = fixture(names);
       Object.defineProperty(executor, 'desktopInstanceId', { value: 'different-cached-instance' });
@@ -73,13 +156,19 @@ describe('dashboard membership apply', () => {
         signal,
       });
       expect(result.isOk()).toBe(true);
-      expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(expect.any(String), signal, {
-        expectedInstanceId: 'snapshot-instance',
-      });
+      expect(executor.applyDashboardDocument).toHaveBeenCalledWith(
+        'dash-1',
+        expect.any(String),
+        signal,
+        {
+          expectedInstanceId: 'snapshot-instance',
+        },
+      );
     },
   );
 
-  it('rejects a restarted instance during freshness checking even if its workbook XML is identical', async () => {
+  it('rejects readback from a restarted instance even if its workbook XML is identical', async () => {
+    vi.useFakeTimers();
     const { executor, original } = fixture(['A']);
     vi.mocked(executor.getWorkbookDocument)
       .mockResolvedValueOnce(
@@ -98,14 +187,16 @@ describe('dashboard membership apply', () => {
           xsdPayloadVersion: undefined,
         }),
       );
-    const result = await loadDashboardXml({
+    const pending = loadDashboardXml({
       dashboardName: 'D',
       xml: fragment(['A']),
       focus,
       executor,
       signal,
     });
-    expect(result).toMatchObject({ error: { error: { type: 'source-drift' } } });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ error: { error: { type: 'verification-failed' } } });
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
     expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -123,10 +214,12 @@ describe('dashboard membership apply', () => {
       type: 'command-failed',
       error: { code: 'instance-mismatch', message: 'Desktop restarted', recoverable: false },
     } as const;
-    vi.mocked(executor.applyWorkbookDocument).mockImplementation(async (_xml, _signal, options) => {
-      expect(options?.expectedInstanceId).toBe('snapshot-instance');
-      return Err(restartError);
-    });
+    vi.mocked(executor.applyDashboardDocument).mockImplementation(
+      async (_id, _xml, _signal, options) => {
+        expect(options?.expectedInstanceId).toBe('snapshot-instance');
+        return Err(restartError);
+      },
+    );
     const result = await loadDashboardXml({
       dashboardName: 'D',
       xml: fragment(['A']),
@@ -135,8 +228,9 @@ describe('dashboard membership apply', () => {
       signal,
     });
     expect(result).toMatchObject({ error: { type: 'execute-command-error', error: restartError } });
-    expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it.each(['Phone layout', 'retained settings', 'Desktop instance'])(
@@ -189,8 +283,8 @@ describe('dashboard membership apply', () => {
           },
         },
       });
-      expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     },
   );
 
@@ -198,9 +292,6 @@ describe('dashboard membership apply', () => {
     vi.useFakeTimers();
     const { executor, original, live } = fixture(['A']);
     vi.mocked(executor.getWorkbookDocument)
-      .mockResolvedValueOnce(
-        Ok({ xml: original, applicationVersion: undefined, xsdPayloadVersion: undefined }),
-      )
       .mockResolvedValueOnce(
         Ok({ xml: original, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       )
@@ -223,8 +314,9 @@ describe('dashboard membership apply', () => {
     });
     await vi.runAllTimersAsync();
     expect((await pending).unwrap().verifiedWorksheetNames).toEqual(['A']);
-    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(4);
-    expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(3);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('checks the changed dashboard without running the workbook registry over a wide datasource', async () => {
@@ -359,33 +451,36 @@ describe('dashboard membership apply', () => {
     expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
   });
 
-  it('preserves unrelated Desktop edits made after the last read, at the actual POST boundary', async () => {
-    const { executor, live } = fixture([], ['A'], (xml) =>
-      xml
-        .replaceAll('Unrelated', 'Renamed by user')
-        .replace(
-          '</worksheets>',
-          '<worksheet name="Created concurrently"><table/></worksheet></worksheets>',
-        ),
-    );
-    const result = await loadDashboardXml({
-      dashboardName: 'D',
-      xml: fragment(['A']),
-      requireExistingSheet: true,
-      focus,
-      executor,
-      signal,
-    });
-    expect(result.isOk()).toBe(true);
-    expect(live()).toContain('name="Renamed by user"');
-    expect(live()).toContain('name="Created concurrently"');
-    expect(dashboardMembershipMatches(live(), 'D', ['A'])).toBe(true);
-    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
-    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
-  });
+  it.each([true, false, undefined])(
+    'preserves edits at the POST boundary (requireExistingSheet=%s)',
+    async (requireExistingSheet) => {
+      const { executor, live } = fixture([], ['A'], (xml) =>
+        xml
+          .replaceAll('Unrelated', 'Renamed by user')
+          .replace(
+            '</worksheets>',
+            '<worksheet name="Created concurrently"><table/></worksheet></worksheets>',
+          ),
+      );
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(['A']),
+        requireExistingSheet,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result.isOk()).toBe(true);
+      expect(live()).toContain('name="Renamed by user"');
+      expect(live()).toContain('name="Created concurrently"');
+      expect(dashboardMembershipMatches(live(), 'D', ['A'])).toBe(true);
+      expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not claim success when the accepted write cannot be read back', async () => {
-    const { executor, original } = fixture([]);
+    const { executor, original } = fixture([], ['A']);
     vi.mocked(executor.getWorkbookDocument)
       .mockResolvedValueOnce(
         Ok({ xml: original, applicationVersion: undefined, xsdPayloadVersion: undefined }),
@@ -403,6 +498,7 @@ describe('dashboard membership apply', () => {
       signal,
     });
     expect(result).toMatchObject({ error: { error: { type: 'verification-failed' } } });
-    expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 });

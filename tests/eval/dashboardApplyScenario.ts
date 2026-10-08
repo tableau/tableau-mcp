@@ -31,6 +31,7 @@ type DashboardApplyCase = {
   blank?: boolean;
   layoutOnly?: boolean;
   registrationRequired?: boolean;
+  concurrentEdit?: boolean;
 };
 
 export const dashboardApplyCases: DashboardApplyCase[] = [
@@ -79,7 +80,21 @@ export const dashboardApplyCases: DashboardApplyCase[] = [
     after: ['Sales'],
     registrationRequired: true,
   },
+  {
+    name: 'preserve a same-instance Desktop edit made immediately before the dashboard POST',
+    before: ['Sales'],
+    after: ['Sales'],
+    layoutOnly: true,
+    concurrentEdit: true,
+  },
 ];
+
+function concurrentDesktopEdit(xml: string): string {
+  return xml.replace(
+    '<datasource name="Sample"',
+    '<datasource caption="Edited in Desktop" name="Sample"',
+  );
+}
 
 export function dashboardFragment(names: string[], height = 800): string {
   const zones = names
@@ -198,6 +213,7 @@ export class DashboardApplyScenario {
         .mockImplementation(async () => Ok({ xml: this.dashboardXml() })),
       getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: this.live })),
       applyWorkbookDocument: vi.fn().mockImplementation(async (xml: string) => {
+        if (testCase.concurrentEdit) this.live = concurrentDesktopEdit(this.live);
         this.writes.push({ route: 'workbook', xml });
         const posted = parse(xml);
         invariant(posted.ownerDocument, 'Missing workbook document');
@@ -215,6 +231,7 @@ export class DashboardApplyScenario {
         return completed();
       }),
       applyDashboardDocument: vi.fn().mockImplementation(async (_id: string, xml: string) => {
+        if (testCase.concurrentEdit) this.live = concurrentDesktopEdit(this.live);
         this.writes.push({ route: 'dashboard', xml });
         const root = parse(this.live);
         invariant(root.ownerDocument, 'Missing workbook document');
@@ -323,17 +340,27 @@ export class DashboardApplyScenario {
             'Use this file path with apply-dashboard instead of passing content directly.',
         });
       }
-      case 'apply_dashboard': {
+      case 'apply_dashboard':
+      case 'apply_dashboard_with_viewpoints': {
         invariant(args.dashboardName === dashboardName, 'dashboardName is required');
         invariant(
           args.dashboardFile === draftFile,
           'Apply the supplied draft, not a refreshed live layout',
         );
+        const helper = name === 'apply_dashboard_with_viewpoints';
+        if (helper)
+          invariant(
+            Array.isArray(args.worksheetNames) &&
+              args.worksheetNames.every((value) => typeof value === 'string'),
+            'worksheetNames is required',
+          );
         const result = await loadDashboardXml({
           dashboardName,
           xml: this.files.get(draftFile)!,
-          expectedSourceHash: this.sourceHash,
+          expectedSourceHash: helper ? undefined : this.sourceHash,
           requireExistingSheet: true,
+          verifyReadback: helper,
+          worksheetNames: helper ? (args.worksheetNames as string[]) : undefined,
           focus: { navigate: 'none', reason: 'intermediate-leg' },
           executor: this.executor,
           signal: new AbortController().signal,
@@ -387,7 +414,9 @@ export class DashboardApplyScenario {
     )
       failures.push(`Unexpected apply rejections: ${this.rejections.join(', ')}`);
     const root = parse(this.live);
-    const original = parse(this.original);
+    const original = parse(
+      this.testCase.concurrentEdit ? concurrentDesktopEdit(this.original) : this.original,
+    );
     const target = named(root, 'dashboard', dashboardName);
     const expected = parse(
       dashboardFragment(this.testCase.after, this.testCase.layoutOnly ? 850 : 800),

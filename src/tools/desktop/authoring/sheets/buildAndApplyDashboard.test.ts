@@ -21,15 +21,6 @@ vi.mock('../../../../desktop/wrappers/loadDashboardXml.js');
 vi.mock('../../../../desktop/wrappers/injectViewpoints.js');
 vi.mock('fs');
 
-const mockWorkbookXml =
-  '<workbook><windows><window class="dashboard" name="Sales Dashboard"/></windows></workbook>';
-const mockWorkbookXmlWithExistingViewpoint =
-  '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="KPI 1"><zoom type="entire-view"/></viewpoint></viewpoints></window></windows></workbook>';
-const mockWorkbookXmlWithViewpoints =
-  '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="KPI 1"/><viewpoint name="KPI 2"/><viewpoint name="Chart 1"/><viewpoint name="Chart 2"/></viewpoints></window></windows></workbook>';
-const mockWorkbookXmlWithAllViewpoints =
-  '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="KPI 1"><zoom type="entire-view"/></viewpoint><viewpoint name="Chart 1"><zoom type="entire-view"/></viewpoint></viewpoints></window></windows></workbook>';
-
 const defaultLayoutSpec = {
   kpis: ['KPI 1', 'KPI 2'],
   charts: ['Chart 1', 'Chart 2'],
@@ -47,15 +38,11 @@ describe('buildAndApplyDashboardTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
-      mockWorkbookXmlWithViewpoints,
-    );
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [], documentWarnings: [] }),
-    );
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({
+        validationWarnings: [],
+        verifiedWorksheetNames: ['KPI 1', 'KPI 2', 'Chart 1', 'Chart 2'],
+      }),
     );
   });
 
@@ -128,7 +115,7 @@ describe('buildAndApplyDashboardTool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
@@ -149,13 +136,7 @@ describe('buildAndApplyDashboardTool', () => {
         focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
       }),
     );
-    // The viewpoint apply is skipped when the viewpoints are already present, so it names
-    // the same dashboard rather than relying on the write above having been the last one.
-    expect(mockWorkbookLoad).toHaveBeenCalledWith(
-      expect.objectContaining({
-        focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
-      }),
-    );
+    expect(mockWorkbookLoad).not.toHaveBeenCalled();
   });
 
   it('should include a title text zone when title is provided', async () => {
@@ -174,70 +155,6 @@ describe('buildAndApplyDashboardTool', () => {
         xml: expect.stringContaining('type-v2="text"'),
       }),
     );
-  });
-
-  it('applies the dashboard before injecting viewpoints into the fresh workbook', async () => {
-    await getToolResult({ layoutSpec: defaultLayoutSpec, worksheetNames: ['Chart 1'] });
-
-    const dashboardApplyOrder = vi.mocked(loadDashboardXmlModule.loadDashboardXml).mock
-      .invocationCallOrder[0];
-    const workbookReadOrder = vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock
-      .invocationCallOrder[0];
-    const viewpointInjectOrder = vi.mocked(injectViewpointsModule.injectViewpoints).mock
-      .invocationCallOrder[0];
-    const workbookApplyOrder = vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mock
-      .invocationCallOrder[0];
-
-    expect(dashboardApplyOrder).toBeLessThan(workbookReadOrder);
-    expect(workbookReadOrder).toBeLessThan(viewpointInjectOrder);
-    expect(viewpointInjectOrder).toBeLessThan(workbookApplyOrder);
-  });
-
-  it('returns partial state with failed viewpoints when no dashboard window accepts injection', async () => {
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
-
-    const result = await getToolResult({
-      layoutSpec: defaultLayoutSpec,
-      worksheetNames: ['KPI 1', 'Chart 1'],
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      dashboardName: 'Sales Dashboard',
-      dashboardApplied: true,
-      stage: 'viewpoint-injection',
-      viewpoints: {
-        state: 'failed',
-        requested: ['KPI 1', 'Chart 1'],
-        landed: [],
-        failed: ['KPI 1', 'Chart 1'],
-      },
-    });
-    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
-  });
-
-  it('treats unchanged XML with requested viewpoints already present as success', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
-      Ok(mockWorkbookXmlWithAllViewpoints),
-    );
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
-      mockWorkbookXmlWithAllViewpoints,
-    );
-
-    const result = await getToolResult({
-      layoutSpec: defaultLayoutSpec,
-      worksheetNames: ['KPI 1', 'Chart 1'],
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      dashboardName: 'Sales Dashboard',
-      viewpointCount: 2,
-      viewpointState: 'success-already-present',
-    });
-    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return error when workbook file does not exist', async () => {
@@ -268,95 +185,6 @@ describe('buildAndApplyDashboardTool', () => {
     expect(result.content[0].text).toContain('Dashboard cache file not found');
   });
 
-  it('reports dashboard-applied partial state when the post-apply workbook read fails', async () => {
-    const error = {
-      type: 'command-failed' as const,
-      error: { code: 'ERR', message: 'Failed', recoverable: false },
-    };
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Err(error));
-
-    const result = await getToolResult({
-      layoutSpec: defaultLayoutSpec,
-      worksheetNames: ['Chart 1'],
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      dashboardName: 'Sales Dashboard',
-      dashboardApplied: true,
-      stage: 'post-dashboard-workbook-read',
-      viewpoints: {
-        state: 'unknown',
-        requested: ['Chart 1'],
-      },
-      apply_error: new DesktopCommandExecutionError(error).message,
-    });
-  });
-
-  it('reports dashboard-applied partial state when the viewpoint workbook apply fails', async () => {
-    const error = {
-      type: 'execute-command-error' as const,
-      error: {
-        type: 'command-failed' as const,
-        error: { code: 'ERR', message: 'Failed', recoverable: false },
-      },
-    };
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
-
-    const result = await getToolResult({
-      layoutSpec: defaultLayoutSpec,
-      worksheetNames: ['Chart 1'],
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      dashboardName: 'Sales Dashboard',
-      dashboardApplied: true,
-      stage: 'viewpoint-workbook-apply',
-      viewpoints: {
-        state: 'unknown',
-        requested: ['Chart 1'],
-        attempted: ['Chart 1'],
-      },
-      apply_error: new DesktopCommandExecutionError(error.error).message,
-    });
-  });
-
-  it('does not report pre-existing viewpoints as failed when the viewpoint workbook apply is rejected', async () => {
-    const error = {
-      type: 'load-workbook-xml-error' as const,
-      error: { type: 'load-rejected' as const, message: 'Rejected by Desktop' },
-    };
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
-      Ok(mockWorkbookXmlWithExistingViewpoint),
-    );
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
-      mockWorkbookXmlWithAllViewpoints,
-    );
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
-
-    const result = await getToolResult({
-      layoutSpec: defaultLayoutSpec,
-      worksheetNames: ['KPI 1', 'Chart 1'],
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      dashboardName: 'Sales Dashboard',
-      dashboardApplied: true,
-      stage: 'viewpoint-workbook-apply',
-      viewpoints: {
-        state: 'failed',
-        requested: ['KPI 1', 'Chart 1'],
-        landed: ['KPI 1'],
-        failed: ['Chart 1'],
-      },
-    });
-  });
-
   it('should return error when loadDashboardXml fails', async () => {
     const error = {
       type: 'execute-command-error' as const,
@@ -373,6 +201,61 @@ describe('buildAndApplyDashboardTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(error.error).message);
   });
+  afterEach(() => {
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(injectViewpointsModule.injectViewpoints).not.toHaveBeenCalled();
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('requires all requested views before a surgical apply and requests verified readback', async () => {
+    const args = { layoutSpec: defaultLayoutSpec, worksheetNames: ['KPI 1', 'Chart 1'] };
+    await getToolResult(args);
+    expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requireExistingSheet: true,
+        verifyReadback: true,
+        worksheetNames: args.worksheetNames,
+      }),
+    );
+  });
+
+  it.each(['sheet-absent', 'registration-required', 'verification-failed'] as const)(
+    'propagates %s without a workbook or injection fallback',
+    async (type) => {
+      vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+        Err({
+          type: 'load-dashboard-xml-error',
+          error: { type, message: 'Cannot safely apply', worksheetNames: ['Missing'] },
+        }),
+      );
+      const result = await getToolResult({
+        layoutSpec: defaultLayoutSpec,
+        worksheetNames: ['KPI 1', 'Chart 1'],
+      });
+      expect(result.isError).toBe(true);
+      expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([undefined, []])(
+    'reports an incomplete result for missing verification %s',
+    async (verifiedWorksheetNames) => {
+      vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
+        Ok({
+          validationWarnings: [],
+          verifiedWorksheetNames,
+        }),
+      );
+      const result = await getToolResult({
+        layoutSpec: defaultLayoutSpec,
+        worksheetNames: ['KPI 1', 'Chart 1'],
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('viewpoint-verification');
+      expect(result.content[0].text).toContain('Do not replace the workbook');
+    },
+  );
 });
 
 async function getToolResult({
