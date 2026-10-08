@@ -84,7 +84,7 @@ export const getDescribeFlowTool = (
 
   **describe-flow vs get-flow**
   - \`get-flow\` returns catalog *metadata* (name, owner, project, tags, output step names, input connections, recent run history). Use it for "who owns this?", "did the last run succeed?".
-  - \`describe-flow\` returns the flow's *internal design*: its inputs and their data connections, its output destinations, the transformation steps in between, and the step-to-step lineage. Use it to understand the flow's purpose and data movement.
+  - \`describe-flow\` returns a structured view of the flow's *internal design*: its inputs, outputs, steps, lineage, and connections. Use it to understand the flow's purpose and data movement.
 
   **Requirements**
   Requires Tableau Server 2026.3 or later and the server feature flag \`features.getFlowDocumentRestApi\` enabled. On older servers, use \`get-flow\` for metadata; if the flag is disabled, ask a server administrator to enable it and apply pending TSM changes.
