@@ -175,9 +175,13 @@ endpoint does not return a total count, so completeness is reported via the `tru
 (computed with a "+1 probe" — the tool fetches one more run than `limit` to detect that more exist).
 When `truncated` is `true`, report "at least N" — never invent a total.
 
-:::tip For client / LLM authors `mcp.resultInfo` is a signal **for the model**, not text to show the
+:::tip[For client / LLM authors]
+
+`mcp.resultInfo` is a signal **for the model**, not text to show the
 user. Translate it into one plain sentence — "These are all 12 matching runs" or "Here are the first
-50; more match" — and never surface the field names to the end user. :::
+50; more match" — and never surface the field names to the end user.
+
+:::
 
 ## Failure reporting
 
