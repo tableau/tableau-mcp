@@ -129,7 +129,7 @@ describe('publishWorkbookTool', () => {
   });
 
   it.each([false, true])(
-    'advertises Personal Space and access guidance only when data-apps is %s',
+    'advertises Personal Space and permission fields only when data-apps is %s',
     async (enabled) => {
       mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
         flag === 'data-apps' ? enabled : true,
@@ -159,8 +159,11 @@ describe('publishWorkbookTool', () => {
           expect(listed?.inputSchema.properties).toHaveProperty('personalSpace');
           expect(listed?.inputSchema.required).not.toContain('projectId');
           expect(listed?.description).toContain('personalSpace');
-          expect(listed?.description).toContain('relay permissionsMessage');
-          expect(listed?.description).toContain('beta PDS reminder');
+          expect(listed?.description).toContain('workbook permission rules');
+          expect(listed?.description).toContain('permissionsNote');
+          expect(listed?.description).not.toMatch(
+            /permissionsMessage|PDS reminder|Full Data Query/,
+          );
         } else {
           expect(listed?.inputSchema.properties).not.toHaveProperty('personalSpace');
           expect(listed?.inputSchema.required).toContain('projectId');
@@ -870,7 +873,7 @@ describe('publishWorkbookTool', () => {
     },
   );
 
-  describe('permissionsMessage in the tool response', () => {
+  describe('raw permissions in the tool response', () => {
     const allowed = ['Read', 'Connect', 'VizqlDataApiAccess'].map((name) => ({
       name,
       mode: 'Allow',
@@ -884,34 +887,29 @@ describe('publishWorkbookTool', () => {
       capabilities: { capability: allowed },
     };
 
-    it.each<{ label: string; rules: GranteeCapability[]; grants: boolean }>([
-      { label: 'all required grants on a group', rules: [group()], grants: true },
-      { label: 'all required grants on multiple principals', rules: [group(), user], grants: true },
-      { label: 'empty rules', rules: [], grants: false },
+    it.each<{ label: string; rules: GranteeCapability[] }>([
+      { label: 'all required grants on a group', rules: [group()] },
+      { label: 'all required grants on multiple principals', rules: [group(), user] },
+      { label: 'empty rules', rules: [] },
       {
         label: 'missing capabilities object',
         rules: [{ group: { id: 'group-1' } }],
-        grants: false,
       },
       {
         label: 'missing capability array',
         rules: [{ user: { id: 'user-1' }, capabilities: {} }],
-        grants: false,
       },
       {
         label: 'mixed complete and incomplete rules',
         rules: [user, group(allowed.slice(0, 2))],
-        grants: false,
       },
       {
         label: 'AI Access does not replace API Access',
         rules: [group([...allowed.slice(0, 2), { name: 'AIAccess', mode: 'Allow' }])],
-        grants: false,
       },
       {
         label: 'conflicting entries',
         rules: [group([...allowed, { name: 'Read', mode: 'Deny' }])],
-        grants: false,
       },
       ...['Read', 'Connect', 'VizqlDataApiAccess'].flatMap((name) =>
         ['Deny', 'Unspecified', 'missing'].map((mode) => ({
@@ -923,12 +921,11 @@ describe('publishWorkbookTool', () => {
                 : allowed.map((entry) => (entry.name === name ? { name, mode } : entry)),
             ),
           ],
-          grants: false,
         })),
       ),
     ])(
-      'returns the exact message for $label in text and structuredContent',
-      async ({ rules, grants }) => {
+      'preserves $label without interpretation in text and structuredContent',
+      async ({ rules }) => {
         mocks.mockValidateWorkbookAndUpload.mockResolvedValue({ uploadId: 'validated-upload-id' });
         mocks.mockQueryWorkbookPermissions.mockResolvedValue(rules);
         const publishedName = 'Published workbook name';
@@ -941,11 +938,7 @@ describe('publishWorkbookTool', () => {
         const response = JSON.parse(result.content[0].text);
         expect(result.structuredContent).toEqual(response);
         expect(response.permissions).toEqual(rules);
-        expect(response.permissionsMessage).toBe(
-          grants
-            ? 'The returned rules grant the workbook permissions required for viewing data apps. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.'
-            : `If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on ${publishedName}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
-        );
+        expect(response).not.toHaveProperty('permissionsMessage');
         expect(mocks.mockQueryWorkbookPermissions).toHaveBeenCalledOnce();
       },
     );
@@ -1031,9 +1024,7 @@ describe('publishWorkbookTool', () => {
       } else {
         expect(response.permissions).toBeUndefined();
         expect(response.permissionsNote).toContain('could not be retrieved');
-        expect(response.permissionsMessage).toBe(
-          `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
-        );
+        expect(response).not.toHaveProperty('permissionsMessage');
       }
     },
   );
@@ -1093,9 +1084,7 @@ describe('publishWorkbookTool', () => {
     expect(response.data.id).toBe(mockWorkbook.id);
     expect(response.permissions).toBeUndefined();
     expect(response.permissionsNote).toContain('could not be retrieved');
-    expect(response.permissionsMessage).toBe(
-      `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
-    );
+    expect(response).not.toHaveProperty('permissionsMessage');
   });
 
   it.each(['authentication', 'feature lookup'])(
@@ -1128,9 +1117,7 @@ describe('publishWorkbookTool', () => {
       expect(response.data.id).toBe(mockWorkbook.id);
       expect(response.permissions).toBeUndefined();
       expect(response.permissionsNote).toContain('could not be retrieved');
-      expect(response.permissionsMessage).toBe(
-        `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
-      );
+      expect(response).not.toHaveProperty('permissionsMessage');
       expect(mocks.mockPublishWorkbook).toHaveBeenCalledOnce();
       expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();
     },

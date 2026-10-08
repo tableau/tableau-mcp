@@ -158,105 +158,26 @@ The tool returns one of two result shapes:
 ### Permissions after a project publish
 
 When the `data-apps` feature flag is enabled, a successful project publish also returns
-`permissions`: the workbook's configured user/group permission rules, and `permissionsMessage`: the
-selected workbook base response followed by the conditional PDS reminder. The same fields appear
-in `structuredContent` and the JSON text content. Personal Space publishes skip this read and omit these fields. If the optional read fails,
-publishing still succeeds;
-`permissionsNote` explains that the rules could not be retrieved, and `permissionsMessage` contains
-the permissions-unavailable response. When the flag is disabled, all three permission fields and
-the data-app access guidance are omitted; ordinary project publishing remains available.
-See [Feature Flags](../../developers/feature-flags.md).
+`permissions`: the workbook's configured user/group permission rules. These rules are returned
+unchanged in both `structuredContent` and the JSON text content. The tool does not select an
+access message or append a published-data-source reminder; the authoring skill interprets the
+output using existing task context.
 
-With `data-apps` enabled, the tool selects exactly one base response and always appends the
-conditional PDS reminder inside `permissionsMessage`. Show the **publish confirmation and link**,
-then relay the complete message. Do not append another PDS reminder. If `permissionsMessage` is
-absent, omit the access summary.
+If the optional read fails, publishing still succeeds and `permissionsNote` explains that the
+rules could not be retrieved. Personal Space publishes and project publishes with `data-apps`
+disabled skip the read and omit both permission fields. Ordinary project publishing remains
+available. See [Feature Flags](../../developers/feature-flags.md).
 
-The publish result does not identify whether the workbook contains a data app, so there is no
-separate response branch for regular workbooks. Requirements use Tableau UI labels and order:
+| Publish outcome | Permission fields |
+| --- | --- |
+| Project publish; permission read succeeds | `permissions` contains the returned rules, including an empty array if none were returned. |
+| Project publish; permission read fails or consent is unavailable | `permissionsNote` explains the unavailable read; `permissions` is absent. |
+| Project publish; `data-apps` disabled | Neither field is returned; no permission read occurs. |
+| Personal Space publish | Neither field is returned; no permission read occurs. |
 
-| Resource | Tableau UI capability | API capability name |
-| --- | --- | --- |
-| Workbook | View | `Read` |
-| Workbook | Full Data Query | `Connect` |
-| Workbook | API Access | `VizqlDataApiAccess` |
-| Published parent data source, if used by the data app | API Access | `VizqlDataApiAccess` |
-
-AI Access is a separate capability and does not replace API Access for the data app. Avoid
-listing raw grantee IDs, every permission rule, or unrelated capabilities.
-
-The tool selects the workbook base response from the existing results, then always appends the
-conditional PDS reminder. It does not determine whether a published parent is used:
-
-```mermaid
-flowchart TD
-    A{"Publish succeeded?"}
-    A -->|No| E["Report the error; no access summary"]
-    A -->|Yes| B{"Published to a project?"}
-    B -->|"No: Personal Space"| C["Publish confirmation only"]
-    B -->|Yes| H{"data-apps enabled?"}
-    H -->|No| C
-    H -->|Yes| D{"permissions field present?"}
-    D -->|No| R3["Base 3: Permissions unavailable"]
-    D -->|Yes| F{"permissions array empty?"}
-    F -->|Yes| R1["Base 1: Warning"]
-    F -->|No| G{"All three required capabilities<br/>explicitly Allow in every rule?"}
-    G -->|Yes| R2["Base 2: Workbook grants present"]
-    G -->|"No: Denied, Unspecified, or missing"| R1
-    R1 --> P["Append conditional PDS reminder inside permissionsMessage"]
-    R2 --> P
-    R3 --> P
-```
-
-Denied and Unspecified/missing use the **same conservative warning**, while retaining their
-different meanings in the returned rules. An absent capability is not rewritten as an explicit
-denial. An empty `permissions` array means no configured grants were returned and routes to
-Base 1; an absent `permissions` field means the rules are unavailable and routes to Base 3.
-The absence of `permissionsNote` does not imply that rules were returned. Disabling `data-apps`
-omits all three permission fields and the access-summary guidance entirely. A mix of complete and incomplete
-grantee rules routes to Base 1.
-
-**Base 1 — Warning**
-
-> If this workbook contains a data app, some users with access to this project may not be able
-> to view it by default. In Tableau, make sure intended data-app viewers have **View, Full Data
-> Query, and API Access** on **{workbook}**.
-
-**Base 2 — Workbook grants present**
-
-> The returned rules grant the workbook permissions required for viewing data apps.
-
-**Base 3 — Permissions unavailable**
-
-> Viewer access was not verified. If this workbook contains a data app, intended viewers need
-> **View, Full Data Query, and API Access** on **{workbook}**.
-
-The tool substitutes the returned workbook name in Bases 1 and 3. Relay `permissionsMessage`
-after the successful publish confirmation and link. For example, Base 2 plus the reminder is
-returned as:
-
-```json
-{
-  "permissionsMessage": "The returned rules grant the workbook permissions required for viewing data apps. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source."
-}
-```
-
-For beta, the tool always appends this conditional reminder to all three base responses:
-
-> If this workbook contains a data app backed by a published data source, viewers also need
-> **API Access** on that source.
-
-There is no PDS-context input or known/unknown parent branch. Publishing does not establish parent
-source usage. The reminder needs no parent data source lookup or permission evaluation and does
-not report a verified grant or denial on the source.
-
-These summaries describe configured defaults, not each viewer's effective access. Do not promise
-everyone with project access can view the data app. Other rules, site roles, and ownership affect
-the result, and a successful query by the publisher does not verify other viewers' access. See
-[Effective permissions](https://help.tableau.com/current/online/en-us/permission_effective.htm).
-
-This guidance uses existing results and task context. It adds no permission checks, data-app
-detection, effective-permission calculation, or permission changes.
+An omitted capability is not rewritten as a denial. An empty array means no configured rules
+were returned, not that nobody has access. The rules do not determine each viewer's effective
+access, and successful publishing does not verify permissions on a published parent data source.
 
 ## Example result (published)
 
