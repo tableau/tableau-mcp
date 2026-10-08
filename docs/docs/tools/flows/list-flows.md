@@ -250,10 +250,14 @@ example:
 }
 ```
 
-:::tip For client / LLM authors `mcp.resultInfo` is a signal **for the model**, not text to show the
+:::tip[For client / LLM authors]
+
+`mcp.resultInfo` is a signal **for the model**, not text to show the
 user. Translate it into one plain sentence — "These are all 12 flows matching your request" or "Here
 are the first 100 of 430; more match" — and never surface the field names (or the absence of a
-warning) to the end user. :::
+warning) to the end user.
+
+:::
 
 ## Example result
 
