@@ -25,7 +25,7 @@ import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/sc
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
-import { type BucketS3Config } from '../s3Client.js';
+import { type BucketS3Config, getTenantLuids, type TenantIdentitySource } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
@@ -203,11 +203,16 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
+              const resolvedWorkbookInput = await resolveWorkbookInput({
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
+                tenant: extra,
               });
+              if (resolvedWorkbookInput.isErr()) {
+                return resolvedWorkbookInput;
+              }
+              const resolvedWorkbookFile = resolvedWorkbookInput.value;
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -397,11 +402,13 @@ async function resolveWorkbookInput({
   config,
   workbookUploadId,
   workbookFilePath,
+  tenant,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
-}): Promise<ResolvedWorkbook> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ResolvedWorkbook, McpToolError>> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
@@ -412,7 +419,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath);
+    return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
   if (!workbookUploadId) {
@@ -425,10 +432,17 @@ async function resolveWorkbookInput({
       'MCP_S3_BUCKET must be configured before publishing staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({
-    workbookUploadId,
-    config,
-  });
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  return new Ok(
+    await resolveStagedWorkbookUpload({
+      workbookUploadId,
+      config,
+      tenant: tenantLuids.value,
+    }),
+  );
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {

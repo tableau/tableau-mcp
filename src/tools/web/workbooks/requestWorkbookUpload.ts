@@ -1,13 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
+import { getTenantLuids } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import {
   requestStagedWorkbookUpload,
@@ -62,11 +64,24 @@ export const getRequestWorkbookUploadTool = (
             );
           }
 
-          const result = await requestStagedWorkbookUpload({
-            fileName,
-            config: extra.config.bucketS3,
+          // Sign in so the staged key uses the same identity publish-workbook resolves.
+          return await useRestApi<Result<RequestWorkbookUploadResult, McpToolError>>({
+            ...extra,
+            jwtScopes: tool.requiredApiScopes,
+            callback: async () => {
+              const tenant = getTenantLuids(extra);
+              if (tenant.isErr()) {
+                return tenant;
+              }
+              return new Ok(
+                await requestStagedWorkbookUpload({
+                  fileName,
+                  config: extra.config.bucketS3,
+                  tenant: tenant.value,
+                }),
+              );
+            },
           });
-          return new Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

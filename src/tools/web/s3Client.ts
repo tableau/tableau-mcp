@@ -12,6 +12,11 @@
  * S3 client rather than each constructing their own.
  */
 
+import { Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
+
+import { UnknownError } from '../../errors/mcpToolError.js';
+
 /**
  * Socket-idle timeouts (ms) for the S3 client's Node HTTP handler.
  *
@@ -113,6 +118,51 @@ export function joinS3Prefix(base: string, segment: string): string {
     .filter(Boolean)
     .join('/');
   return joined ? `${joined}/` : '';
+}
+
+export type TenantLuids = { siteLuid: string; userLuid: string };
+export type TenantIdentitySource = { getSiteLuid: () => string; getUserLuid: () => string };
+
+// Tenant LUIDs become key path segments, so anything but a UUID (e.g. `../`) is rejected.
+const tenantLuidSchema = z.string().uuid();
+
+function isValidTenantLuids(siteLuid: string, userLuid: string): boolean {
+  return (
+    tenantLuidSchema.safeParse(siteLuid).success && tenantLuidSchema.safeParse(userLuid).success
+  );
+}
+
+/**
+ * Returns the caller's site and user LUIDs for tenant-scoping S3 keys. Must be called after
+ * `useRestApi` has run so PAT/UAT/direct-trust sessions reflect the signed-in identity. Returns
+ * an error (fail closed) rather than producing an unscoped key.
+ */
+export function getTenantLuids(extra: TenantIdentitySource): Result<TenantLuids, UnknownError> {
+  const siteLuid = extra.getSiteLuid();
+  const userLuid = extra.getUserLuid();
+  if (!isValidTenantLuids(siteLuid, userLuid)) {
+    return new UnknownError(
+      'Unable to determine the signed-in Tableau site and user for S3 file storage.',
+    ).toErr();
+  }
+  return new Ok({ siteLuid, userLuid });
+}
+
+/**
+ * Like {@link joinS3Prefix}, but scopes the segment under `<siteLuid>/<userLuid>/` so objects
+ * from different tenants never share a key path. Callers pass LUIDs already validated by
+ * {@link getTenantLuids}; an invalid LUID here is a programming error and throws.
+ */
+export function joinTenantS3Prefix(
+  base: string,
+  siteLuid: string,
+  userLuid: string,
+  segment: string,
+): string {
+  if (!isValidTenantLuids(siteLuid, userLuid)) {
+    throw new Error('Invalid tenant LUIDs for S3 key prefix.');
+  }
+  return joinS3Prefix(joinS3Prefix(base, `${siteLuid}/${userLuid}`), segment);
 }
 
 /**

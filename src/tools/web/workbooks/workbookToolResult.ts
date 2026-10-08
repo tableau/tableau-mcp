@@ -4,12 +4,19 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok, Result } from 'ts-results-es';
 
 import { Config } from '../../../config.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
+import {
+  getTenantLuids,
+  joinTenantS3Prefix,
+  TenantIdentitySource,
+  uploadBufferToS3,
+} from '../s3Client.js';
 
 export type WorkbookToolResult =
   | { kind: 'url'; url: string; mimeType: string; filename: string }
@@ -23,6 +30,7 @@ export async function buildWorkbookToolResult({
   config,
   toolName,
   keyPrefixSegment,
+  tenant,
 }: {
   content: Buffer;
   mimeType: string;
@@ -31,17 +39,29 @@ export async function buildWorkbookToolResult({
   config: Config;
   toolName: string;
   keyPrefixSegment: string;
-}): Promise<WorkbookToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<WorkbookToolResult, McpToolError>> {
   if (
     !config.bucketS3.enabled ||
     !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))
   ) {
-    return await persistWorkbookToTempPath({ content, mimeType, filename });
+    return new Ok(await persistWorkbookToTempPath({ content, mimeType, filename }));
   }
 
+  // Resolved outside the try so a missing tenant fails closed instead of falling back.
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  const { siteLuid, userLuid } = tenantLuids.value;
   try {
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
-    const keyPrefix = joinS3Prefix(config.bucketS3.keyPrefix, keyPrefixSegment);
+    const keyPrefix = joinTenantS3Prefix(
+      config.bucketS3.keyPrefix,
+      siteLuid,
+      userLuid,
+      keyPrefixSegment,
+    );
     const key = `${keyPrefix}${resourceId}/${randomUUID()}.${ext}`;
     const url = await uploadBufferToS3(content, {
       key,
@@ -50,7 +70,7 @@ export async function buildWorkbookToolResult({
       region: config.bucketS3.region,
       presignTtlSeconds: config.bucketS3.presignTtlSeconds,
     });
-    return { kind: 'url', url, mimeType, filename };
+    return new Ok({ kind: 'url', url, mimeType, filename });
   } catch (error) {
     log({
       message: `${toolName}: S3 workbook upload failed, falling back to temp-file output: ${getExceptionMessage(
@@ -59,7 +79,7 @@ export async function buildWorkbookToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return await persistWorkbookToTempPath({ content, mimeType, filename });
+    return new Ok(await persistWorkbookToTempPath({ content, mimeType, filename }));
   }
 }
 

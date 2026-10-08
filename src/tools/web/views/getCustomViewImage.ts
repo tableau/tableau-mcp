@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -115,16 +114,15 @@ export const getGetCustomViewImageTool = (
           // Offload to S3 (returning a presigned URL) when configured, otherwise
           // carry the raw bytes for inline base64. Falls back to inline on any
           // S3 failure.
-          return new Ok(
-            await buildImageToolResult({
-              imageData: imageResult.value,
-              format,
-              resourceId: customViewId,
-              config: extra.config,
-              toolName: getCustomViewImageTool.name,
-              keyPrefixSegment: 'custom-view-images/',
-            }),
-          );
+          return await buildImageToolResult({
+            imageData: imageResult.value,
+            format,
+            resourceId: customViewId,
+            config: extra.config,
+            toolName: getCustomViewImageTool.name,
+            keyPrefixSegment: 'custom-view-images/',
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (imageToolResult) => {
           return {

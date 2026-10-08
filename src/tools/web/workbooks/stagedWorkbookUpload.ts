@@ -5,7 +5,8 @@ import {
   BucketS3Config,
   createPresignedPutUrlToS3,
   downloadObjectFromS3IfExists,
-  joinS3Prefix,
+  joinTenantS3Prefix,
+  TenantLuids,
 } from '../s3Client.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
@@ -31,24 +32,27 @@ export type RequestWorkbookUploadResult = {
 type WorkbookUploadOptions = {
   fileName: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
 };
 
 type ResolveWorkbookUploadOptions = {
   workbookUploadId: string;
   config: BucketS3Config;
+  tenant: TenantLuids;
   maxBytes?: number;
 };
 
 export async function requestStagedWorkbookUpload({
   fileName,
   config,
+  tenant,
 }: WorkbookUploadOptions): Promise<RequestWorkbookUploadResult> {
   const fileType = assertWorkbookUploadFileName(fileName);
 
   const workbookUploadId = randomUUID();
   const contentType = getWorkbookUploadContentType(fileType);
   const uploadUrl = await createPresignedPutUrlToS3({
-    key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
+    key: buildWorkbookUploadS3Key(config.keyPrefix, tenant, workbookUploadId, fileType),
     contentType,
     bucket: config.bucket,
     region: config.region,
@@ -67,13 +71,15 @@ export async function requestStagedWorkbookUpload({
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
   config,
+  tenant,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
 }: ResolveWorkbookUploadOptions): Promise<ResolvedWorkbook> {
   assertWorkbookUploadId(workbookUploadId);
 
+  // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of WORKBOOK_FILE_TYPES) {
     const bytes = await downloadObjectFromS3IfExists({
-      key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
+      key: buildWorkbookUploadS3Key(config.keyPrefix, tenant, workbookUploadId, fileType),
       bucket: config.bucket,
       region: config.region,
       maxBytes,
@@ -98,11 +104,13 @@ export async function resolveStagedWorkbookUpload({
 
 export function buildWorkbookUploadS3Key(
   keyPrefix: string,
+  { siteLuid, userLuid }: TenantLuids,
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
   assertWorkbookUploadId(workbookUploadId);
-  return `${joinS3Prefix(keyPrefix, WORKBOOK_UPLOAD_PREFIX_SEGMENT)}${workbookUploadId}/workbook.${fileType}`;
+  const prefix = joinTenantS3Prefix(keyPrefix, siteLuid, userLuid, WORKBOOK_UPLOAD_PREFIX_SEGMENT);
+  return `${prefix}${workbookUploadId}/workbook.${fileType}`;
 }
 
 function assertWorkbookUploadFileName(fileName: string): WorkbookFileType {

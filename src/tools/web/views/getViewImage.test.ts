@@ -7,7 +7,7 @@ import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetViewImageTool } from './getViewImage.js';
 import { mockView } from './mockView.js';
 
@@ -329,12 +329,12 @@ describe('getViewImageTool', () => {
         resourceId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
         config: expect.objectContaining({
           bucket: 'tableau-images',
-          keyPrefix: 'view-images/',
+          keyPrefix: `${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-images/`,
         }),
       });
     });
 
-    it('prefixes the S3 key with the base prefix followed by the view-images segment', async () => {
+    it('prefixes the S3 key with the base prefix, then the site and user LUIDs, then the view-images segment', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
       mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
@@ -345,9 +345,40 @@ describe('getViewImageTool', () => {
       expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(
         mockPngData,
         expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/view-images/' }),
+          config: expect.objectContaining({
+            keyPrefix: `tableau/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-images/`,
+          }),
         }),
       );
+    });
+
+    it('fails closed without uploading when the session has no valid user LUID', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+
+      const result = await getToolResult(
+        { viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' },
+        { _userLuid: '' },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unable to determine the signed-in Tableau site and user',
+      );
+      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+    });
+
+    it('does not require tenant LUIDs when returning inline base64', async () => {
+      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+
+      const result = await getToolResult(
+        { viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' },
+        { _userLuid: '' },
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]).toMatchObject({ type: 'image', data: base64PngData });
     });
 
     it('should return inline base64 when MCP_S3_BUCKET is not configured', async () => {
@@ -403,12 +434,15 @@ describe('getViewImageTool', () => {
   });
 });
 
-async function getToolResult(params: {
-  viewId: string;
-  format?: 'PNG' | 'SVG';
-  viewFilters?: Record<string, string>;
-  productVersion?: ProductVersion;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  params: {
+    viewId: string;
+    format?: 'PNG' | 'SVG';
+    viewFilters?: Record<string, string>;
+    productVersion?: ProductVersion;
+  },
+  extraOverrides: Parameters<typeof getMockRequestHandlerExtra>[0] = {},
+): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(
     new WebMcpServer(),
     params.productVersion ?? testProductVersionWithSvg,
@@ -422,6 +456,6 @@ async function getToolResult(params: {
       format: params.format,
       viewFilters: params.viewFilters,
     },
-    getMockRequestHandlerExtra(),
+    getMockRequestHandlerExtra(extraOverrides),
   );
 }

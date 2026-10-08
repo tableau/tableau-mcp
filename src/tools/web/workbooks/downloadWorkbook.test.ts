@@ -6,7 +6,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getDownloadWorkbookTool } from './downloadWorkbook.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -170,10 +170,33 @@ describe('downloadWorkbookTool', () => {
         contentType: 'application/xml',
         bucket: 'tableau-data',
         key: expect.stringMatching(
-          /^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/,
+          new RegExp(
+            `^${MOCK_SITE_LUID}/${MOCK_USER_LUID}/workbook-files/96a43833-27db-40b6-aa80-751efc776b9a/.+\\.twb$`,
+          ),
         ),
       }),
     );
+  });
+
+  it('fails closed without uploading or writing a temp file when the session has no site LUID', async () => {
+    vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: Buffer.from('<workbook/>', 'utf-8'),
+      contentType: 'application/xml',
+      filename: 'Superstore.twb',
+    });
+
+    const result = await getToolResult(
+      { workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' },
+      { _siteLuid: '' },
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Unable to determine the signed-in Tableau site and user',
+    );
+    expect(mocks.mockUploadBufferToS3).not.toHaveBeenCalled();
   });
 
   it('should fall back to temp path and log warning when S3 upload fails', async () => {
@@ -253,10 +276,13 @@ describe('downloadWorkbookTool', () => {
   });
 });
 
-async function getToolResult(params: {
-  workbookId: string;
-  includeExtract?: boolean;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  params: {
+    workbookId: string;
+    includeExtract?: boolean;
+  },
+  extraOverrides: Parameters<typeof getMockRequestHandlerExtra>[0] = {},
+): Promise<CallToolResult> {
   const downloadWorkbookTool = getDownloadWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(downloadWorkbookTool.callback);
   return await callback(
@@ -264,6 +290,6 @@ async function getToolResult(params: {
       workbookId: params.workbookId,
       includeExtract: params.includeExtract,
     },
-    getMockRequestHandlerExtra(),
+    getMockRequestHandlerExtra(extraOverrides),
   );
 }

@@ -7,7 +7,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
 
@@ -340,12 +340,12 @@ describe('getViewDataTool', () => {
         resourceId: mockView.id,
         config: expect.objectContaining({
           bucket: 'tableau-data',
-          keyPrefix: 'view-data/',
+          keyPrefix: `${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-data/`,
         }),
       });
     });
 
-    it('prefixes the S3 key with the base prefix followed by the view-data segment', async () => {
+    it('prefixes the S3 key with the base prefix, then the site and user LUIDs, then the view-data segment', async () => {
       vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
       vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
       mocks.mockUploadCsvToS3.mockResolvedValue('https://s3.example.com/signed-url');
@@ -355,9 +355,20 @@ describe('getViewDataTool', () => {
       expect(mocks.mockUploadCsvToS3).toHaveBeenCalledWith(
         mockViewData,
         expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/view-data/' }),
+          config: expect.objectContaining({
+            keyPrefix: `tableau/${MOCK_SITE_LUID}/${MOCK_USER_LUID}/view-data/`,
+          }),
         }),
       );
+    });
+
+    it('fails closed without uploading when the session site LUID is not a valid LUID', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-data');
+
+      const result = await getToolResult({ viewId: mockView.id }, { _siteLuid: '../other-site' });
+
+      expect(result.isError).toBe(true);
+      expect(mocks.mockUploadCsvToS3).not.toHaveBeenCalled();
     });
 
     it('should return inline CSV when MCP_S3_BUCKET is not configured', async () => {
@@ -400,16 +411,19 @@ describe('getViewDataTool', () => {
   });
 });
 
-async function getToolResult({
-  viewId,
-  viewFilters,
-}: {
-  viewId: string;
-  viewFilters?: Record<string, string>;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  {
+    viewId,
+    viewFilters,
+  }: {
+    viewId: string;
+    viewFilters?: Record<string, string>;
+  },
+  extraOverrides: Parameters<typeof getMockRequestHandlerExtra>[0] = {},
+): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra(extraOverrides));
 }
 
 function parseJsonContent(result: CallToolResult): any {

@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -74,15 +73,14 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
           // Offload to S3 (returning a presigned URL) when configured, otherwise
           // carry the raw CSV for an inline text result. Falls back to inline on
           // any S3 failure.
-          return new Ok(
-            await buildDataToolResult({
-              csv,
-              resourceId: customViewId,
-              config: extra.config,
-              toolName: getCustomViewDataTool.name,
-              keyPrefixSegment: 'custom-view-data/',
-            }),
-          );
+          return await buildDataToolResult({
+            csv,
+            resourceId: customViewId,
+            config: extra.config,
+            toolName: getCustomViewDataTool.name,
+            keyPrefixSegment: 'custom-view-data/',
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (dataToolResult) => {
           return {

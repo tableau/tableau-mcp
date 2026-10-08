@@ -592,6 +592,8 @@ describe('scopes', () => {
         'tableau:file_uploads:create',
         'tableau:projects:read',
       ]);
+      // request-workbook-upload signs in identically so both resolve the same tenant identity.
+      expect(getRequiredApiScopesForTool('request-workbook-upload')).toEqual(scopes);
     });
 
     it('should require workbooks update plus resource access scopes for move-workbook', () => {
