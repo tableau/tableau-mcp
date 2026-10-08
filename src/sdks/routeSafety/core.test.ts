@@ -4,6 +4,7 @@ import {
   assertNoTraversal,
   assertSafePathSegment,
   buildRestPath,
+  fullyDecode,
   luidSchema,
   pathParamGuardPlugin,
   RouteSafetyError,
@@ -29,6 +30,11 @@ const attacks: Array<[string, string]> = [
   ['malformed encoding', '%zz'],
   ['empty', ''],
   ['report payload', '../workbooks/W1/content?includeExtract=true&x='],
+  ['semicolon (Tomcat path param)', 'a;b'],
+  ['tomcat dot-dot-semicolon', '..;'],
+  ['encoded tomcat dot-dot-semicolon', '%2e%2e%3bx'],
+  ['double-encoded slash behind a literal percent', '%252e%252e%25%252f'],
+  ['encoded dot next to invalid UTF-8', '%25e2%252e%252e%252f'],
 ];
 
 describe('routeSafety', () => {
@@ -42,12 +48,39 @@ describe('routeSafety', () => {
       expect(() => assertSafePathSegment('p', {})).toThrow(RouteSafetyError);
     });
 
-    it.each([LUID, 'exp', 'definitions%3AbatchGet', 'a%3Ab', 'field%3AProfit%20Ratio', 'my-site'])(
-      'accepts %s',
-      (v) => {
-        expect(assertSafePathSegment('p', v)).toBe(v);
-      },
-    );
+    it.each([
+      LUID,
+      'exp',
+      'definitions%3AbatchGet',
+      'a%3Ab',
+      'field%3AProfit%20Ratio',
+      'my-site',
+      // A literal `%` in the decoded value (sent as `%25`) must not be a false positive.
+      'field%3AProfit%20%25',
+      '100%25',
+      // Double-encoded but harmless: decodes to `a%41` then `aA`, stable after two passes.
+      'a%2541',
+    ])('accepts %s', (v) => {
+      expect(assertSafePathSegment('p', v)).toBe(v);
+    });
+  });
+
+  describe('fullyDecode', () => {
+    it('decodes at most twice', () => {
+      expect(fullyDecode('%252e')).toBe('.');
+    });
+
+    it('keeps a literal % that is no longer decodable instead of throwing', () => {
+      expect(fullyDecode('field%3AProfit%20%25')).toBe('field:Profit %');
+    });
+
+    it('rejects a value that is still changing after two passes', () => {
+      expect(() => fullyDecode('%25252e')).toThrow('Excessive percent-encoding');
+    });
+
+    it('rejects malformed encoding in the raw (on-the-wire) value', () => {
+      expect(() => fullyDecode('%zz')).toThrow('Malformed percent-encoding');
+    });
   });
 
   describe('assertNoTraversal', () => {
@@ -58,6 +91,9 @@ describe('routeSafety', () => {
       '/sites/S/views/..\\x',
       '/sites/S/views/%252e%252e/x',
       '/sites/S/views/%zz/x',
+      '/sites/S/views/..;/workbooks',
+      '/sites/S/views/..;jsessionid=x/workbooks',
+      '/sites/S/views/%2e%2e%3b/workbooks',
     ])('rejects %s', (url) => {
       expect(() => assertNoTraversal(url)).toThrow(RouteSafetyError);
     });
@@ -66,6 +102,7 @@ describe('routeSafety', () => {
       `/sites/S/views/${LUID}/image?x=../y`,
       '/sites/S/pulse/definitions%3AbatchGet',
       '/sites/S/files/a.b',
+      '/sites/S/knowledge/nodes/field%3AProfit%20%25',
     ])('accepts %s', (url) => {
       expect(() => assertNoTraversal(url)).not.toThrow();
     });
@@ -78,7 +115,24 @@ describe('routeSafety', () => {
       );
     });
 
-    it.each(attacks)('rejects %s', (_n, payload) => {
+    it('encodes decoded segments exactly once', () => {
+      expect(buildRestPath('sites', 's1', 'pulse', 'definitions:batchGet', 'Profit %')).toBe(
+        '/sites/s1/pulse/definitions%3AbatchGet/Profit%20%25',
+      );
+    });
+
+    it('rejects pre-encoded segments instead of double-encoding them', () => {
+      expect(() => buildRestPath('sites', 's1', 'definitions%3AbatchGet')).toThrow(
+        'expects decoded path segments',
+      );
+    });
+
+    it('treats a non-escape % as a literal and encodes it', () => {
+      expect(buildRestPath('sites', 's1', '%zz')).toBe('/sites/s1/%25zz');
+    });
+
+    // `%zz` is not an escape, so under the decoded-segment contract it is a harmless literal.
+    it.each(attacks.filter(([, p]) => p !== '%zz'))('rejects %s', (_n, payload) => {
       expect(() => buildRestPath('sites', 's1', payload)).toThrow(RouteSafetyError);
     });
   });

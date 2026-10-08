@@ -1,8 +1,13 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  McpToolError,
+  ZodiosValidationError,
+} from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
+import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
@@ -240,6 +245,26 @@ export class WebTool<
       };
       return toolResult;
     } catch (error) {
+      // A route-safety rejection (Zodios path-param plugin or axios traversal interceptor) means an
+      // unsafe ID reached the SDK layer: surface it to the client as an args-validation error, not
+      // an unknown 500, and log it at warning level as a security signal. The message names the
+      // parameter but never echoes the payload.
+      if (error instanceof RouteSafetyError) {
+        const argsError = new ArgsValidationError(error.message);
+        errorCode = getHttpStatus(argsError);
+        log(
+          {
+            message: `Tool ${this.name} rejected an unsafe REST route: ${error.message}`,
+            level: 'warning',
+            logger: 'tool',
+            tool_name: this.name,
+            request_id: requestId.toString(),
+          },
+          extra,
+        );
+        toolResult = { isError: true, content: [{ type: 'text', text: argsError.getErrorText() }] };
+        return toolResult;
+      }
       if (error instanceof Error) {
         errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
       }

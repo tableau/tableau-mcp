@@ -12,6 +12,11 @@ import { assertSafePathSegment } from './core.js';
  * - `luid`: Tableau LUID (UUID). Validated on the raw value; never decoded first.
  * - `segment`: any value that is a single safe path segment (for non-LUID IDs such as knowledge
  *   node IDs or Pulse `definitions:batchGet`-style values).
+ *
+ * Why `:siteId` is declared as `segment`, not `luid`: the site ID is never agent input. It is
+ * server-supplied, taken from the sign-in / session response, and is a LUID in practice. `segment`
+ * still blocks traversal if that value were ever malformed, without making a working session fail
+ * on an unexpected-but-harmless site ID format. Agent-supplied IDs must use `luid`.
  */
 export type IdKind = 'luid' | 'segment';
 

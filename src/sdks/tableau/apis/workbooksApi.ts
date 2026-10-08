@@ -93,6 +93,7 @@ const queryWorkbookPermissionsEndpoint = makeEndpoint({
   path: '/sites/:siteId/workbooks/:workbookId/permissions',
   alias: 'queryWorkbookPermissions',
   description: 'Returns the permissions (grantee capabilities) for the specified workbook.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: workbookPermissionsSchema,
 });
 

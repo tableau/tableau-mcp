@@ -245,7 +245,7 @@ describe('WorkbooksMethods', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
 
       const [url, body, config] = mockPost.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/workbooks');
+      expect(url).toBe('/sites/site-1/workbooks');
       expect(Buffer.isBuffer(body)).toBe(true);
       expect(body.toString('utf-8')).toContain(
         '<tsRequest><workbook name="My Workbook"><project id="project-1"/></workbook></tsRequest>',
@@ -496,7 +496,7 @@ describe('WorkbooksMethods', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
 
       const [url, body, config] = mockPost.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/workbooks/validateWorkbookAndUpload');
+      expect(url).toBe('/sites/site-1/workbooks/validateWorkbookAndUpload');
       expect(Buffer.isBuffer(body)).toBe(true);
       expect(body.toString('utf-8')).toContain('<workbook />');
       expect(body.toString('latin1')).toContain(

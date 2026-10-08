@@ -34,6 +34,24 @@ export default [
     },
   },
   {
+    // REST route safety: raw axios calls in the Tableau SDK bypass Zodios path-param validation,
+    // so their URLs must be built with `buildRestPath(...)` (validated, individually encoded
+    // segments), never with string interpolation or concatenation.
+    files: ['src/sdks/tableau/methods/**/*.ts'],
+    ignores: ['src/sdks/tableau/methods/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.property.name='axios'][callee.property.name=/^(get|post|put|patch|delete|head|options|request)$/] > :matches(TemplateLiteral, BinaryExpression).arguments:first-child",
+          message:
+            'Build raw axios URLs with buildRestPath(...) from src/sdks/routeSafety, not string interpolation (route-traversal guard).',
+        },
+      ],
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',

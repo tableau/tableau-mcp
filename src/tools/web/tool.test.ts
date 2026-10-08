@@ -11,6 +11,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import * as loggerModule from '../../logging/logger.js';
 import { notifier } from '../../logging/notification.js';
+import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
@@ -168,6 +169,45 @@ describe('Tool', () => {
         data: expect.objectContaining({ message: errorMessage }),
       }),
       mockExtra,
+    );
+
+    logSpy.mockRestore();
+  });
+
+  it('should map a thrown RouteSafetyError to an args-validation error and log a warning', async () => {
+    const tool = new WebTool(mockParams);
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+
+    const result = await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test' },
+      callback: () => {
+        throw new RouteSafetyError("Path parameter 'viewId' is not a valid route segment");
+      },
+      constrainSuccessResult: (result) => ({ type: 'success', result }),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe("Path parameter 'viewId' is not a valid route segment");
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        logger: 'tool',
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      }),
+      mockExtra,
+    );
+    // A route-safety rejection is not an unexpected failure: no error-level log.
+    expect(logSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'error' }),
+      expect.anything(),
+    );
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({ success: false, error_code: '400' }),
     );
 
     logSpy.mockRestore();

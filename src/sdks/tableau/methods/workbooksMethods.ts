@@ -304,7 +304,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     ]);
 
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks`,
+      buildRestPath('sites', siteId, 'workbooks'),
       body,
       {
         params: {
@@ -354,7 +354,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
 
     try {
       const response = await this._apiClient.axios.post(
-        `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
+        buildRestPath('sites', siteId, 'workbooks', 'validateWorkbookAndUpload'),
         body,
         {
           headers: {

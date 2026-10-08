@@ -40,7 +40,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
    */
   initiateFileUpload = async ({ siteId }: { siteId: string }): Promise<FileUpload> => {
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/fileUploads`,
+      buildRestPath('sites', siteId, 'fileUploads'),
       undefined,
       {
         headers: {
