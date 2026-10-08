@@ -159,18 +159,18 @@ The tool returns one of two result shapes:
 
 When the `data-apps` feature flag is enabled, a successful project publish also returns
 `permissions`: the workbook's configured user/group permission rules, and `permissionsMessage`: the
-selected user-facing base response. The same fields appear in `structuredContent` and the JSON text
-content. Personal Space publishes skip this read and omit these fields. If the optional read fails,
+selected workbook base response followed by the conditional PDS reminder. The same fields appear
+in `structuredContent` and the JSON text content. Personal Space publishes skip this read and omit these fields. If the optional read fails,
 publishing still succeeds;
 `permissionsNote` explains that the rules could not be retrieved, and `permissionsMessage` contains
 the permissions-unavailable response. When the flag is disabled, all three permission fields and
 the data-app access guidance are omitted; ordinary project publishing remains available.
 See [Feature Flags](../../developers/feature-flags.md).
 
-With `data-apps` enabled, the tool selects exactly one base response and returns it as
-`permissionsMessage`. Show the **publish confirmation and link**, relay that message, then append
-**the applicable PDS reminder** using existing context. The agent does not need to select or compose
-the base response. If `permissionsMessage` is absent, omit the access summary and PDS reminder.
+With `data-apps` enabled, the tool selects exactly one base response and always appends the
+conditional PDS reminder inside `permissionsMessage`. Show the **publish confirmation and link**,
+then relay the complete message. Do not append another PDS reminder. If `permissionsMessage` is
+absent, omit the access summary.
 
 The publish result does not identify whether the workbook contains a data app, so there is no
 separate response branch for regular workbooks. Requirements use Tableau UI labels and order:
@@ -185,8 +185,8 @@ separate response branch for regular workbooks. Requirements use Tableau UI labe
 AI Access is a separate capability and does not replace API Access for the data app. Avoid
 listing raw grantee IDs, every permission rule, or unrelated capabilities.
 
-The tool selects `permissionsMessage` from the existing results in this order. The final PDS
-reminder is still appended by the agent, because parent-source context is not a publish-tool input:
+The tool selects the workbook base response from the existing results, then always appends the
+conditional PDS reminder. It does not determine whether a published parent is used:
 
 ```mermaid
 flowchart TD
@@ -203,12 +203,9 @@ flowchart TD
     F -->|No| G{"All three required capabilities<br/>explicitly Allow in every rule?"}
     G -->|Yes| R2["Base 2: Workbook grants present"]
     G -->|"No: Denied, Unspecified, or missing"| R1
-    R1 --> P{"Published parent context?"}
+    R1 --> P["Append conditional PDS reminder inside permissionsMessage"]
     R2 --> P
     R3 --> P
-    P -->|"Known PDS"| K["Append fixed PDS reminder"]
-    P -->|"Known no PDS"| N["Append nothing"]
-    P -->|Unknown| U["Append conditional PDS reminder"]
 ```
 
 Denied and Unspecified/missing use the **same conservative warning**, while retaining their
@@ -235,24 +232,22 @@ grantee rules routes to Base 1.
 > **View, Full Data Query, and API Access** on **{workbook}**.
 
 The tool substitutes the returned workbook name in Bases 1 and 3. Relay `permissionsMessage`
-after the successful publish confirmation and link. For example, Base 2 is returned as:
+after the successful publish confirmation and link. For example, Base 2 plus the reminder is
+returned as:
 
 ```json
 {
-  "permissionsMessage": "The returned rules grant the workbook permissions required for viewing data apps."
+  "permissionsMessage": "The returned rules grant the workbook permissions required for viewing data apps. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source."
 }
 ```
 
-For beta, append the PDS reminder using existing context only:
+For beta, the tool always appends this conditional reminder to all three base responses:
 
-| Published parent context | Append after any base response |
-| --- | --- |
-| Known PDS | "For data apps, viewers also need **API Access** on the published data source **{source}**." Use "the published parent data source" if its name is unknown. |
-| Known no PDS | Nothing additional. |
-| Unknown | "If this workbook contains a data app backed by a published data source, viewers also need **API Access** on that source." |
+> If this workbook contains a data app backed by a published data source, viewers also need
+> **API Access** on that source.
 
-Parent context changes only the appended reminder, not the selected workbook base response.
-This fixed requirement needs no parent data source permission lookup or evaluation and does
+There is no PDS-context input or known/unknown parent branch. Publishing does not establish parent
+source usage. The reminder needs no parent data source lookup or permission evaluation and does
 not report a verified grant or denial on the source.
 
 These summaries describe configured defaults, not each viewer's effective access. Do not promise

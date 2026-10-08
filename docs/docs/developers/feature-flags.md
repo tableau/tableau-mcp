@@ -42,7 +42,8 @@ The server also omits `tableau:permissions:read` from OAuth discovery. When enab
 read uses a separate REST session with that scope, so a permissions or
 authentication failure still returns the published workbook with a `permissionsNote`. Personal Space
 publishes always skip this read and omit the permission fields. When enabled for a project publish,
-`permissionsMessage` contains the selected base response, including when the read fails.
+`permissionsMessage` contains the selected workbook base response and the conditional PDS
+API Access reminder, including when the read fails.
 
 When OAuth API scope enforcement is enabled, the caller must already hold
 `tableau:permissions:read`; a missing grant skips disclosure and returns `permissionsNote`.

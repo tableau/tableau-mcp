@@ -943,8 +943,8 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toEqual(rules);
         expect(response.permissionsMessage).toBe(
           grants
-            ? 'The returned rules grant the workbook permissions required for viewing data apps.'
-            : `If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on ${publishedName}.`,
+            ? 'The returned rules grant the workbook permissions required for viewing data apps. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.'
+            : `If this workbook contains a data app, some users with access to this project may not be able to view it by default. In Tableau, make sure intended data-app viewers have View, Full Data Query, and API Access on ${publishedName}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
         );
         expect(mocks.mockQueryWorkbookPermissions).toHaveBeenCalledOnce();
       },
@@ -1032,7 +1032,7 @@ describe('publishWorkbookTool', () => {
         expect(response.permissions).toBeUndefined();
         expect(response.permissionsNote).toContain('could not be retrieved');
         expect(response.permissionsMessage).toBe(
-          `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}.`,
+          `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
         );
       }
     },
@@ -1094,7 +1094,7 @@ describe('publishWorkbookTool', () => {
     expect(response.permissions).toBeUndefined();
     expect(response.permissionsNote).toContain('could not be retrieved');
     expect(response.permissionsMessage).toBe(
-      `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}.`,
+      `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
     );
   });
 
@@ -1129,7 +1129,7 @@ describe('publishWorkbookTool', () => {
       expect(response.permissions).toBeUndefined();
       expect(response.permissionsNote).toContain('could not be retrieved');
       expect(response.permissionsMessage).toBe(
-        `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}.`,
+        `Viewer access was not verified. If this workbook contains a data app, intended viewers need View, Full Data Query, and API Access on ${mockWorkbook.name}. If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`,
       );
       expect(mocks.mockPublishWorkbook).toHaveBeenCalledOnce();
       expect(mocks.mockQueryWorkbookPermissions).not.toHaveBeenCalled();

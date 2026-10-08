@@ -100,7 +100,7 @@ export type PublishWorkbookResult =
       // Absent for Personal Space, disabled permissions disclosure, or a failed permissions read.
       permissions?: GranteeCapability[];
       permissionsNote?: string;
-      // Selected base response for data-app access guidance after a project publish.
+      // Complete data-app access guidance: workbook base response plus conditional PDS reminder.
       permissionsMessage?: string;
     }
   | {
@@ -134,8 +134,7 @@ export const getPublishWorkbookTool = (
           'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
         ...(dataAppsEnabled
           ? [
-              'After a successful publish, show the confirmation and link, then relay permissionsMessage when present. The tool selects this base response from the returned workbook rules; do not reclassify those rules or substitute a different base response. If permissionsMessage is absent, omit the access summary and PDS reminder. The publish result does not identify whether the workbook contains a data app. These messages describe configured rules, not effective access for every viewer. Use only existing results and task context; do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
-              'After relaying permissionsMessage, append the beta PDS reminder using existing context only. Known published parent data source: "For data apps, viewers also need API Access on the published data source {source}." Use the source name if known, otherwise say "the published parent data source". Known no published parent: append nothing. Unknown parent usage: "If this workbook contains a data app backed by a published data source, viewers also need API Access on that source." Parent context changes only this reminder, not the selected workbook base response. No parent data source permission lookup or evaluation is required. Do not claim parent permissions were checked or granted, or use the publisher\'s successful query as proof of other viewers\' access.',
+              'After a successful publish, show the confirmation and link, then relay permissionsMessage when present. It contains the selected workbook base response followed by the conditional beta PDS reminder. Do not reclassify the rules, substitute a different response, or append another PDS reminder. If permissionsMessage is absent, omit the access summary. The tool does not determine whether the workbook contains a data app or uses a published parent data source. These messages describe configured workbook rules and source requirements, not verified effective access for viewers or a verified grant on the parent source. Do not perform additional permission checks or enumerate raw grantee IDs and unrelated capabilities.',
             ]
           : []),
       ].join('\n\n');
@@ -359,8 +358,17 @@ export const getPublishWorkbookTool = (
   return tool;
 };
 
-// Summarize configured rules only; this does not calculate any user's effective access.
+// Publishing does not establish parent-source usage, so always include the conditional reminder.
 function getWorkbookPermissionsMessage(
+  workbookName: string,
+  permissions: GranteeCapability[] | undefined,
+): string {
+  const baseMessage = getWorkbookBasePermissionsMessage(workbookName, permissions);
+  return `${baseMessage} If this workbook contains a data app backed by a published data source, viewers also need API Access on that source.`;
+}
+
+// Summarize configured rules only; this does not calculate any user's effective access.
+function getWorkbookBasePermissionsMessage(
   workbookName: string,
   permissions: GranteeCapability[] | undefined,
 ): string {
