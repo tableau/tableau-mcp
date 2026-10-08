@@ -112,6 +112,17 @@ export class FlowNotAllowedError extends McpToolError {
   }
 }
 
+/** The flow-document endpoint requires Tableau Server 2026.3 or later. */
+export class FlowDocumentVersionUnsupportedError extends McpToolError {
+  constructor(serverVersion: string) {
+    super({
+      type: 'flow-document-version-unsupported',
+      message: `describe-flow requires Tableau Server 2026.3 or later. The connected server is version ${serverVersion}. Upgrade Tableau Server to read flow designs; use get-flow for flow metadata in the meantime.`,
+      statusCode: 501,
+    });
+  }
+}
+
 /**
  * The experimental flow-document REST API is not enabled on this server.
  *

@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { FlowDocumentForbiddenError } from '../../../../errors/mcpToolError.js';
+import { ProductVersion } from '../../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -9,6 +10,15 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockFlow, mockOutputSteps } from '../getFlow/mockFlow.js';
 import { getDescribeFlowTool } from './describeFlow.js';
 import { mockFlowDocument } from './mockFlowDocument.js';
+
+const supportedProductVersion = {
+  value: '2026.3.0',
+  build: '20263.26.0601.0001',
+} satisfies ProductVersion;
+const unsupportedProductVersion = {
+  value: '2026.2.0',
+  build: '20262.26.0301.0001',
+} satisfies ProductVersion;
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowDocument: vi.fn(),
@@ -86,15 +96,17 @@ describe('describeFlowTool', () => {
   });
 
   it('creates a tool instance with the correct properties', () => {
-    const tool = getDescribeFlowTool(new WebMcpServer());
+    const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
     expect(tool.name).toBe('describe-flow');
     expect(tool.minRequiredRole).toBe(SiteRole.EXPLORER);
     expect(tool.description).toContain('underlying document');
+    expect(tool.description).toContain('Tableau Server 2026.3 or later');
+    expect(tool.description).toContain('features.getFlowDocumentRestApi');
     expect(tool.paramsSchema).toMatchObject({ flowId: expect.any(Object) });
   });
 
   it('is enabled when flow tools are turned on', async () => {
-    const tool = getDescribeFlowTool(new WebMcpServer());
+    const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
@@ -104,13 +116,13 @@ describe('describeFlowTool', () => {
       flowToolsEnabled: false,
     } as ReturnType<typeof getConfig>);
 
-    const tool = getDescribeFlowTool(new WebMcpServer());
+    const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
   it('is disabled when the flow-tools feature flag is OFF', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getDescribeFlowTool(new WebMcpServer());
+    const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
     expect(await Provider.from(tool.disabled)).toBe(true);
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
   });
@@ -179,6 +191,22 @@ describe('describeFlowTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('experimental flow-document API is not enabled');
+    expect(result.content[0].text).toContain('features.getFlowDocumentRestApi');
+    expect(result.content[0].text).toContain('tsm pending-changes apply');
+  });
+
+  it('reports the minimum Tableau version before calling the experimental endpoint', async () => {
+    const result = await getToolResult({
+      flowId: mockFlow.id,
+      productVersion: unsupportedProductVersion,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau Server 2026.3 or later');
+    expect(result.content[0].text).toContain('connected server is version 2026.2.0');
+    expect(result.content[0].text).toContain('use get-flow for flow metadata');
+    expect(mocks.mockGetFlowDocument).not.toHaveBeenCalled();
+    expect(mocks.mockIsFlowAllowed).not.toHaveBeenCalled();
   });
 
   it('recognizes the disabled code from Tableau response headers', async () => {
@@ -278,8 +306,12 @@ describe('describeFlowTool', () => {
 async function getToolResult(params: {
   flowId: string;
   includeFieldSchemas?: boolean;
+  productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
-  const tool = getDescribeFlowTool(new WebMcpServer());
+  const tool = getDescribeFlowTool(
+    new WebMcpServer(),
+    params.productVersion ?? supportedProductVersion,
+  );
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

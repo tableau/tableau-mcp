@@ -10,7 +10,7 @@ const getFlowDocumentEndpoint = makeEndpoint({
   path: '/sites/:siteId/flows/:flowId/document',
   alias: 'getFlowDocument',
   description:
-    "Returns the specified flow's document as sanitized JSON. Experimental API (api/exp) that must be enabled server-side; requires the tableau:flows:download scope.",
+    "Returns the specified flow's document as sanitized JSON. Requires Tableau Server 2026.3+, the server feature flag `features.getFlowDocumentRestApi`, and the `tableau:flows:download` scope.",
   response: flowDocumentSchema,
 });
 

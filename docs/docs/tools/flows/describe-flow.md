@@ -26,11 +26,26 @@ or "walk me through this flow".
   — used to enrich the summary with the flow's identity (name, owner, project, tags, parameters).
   Best-effort: if it fails, the structural summary is still returned with a note.
 
+## Requirements
+
+This feature requires **Tableau Server 2026.3 or later** and the server feature flag
+`features.getFlowDocumentRestApi` enabled. On an older server, use [Get Flow](get-flow.md) for
+metadata or upgrade Tableau Server.
+
+The flow-document endpoint lives under `/api/exp` and is experimental. A server administrator can
+enable the feature flag with TSM:
+
+```bash
+tsm configuration set -k features.getFlowDocumentRestApi -v true --force-keys
+tsm pending-changes apply
+```
+
+Applying pending changes may restart Tableau Server.
+
 :::warning Experimental API
 
-The flow-document endpoint lives under `/api/exp` and must be enabled server-side. If it is not
-enabled, this tool returns a clear "experimental flow-document API is not enabled" error — fall
-back to [Get Flow](get-flow.md) for metadata.
+Because this API is experimental, its availability and response format may change between Tableau
+Server releases.
 
 :::
 
@@ -135,8 +150,11 @@ may genuinely be empty, or the experimental document format may have changed.
 ## Errors
 
 - **Experimental API not enabled** (HTTP 403, Tableau error code `403201`): the experimental
-  flow-document API is not enabled on this server. Use [Get Flow](get-flow.md) for metadata
-  instead.
+  flow-document API is disabled. Confirm the server is Tableau Server 2026.3 or later and that
+  `features.getFlowDocumentRestApi` is enabled and its pending TSM changes have been applied. Use
+  [Get Flow](get-flow.md) for metadata instead.
+- **Unsupported server version**: `describe-flow` requires Tableau Server 2026.3 or later. Upgrade
+  Tableau Server; [Get Flow](get-flow.md) remains available for metadata.
 - **Not authorized to download** (HTTP 403, any other code): the caller lacks permission to download
   this flow (the same permission as downloading its `.tfl`/`.tflx` file in Tableau), or the token
   lacks the `tableau:flows:download` scope. This is reported separately from the not-enabled case
@@ -148,8 +166,8 @@ may genuinely be empty, or the experimental document format may have changed.
 
 ## Limitations
 
-- Relies on an experimental Tableau REST API that may change or be unavailable depending on the
-  server version and configuration.
+- Relies on an experimental Tableau REST API that may change. It requires Tableau Server 2026.3 or
+  later and the `features.getFlowDocumentRestApi` server flag to be enabled.
 - The summary is derived from the flow document's structure. Highly customized or future node types
   that the summarizer does not recognize are still listed, with a humanized label derived from their
   raw type, but without a curated friendly role.
