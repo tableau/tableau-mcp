@@ -151,8 +151,7 @@ even though querying the data source itself does not.
 
 If that request is denied due to missing permissions on the project, the server falls back to the
 [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html), which is only
-available on Tableau Enterprise.
-
-The fall back to the Metadata API will fail if either Metadata API is not available or if
-[`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is set, in which case
-users will need **View** permission on the datasources' parent project.
+available on Tableau Enterprise and Tableau Plus and if
+[`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is not set. Therefore,
+if you are using project or tag based tool scoping, we recommend that your users have view access on
+the projects where they have view access to the content in those projects.
