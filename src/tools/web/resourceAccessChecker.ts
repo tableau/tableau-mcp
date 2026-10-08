@@ -15,6 +15,7 @@ import {
 } from '../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
+import { MAX_PAGE_SIZE, paginate } from '../../utils/paginate.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
@@ -278,17 +279,24 @@ class ResourceAccessChecker {
       }
 
       try {
-        const { datasources } = await useRestApi({
+        return await useRestApi({
           ...extra,
           jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
           callback: async (restApi) =>
-            await restApi.datasourcesMethods.listDatasources({
-              siteId: restApi.siteId,
-              filter: `name:eq:${name}`,
-              pageSize: 1000,
+            await paginate({
+              pageConfig: { pageSize: MAX_PAGE_SIZE },
+              getDataFn: async (pageConfig) => {
+                const { pagination, datasources } =
+                  await restApi.datasourcesMethods.listDatasources({
+                    siteId: restApi.siteId,
+                    filter: `name:eq:${name}`,
+                    pageSize: pageConfig.pageSize,
+                    pageNumber: pageConfig.pageNumber,
+                  });
+                return { pagination, data: datasources };
+              },
             }),
         });
-        return datasources;
       } catch (error) {
         log(
           {

@@ -224,6 +224,13 @@ describe('ResourceAccessChecker', () => {
         };
       }
 
+      function listResponse(
+        datasources: Array<typeof mockDatasource>,
+        { pageNumber = 1, totalAvailable = datasources.length } = {},
+      ): unknown {
+        return { pagination: { pageNumber, pageSize: 1000, totalAvailable }, datasources };
+      }
+
       function createChecker({
         projectIds = null,
         tags = null,
@@ -264,10 +271,9 @@ describe('ResourceAccessChecker', () => {
             { luid: mockDatasource.id, name: mockDatasource.name, tags: [allowedTag] },
           ]),
         );
-        mocks.mockListDatasources.mockResolvedValue({
-          pagination: mockDatasources.pagination,
-          datasources: [sameNameDatasource, mockDatasource],
-        });
+        mocks.mockListDatasources.mockResolvedValue(
+          listResponse([sameNameDatasource, mockDatasource]),
+        );
       });
 
       it('should read the tags from the Metadata API and allow it when it has an allowed tag', async () => {
@@ -350,6 +356,25 @@ describe('ResourceAccessChecker', () => {
         ).toEqual({ allowed: true, content: mockDatasource });
       });
 
+      it('should page through the datasources with the same name until it finds the LUID', async () => {
+        mocks.mockListDatasources
+          .mockResolvedValueOnce(listResponse([sameNameDatasource], { totalAvailable: 2 }))
+          .mockResolvedValueOnce(
+            listResponse([mockDatasource], { pageNumber: 2, totalAvailable: 2 }),
+          );
+
+        expect(
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({ allowed: true, content: mockDatasource });
+        expect(mocks.mockListDatasources).toHaveBeenCalledTimes(2);
+        expect(mocks.mockListDatasources).toHaveBeenLastCalledWith(
+          expect.objectContaining({ filter: `name:eq:${mockDatasource.name}`, pageNumber: 2 }),
+        );
+      });
+
       it('should not look up the project when the Metadata API tags are not allowed', async () => {
         expect(
           await createChecker({
@@ -376,10 +401,7 @@ describe('ResourceAccessChecker', () => {
       });
 
       it('should say the project could not be determined when the list finds no datasource with its LUID', async () => {
-        mocks.mockListDatasources.mockResolvedValue({
-          pagination: mockDatasources.pagination,
-          datasources: [sameNameDatasource],
-        });
+        mocks.mockListDatasources.mockResolvedValue(listResponse([sameNameDatasource]));
 
         expect(
           await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
