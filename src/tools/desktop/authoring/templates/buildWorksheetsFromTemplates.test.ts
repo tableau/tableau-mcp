@@ -60,6 +60,26 @@ const SHIPPED_TEMPLATE_NAMES = [
   'gantt-task-rollup-chart',
 ] as const;
 
+const AGGREGATED_WORKBOOK = SUPERSTORE_WORKBOOK.replace(
+  '</datasource>',
+  "<column name='[Total Sales]' datatype='real' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='SUM([Sales])'/></column></datasource>",
+);
+
+const AGGREGATIONS = [
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'cnt',
+  'ctd',
+  'med',
+  'std',
+  'stp',
+  'var',
+  'vrp',
+] as const;
+
 const EXACT_ARGS = {
   session: '12345',
   templateName: 'pulse-bar',
@@ -263,6 +283,120 @@ describe('build-worksheets-from-templates', () => {
     expect(reserved.artifact.worksheetXml).toContain(
       '&lt;[Sample - Superstore].[ctd:Order ID:qk]&gt;',
     );
+  });
+
+  it.each(
+    AGGREGATIONS.flatMap((derivation) =>
+      ['field_base_1', '{{field_base_1}}', '{{field_base_1}}@sum'].map((mappingKey) => ({
+        derivation,
+        mappingKey,
+      })),
+    ),
+  )(
+    'rejects ignored $derivation overrides with mapping key $mappingKey',
+    async ({ derivation, mappingKey }) => {
+      const store = new TemplateArtifactStore({ capacity: 4 });
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ xml: AGGREGATED_WORKBOOK, instanceId: 'inst-build' })),
+      });
+      const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+        store,
+        createId: () => 'artifact-ignored-override',
+      });
+      const result = await callTool(
+        tool,
+        {
+          session: '12345',
+          templateName: 'kpi-text',
+          title: 'Total Sales',
+          datasource: 'Sample - Superstore',
+          fieldMapping: { [mappingKey]: '[Sample - Superstore].[usr:Total Sales:qk]' },
+          derivationOverrides: { field_base_1: derivation },
+        },
+        executor,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toMatch(/already aggregated/i);
+      expect(result.content[0].text).toContain(derivation);
+      expect(store.reserve('artifact-ignored-override', '12345')).toEqual({
+        ok: false,
+        reason: 'unknown',
+      });
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps already aggregated fields usable without an override', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: AGGREGATED_WORKBOOK, instanceId: 'inst-build' })),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-existing-aggregate',
+    });
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Total Sales',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[usr:Total Sales:qk]' },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    const reserved = store.reserve('artifact-existing-aggregate', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping['{{field_base_1}}']).toBe(
+      '[Sample - Superstore].[usr:Total Sales:qk]',
+    );
+    expect(reserved.artifact.worksheetXml).toContain('derivation="User"');
+    expect(reserved.artifact.worksheetXml).toContain('SUM([Sales])');
+  });
+
+  it.each(AGGREGATIONS)('honors a %s override on a row-level numeric field', async (derivation) => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: SUPERSTORE_WORKBOOK, instanceId: 'inst-build' })),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-row-level-override',
+    });
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Sales',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[sum:Sales:qk]' },
+        derivationOverrides: { field_base_1: derivation },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    const reserved = store.reserve('artifact-row-level-override', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping['{{field_base_1}}']).toBe(
+      `[Sample - Superstore].[${derivation}:Sales:qk]`,
+    );
+    expect(reserved.artifact.worksheetXml).toContain(`[${derivation}:Sales:qk]`);
   });
 
   it('builds and applies the shipped insights bar without leaving a direction token', async () => {
@@ -828,7 +962,7 @@ async function callTool(
     title: string;
     datasource: string;
     fieldMapping: Record<string, string>;
-    derivationOverrides?: Record<string, 'cnt' | 'ctd'>;
+    derivationOverrides?: Record<string, (typeof AGGREGATIONS)[number]>;
     topN?: number;
   },
   executor: ExternalApiToolExecutor,
