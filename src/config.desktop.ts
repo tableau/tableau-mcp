@@ -10,7 +10,6 @@ import {
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
 import { parseSessionLuid } from './desktop/session/parseSessionLuid.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
-import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetry/productTelemetry/telemetryForwarder.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
@@ -60,11 +59,11 @@ export class Config extends BaseConfig {
   desktopSessionLuid: string | undefined;
 
   /**
-   * Signed-in Tableau pod name and site and user LUID of the launching Desktop session, forwarded by the agent
-   * from `TABLEAU_POD_NAME` / `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch).
-   * Empty string when the launcher did not provide them.
+   * Signed-in Tableau site and user LUID of the launching Desktop session, forwarded by the agent
+   * from `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch) and sent as
+   * product-telemetry context. Empty string when the launcher did not provide them. The server/pod
+   * is resolved separately from `TABLEAU_POD_NAME` in resolveTelemetryEnv (telemetryForwarder.ts).
    */
-  podName: string;
   siteLuid: string;
   userLuid: string;
 
@@ -75,13 +74,6 @@ export class Config extends BaseConfig {
    * calls with the conversation that drove them. Empty string when the launcher did not provide it.
    */
   chatId: string;
-
-  /**
-   * Product-telemetry endpoint + enable flag for the per-tool-call `tool_call` event.
-   * Enabled by default; set `PRODUCT_TELEMETRY_ENABLED=false` to turn off.
-   */
-  productTelemetryEndpoint: string;
-  productTelemetryEnabled: boolean;
 
   /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
@@ -110,14 +102,11 @@ export class Config extends BaseConfig {
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
-      TABLEAU_POD_NAME: podName,
       TABLEAU_SITE_LUID: siteLuid,
       TABLEAU_USER_LUID: userLuid,
       TABLEAU_CHAT_ID: chatId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
-      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
-      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -135,13 +124,9 @@ export class Config extends BaseConfig {
         ? desktopSessionLuid
         : undefined;
 
-    this.podName = podName || '';
     this.siteLuid = siteLuid || '';
     this.userLuid = userLuid || '';
     this.chatId = chatId || '';
-
-    this.productTelemetryEndpoint = productTelemetryEndpoint || DEFAULT_PRODUCT_TELEMETRY_ENDPOINT;
-    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,

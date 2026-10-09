@@ -129,35 +129,19 @@ describe('DesktopConfig', () => {
     });
   });
 
-  describe('connected pod name and site and user LUID', () => {
+  describe('connected site and user LUID', () => {
     it('should default to empty strings', () => {
       const config = new Config();
-      expect(config.podName).toBe('');
       expect(config.siteLuid).toBe('');
       expect(config.userLuid).toBe('');
     });
 
-    it('should read pod name and site and user LUID from their env vars', () => {
-      vi.stubEnv('TABLEAU_POD_NAME', 'some-pod-name');
+    it('should read site and user LUID from their env vars', () => {
       vi.stubEnv('TABLEAU_SITE_LUID', '11111111-1111-1111-1111-111111111111');
       vi.stubEnv('TABLEAU_USER_LUID', '22222222-2222-2222-2222-222222222222');
       const config = new Config();
-      expect(config.podName).toBe('some-pod-name');
       expect(config.siteLuid).toBe('11111111-1111-1111-1111-111111111111');
       expect(config.userLuid).toBe('22222222-2222-2222-2222-222222222222');
-    });
-  });
-
-  describe('pod name', () => {
-    it('should default to an empty string', () => {
-      const config = new Config();
-      expect(config.podName).toBe('');
-    });
-
-    it('should read the pod name from TABLEAU_POD_NAME', () => {
-      vi.stubEnv('TABLEAU_POD_NAME', 'some-pod-name');
-      const config = new Config();
-      expect(config.podName).toBe('some-pod-name');
     });
   });
 
@@ -171,30 +155,6 @@ describe('DesktopConfig', () => {
       vi.stubEnv('TABLEAU_CHAT_ID', 'chat-abc-123');
       const config = new Config();
       expect(config.chatId).toBe('chat-abc-123');
-    });
-  });
-
-  describe('product telemetry', () => {
-    it('should default to the shared prod endpoint', () => {
-      expect(new Config().productTelemetryEndpoint).toBe(
-        'https://prod.telemetry.tableausoftware.com',
-      );
-    });
-
-    it('should override the endpoint from PRODUCT_TELEMETRY_ENDPOINT', () => {
-      vi.stubEnv('PRODUCT_TELEMETRY_ENDPOINT', 'https://qa.telemetry.tableausoftware.com');
-      expect(new Config().productTelemetryEndpoint).toBe(
-        'https://qa.telemetry.tableausoftware.com',
-      );
-    });
-
-    it('should be enabled by default', () => {
-      expect(new Config().productTelemetryEnabled).toBe(true);
-    });
-
-    it('should be disabled only when PRODUCT_TELEMETRY_ENABLED is exactly "false"', () => {
-      vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', 'false');
-      expect(new Config().productTelemetryEnabled).toBe(false);
     });
   });
 });

@@ -4,6 +4,7 @@ import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
 import { Config } from '../../config.desktop.js';
+import { createCallDeadline } from '../../desktop/callDeadline.js';
 import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
@@ -49,6 +50,7 @@ afterEach(() => {
   sessionRouteState.clear();
   mockTelemetrySend.mockClear();
   mockGetProductTelemetry.mockClear();
+  vi.useRealTimers();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -344,7 +346,6 @@ describe('DesktopTool product telemetry', () => {
       site_luid: '',
       user_luid: '',
       chat_id: '',
-      podname: '',
       success: true,
       error_code: '',
       error_message: '',
@@ -386,37 +387,42 @@ describe('DesktopTool product telemetry', () => {
     );
   });
 
-  it('forwards the Tableau pod name from config as podname', async () => {
-    await makeTool().logAndExecute({
-      extra: extraWithConfig({ podName: 'some-pod-name' }),
+  it('keeps a successful result when the telemetry sink throws synchronously', async () => {
+    const { exportedForTesting } = await vi.importActual<
+      typeof import('../../telemetry/productTelemetry/telemetryForwarder.js')
+    >('../../telemetry/productTelemetry/telemetryForwarder.js');
+    // Route through the real forwarder with an invalid endpoint: `new Request` throws synchronously
+    // inside send(), which runs in logAndExecute's finally. The success result must survive.
+    mockGetProductTelemetry.mockReturnValueOnce(
+      new exportedForTesting.DirectTelemetryForwarder({
+        endpoint: 'not-a-valid-url',
+        enabled: true,
+        pod: '',
+        isHyperforce: false,
+      }),
+    );
+
+    const result = await makeTool().logAndExecute({
+      extra: extraWithConfig({}),
       args: { session: 'S1' },
       callback: async () => new Ok({ ok: true }),
     });
 
-    expect(mockTelemetrySend).toHaveBeenCalledWith(
-      'tool_call',
-      expect.objectContaining({ podname: 'some-pod-name' }),
-    );
+    expect(result.isError).toBe(false);
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true }) }]);
   });
 
-  it('builds the telemetry forwarder with the config pod name as the event pod', async () => {
-    const extra = extraWithConfig({
-      podName: 'some-pod-name',
-      productTelemetryEndpoint: 'https://telemetry.example.com',
-      productTelemetryEnabled: true,
-    });
-
+  it('fetches the shared forwarder without passing any per-config telemetry args', async () => {
+    // The forwarder resolves endpoint/enabled/pod/is_hyperforce from env itself, so the desktop
+    // tool must not thread config into getProductTelemetry (that is what let the first caller's
+    // config leak across the combined build).
     await makeTool().logAndExecute({
-      extra,
+      extra: extraWithConfig({}),
       args: { session: 'S1' },
       callback: async () => new Ok({ ok: true }),
     });
 
-    expect(mockGetProductTelemetry).toHaveBeenCalledWith(
-      'https://telemetry.example.com',
-      true,
-      'some-pod-name',
-    );
+    expect(mockGetProductTelemetry).toHaveBeenCalledWith();
   });
 
   it('sends empty session_id when the Desktop GUID is absent, even if a PID is set', async () => {
@@ -488,6 +494,61 @@ describe('DesktopTool product telemetry', () => {
       },
     });
 
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        success: false,
+        error_code: '',
+        error_message: '',
+      }),
+    );
+  });
+
+  it('classifies an Ok value mapped to isError:true as one unsuccessful tool_call with empty error fields', async () => {
+    await makeTool().logAndExecute({
+      extra: extraWithConfig({ desktopSessionLuid: guid }),
+      args: { session: 'S1' },
+      callback: async () => new Ok({ ok: true }),
+      // A mapped failure: the callback succeeds but getSuccessResult returns an error result. The
+      // error code/type slug stay empty because no McpToolError was ever in play.
+      getSuccessResult: () => ({
+        isError: true,
+        content: [{ type: 'text', text: 'mapped failure' }],
+      }),
+    });
+
+    expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      expect.objectContaining({
+        success: false,
+        error_code: '',
+        error_message: '',
+      }),
+    );
+  });
+
+  it('classifies a deadline expiry as one unsuccessful tool_call with empty error fields', async () => {
+    vi.useFakeTimers();
+    const deadline = createCallDeadline({ budgetMs: 60_000 });
+    const extra = {
+      ...extraWithConfig({ desktopSessionLuid: guid }),
+      signal: deadline.signal,
+      deadline,
+    };
+
+    const pending = makeTool().logAndExecute({
+      extra,
+      args: { session: 'S1' },
+      // A wedged Desktop: the request never settles, so the per-call deadline cuts it. The timeout
+      // is a DesktopCallTimeoutError, not an McpToolError, so the error fields stay empty.
+      callback: () => new Promise(() => undefined),
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await pending;
+    deadline.dispose();
+
+    expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({

@@ -81,11 +81,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
 
     // Mirrors the web path's `tool_call` product-telemetry event (see src/tools/web/tool.ts) so
     // desktop tool calls land in the same pipeline. Emitted once, in the finally below.
-    const productTelemetryForwarder = getProductTelemetry(
-      extra.config.productTelemetryEndpoint,
-      extra.config.productTelemetryEnabled,
-      extra.config.podName,
-    );
+    const productTelemetryForwarder = getProductTelemetry();
     let success = false;
     // errorCode is McpToolError's HTTP statusCode; errorType its stable `type` slug (e.g.
     // 'args-validation'). Both stay empty unless a typed McpToolError is in play. We send only the
@@ -203,7 +199,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         site_luid: extra.config.siteLuid,
         user_luid: extra.config.userLuid,
         chat_id: extra.config.chatId,
-        podname: extra.config.podName,
         success,
         error_code: errorCode,
         // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is

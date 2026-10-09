@@ -47,18 +47,19 @@ describe('getRecordEventTool', () => {
     expect(tool.meta?.ui?.visibility).toEqual(['app']);
   });
 
-  it('sends an tableau_mcp_event event with the event_type, message and server context', async () => {
+  it('sends an tableau_mcp_event event with the event_type, message and site context', async () => {
     const extra = getMockRequestHandlerExtra();
     const result = await getToolResult(extra, { event_type: 'PARSE_ERROR', message: 'bad json' });
 
     expect(result.isError).toBe(false);
+    // podname + is_hyperforce are stamped by the forwarder from env, not passed by the call site.
     expect(sendSpy).toHaveBeenCalledWith(
       'tableau_mcp_event',
       expect.objectContaining({
         event_type: 'PARSE_ERROR',
         message: 'bad json',
-        podname: extra.config.server,
-        is_hyperforce: extra.config.isHyperforce,
+        site_luid: extra.getSiteLuid(),
+        user_luid: extra.getUserLuid(),
       }),
     );
   });

@@ -61,21 +61,13 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
         extra,
         args,
         callback: async () => {
-          const { config } = extra;
-
-          const productTelemetryForwarder = getProductTelemetry(
-            config.productTelemetryEndpoint,
-            config.productTelemetryEnabled,
-            config.server,
-          );
+          const productTelemetryForwarder = getProductTelemetry();
 
           productTelemetryForwarder.send('tableau_mcp_event', {
             event_type: args.event_type,
             message: args.message ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
-            podname: config.server,
-            is_hyperforce: config.isHyperforce,
           });
 
           return Ok({ recorded: true as const });
