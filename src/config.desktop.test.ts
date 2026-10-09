@@ -118,6 +118,11 @@ describe('DesktopConfig', () => {
       expect(new Config().desktopSessionLuid).toBe(guid);
     });
 
+    it('should store the normalized GUID when the value is whitespace-padded', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', `  ${guid}\n`);
+      expect(new Config().desktopSessionLuid).toBe(guid);
+    });
+
     it('should ignore a blank value', () => {
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', '');
       expect(new Config().desktopSessionLuid).toBeUndefined();

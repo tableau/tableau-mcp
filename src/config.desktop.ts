@@ -119,10 +119,9 @@ export class Config extends BaseConfig {
         ? desktopSessionId
         : undefined;
 
-    this.desktopSessionLuid =
-      desktopSessionLuid && parseSessionLuid(desktopSessionLuid) !== undefined
-        ? desktopSessionLuid
-        : undefined;
+    this.desktopSessionLuid = desktopSessionLuid
+      ? parseSessionLuid(desktopSessionLuid)
+      : undefined;
 
     this.siteLuid = siteLuid || '';
     this.userLuid = userLuid || '';
