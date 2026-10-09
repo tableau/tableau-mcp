@@ -16,6 +16,8 @@ export default mergeConfig(
           'src/scripts/**/*',
           'src/sdks/**/*',
           'src/server/**/*',
+          // Static data app template assets (incl. the vendored, minified Extensions API library).
+          'src/templates/**/*',
           ...coverageConfigDefaults.exclude,
         ],
         reporter: ['text', 'cobertura'],
