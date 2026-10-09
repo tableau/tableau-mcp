@@ -64,27 +64,36 @@ class DirectTelemetryForwarder {
       return;
     }
 
-    const event: TableauTelemetryJsonEvent = {
-      type: eventType,
-      host_timestamp: formatHostTimestamp(new Date()),
-      service_name: SERVICE_NAME,
-      pod: this.podName,
-      host_name: getDefaultHostName(),
-      properties,
-    };
+    try {
+      const event: TableauTelemetryJsonEvent = {
+        type: eventType,
+        host_timestamp: formatHostTimestamp(new Date()),
+        service_name: SERVICE_NAME,
+        pod: this.podName,
+        host_name: getDefaultHostName(),
+        properties,
+      };
 
-    const init: RequestInit = {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([event]),
-    };
+      const init: RequestInit = {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([event]),
+      };
 
-    const req = new Request(this.endpoint, init);
-    // Intentionally not awaiting: telemetry should not block execution.
-    sendTelemetryRequest(req);
+      const req = new Request(this.endpoint, init);
+      // Intentionally not awaiting: telemetry should not block execution.
+      sendTelemetryRequest(req);
+    } catch (error) {
+      log({
+        message: 'Failed to send telemetry event',
+        level: 'error',
+        logger: 'telemetry',
+        data: error,
+      });
+    }
   }
 }
 
@@ -120,7 +129,6 @@ const formatHostTimestamp = (d: Date): string => {
   return d.toISOString();
 };
 
-// Singleton access pattern
 let productTelemetryInstance: DirectTelemetryForwarder | null = null;
 
 export function getProductTelemetry(
