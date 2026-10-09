@@ -32,7 +32,6 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
     server,
     name: 'get-custom-view-data',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ customViewId }) => ({ type: 'custom-view', luid: customViewId }),
     description: [
       "Retrieves comma-separated value (CSV) data for a Tableau Custom View (saved/personalized view state), including the user's filters.",
       'Requires the custom view LUID from the content URL (not the published view id).',

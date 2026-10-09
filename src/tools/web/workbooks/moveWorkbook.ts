@@ -33,7 +33,6 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
     server,
     name: 'move-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    activityLogObject: ({ workbookId }) => ({ type: 'workbook', luid: workbookId }),
     description:
       'Moves a workbook into a different project. Use list-projects to discover available project IDs.',
     paramsSchema,

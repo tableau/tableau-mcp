@@ -21,6 +21,9 @@
   "exports": {
     ".": "./build/index.js",
     "./tracing": "./build/telemetry/tracing.js",
+    "./activityLog/provider": {
+      "types": "./build/activityLog/provider.d.ts"
+    },
     "./features/featureGateProvider": {
       "types": "./build/features/featureGateProvider.d.ts"
     },

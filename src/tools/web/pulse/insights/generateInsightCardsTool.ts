@@ -153,9 +153,6 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
     server,
     name: 'generate-insight-cards',
     minRequiredRole: SiteRole.VIEWER,
-    // The string form is a content URL, not a LUID.
-    activityLogObject: ({ datasource }) =>
-      typeof datasource === 'string' ? undefined : { type: 'datasource', luid: datasource.luid },
     registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: 'Generate deterministic insights for a published datasource.',
     // Gated off by default (INSIGHTS_TOOLS_ENABLED) so it's never frontloaded

@@ -87,7 +87,6 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'get-flow',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ flowId }) => ({ type: 'flow', luid: flowId }),
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

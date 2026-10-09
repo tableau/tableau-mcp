@@ -49,7 +49,6 @@ export const getGetCustomViewImageTool = (
     server,
     name: 'get-custom-view-image',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ customViewId }) => ({ type: 'custom-view', luid: customViewId }),
     description: [
       'Retrieves an image of the specified custom view in a published viz.',
       'A custom view is a shortcut to a specific state of interaction, such as filter selections and sorting, for a published viz.',

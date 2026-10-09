@@ -68,7 +68,6 @@ export const getDescribeFlowTool = (server: WebMcpServer): WebTool<typeof params
     server,
     name: 'describe-flow',
     minRequiredRole: SiteRole.EXPLORER,
-    activityLogObject: ({ flowId }) => ({ type: 'flow', luid: flowId }),
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

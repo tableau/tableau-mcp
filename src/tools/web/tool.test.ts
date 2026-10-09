@@ -36,9 +36,9 @@ vi.mock('../../telemetry/init.js', () => ({
   }),
 }));
 
-const mockRecordMcpToolCall = vi.hoisted(() => vi.fn());
-vi.mock('../../activityLog/index.js', () => ({
-  recordMcpToolCall: mockRecordMcpToolCall,
+const mockRecordToolCall = vi.hoisted(() => vi.fn());
+vi.mock('../../activityLog/init.js', () => ({
+  recordToolCall: mockRecordToolCall,
 }));
 
 describe('Tool', () => {
@@ -609,7 +609,7 @@ describe('Tool', () => {
 
   describe('Activity Log', () => {
     beforeEach(() => {
-      mockRecordMcpToolCall.mockClear();
+      mockRecordToolCall.mockClear();
     });
 
     it('should record an mcp_tool_call with the call details on success', async () => {
@@ -629,60 +629,38 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledTimes(1);
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(extra.config, {
+      expect(mockRecordToolCall).toHaveBeenCalledTimes(1);
+      expect(mockRecordToolCall).toHaveBeenCalledWith({
         toolName: 'get-datasource-metadata',
         siteLuid: 'test-site-luid',
         userLuid: 'test-user-luid',
         success: true,
         errorCode: '',
         oauthClientId: 'https://claude.ai/client',
+        clientName: 'Claude',
         userAgent: 'test-agent/1.0',
         mcpRequestId: '2',
         object: undefined,
       });
     });
 
-    it('should record the object the tool declares for the call arguments', async () => {
+    it('should record the object the tool name maps to for the call arguments', async () => {
       const tool = new WebTool({
         ...mockParams,
-        activityLogObject: ({ param1 }) => ({ type: 'datasource', luid: param1 }),
+        paramsSchema: { datasourceLuid: z.string() },
       });
 
       await tool.logAndExecute({
         extra: mockExtra,
-        args: { param1: '11111111-2222-3333-4444-555555555555' },
+        args: { datasourceLuid: '11111111-2222-3333-4444-555555555555' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({
           object: { type: 'datasource', luid: '11111111-2222-3333-4444-555555555555' },
         }),
-      );
-    });
-
-    it('should keep the tool result, and record no object, when activityLogObject throws', async () => {
-      const tool = new WebTool({
-        ...mockParams,
-        activityLogObject: () => {
-          throw new TypeError('bad args');
-        },
-      });
-
-      const result = await tool.logAndExecute({
-        extra: mockExtra,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(result.isError).toBe(false);
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
-        expect.objectContaining({ success: true, object: undefined }),
       );
     });
 
@@ -700,8 +678,7 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({ success: false, errorCode: '403', userAgent: undefined }),
       );
     });
@@ -718,8 +695,7 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({ success: false, errorCode: '500' }),
       );
     });
@@ -734,8 +710,7 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({ success: false, errorCode: '403' }),
       );
     });
@@ -750,8 +725,7 @@ describe('Tool', () => {
         constrainSuccessResult: () => ({ type: 'error', message: 'Not allowed' }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({ success: false, errorCode: '' }),
       );
     });
@@ -773,10 +747,7 @@ describe('Tool', () => {
       });
 
       expect(result.isError).toBe(false);
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        mockExtra.config,
-        expect.objectContaining({ success: true }),
-      );
+      expect(mockRecordToolCall).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
     it('should read the LUIDs after the callback, once sign-in has set them', async () => {
@@ -794,8 +765,7 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockRecordMcpToolCall).toHaveBeenCalledWith(
-        extra.config,
+      expect(mockRecordToolCall).toHaveBeenCalledWith(
         expect.objectContaining({
           siteLuid: 'signed-in-site-luid',
           userLuid: 'signed-in-user-luid',

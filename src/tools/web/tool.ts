@@ -1,7 +1,8 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { ActivityLogObject, recordMcpToolCall } from '../../activityLog/index.js';
+import { recordToolCall } from '../../activityLog/init.js';
+import { getActivityLogObject } from '../../activityLog/objects.js';
 import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
@@ -63,17 +64,6 @@ export type ToolMeta = {
   };
 };
 
-type WebToolArgs<Args extends undefined | ZodRawShapeCompat | AnySchema> = LogAndExecuteParams<
-  unknown,
-  WebMcpServer,
-  TableauWebRequestHandlerExtra,
-  Args
->['args'];
-
-type GetActivityLogObject<Args extends undefined | ZodRawShapeCompat | AnySchema> = (
-  args: WebToolArgs<Args>,
-) => ActivityLogObject | undefined;
-
 export type WebToolParams<Args extends undefined | ZodRawShapeCompat | AnySchema = undefined> =
   ToolParams<
     WebMcpServer,
@@ -92,8 +82,6 @@ export type WebToolParams<Args extends undefined | ZodRawShapeCompat | AnySchema
      */
     minRequiredRole: SiteRole;
     registrationConditions?: ReadonlyArray<RegistrationCondition>;
-    /** The single Tableau object a call acts against, recorded in its Activity Log event. */
-    activityLogObject?: GetActivityLogObject<Args>;
   } & (
       | {
           app?: AppDetails;
@@ -148,7 +136,6 @@ export class WebTool<
   registrationConditions: ReadonlyArray<RegistrationCondition>;
   app?: AppDetails;
   meta?: ToolMeta;
-  activityLogObject?: GetActivityLogObject<Args>;
 
   constructor({
     server,
@@ -162,7 +149,6 @@ export class WebTool<
     registrationConditions,
     app,
     meta,
-    activityLogObject,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
@@ -171,7 +157,6 @@ export class WebTool<
     this.registrationConditions = registrationConditions ?? [];
     this.app = app;
     this.meta = meta;
-    this.activityLogObject = activityLogObject;
   }
 
   async logAndExecute<T>({
@@ -290,6 +275,8 @@ export class WebTool<
         : getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
+      const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
@@ -304,23 +291,23 @@ export class WebTool<
         // passthrough returns isError: false with the full API payload, so keying off isError
         // (not !success) keeps successful response data out of telemetry.
         error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
-        oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
-        oauth_client_display_name:
-          getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        oauth_client_id: sanitizedClientId,
+        oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
       });
       // Read after the callback because sign-in inside it sets the LUIDs. The ZodiosValidationError
       // passthrough isn't a success for telemetry, but the client did get its data.
-      void recordMcpToolCall(config, {
+      recordToolCall({
         toolName: this.name,
         siteLuid: extra.getSiteLuid(),
         userLuid: extra.getUserLuid(),
         success: success || toolResult?.isError === false,
         errorCode,
-        oauthClientId,
+        oauthClientId: sanitizedClientId,
+        clientName,
         userAgent: extra.requestInfo?.headers?.['user-agent'],
         mcpRequestId: requestId.toString(),
-        object: getActivityLogObject(this.activityLogObject, args),
+        object: getActivityLogObject(this.name, args),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();
@@ -330,18 +317,6 @@ export class WebTool<
         error_code: errorCode,
       });
     }
-  }
-}
-
-// Runs in logAndExecute's finally block, where a throw would replace the tool's result.
-function getActivityLogObject<Args extends undefined | ZodRawShapeCompat | AnySchema>(
-  get: GetActivityLogObject<Args> | undefined,
-  args: WebToolArgs<Args>,
-): ActivityLogObject | undefined {
-  try {
-    return get?.(args);
-  } catch {
-    return undefined;
   }
 }
 

@@ -27,7 +27,6 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'get-view',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ viewId }) => ({ type: 'view', luid: viewId }),
     description:
       'Retrieves information about the specified view, including upstream datasources, workbook information, project details, owner, tags, and usage statistics. Returns facts only, NO visual output: to display the view use render-interactive-viz (interactive) or get-view-image (static image).',
     paramsSchema,

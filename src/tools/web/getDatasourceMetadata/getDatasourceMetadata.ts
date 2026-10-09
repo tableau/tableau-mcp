@@ -127,7 +127,6 @@ export const getGetDatasourceMetadataTool = (
     server,
     name: 'get-datasource-metadata',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ datasourceLuid }) => ({ type: 'datasource', luid: datasourceLuid }),
     description: new Provider(() =>
       getResultForTableauVersion({
         productVersion,

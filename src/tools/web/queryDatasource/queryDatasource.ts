@@ -65,7 +65,6 @@ export const getQueryDatasourceTool = (
     server,
     name: 'query-datasource',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ datasourceLuid }) => ({ type: 'datasource', luid: datasourceLuid }),
     description: new Provider(() =>
       getResultForTableauVersion({
         productVersion,

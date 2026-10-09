@@ -44,7 +44,6 @@ export const getGetViewImageTool = (
     server,
     name: 'get-view-image',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ viewId }) => ({ type: 'view', luid: viewId }),
     description: [
       'Returns a static, non-interactive image of the specified view in a Tableau workbook.',
       'Use only when the user explicitly wants an image artifact — a screenshot, picture, thumbnail, PNG/PDF, or an image to embed in a document or export.',

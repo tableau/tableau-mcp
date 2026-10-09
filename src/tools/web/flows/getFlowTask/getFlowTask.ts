@@ -29,7 +29,6 @@ export const getGetFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     server,
     name: 'get-flow-task',
     minRequiredRole: SiteRole.VIEWER,
-    activityLogObject: ({ taskId }) => ({ type: 'flow-task', luid: taskId }),
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),

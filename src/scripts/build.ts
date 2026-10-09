@@ -37,12 +37,6 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     format: 'cjs',
     minify: !dev,
     packages: dev ? 'external' : 'bundle',
-    // The internal CEPP SDK isn't a dependency of this public repo; src/activityLog/sdk.ts loads
-    // it at runtime. Listed in case minification ever inlines its specifiers into literals.
-    external: [
-      '@tableau/activitylog-logging-client-ts',
-      '@tableau/activitylog-logging-client-ts/events',
-    ],
     sourcemap: true,
     logLevel: dev ? 'debug' : 'info',
     logOverride: {
