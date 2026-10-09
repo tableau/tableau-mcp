@@ -10,6 +10,7 @@ import {
   getResponseInterceptor,
   useRestApi,
 } from './restApiInstance.js';
+import { RouteSafetyError } from './sdks/routeSafety/core.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 
@@ -504,6 +505,31 @@ describe('restApiInstance', () => {
         }),
       );
     });
+
+    it.each([
+      ['request', getRequestErrorInterceptor],
+      ['response', getResponseErrorInterceptor],
+    ])(
+      'logs a RouteSafetyError from the %s error interceptor as a warning, without notifying',
+      (_kind, getInterceptor) => {
+        const server = new WebMcpServer();
+        const errorInterceptor = getInterceptor(server, mockRequestId);
+        const error = new RouteSafetyError(
+          "Path parameter 'viewId' must be a Tableau LUID (UUID format)",
+        );
+
+        errorInterceptor(error, mockHost);
+
+        expect(notifier.error).not.toHaveBeenCalled();
+        expect(notifier.info).not.toHaveBeenCalled();
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log).toHaveBeenCalledWith(
+          expect.objectContaining({ level: 'warning', logger: 'rest-api' }),
+          undefined,
+        );
+        expect(vi.mocked(log).mock.calls[0][0]).not.toHaveProperty('data');
+      },
+    );
 
     it('should handle AxiosError response errors', () => {
       const server = new WebMcpServer();

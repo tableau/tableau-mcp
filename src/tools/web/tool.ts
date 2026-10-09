@@ -245,10 +245,11 @@ export class WebTool<
       };
       return toolResult;
     } catch (error) {
-      // A route-safety rejection (Zodios path-param plugin or axios traversal interceptor) means an
-      // unsafe ID reached the SDK layer: surface it to the client as an args-validation error, not
-      // an unknown 500, and log it at warning level as a security signal. The message names the
-      // parameter but never echoes the payload.
+      // A route-safety rejection (a `pathParam` schema, `assertLuid` / `buildRestPath` in a raw
+      // call, the Zodios path-param plugin or the axios URL interceptor) means an unsafe ID reached
+      // the SDK layer: surface it to the client as an args-validation error, not an unknown 500,
+      // and log it at warning level as a security signal. Every one of those throws
+      // `RouteSafetyError`, whose message names the parameter but never echoes the payload.
       if (error instanceof RouteSafetyError) {
         const argsError = new ArgsValidationError(error.message);
         errorCode = getHttpStatus(argsError);
