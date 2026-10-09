@@ -6,6 +6,7 @@ import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
+import { GranteeCapability } from '../types/permissions.js';
 import { Workbook, WorkbookConnection, workbookSchema } from '../types/workbook.js';
 import {
   WorkbookValidationResult,
@@ -104,6 +105,30 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       ...this.authHeader,
     });
     return response.connections.connection ?? [];
+  };
+
+  /**
+   * Returns the permission rules (grantee capabilities) for the specified workbook. Each grantee is
+   * a user or group with the capabilities (e.g. Read, Write) granted or denied on the workbook.
+   *
+   * Required scopes (Tableau Cloud): `tableau:permissions:read`
+   *
+   * @param workbookId - The ID of the workbook to return permissions for.
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions
+   */
+  queryWorkbookPermissions = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<GranteeCapability[]> => {
+    const response = await this._apiClient.queryWorkbookPermissions({
+      params: { siteId, workbookId },
+      ...this.authHeader,
+    });
+    return response.permissions.granteeCapabilities ?? [];
   };
 
   /**
