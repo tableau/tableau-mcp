@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { getFeatureGate } from '../features/init.js';
 import { log } from '../logging/logger.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { NoOpActivityLogProvider } from './noop.js';
@@ -12,6 +13,7 @@ import type { ActivityLogProvider, ToolCallDetails } from './provider.js';
 import { isActivityLogProvider } from './types.js';
 
 const ACTIVITY_LOG_LOGGER = 'activityLog';
+const ACTIVITY_LOG_FEATURE = 'activity-log';
 
 function isRecord(obj: unknown): obj is Record<string, unknown> {
   return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
@@ -38,21 +40,27 @@ let provider: ActivityLogProvider | null = null;
 /**
  * Initialize the Activity Log provider based on configuration.
  *
- * Call early in application startup. A provider that can't be loaded is logged and replaced by the
- * no-op, because recording is never worth failing to serve tool calls.
+ * Call early in application startup, after the feature gate. Nothing is recorded, and no provider
+ * is loaded, unless the `activity-log` feature flag is enabled. A provider that can't be loaded is
+ * logged and replaced by the no-op, because recording is never worth failing to serve tool calls.
  */
-export function initializeActivityLog(): void {
-  const requested = process.env.ACTIVITY_LOG_PROVIDER?.trim();
-  if (requested && !isActivityLogProvider(requested)) {
-    // Silently recording nothing is the worst failure for an audit log.
-    log({
-      message: `Unrecognized ACTIVITY_LOG_PROVIDER "${requested}", so events are not recorded`,
-      level: 'warning',
-      logger: ACTIVITY_LOG_LOGGER,
-    });
-  }
-
+export async function initializeActivityLog(): Promise<void> {
   try {
+    if (!(await getFeatureGate().isFeatureEnabled(ACTIVITY_LOG_FEATURE))) {
+      provider = new NoOpActivityLogProvider();
+      return;
+    }
+
+    const requested = process.env.ACTIVITY_LOG_PROVIDER?.trim();
+    if (requested && !isActivityLogProvider(requested)) {
+      // Silently recording nothing is the worst failure for an audit log.
+      log({
+        message: `Unrecognized ACTIVITY_LOG_PROVIDER "${requested}", so events are not recorded`,
+        level: 'warning',
+        logger: ACTIVITY_LOG_LOGGER,
+      });
+    }
+
     const config = getConfig();
     provider =
       config.activityLog.provider === 'custom'

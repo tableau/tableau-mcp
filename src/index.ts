@@ -52,7 +52,7 @@ async function startServer(): Promise<void> {
 
   // Initialize feature gate provider
   initializeFeatureGate();
-  initializeActivityLog();
+  await initializeActivityLog();
 
   // Initialize session store provider, then prove a custom backend is reachable before serving.
   // A rejection here is fatal via the top-level startServer().catch, matching other boot failures.

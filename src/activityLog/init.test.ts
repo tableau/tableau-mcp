@@ -4,6 +4,10 @@ vi.mock('../config.js', () => ({
   getConfig: vi.fn(() => ({ activityLog: { provider: 'noop' } })),
 }));
 vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
+const mockIsFeatureEnabled = vi.hoisted(() => vi.fn());
+vi.mock('../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mockIsFeatureEnabled }),
+}));
 
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
@@ -49,6 +53,7 @@ describe('Activity Log init', () => {
   beforeEach(() => {
     resetActivityLog();
     vi.clearAllMocks();
+    mockIsFeatureEnabled.mockResolvedValue(true);
     vi.mocked(getConfig).mockReturnValue({ activityLog: { provider: 'noop' } } as any);
     globalThis.__activityLogCalls = [];
     globalThis.__activityLogFailure = undefined;
@@ -57,23 +62,23 @@ describe('Activity Log init', () => {
   });
 
   describe('provider selection', () => {
-    it('records nothing, and logs nothing, with the noop provider', () => {
-      initializeActivityLog();
+    it('records nothing, and logs nothing, with the noop provider', async () => {
+      await initializeActivityLog();
 
       expect(() => recordToolCall(details)).not.toThrow();
       expect(globalThis.__activityLogCalls).toEqual([]);
       expect(log).not.toHaveBeenCalled();
     });
 
-    it('records nothing when initializeActivityLog was never called', () => {
+    it('records nothing when initializeActivityLog was never called', async () => {
       expect(() => recordToolCall(details)).not.toThrow();
       expect(log).not.toHaveBeenCalled();
     });
 
-    it('loads a custom provider, hands it the whole config, and passes it the call details', () => {
+    it('loads a custom provider, hands it the whole config, and passes it the call details', async () => {
       useCustomProvider(RECORDING_MODULE, { directory: '/home/nodejs/logs' });
 
-      initializeActivityLog();
+      await initializeActivityLog();
       recordToolCall(details);
 
       expect(globalThis.__activityLogProviderConfig).toEqual({
@@ -83,10 +88,10 @@ describe('Activity Log init', () => {
       expect(globalThis.__activityLogCalls).toEqual([details]);
     });
 
-    it('falls back to noop and logs an error when the module is missing', () => {
+    it('falls back to noop and logs an error when the module is missing', async () => {
       useCustomProvider('./src/activityLog/__fixtures__/does-not-exist.cjs');
 
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(() => recordToolCall(details)).not.toThrow();
       expect(globalThis.__activityLogCalls).toEqual([]);
@@ -99,10 +104,10 @@ describe('Activity Log init', () => {
       );
     });
 
-    it('falls back to noop and logs an error when the provider lacks recordToolCall', () => {
+    it('falls back to noop and logs an error when the provider lacks recordToolCall', async () => {
       useCustomProvider(INVALID_MODULE);
 
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(() => recordToolCall(details)).not.toThrow();
       expect(log).toHaveBeenCalledWith(
@@ -115,12 +120,12 @@ describe('Activity Log init', () => {
       );
     });
 
-    it('falls back to noop when the custom config has no module', () => {
+    it('falls back to noop when the custom config has no module', async () => {
       vi.mocked(getConfig).mockReturnValue({
         activityLog: { provider: 'custom', providerConfig: {} },
       } as any);
 
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -130,14 +135,39 @@ describe('Activity Log init', () => {
       );
     });
 
-    it('falls back to noop when reading the config throws', () => {
+    it('falls back to noop when reading the config throws', async () => {
       vi.mocked(getConfig).mockImplementation(() => {
         throw new Error('bad config');
       });
 
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(() => recordToolCall(details)).not.toThrow();
+      expect(log).toHaveBeenCalledWith(expect.objectContaining({ level: 'error' }));
+    });
+  });
+
+  describe('feature flag', () => {
+    it('loads no provider, and records nothing, while the activity-log flag is off', async () => {
+      mockIsFeatureEnabled.mockResolvedValue(false);
+      useCustomProvider(RECORDING_MODULE);
+
+      await initializeActivityLog();
+      recordToolCall(details);
+
+      expect(mockIsFeatureEnabled).toHaveBeenCalledWith('activity-log');
+      expect(globalThis.__activityLogProviderConfig).toBeUndefined();
+      expect(globalThis.__activityLogCalls).toEqual([]);
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    it('falls back to noop and logs an error when the flag lookup fails', async () => {
+      mockIsFeatureEnabled.mockRejectedValue(new Error('flag service down'));
+      useCustomProvider(RECORDING_MODULE);
+
+      await initializeActivityLog();
+
+      expect(globalThis.__activityLogProviderConfig).toBeUndefined();
       expect(log).toHaveBeenCalledWith(expect.objectContaining({ level: 'error' }));
     });
   });
@@ -145,20 +175,20 @@ describe('Activity Log init', () => {
   describe('unrecognized provider name', () => {
     afterEach(() => vi.unstubAllEnvs());
 
-    it('warns when ACTIVITY_LOG_PROVIDER is set to something unknown', () => {
+    it('warns when ACTIVITY_LOG_PROVIDER is set to something unknown', async () => {
       vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'Custom');
 
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(log).toHaveBeenCalledWith(
         expect.objectContaining({ level: 'warning', message: expect.stringContaining('"Custom"') }),
       );
     });
 
-    it('does not warn when it is unset or valid', () => {
-      initializeActivityLog();
+    it('does not warn when it is unset or valid', async () => {
+      await initializeActivityLog();
       vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'noop');
-      initializeActivityLog();
+      await initializeActivityLog();
 
       expect(log).not.toHaveBeenCalled();
     });
@@ -169,7 +199,7 @@ describe('Activity Log init', () => {
       await expect(closeActivityLog()).resolves.toBeUndefined();
 
       useCustomProvider(RECORDING_MODULE);
-      initializeActivityLog();
+      await initializeActivityLog();
       await closeActivityLog();
 
       expect(globalThis.__activityLogClosed).toBe(true);
@@ -177,9 +207,9 @@ describe('Activity Log init', () => {
   });
 
   describe('recordToolCall', () => {
-    it('swallows a provider that throws, and logs a warning naming the tool', () => {
+    it('swallows a provider that throws, and logs a warning naming the tool', async () => {
       useCustomProvider(RECORDING_MODULE);
-      initializeActivityLog();
+      await initializeActivityLog();
       globalThis.__activityLogFailure = 'throw';
 
       expect(() => recordToolCall(details)).not.toThrow();
@@ -194,7 +224,7 @@ describe('Activity Log init', () => {
 
     it('swallows a provider that rejects, and logs a warning naming the tool', async () => {
       useCustomProvider(RECORDING_MODULE);
-      initializeActivityLog();
+      await initializeActivityLog();
       globalThis.__activityLogFailure = 'reject';
 
       expect(() => recordToolCall(details)).not.toThrow();
