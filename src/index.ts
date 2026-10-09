@@ -4,6 +4,7 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
 import pkg from '../package.json';
+import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { getConfig } from './config.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
@@ -21,18 +22,18 @@ import {
 
 const serverVersion = pkg.version;
 
-// Minimal shutdown hook: release the session store's backend resources on termination signals.
-// Intentionally NOT a general graceful-drain (no in-flight request draining, no Express close) --
-// this only closes the session store, matching the scope of the lifecycle-hook fix.
+// Minimal shutdown hook: release the session store's backend resources and flush the Activity Log
+// on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
+// draining, no Express close).
 function registerSessionStoreShutdown(): void {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, async () => {
       try {
-        await disconnectSessionStore();
+        await Promise.all([disconnectSessionStore(), closeActivityLog()]);
         process.exit(0);
       } catch (error) {
         log({
-          message: 'Error closing session store during shutdown',
+          message: 'Error closing session store or Activity Log during shutdown',
           level: 'error',
           logger: 'shutdown',
           data: error,
@@ -51,6 +52,7 @@ async function startServer(): Promise<void> {
 
   // Initialize feature gate provider
   initializeFeatureGate();
+  await initializeActivityLog();
 
   // Initialize session store provider, then prove a custom backend is reachable before serving.
   // A rejection here is fatal via the top-level startServer().catch, matching other boot failures.

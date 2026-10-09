@@ -1,6 +1,8 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
+import { recordToolCall } from '../../activityLog/init.js';
+import { getActivityLogObject } from '../../activityLog/objects.js';
 import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
@@ -273,6 +275,8 @@ export class WebTool<
         : getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
+      const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
@@ -287,10 +291,23 @@ export class WebTool<
         // passthrough returns isError: false with the full API payload, so keying off isError
         // (not !success) keeps successful response data out of telemetry.
         error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
-        oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
-        oauth_client_display_name:
-          getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        oauth_client_id: sanitizedClientId,
+        oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
+      });
+      // Read after the callback because sign-in inside it sets the LUIDs. The ZodiosValidationError
+      // passthrough isn't a success for telemetry, but the client did get its data.
+      recordToolCall({
+        toolName: this.name,
+        siteLuid: extra.getSiteLuid(),
+        userLuid: extra.getUserLuid(),
+        success: success || toolResult?.isError === false,
+        errorCode,
+        oauthClientId: sanitizedClientId,
+        clientName,
+        userAgent: extra.requestInfo?.headers?.['user-agent'],
+        mcpRequestId: requestId.toString(),
+        object: getActivityLogObject(this.name, args),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();

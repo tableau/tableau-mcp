@@ -959,4 +959,40 @@ describe('Config', () => {
       expect(config.featureGate.provider).toBe('server');
     });
   });
+
+  describe('Activity Log provider configuration', () => {
+    it('should default to "noop" when ACTIVITY_LOG_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
+    });
+
+    it('should use "custom" when ACTIVITY_LOG_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+      vi.stubEnv(
+        'ACTIVITY_LOG_PROVIDER_CONFIG',
+        '{"module":"./my-activity-log.js","directory":"/home/nodejs/logs"}',
+      );
+
+      const config = new Config();
+      expect(config.activityLog).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './my-activity-log.js', directory: '/home/nodejs/logs' },
+      });
+    });
+
+    it('should throw error when ACTIVITY_LOG_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+      );
+    });
+
+    it('should fall back to "noop" when ACTIVITY_LOG_PROVIDER is invalid', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'invalid');
+
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
+    });
+  });
 });

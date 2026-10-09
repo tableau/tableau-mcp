@@ -1,6 +1,11 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
+import {
+  ActivityLogConfig,
+  isActivityLogProvider,
+  providerConfigSchema as activityLogProviderConfigSchema,
+} from './activityLog/types.js';
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   FeatureGateConfig,
@@ -79,6 +84,7 @@ export class Config extends BaseConfig {
   isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
+  activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
@@ -153,6 +159,8 @@ export class Config extends BaseConfig {
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
+      ACTIVITY_LOG_PROVIDER: activityLogProvider,
+      ACTIVITY_LOG_PROVIDER_CONFIG: activityLogProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
@@ -339,6 +347,25 @@ export class Config extends BaseConfig {
     } else {
       this.sessionStore = {
         provider: 'memory',
+      };
+    }
+
+    // Activity Log provider configuration (similar to feature gate provider)
+    if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {
+      if (!activityLogProviderConfig) {
+        throw new Error(
+          'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+        );
+      }
+      this.activityLog = {
+        provider: 'custom',
+        providerConfig: activityLogProviderConfigSchema.parse(
+          JSON.parse(activityLogProviderConfig),
+        ),
+      };
+    } else {
+      this.activityLog = {
+        provider: 'noop',
       };
     }
 
