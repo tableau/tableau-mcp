@@ -48,6 +48,8 @@ describe('planned dashboard creation through live dashboard apply', () => {
   });
 
   it.each([
+    { template: undefined, query: 'Sales', derivation: 'Sum', prefix: 'sum', native: true },
+    { template: undefined, query: 'avg of Sales', derivation: 'Avg', prefix: 'avg', native: true },
     { template: undefined, query: 'Sales', derivation: 'Sum', prefix: 'sum' },
     { template: 'insights__bar_chart', query: 'Sales', derivation: 'Sum', prefix: 'sum' },
     ...['avg', 'min', 'max', 'count', 'countd'].map((aggregation) => ({
@@ -85,9 +87,11 @@ describe('planned dashboard creation through live dashboard apply', () => {
     'executes production worksheet calls before registered dashboard apply (aggregation=%j)',
     async ({ template, query, derivation, prefix, ...options }) => {
       const field = ('field' in options ? options.field : undefined) ?? 'Sales';
+      const native = 'native' in options && options.native === true;
       let live = workbook;
       const completed = Ok({ command_id: 'apply', status: 'completed', submitted_at: '' } as const);
       const executor = makeExecutorMock({
+        desktopApiVersion: native ? '0.2.22' : '0.2.21',
         getWorkbookDocument: vi
           .fn()
           .mockImplementation(async () => Ok({ xml: live, instanceId: 'plan-instance' })),
@@ -125,6 +129,18 @@ describe('planned dashboard creation through live dashboard apply', () => {
           // A surgical Desktop edit retains the target sheet's stable identity.
           replacement.appendChild(existing.getElementsByTagName('simple-id')[0].cloneNode(true));
           existing.parentNode!.replaceChild(replacement, existing);
+          if (native) {
+            // Simulate only the native endpoint's registration contract; all MCP calls are real.
+            const window = Array.from(doc.getElementsByTagName('window')).find(
+              (node) => node.getAttribute('name') === name,
+            )!;
+            const viewpoints = window.getElementsByTagName('viewpoints')[0];
+            for (const worksheetName of ['A', 'B']) {
+              const viewpoint = doc.createElement('viewpoint');
+              viewpoint.setAttribute('name', worksheetName);
+              viewpoints.appendChild(viewpoint);
+            }
+          }
           live = new XMLSerializer().serializeToString(doc);
           return completed;
         }),
@@ -153,18 +169,19 @@ describe('planned dashboard creation through live dashboard apply', () => {
       );
       expect(planned.isError, payloadText(planned)).toBe(false);
       const plan = payload(planned).plan;
-      expect(plan.metadata.automaticCompletionSupported).toBe(false);
+      expect(plan.metadata.automaticCompletionSupported).toBe(native);
       expect(plan.phase2Parallel.tasks.map((task: any) => task.task_type)).toEqual([
         'worksheet',
         'worksheet',
       ]);
-      expect(plan.phase3Registration.required).toBe(true);
+      expect(plan.phase3Registration.required).toBe(!native);
+      expect(plan.phase4Dashboard.dependsOn).toBe(native ? 'phase2Parallel' : 'phase3Registration');
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
 
       const batch = await Provider.from(getBatchCreateAndCacheSheetsTool(server).callback);
       const created = await batch(plan.phase1Prework.params, extra);
       expect(created.isError).toBe(false);
-      expect(payload(created).readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+      expect(payload(created).readiness).toEqual({ worksheetBuild: true, dashboardApply: native });
       expect(
         new DOMParser().parseFromString(live, 'text/xml').getElementsByTagName('viewpoint'),
       ).toHaveLength(0);
@@ -252,38 +269,40 @@ describe('planned dashboard creation through live dashboard apply', () => {
         }
       }
       const worksheetWrites = vi.mocked(executor.applyWorkbookDocument).mock.calls.length;
-      const unregistered = await apply(applyTask, extra);
-      expect(unregistered.isError).toBe(true);
-      expect(payloadText(unregistered)).toContain('needs worksheet view registrations for A, B');
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      if (!native) {
+        const unregistered = await apply(applyTask, extra);
+        expect(unregistered.isError).toBe(true);
+        expect(payloadText(unregistered)).toContain('needs worksheet view registrations for A, B');
+        expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
 
-      // Simulate the explicit user action in Desktop, not an MCP workbook-replacement workaround.
-      function registerView(name: string): void {
-        const doc = new DOMParser().parseFromString(live, 'text/xml');
-        const window = Array.from(doc.getElementsByTagName('window')).find(
-          (node) => node.getAttribute('name') === 'D',
-        )!;
-        const viewpoint = doc.createElement('viewpoint');
-        viewpoint.setAttribute('name', name);
-        const zoom = doc.createElement('zoom');
-        zoom.setAttribute('type', 'standard');
-        viewpoint.appendChild(zoom);
-        window.getElementsByTagName('viewpoints')[0].appendChild(viewpoint);
-        const dashboard = Array.from(doc.getElementsByTagName('dashboard')).find(
-          (node) => node.getAttribute('name') === 'D',
-        )!;
-        const zone = doc.createElement('zone');
-        zone.setAttribute('id', String(100 + window.getElementsByTagName('viewpoint').length));
-        zone.setAttribute('name', name);
-        dashboard.getElementsByTagName('zones')[0].appendChild(zone);
-        live = new XMLSerializer().serializeToString(doc);
+        // Simulate the explicit user action in Desktop, not an MCP workbook-replacement workaround.
+        function registerView(name: string): void {
+          const doc = new DOMParser().parseFromString(live, 'text/xml');
+          const window = Array.from(doc.getElementsByTagName('window')).find(
+            (node) => node.getAttribute('name') === 'D',
+          )!;
+          const viewpoint = doc.createElement('viewpoint');
+          viewpoint.setAttribute('name', name);
+          const zoom = doc.createElement('zoom');
+          zoom.setAttribute('type', 'standard');
+          viewpoint.appendChild(zoom);
+          window.getElementsByTagName('viewpoints')[0].appendChild(viewpoint);
+          const dashboard = Array.from(doc.getElementsByTagName('dashboard')).find(
+            (node) => node.getAttribute('name') === 'D',
+          )!;
+          const zone = doc.createElement('zone');
+          zone.setAttribute('id', String(100 + window.getElementsByTagName('viewpoint').length));
+          zone.setAttribute('name', name);
+          dashboard.getElementsByTagName('zones')[0].appendChild(zone);
+          live = new XMLSerializer().serializeToString(doc);
+        }
+        registerView('A');
+        const partial = await apply(applyTask, extra);
+        expect(partial.isError).toBe(true);
+        expect(payloadText(partial)).toContain('B');
+        expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+        registerView('B');
       }
-      registerView('A');
-      const partial = await apply(applyTask, extra);
-      expect(partial.isError).toBe(true);
-      expect(payloadText(partial)).toContain('B');
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
-      registerView('B');
 
       // Phase 4 consumes refreshed cache paths, never the original phase-1 snapshots.
       const getWorkbook = await Provider.from(getGetWorkbookXmlTool(server).callback);
@@ -308,7 +327,16 @@ describe('planned dashboard creation through live dashboard apply', () => {
       expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(worksheetWrites);
       expect(live).toContain('name="A"');
       expect(live).toContain('name="B"');
-      expect(readFileSync(refreshedFiles.workbookFile, 'utf8')).toContain('<viewpoint name="B">');
+      const cachedWorkbook = readFileSync(refreshedFiles.workbookFile, 'utf8');
+      if (native) {
+        expect(cachedWorkbook).not.toContain('<viewpoint name="B"');
+        const dashboardWindow = Array.from(
+          new DOMParser().parseFromString(live, 'text/xml').getElementsByTagName('window'),
+        ).find((node) => node.getAttribute('name') === 'D')!;
+        expect(dashboardWindow.getElementsByTagName('viewpoint')).toHaveLength(2);
+      } else {
+        expect(cachedWorkbook).toContain('<viewpoint name="B">');
+      }
     },
   );
 

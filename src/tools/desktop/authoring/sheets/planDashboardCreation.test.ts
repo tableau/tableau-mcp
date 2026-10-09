@@ -73,7 +73,7 @@ describe('planDashboardCreationTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getPlanDashboardCreationTool(new DesktopMcpServer());
     expect(tool.name).toBe('plan-dashboard-creation');
-    expect(tool.description).toContain('manual registration');
+    expect(tool.description).toContain('older Desktop');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),

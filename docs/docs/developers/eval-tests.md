@@ -108,8 +108,17 @@ in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe
 registrations in both empty and populated dashboards, preserving concurrent Desktop edits, and
 repairing unsafe zone types already present in the live dashboard. Known crash hazards cannot be
 grandfathered from the live baseline. Existing-dashboard edits use the surgical dashboard endpoint.
-Until Desktop supports safe registration updates, the model must explain that blocker without
-attempting a whole-workbook replacement or discarding the requested membership.
+Desktop builds advertising External Client API 0.2.22 or later create missing worksheet views
+during surgical dashboard apply. The MCP planner permits automatic completion on those builds,
+after every worksheet has been populated, and apply verifies the registrations in live readback.
+Older or unknown API versions still require manual registration in Desktop. A whole-workbook
+replacement is never a fallback for missing registrations.
+
+The offline workflow test in
+`src/tools/desktop/authoring/sheets/planDashboardCreation.workflow.test.ts` covers planning,
+scaffold creation, worksheet build/apply, cache refresh, and dashboard apply on both legacy and
+supported API versions. Its supported-build cases perform no manual registration. The Desktop
+API is a test double; visible rendering and zone removal with undo/redo still need live validation.
 
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
