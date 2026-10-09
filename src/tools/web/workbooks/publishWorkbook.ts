@@ -10,6 +10,7 @@ import {
   McpToolError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -22,7 +23,6 @@ import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/scopes.js';
-import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
@@ -147,7 +147,7 @@ export const getPublishWorkbookTool = (
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
+        !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async (args, extra): Promise<CallToolResult> => {
       const {
