@@ -40,7 +40,7 @@ export const getApplyDashboardWithViewpointsTool = (
     server,
     name: 'apply-dashboard-with-viewpoints',
     title,
-    description: 'Apply an existing dashboard layout; requires registered worksheet views.',
+    description: 'Apply a dashboard layout; older Desktop versions require registered views.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -80,7 +80,7 @@ export const getApplyDashboardWithViewpointsTool = (
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // Check all requested registrations before a surgical write and verify its readback.
+          // Check registration support before a surgical write and verify its readback.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,

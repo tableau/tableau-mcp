@@ -1,15 +1,29 @@
+import { supportsDashboardVisualRegistration } from '../../../../desktop/externalApi/apiVersion.js';
+
 type DashboardCreationPrerequisite = {
   required: boolean;
   status: 'blocked' | 'ready';
-  kind: 'manual';
+  kind: 'manual' | 'native';
   instructions: string[];
 };
 
-/** Desktop has no incremental API for registering worksheet views in a new dashboard. */
 export function dashboardCreationPrerequisite(
   dashboardName: string,
   worksheetNames: string[],
+  apiVersion?: string,
 ): DashboardCreationPrerequisite {
+  if (supportsDashboardVisualRegistration(apiVersion)) {
+    return {
+      required: false,
+      status: 'ready',
+      kind: 'native',
+      instructions: [
+        'Finish applying every worksheet first; empty worksheet scaffolds cannot be added to a dashboard.',
+        'Apply the dashboard through its document endpoint. Desktop creates missing views for referenced worksheets.',
+        'Refresh both caches after worksheet apply and verify the dashboard layout and registrations in readback.',
+      ],
+    };
+  }
   return {
     required: worksheetNames.length > 0,
     status: worksheetNames.length > 0 ? 'blocked' : 'ready',
