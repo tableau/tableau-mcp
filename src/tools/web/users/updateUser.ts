@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -173,6 +174,8 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
               } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 recordOutcome({ ok: false, failureDetail: message });
+                // Let the shared tool error path map it to a 400 args-validation error.
+                if (err instanceof RouteSafetyError) throw err;
                 return new UnknownError(
                   `Failed to update user '${args.userId}': ${message}`,
                 ).toErr();

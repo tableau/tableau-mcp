@@ -325,6 +325,35 @@ describe('queryKnowledgeContextTool', () => {
     expect(out.sources).toHaveLength(1);
   });
 
+  it.each([
+    ['ground', 'Profit/Sales'],
+    ['lineage', 'a\\b'],
+    ['impact', 'x/../y'],
+  ])(
+    'returns an actionable args error for an unroutable nodeId (intent=%s)',
+    async (intent, nodeId) => {
+      const result = await getResult({ intent, nodeId });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        "Knowledge node IDs containing '/' or '\\' (or that are only '.' or '..') are not supported",
+      );
+      expect(result.content[0].text).not.toContain(nodeId);
+      // Rejected before signing in, so no request of any kind is sent.
+      expect(useRestApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still sends a nodeId with ?, #, ; or : in it', async () => {
+    const result = await getResult({ intent: 'ground', nodeId: 'field:Is Returned? #1;x' });
+
+    expect(result.isError).toBeFalsy();
+    expect(mocks.getKnowledgeNode).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeId: 'field:Is Returned? #1;x' }),
+    );
+  });
+
   it('rejects a node-based intent without either query or nodeId', async () => {
     const result = await getResult({ intent: 'impact' });
 

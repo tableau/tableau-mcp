@@ -531,6 +531,42 @@ describe('restApiInstance', () => {
       },
     );
 
+    it('rejects an unsafe raw URL before the RestApi request interceptor logs it', async () => {
+      const { RestApi: ActualRestApi } = await vi.importActual<
+        typeof import('./sdks/tableau/restApi.js')
+      >('./sdks/tableau/restApi.js');
+      ActualRestApi.host = mockHost;
+      const server = new WebMcpServer();
+      const restApi = new ActualRestApi({
+        maxRequestTimeoutMs: 1000,
+        requestInterceptor: [
+          getRequestInterceptor(server, mockRequestId),
+          getRequestErrorInterceptor(server, mockRequestId),
+        ],
+        responseInterceptor: [
+          getResponseInterceptor(server, mockRequestId),
+          getResponseErrorInterceptor(server, mockRequestId),
+        ],
+      });
+      // @ts-expect-error - setting private credentials instead of signing in
+      restApi._creds = { type: 'Bearer', token: 'test-token' };
+      // @ts-expect-error - reaching the protected Zodios client to issue a raw request
+      const axios = restApi.viewsMethods._apiClient.axios;
+      const adapter = vi.fn();
+      axios.defaults.adapter = adapter;
+
+      await expect(axios.get('/x/%2e%2e/y')).rejects.toBeInstanceOf(RouteSafetyError);
+
+      expect(adapter).not.toHaveBeenCalled();
+      expect(notifier.info).not.toHaveBeenCalled();
+      expect(notifier.error).not.toHaveBeenCalled();
+      expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain('%2e%2e');
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({ level: 'warning', logger: 'rest-api' }),
+        undefined,
+      );
+    });
+
     it('should handle AxiosError response errors', () => {
       const server = new WebMcpServer();
       const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);

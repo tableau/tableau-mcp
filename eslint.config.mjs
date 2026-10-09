@@ -52,7 +52,7 @@ export default [
           // Raw calls on a Zodios client's axios instance: the URL must be a direct
           // `buildRestPath(...)` call (validated, individually encoded segments).
           selector:
-            "CallExpression[callee.object.property.name='axios'][callee.property.name=/^(get|post|put|patch|delete|head|options)$/]:not([arguments.0.type='CallExpression'][arguments.0.callee.name='buildRestPath'])",
+            "CallExpression[callee.object.property.name='axios'][callee.property.name=/^(get|post|put|patch|delete|head|options|postForm|putForm|patchForm)$/]:not([arguments.0.type='CallExpression'][arguments.0.callee.name='buildRestPath'])",
           message:
             'Pass buildRestPath(...) directly as the URL of a raw axios call (route-traversal guard).',
         },

@@ -140,16 +140,19 @@ export function assertNoTraversal(url: string): void {
   }
 }
 
-// RFC 3986 path characters: pchar (unreserved, pct-encoded, sub-delims, `:`, `@`) plus `/`.
-// None of these is re-encoded or stripped by WHATWG URL, so for an allowed URL the only way the
-// resolved pathname can differ from the naive concatenation is dot-segment collapsing.
-const PATH_CHARS = /^[A-Za-z0-9\-._~!$&'()*+,;=:@%/]*$/;
+// RFC 3986 path characters: pchar (unreserved, pct-encoded, sub-delims, `:`, `@`) plus `/`, minus
+// `;`, which servlet containers such as Tomcat treat as a path-parameter delimiter and strip
+// (buildRestPath and every Zodios path param send it as `%3B`). None of these is re-encoded or
+// stripped by WHATWG URL, so for an allowed URL the only way the resolved pathname can differ from
+// the naive concatenation is dot-segment collapsing.
+const PATH_CHARS = /^[A-Za-z0-9\-._~!$&'()*+,=:@%/]*$/;
 
 /**
  * Final-URL guard for the axios request interceptor. Checks the URL axios will actually send:
  *  - `url` must be a path relative to `baseURL` (no absolute or protocol-relative URL),
  *  - `url` must contain only RFC 3986 path characters: no literal `?` / `#` (queries belong in
- *    axios `params`), `\`, spaces, control or non-ASCII characters,
+ *    axios `params`), `;`, `\`, spaces, control or non-ASCII characters,
+ *  - `url` must not contain an empty segment (`//`),
  *  - the decoded path must not contain dot segments,
  *  - resolving it against `baseURL` with WHATWG `URL` (as axios's Node adapter does) must keep the
  *    origin and yield exactly the naive concatenation, i.e. normalization changed nothing.
@@ -160,6 +163,10 @@ export function assertSafeRequestUrl(url: string | undefined, baseURL: string | 
   }
   if (!PATH_CHARS.test(url)) {
     throw new RouteSafetyError('REST route contains characters that are not allowed in a path');
+  }
+  // An empty segment shifts every later segment, and some servers and proxies collapse `//`.
+  if (url.includes('//')) {
+    throw new RouteSafetyError('REST route contains an empty path segment');
   }
   assertNoTraversal(url);
   if (!baseURL) {

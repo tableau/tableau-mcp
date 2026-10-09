@@ -12,6 +12,7 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from '../../interceptors.js';
+import { assertSafeRequestUrl } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { agentApis } from './apis.js';
 import {
@@ -60,6 +61,9 @@ export class AgentApiClient {
 
     this._apiClient.axios.interceptors.request.use(
       (config) => {
+        // Runs before the route guard installed by `createGuardedZodios` (axios runs request
+        // interceptors in reverse order), so check the URL before it can be logged.
+        assertSafeRequestUrl(config.url, config.baseURL);
         options.requestInterceptor?.[0]({
           baseUrl,
           ...getRequestInterceptorConfig(config),

@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -213,6 +214,32 @@ describe('updateUserTool', () => {
         failureDetail: 'Network timeout',
       });
       expect(result.isError).toBe(true);
+    });
+
+    it('reports a RouteSafetyError as an args-validation error, not an unknown failure', async () => {
+      const recordOutcome = vi.fn();
+      mocks.mockGuardMutation.mockResolvedValue(
+        new Ok({
+          actor: { siteLuid: 'test-site-id', siteName: 'tc25' },
+          target: { id: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890', name: 'jsmith', kind: 'user' },
+          recordOutcome,
+        }),
+      );
+      const message = "Path parameter 'userId' must be a Tableau LUID (UUID format)";
+      mocks.mockUpdateUser.mockRejectedValue(new RouteSafetyError(message));
+
+      const result = await getToolResult({
+        userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
+        siteRole: 'Unlicensed',
+        confirm: true,
+        confirmationToken: 'test-token',
+      });
+
+      expect(recordOutcome).toHaveBeenCalledWith({ ok: false, failureDetail: message });
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain(message);
+      expect(text).not.toContain('Failed to update user');
     });
 
     it('should record success outcome on successful update', async () => {

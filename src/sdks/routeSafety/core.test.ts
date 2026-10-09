@@ -165,8 +165,15 @@ describe('routeSafety', () => {
       ['relative path without leading slash', 'sites/S'],
       ['non-ASCII', '/sites/S/views/é'],
       ['empty', ''],
+      ['literal semicolon (Tomcat path param)', `/sites/S/views/${LUID};x/data`],
+      ['empty segment', '/sites/s//views'],
+      ['trailing empty segment', '/sites/s/views//'],
     ])('rejects %s', (_n, url) => {
       expect(() => assertSafeRequestUrl(url, BASE)).toThrow(RouteSafetyError);
+    });
+
+    it('accepts the OAuth token endpoint under its base path', () => {
+      expect(() => assertSafeRequestUrl('/oauth2/v1/token', 'https://sso.test')).not.toThrow();
     });
 
     it('rejects a missing URL or base URL', () => {
@@ -181,6 +188,7 @@ describe('routeSafety', () => {
       '/sites/S/knowledge/nodes/field%3AProfit%20%25',
       '/sites/S/fileUploads/12345:ABCDEF0123-4:5',
       `/sites/${LUID}/workbooks`,
+      '/sites/S/knowledge/nodes/x%3By',
     ])('accepts %s', (url) => {
       expect(() => assertSafeRequestUrl(url, BASE)).not.toThrow();
       expect(() => assertSafeRequestUrl(url, `${BASE}/`)).not.toThrow();

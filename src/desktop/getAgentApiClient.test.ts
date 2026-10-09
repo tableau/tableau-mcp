@@ -1,6 +1,7 @@
 import { AxiosError } from 'axios';
 
 import * as logger from '../logging/logger.js';
+import { RouteSafetyError } from '../sdks/routeSafety/core.js';
 import { AxiosRequestHeaders, AxiosResponse } from '../utils/axios.js';
 import {
   getRequestErrorInterceptor,
@@ -74,6 +75,28 @@ describe('getAgentApiClient', () => {
   });
 
   describe('Error Handling', () => {
+    it.each([
+      ['request', getRequestErrorInterceptor],
+      ['response', getResponseErrorInterceptor],
+    ])(
+      'logs a RouteSafetyError from the %s error interceptor as a warning, not an error',
+      (_kind, getInterceptor) => {
+        vi.mocked(logger.log).mockClear();
+        const errorInterceptor = getInterceptor();
+        const error = new RouteSafetyError(
+          "Path parameter 'commandId' is not a valid route segment",
+        );
+
+        errorInterceptor(error, mockHost);
+
+        expect(logger.log).toHaveBeenCalledTimes(1);
+        expect(logger.log).toHaveBeenCalledWith(
+          expect.objectContaining({ level: 'warning', logger: 'AgentApiClient' }),
+        );
+        expect(vi.mocked(logger.log).mock.calls[0][0]).not.toHaveProperty('data');
+      },
+    );
+
     it('should handle request errors', () => {
       const errorInterceptor = getRequestErrorInterceptor();
       const error = new Error('Request failed');
