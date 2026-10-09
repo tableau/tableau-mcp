@@ -109,8 +109,7 @@ const paramsSchema = {
     'The kind of resource to delete: "workbook", "datasource", or "extract-refresh-task".',
   ),
   resourceId: luidSchema.describe(
-    'The LUID of the workbook or data source, or the UUID of the extract refresh task. ' +
-      'For extract-refresh-task, must be a valid UUID.',
+    'The LUID of the workbook or data source, or the UUID of the extract refresh task.',
   ),
   confirm: z
     .boolean()

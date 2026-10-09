@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { RegistryEvidence } from '../_lib/evidence.js';
@@ -24,10 +25,7 @@ const VALID_SITE_ROLES = [
 ] as const;
 
 const paramsSchema = {
-  userId: z
-    .string()
-    .uuid('userId must be a valid UUID')
-    .describe('The LUID of the user to update. Obtain from list-users.'),
+  userId: luidSchema.describe('The LUID of the user to update. Obtain from list-users.'),
   siteRole: z
     .enum(VALID_SITE_ROLES)
     .describe(
