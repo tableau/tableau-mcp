@@ -4,6 +4,7 @@ import {
   assertSafeRequestUrl,
   buildRestPath,
   fullyDecode,
+  LUID_PATTERN,
   RouteSafetyError,
 } from './core.js';
 import { luidSchema } from './ids.js';
@@ -262,6 +263,11 @@ describe('routeSafety', () => {
   describe('luidSchema', () => {
     it.each([LUID, 'ABCDEF01-2345-6789-abcd-ef0123456789'])('accepts %s', (v) => {
       expect(luidSchema.parse(v)).toBe(v);
+    });
+
+    it('accepts any case via the flag-less source advertised as JSON Schema `pattern`', () => {
+      expect(LUID_PATTERN.flags).toBe('');
+      expect(new RegExp(LUID_PATTERN.source).test(LUID.toUpperCase())).toBe(true);
     });
 
     it.each([...attacks.map(([, p]) => p), 'view-123', '1', '..'.padEnd(36, 'x')])(

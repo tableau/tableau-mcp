@@ -20,8 +20,13 @@ export class RouteSafetyError extends Error {
   override name = 'RouteSafetyError';
 }
 
-/** Tableau LUID: 8-4-4-4-12 hex digits, any case. Deliberately not RFC 9562 version-checked. */
-export const LUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Tableau LUID: 8-4-4-4-12 hex digits, any case. Deliberately not RFC 9562 version-checked.
+ * Both cases are spelled out instead of using the `i` flag, which is lost when the pattern is
+ * advertised to clients as JSON Schema `pattern`.
+ */
+export const LUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 // Checked on the RAW value (what goes on the wire): separators, query/fragment delimiters, `;`,
 // space and control characters. Callers that need any of these must percent-encode them first.
