@@ -42,7 +42,7 @@ tsm pending-changes apply
 
 Applying pending changes may restart Tableau Server.
 
-:::warning Experimental API
+:::warning[Experimental API]
 
 Because this API is experimental, its availability and response format may change between Tableau
 Server releases.
