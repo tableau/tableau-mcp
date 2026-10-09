@@ -9,7 +9,10 @@ import { getPlanDashboardCreationTool } from './planDashboardCreation.js';
 
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/metadata/index.js');
-vi.mock('../../../../desktop/templates/templatePath.js');
+vi.mock('../../../../desktop/templates/templatePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/templates/templatePath.js')>()),
+  listTemplateNames: vi.fn(),
+}));
 
 import { FieldResolution, resolveField } from '../../../../desktop/metadata/index.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
@@ -21,7 +24,16 @@ const SESSION = 'session-1';
 const SAMPLE_WORKBOOK_XML = `<?xml version="1.0" encoding="utf-8"?>
 <workbook>
   <datasources>
-    <datasource name="Sample Superstore" caption="Sample - Superstore"/>
+    <datasource name="Sample Superstore" caption="Sample - Superstore">
+      <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[Revenue]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[Order Date]" datatype="date" role="dimension" type="ordinal"/>
+      <column name="[Order Timestamp]" datatype="datetime" role="dimension" type="ordinal"/>
+      <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
+    </datasource>
+    <datasource name="ds1"><column name="[Profit]" datatype="real" role="measure" type="quantitative"/></datasource>
+    <datasource name="ds2"><column name="[Profit]" datatype="real" role="measure" type="quantitative"/></datasource>
   </datasources>
   <worksheets/>
 </workbook>`;
@@ -37,7 +49,10 @@ function makeExtra(workbookXml: string = SAMPLE_WORKBOOK_XML): TableauDesktopReq
 function makeExactResolution(fieldName: string): FieldResolution {
   return {
     kind: 'exact' as const,
-    column_ref: `[Sample - Superstore].[sum:${fieldName}:qk]`,
+    column_ref:
+      fieldName === 'Category'
+        ? '[Sample Superstore].[none:Category:nk]'
+        : `[Sample Superstore].[sum:${fieldName}:qk]`,
     datasource: 'Sample Superstore',
     query: fieldName,
   };
@@ -58,7 +73,7 @@ describe('planDashboardCreationTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getPlanDashboardCreationTool(new DesktopMcpServer());
     expect(tool.name).toBe('plan-dashboard-creation');
-    expect(tool.description).toContain('parallel');
+    expect(tool.description).toContain('manual registration');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
@@ -67,13 +82,13 @@ describe('planDashboardCreationTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: true });
   });
 
-  it('should return a plan with phase1 and phase2 on success', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+  it('plans worksheet work but gates dashboard apply on manual registration and fresh caches', async () => {
+    vi.mocked(resolveField).mockImplementation((_, query) => makeExactResolution(query));
 
     const result = await getResult({
       session: SESSION,
       dashboardName: 'My Dashboard',
-      worksheets: [{ name: 'Sheet1', type: 'chart', fields: ['Sales'] }],
+      worksheets: [{ name: 'Sheet1', type: 'chart', fields: ['Sales', 'Category'] }],
     });
 
     expect(result.isError).toBeFalsy();
@@ -82,6 +97,89 @@ describe('planDashboardCreationTool', () => {
     expect(result.content[0].text).toContain('batch-create-and-cache-sheets');
     expect(result.content[0].text).toContain('task_type');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
+    expect(result.content[0].text).toContain('AUTOMATIC COMPLETION BLOCKED');
+    const plan = extractPlan(result);
+    expect(plan.metadata.automaticCompletionSupported).toBe(false);
+    expect(plan.phase2Parallel.tasks.map((task: any) => task.task_type)).toEqual(['worksheet']);
+    expect(plan.phase3Registration).toMatchObject({
+      required: true,
+      kind: 'manual',
+      dependsOn: 'phase2Parallel',
+    });
+    expect(plan.phase4Dashboard).toMatchObject({
+      dependsOn: 'phase3Registration',
+      tool: 'build-and-apply-dashboard',
+    });
+    expect(plan.phase4Dashboard.refreshCaches.map((step: any) => step.tool)).toEqual([
+      'get-workbook-xml',
+      'get-dashboard-xml',
+    ]);
+    expect(plan.phase4Dashboard.fileBinding).toContain('do not reuse the Phase 1 paths');
+  });
+
+  it.each(['avg', 'min', 'max', 'cnt', 'ctd'])(
+    'preserves explicit %s in executable build arguments',
+    async (derivation) => {
+      vi.mocked(resolveField).mockImplementation((_, query) =>
+        query === 'Category'
+          ? makeExactResolution(query)
+          : {
+              kind: 'rewritten',
+              query,
+              datasource: 'Sample Superstore',
+              column_ref: `[Sample Superstore].[${derivation}:Sales:qk]`,
+              rewrites: ['parsed-aggregation-prefix'],
+            },
+      );
+      const result = await getResult({
+        session: SESSION,
+        dashboardName: 'D',
+        worksheets: [{ name: 'A', type: 'chart', fields: [`${derivation} of Sales`, 'Category'] }],
+      });
+      expect(result.isError).toBe(false);
+      const params = extractPlan(result).phase2Parallel.tasks[0].build.params;
+      expect(Object.values(params.derivationOverrides)).toContain(derivation);
+      expect(Object.values(params.fieldMapping)).toContain(
+        `[Sample Superstore].[${derivation}:Sales:qk]`,
+      );
+    },
+  );
+
+  it.each(
+    ['Order Date', 'Order Timestamp'].flatMap((field) =>
+      ['min', 'max'].map((aggregation) => ({ field, aggregation })),
+    ),
+  )(
+    'plans $aggregation of $field with the requested derivation',
+    async ({ field, aggregation }) => {
+      vi.mocked(resolveField).mockImplementation((_, query) => ({
+        kind: 'rewritten',
+        query,
+        datasource: 'Sample Superstore',
+        column_ref: `[Sample Superstore].[${aggregation}:${field}:ok]`,
+        rewrites: ['parsed-aggregation-prefix'],
+      }));
+      const result = await getResult({
+        session: SESSION,
+        dashboardName: 'D',
+        worksheets: [{ name: 'A', type: 'kpi', fields: [`${aggregation} of ${field}`] }],
+      });
+      expect(result.isError).toBe(false);
+      const params = extractPlan(result).phase2Parallel.tasks[0].build.params;
+      expect(Object.values(params.derivationOverrides)).toContain(aggregation);
+      expect(Object.values(params.fieldMapping)).toContain(
+        `[Sample Superstore].[${aggregation}:${field}:qk]`,
+      );
+    },
+  );
+
+  it('does not require registration for an empty dashboard', async () => {
+    const result = await getResult({ session: SESSION, dashboardName: 'Empty', worksheets: [] });
+    expect(result.isError).toBeFalsy();
+    const plan = extractPlan(result);
+    expect(plan.metadata.automaticCompletionSupported).toBe(true);
+    expect(plan.phase3Registration).toMatchObject({ required: false, status: 'ready' });
+    expect(plan.phase2Parallel.tasks).toEqual([]);
   });
 
   it('should block planning when a field is ambiguous', async () => {
@@ -109,7 +207,7 @@ describe('planDashboardCreationTool', () => {
     const result = await getResult({
       session: SESSION,
       dashboardName: 'My Dashboard',
-      worksheets: [{ name: 'Sheet1', type: 'chart', fields: ['Sales'] }],
+      worksheets: [{ name: 'Sheet1', type: 'kpi', fields: ['Sales'] }],
     });
 
     expect(result.isError).toBe(true);
@@ -174,7 +272,7 @@ describe('planDashboardCreationTool', () => {
     const result = await getResult({
       session: SESSION,
       dashboardName: 'My Dashboard',
-      worksheets: [{ name: 'Sheet1', type: 'chart', fields: ['Unknown'] }],
+      worksheets: [{ name: 'Sheet1', type: 'kpi', fields: ['Unknown'] }],
     });
 
     expect(result.isError).toBe(true);
@@ -196,7 +294,7 @@ describe('planDashboardCreationTool', () => {
       session: SESSION,
       dashboardName: 'My Dashboard',
       worksheets: [
-        { name: 'Sheet1', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds2' }] },
+        { name: 'Sheet1', type: 'kpi', fields: [{ query: 'Profit', datasource: 'ds2' }] },
       ],
     });
 
@@ -206,8 +304,10 @@ describe('planDashboardCreationTool', () => {
     });
     const plan = extractPlan(result);
     const worksheetTask = plan.phase2Parallel.tasks.find((t: any) => t.task_type === 'worksheet');
-    expect(worksheetTask.fields).toEqual(['[ds2].[sum:Profit:qk]']);
-    expect(worksheetTask.datasource).toBe('ds2');
+    expect(Object.values(worksheetTask.build.params.fieldMapping)).toEqual([
+      '[ds2].[sum:Profit:qk]',
+    ]);
+    expect(worksheetTask.build.params.datasource).toBe('ds2');
   });
 
   it('caches field resolution by query and datasource selector', async () => {
@@ -222,8 +322,8 @@ describe('planDashboardCreationTool', () => {
       session: SESSION,
       dashboardName: 'My Dashboard',
       worksheets: [
-        { name: 'Sheet1', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds1' }] },
-        { name: 'Sheet2', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds2' }] },
+        { name: 'Sheet1', type: 'kpi', fields: [{ query: 'Profit', datasource: 'ds1' }] },
+        { name: 'Sheet2', type: 'kpi', fields: [{ query: 'Profit', datasource: 'ds2' }] },
       ],
     });
 
@@ -239,11 +339,11 @@ describe('planDashboardCreationTool', () => {
     const worksheetTasks = plan.phase2Parallel.tasks.filter(
       (t: any) => t.task_type === 'worksheet',
     );
-    expect(worksheetTasks.map((t: any) => t.fields)).toEqual([
+    expect(worksheetTasks.map((t: any) => Object.values(t.build.params.fieldMapping))).toEqual([
       ['[ds1].[sum:Profit:qk]'],
       ['[ds2].[sum:Profit:qk]'],
     ]);
-    expect(worksheetTasks.map((t: any) => t.datasource)).toEqual(['ds1', 'ds2']);
+    expect(worksheetTasks.map((t: any) => t.build.params.datasource)).toEqual(['ds1', 'ds2']);
   });
 
   it('should handle getWorkbookXml failure', async () => {
@@ -296,11 +396,11 @@ describe('planDashboardCreationTool', () => {
   });
 
   it('should recommend parallelization for 5+ worksheets', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+    vi.mocked(resolveField).mockImplementation((_, query) => makeExactResolution(query));
 
     const worksheets = Array.from({ length: 5 }, (_, i) => ({
       name: `Sheet${i + 1}`,
-      type: 'chart' as const,
+      type: 'kpi' as const,
       fields: ['Sales'],
     }));
 
@@ -313,17 +413,24 @@ describe('planDashboardCreationTool', () => {
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('PARALLELIZE');
+    const plan = extractPlan(result);
+    expect(plan.phase2Parallel.tasks).toHaveLength(5);
+    expect(plan.phase2Parallel.tasks.every((task: any) => task.task_type === 'worksheet')).toBe(
+      true,
+    );
+    expect(plan.metadata.recommendedParallelism).toBe(5);
+    expect(result.content[0].text).toContain('Do not apply the dashboard in parallel');
   });
 
   it('should not recommend parallelization for fewer than 5 worksheets', async () => {
-    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+    vi.mocked(resolveField).mockImplementation((_, query) => makeExactResolution(query));
 
     const result = await getResult({
       session: SESSION,
       dashboardName: 'Small Dashboard',
       worksheets: [
-        { name: 'Sheet1', type: 'chart' as const, fields: ['Sales'] },
-        { name: 'Sheet2', type: 'chart' as const, fields: ['Sales'] },
+        { name: 'Sheet1', type: 'kpi' as const, fields: ['Sales'] },
+        { name: 'Sheet2', type: 'kpi' as const, fields: ['Sales'] },
       ],
     });
 

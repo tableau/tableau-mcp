@@ -414,6 +414,31 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   }
 }
 
+/** Shared assignment/validation rule; aggregation legality is checked separately. */
+export function slotAcceptsSource(
+  slot: SlotSpec,
+  derivation: Derivation,
+  field: SchemaField,
+  preferValueSlot = false,
+): boolean {
+  const measureSlot = slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical';
+  if (!field.isAggregated && COUNT_AGGREGATION_DERIVATIONS.has(derivation)) {
+    return measureSlot;
+  }
+  if (!field.isAggregated && temporalMinMax(derivation, field)) {
+    return (
+      measureSlot ||
+      slot.kind === 'temporal' ||
+      (!preferValueSlot && kindCompatible(slot.kind, field))
+    );
+  }
+  return kindCompatible(slot.kind, field);
+}
+
+function temporalMinMax(derivation: Derivation, field: SchemaField): boolean {
+  return TEMPORAL_MINMAX_DERIVATIONS.has(derivation) && TEMPORAL_DATATYPES.has(field.datatype);
+}
+
 export function effectiveSlotDerivation(
   slot: SlotSpec,
   field: SchemaField,
@@ -423,7 +448,8 @@ export function effectiveSlotDerivation(
   if (
     slot.kind === 'quantitative-or-categorical' &&
     field.role === 'dimension' &&
-    !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation)
+    !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation) &&
+    !temporalMinMax(slot.derivation, field)
   ) {
     return 'none';
   }
@@ -557,6 +583,8 @@ export function validateBinding(
       (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
       f.role === 'dimension' &&
       COUNT_AGGREGATION_DERIVATIONS.has(effDeriv);
+    const temporalDimensionInMeasureSlot =
+      slot.kind === 'quantitative' && f.role === 'dimension' && temporalMinMax(effDeriv, f);
     const feedsCalc = m.calcs.some(
       (calc) =>
         calc.depends_on_slots.includes(slotId) ||
@@ -596,25 +624,32 @@ export function validateBinding(
 
     if (
       (countDimensionInMeasureSlot && feedsCalc) ||
-      (hasCountOverride &&
+      (temporalDimensionInMeasureSlot && calcInputTemplateFields.has(slot.template_field)) ||
+      (override !== undefined &&
         override !== slot.derivation &&
         calcInputTemplateFields.has(slot.template_field))
     ) {
       const countSource =
-        override !== undefined ? 'requested count override' : 'template count derivation';
+        override !== undefined
+          ? hasCountOverride
+            ? 'requested count override'
+            : 'requested aggregation override'
+          : temporalDimensionInMeasureSlot
+            ? 'template temporal aggregation'
+            : 'template count derivation';
       blockers.push({
         code: 'aggregation-level-mismatch',
         slot_id: slotId,
         detail:
           `slot '${slotId}' maps template field '${slot.template_field}' used by a template calculation, so ` +
           `${countSource} '${effDeriv}' would change mapped shelf instances while leaving the calculation's ` +
-          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested count.",
+          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested aggregation.",
       });
       continue;
     }
 
     // Gate 3: kind/role compatibility.
-    if (!kindCompatible(slot.kind, f) && !countDimensionInMeasureSlot) {
+    if (!slotAcceptsSource(slot, effDeriv, f)) {
       // temporal_axis_from_string: a temporal slot that opted in accepts a date-like
       // STRING field, which the apply-side DATEPARSE splice turns into a real date
       // (see dateparseTemporalAxis.ts). Only when the slot opts in AND the string
@@ -679,8 +714,7 @@ export function validateBinding(
       // MIN/MAX over a date/datetime field is legal (earliest/latest date), so the
       // numeric-measure requirement is waived for that temporal case; every other
       // aggregation still requires a numeric measure.
-      const temporalMinMaxOk =
-        TEMPORAL_MINMAX_DERIVATIONS.has(effDeriv) && TEMPORAL_DATATYPES.has(f.datatype);
+      const temporalMinMaxOk = temporalMinMax(effDeriv, f);
       if (
         NUMERIC_AGGREGATION_DERIVATIONS.has(effDeriv) &&
         !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure') &&

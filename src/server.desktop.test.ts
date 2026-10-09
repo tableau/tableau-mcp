@@ -299,10 +299,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
     ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1143], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
-    ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
-    ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
+    ['plan-dashboard-creation', 1374], // Manual-registration description trim; do not grow.
+    ['build-and-apply-dashboard', 1421], // ratcheted down after removing viewpoint injection; do not grow
     ['author-action', 2582], // raised 2026-09-30 (+166, signed off): parameter-mode onClear enum distinguishes an empty-string reset from keep-current; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.

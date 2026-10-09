@@ -86,9 +86,28 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(result.content[0].text).toContain('Sheet1');
     expect(result.content[0].text).toContain('Sheet2');
     expect(result.content[0].text).toContain('My Dashboard');
-    expect(result.content[0].text).toContain('Ready for Phase 2');
+    expect(result.content[0].text).toContain('Worksheet caches are ready');
+    expect(result.content[0].text).toContain('Dashboard apply is blocked');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+    expect(payload.registration).toMatchObject({ required: true, kind: 'manual' });
     expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
     expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
+  });
+
+  it('does not require worksheet registration for an empty dashboard', async () => {
+    const result = await getResult({
+      session: SESSION,
+      worksheetNames: [],
+      dashboardName: 'Empty',
+    });
+    expect(result.isError).toBe(false);
+    expect(
+      JSON.parse(result.content[0].type === 'text' ? result.content[0].text : ''),
+    ).toMatchObject({
+      readiness: { worksheetBuild: true, dashboardApply: true },
+      registration: { required: false, status: 'ready' },
+    });
   });
 
   it('should call addSheet for each worksheet name', async () => {

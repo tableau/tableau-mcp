@@ -25,23 +25,16 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
     'applyWorkbookText:forward',
   ],
   // loadStoryboardXml forwards its caller's verdict straight into loadDashboardXml (storyboards
-  // reuse the dashboard per-sheet path), so this file has two forward seams in source order.
-  'src/desktop/wrappers/loadDashboardXml.ts': [
-    'loadDashboardXml:forward',
-    'applyWorkbookText:forward',
-  ],
+  // reuse the dashboard per-sheet path). The whole-workbook write seam has been removed.
+  'src/desktop/wrappers/loadDashboardXml.ts': ['loadDashboardXml:forward'],
   'src/tools/desktop/authoring/binder/bindTemplate.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/authoring/sheets/buildAndApplyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/batchCreateAndCacheSheets.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyDashboard.ts': ['loadDashboardXml:artifact'],
   'src/tools/desktop/authoring/sheets/applyDashboardWithViewpoints.ts': [
     'loadDashboardXml:artifact',
-    'loadWorkbookXml:artifact',
   ],
-  'src/tools/desktop/authoring/sheets/buildAndApplyDashboard.ts': [
-    'loadDashboardXml:artifact',
-    'loadWorkbookXml:artifact',
-  ],
+  'src/tools/desktop/authoring/sheets/buildAndApplyDashboard.ts': ['loadDashboardXml:artifact'],
   'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],

@@ -20,20 +20,35 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
-const paramsSchema = {
+export const worksheetAggregationSchema = z.enum([
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'cnt',
+  'ctd',
+  'med',
+  'std',
+  'stp',
+  'var',
+  'vrp',
+]);
+
+export const buildWorksheetsFromTemplatesParamsSchema = {
   session: z.string().optional().describe('Desktop PID.'),
   templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
   title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
   datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
-    .describe('Map slot ID to exact returned column_ref.'),
+    .describe('Slot to column_ref.'),
   derivationOverrides: z
-    .record(z.string(), z.enum(['cnt', 'ctd']))
+    .record(z.string(), worksheetAggregationSchema)
     .optional()
-    .describe('Count derivation by slot ID.'),
-  topN: z.number().int().min(1).max(50).optional().describe('Rank limit (1-50).'),
+    .describe('Aggregation by slot.'),
+  topN: z.number().int().min(1).max(50).optional().describe('Rank limit.'),
 };
+const paramsSchema = buildWorksheetsFromTemplatesParamsSchema;
 
 interface BuildWorksheetsFromTemplatesDependencies {
   store: TemplateArtifactStore;
@@ -49,8 +64,8 @@ export const getBuildWorksheetsFromTemplatesTool = (
   const tool = new DesktopTool({
     server,
     name: 'build-worksheets-from-templates',
-    title: 'Building template worksheet',
-    description: 'Build a worksheet artifact.',
+    title: 'Building worksheet',
+    description: 'Build worksheet.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
