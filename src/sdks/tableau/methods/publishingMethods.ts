@@ -1,7 +1,8 @@
-import { Zodios, ZodiosEndpointDefinitions } from '@zodios/core';
+import { ZodiosEndpointDefinitions } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { buildRestPath } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { FileUpload, fileUploadResponseSchema } from '../types/fileUpload.js';
@@ -26,7 +27,7 @@ const publishingApis: ZodiosEndpointDefinitions = [];
  */
 export default class PublishingMethods extends AuthenticatedMethods<typeof publishingApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, publishingApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, publishingApis, { axiosConfig }), creds);
   }
 
   /**

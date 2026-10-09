@@ -1,17 +1,18 @@
 /**
- * Enforcement: every `:param` in every Zodios endpoint path under `src/sdks/tableau/apis/` must be
- * declared explicitly as a `Path` parameter whose schema comes from `pathParam(...)` / `idSchema`
- * (or is a closed `z.enum` of safe literals).
+ * Enforcement: every `:param` in every Zodios endpoint path under `src/sdks/` must be declared
+ * explicitly as a `Path` parameter whose schema behaves like `pathParam(...)` (throws
+ * `RouteSafetyError` on a traversal payload) or is a closed `z.enum` of safe literals.
  * A bare `z.string()` (or an undeclared path param, which Zodios accepts unvalidated) fails here.
  *
  * The runtime guards in `./zodios.ts` still protect undeclared params; this test keeps the
  * declarative layer from regressing as endpoints are added.
  */
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 import { z } from 'zod';
 
+import * as agentApi from '../desktop/agentApi/apis.js';
 import * as authenticationApi from '../tableau/apis/authenticationApi.js';
 import * as contentExplorationApi from '../tableau/apis/contentExplorationApi.js';
 import * as datasourcesApi from '../tableau/apis/datasourcesApi.js';
@@ -32,8 +33,8 @@ import * as usersApi from '../tableau/apis/usersApi.js';
 import * as viewsApi from '../tableau/apis/viewsApi.js';
 import * as vizqlDataServiceApi from '../tableau/apis/vizqlDataServiceApi.js';
 import * as workbooksApi from '../tableau/apis/workbooksApi.js';
-import { assertSafePathSegment } from './core.js';
-import { isRouteSafeSchema } from './ids.js';
+import * as tableauOAuthApi from '../tableau-oauth/apis.js';
+import { assertSafePathSegment, RouteSafetyError } from './core.js';
 
 type Endpoint = {
   method: string;
@@ -45,26 +46,28 @@ type Endpoint = {
 // Static imports (the project type-checks as CommonJS, so `import.meta.glob` is unavailable).
 // The "covers every api module" test below fails if a new file is added without registering here.
 const modules: Record<string, Record<string, unknown>> = {
-  'authenticationApi.ts': authenticationApi,
-  'contentExplorationApi.ts': contentExplorationApi,
-  'datasourcesApi.ts': datasourcesApi,
-  'flowDocumentApi.ts': flowDocumentApi,
-  'flowsApi.ts': flowsApi,
-  'jobsApi.ts': jobsApi,
-  'knowledgeApi.ts': knowledgeApi,
-  'mcpSettingsApi.ts': mcpSettingsApi,
-  'metadataApi.ts': metadataApi,
-  'packagesApi.ts': packagesApi,
-  'paginationParameters.ts': paginationParameters,
-  'personalSpaceApi.ts': personalSpaceApi,
-  'projectsApi.ts': projectsApi,
-  'pulseApi.ts': pulseApi,
-  'serverApi.ts': serverApi,
-  'tasksApi.ts': tasksApi,
-  'usersApi.ts': usersApi,
-  'viewsApi.ts': viewsApi,
-  'vizqlDataServiceApi.ts': vizqlDataServiceApi,
-  'workbooksApi.ts': workbooksApi,
+  'desktop/agentApi/apis.ts': agentApi,
+  'tableau-oauth/apis.ts': tableauOAuthApi,
+  'tableau/apis/authenticationApi.ts': authenticationApi,
+  'tableau/apis/contentExplorationApi.ts': contentExplorationApi,
+  'tableau/apis/datasourcesApi.ts': datasourcesApi,
+  'tableau/apis/flowDocumentApi.ts': flowDocumentApi,
+  'tableau/apis/flowsApi.ts': flowsApi,
+  'tableau/apis/jobsApi.ts': jobsApi,
+  'tableau/apis/knowledgeApi.ts': knowledgeApi,
+  'tableau/apis/mcpSettingsApi.ts': mcpSettingsApi,
+  'tableau/apis/metadataApi.ts': metadataApi,
+  'tableau/apis/packagesApi.ts': packagesApi,
+  'tableau/apis/paginationParameters.ts': paginationParameters,
+  'tableau/apis/personalSpaceApi.ts': personalSpaceApi,
+  'tableau/apis/projectsApi.ts': projectsApi,
+  'tableau/apis/pulseApi.ts': pulseApi,
+  'tableau/apis/serverApi.ts': serverApi,
+  'tableau/apis/tasksApi.ts': tasksApi,
+  'tableau/apis/usersApi.ts': usersApi,
+  'tableau/apis/viewsApi.ts': viewsApi,
+  'tableau/apis/vizqlDataServiceApi.ts': vizqlDataServiceApi,
+  'tableau/apis/workbooksApi.ts': workbooksApi,
 };
 
 // A closed z.enum is stricter than a free-form segment, so it is accepted as long as every literal
@@ -80,7 +83,25 @@ const isSafeEnum = (schema: unknown): boolean =>
     }
   });
 
-const apisDir = join(__dirname, '..', 'tableau', 'apis');
+const sdksDir = join(__dirname, '..');
+
+// Every non-test source file under src/sdks that defines Zodios endpoints.
+const endpointModuleFiles = (readdirSync(sdksDir, { recursive: true }) as string[])
+  .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+  .filter((f) => /\b(makeApi|makeEndpoint)\(/.test(readFileSync(join(sdksDir, f), 'utf8')))
+  .map((f) => relative(sdksDir, join(sdksDir, f)).split('\\').join('/'));
+
+// A `pathParam(...)` schema throws RouteSafetyError on a traversal payload (it never returns a
+// Zod issue, see ./ids.ts). A bare `z.string()` would accept it.
+const isRouteSafeSchema = (schema: unknown): boolean => {
+  if (!(schema instanceof z.ZodType)) return false;
+  try {
+    schema.safeParse('../workbooks/x');
+    return false;
+  } catch (e) {
+    return e instanceof RouteSafetyError;
+  }
+};
 
 const isEndpoint = (e: unknown): e is Endpoint =>
   typeof e === 'object' &&
@@ -109,9 +130,9 @@ const cases = endpoints.flatMap(([file, e]) =>
 );
 
 describe('REST path-param enforcement', () => {
-  it('covers every api module', () => {
-    const files = readdirSync(apisDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
-    expect(Object.keys(modules).sort()).toEqual(files.sort());
+  it('covers every module that defines Zodios endpoints', () => {
+    const registered = Object.keys(modules);
+    expect(endpointModuleFiles.filter((f) => !registered.includes(f))).toEqual([]);
   });
 
   it('discovers endpoints with path params', () => {

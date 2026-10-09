@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { mcpSettingsApis } from '../apis/mcpSettingsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { McpSiteSettingsResult } from '../types/mcpSiteSettings.js';
@@ -15,7 +14,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class McpSettingsMethods extends AuthenticatedMethods<typeof mcpSettingsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, mcpSettingsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, mcpSettingsApis, { axiosConfig }), creds);
   }
 
   /**

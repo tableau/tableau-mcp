@@ -1,11 +1,10 @@
-import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../../logging/logger.js';
 import { AxiosRequestConfig, getStringResponseHeader, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { buildRestPath } from '../../routeSafety/core.js';
-import { luidSchema } from '../../routeSafety/ids.js';
+import { assertLuid, buildRestPath, RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { CustomView } from '../types/customView.js';
@@ -29,7 +28,7 @@ export type ViewAllDataResponse = {
  */
 export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, viewsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, viewsApis, { axiosConfig }), creds);
   }
 
   /**
@@ -206,6 +205,8 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       return handleQueryImageError(error);
     }
   };
@@ -238,7 +239,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     }
 
     const response = await this._apiClient.axios.get<string>(
-      buildRestPath('sites', siteId, 'views', luidSchema.parse(viewId), 'data'),
+      buildRestPath('sites', siteId, 'views', assertLuid('viewId', viewId), 'data'),
       {
         ...this.authHeader,
         params: queries,
@@ -275,7 +276,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     }
 
     const response = await this._apiClient.axios.get<Uint8Array>(
-      buildRestPath('sites', siteId, 'views', luidSchema.parse(viewId), 'allData'),
+      buildRestPath('sites', siteId, 'views', assertLuid('viewId', viewId), 'allData'),
       {
         ...this.authHeader,
         params: queries,
@@ -355,6 +356,8 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       return handleQueryImageError(error);
     }
   };

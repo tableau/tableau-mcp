@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { usersApis } from '../apis/usersApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
@@ -21,7 +20,7 @@ export interface ListUsersResult {
  */
 export default class UsersMethods extends AuthenticatedMethods<typeof usersApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, usersApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, usersApis, { axiosConfig }), creds);
   }
 
   /**

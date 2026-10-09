@@ -1,8 +1,6 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
-import { buildRestPath } from '../../routeSafety/core.js';
-import { luidSchema } from '../../routeSafety/ids.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -25,7 +23,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbooksApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, workbooksApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, workbooksApis, { axiosConfig }), creds);
   }
 
   /**
@@ -153,7 +151,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
     const response = await this._apiClient.axios.get<ArrayBuffer>(
-      buildRestPath('sites', siteId, 'workbooks', luidSchema.parse(workbookId), 'content'),
+      buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
       {
         params: { includeExtract },
         ...this.authHeader,

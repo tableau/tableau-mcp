@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { GraphQLResponse, metadataApis } from '../apis/metadataApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -14,7 +13,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class MetadataMethods extends AuthenticatedMethods<typeof metadataApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, metadataApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, metadataApis, { axiosConfig }), creds);
   }
 
   /**
