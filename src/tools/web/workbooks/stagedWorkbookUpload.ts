@@ -1,19 +1,26 @@
-import { randomUUID } from 'crypto';
-import { extname } from 'path';
-
+import { BucketS3Config } from '../s3Client.js';
 import {
-  BucketS3Config,
-  createPresignedPutUrlToS3,
-  downloadObjectFromS3IfExists,
-  joinS3Prefix,
-} from '../s3Client.js';
+  buildStagedUploadS3Key,
+  getStagedUploadFileType,
+  MAX_STAGED_UPLOAD_BYTES,
+  requestStagedUpload,
+  resolveStagedUpload,
+  StagedUploadKind,
+} from '../stagedUpload.js';
 
-// Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
-export const MAX_STAGED_WORKBOOK_BYTES = 5 * 1000 * 1000 * 1000;
+export const MAX_STAGED_WORKBOOK_BYTES = MAX_STAGED_UPLOAD_BYTES;
 export const WORKBOOK_UPLOAD_PREFIX_SEGMENT = 'workbook-uploads';
 
 export type WorkbookFileType = 'twb' | 'twbx';
-const WORKBOOK_FILE_TYPES: ReadonlyArray<WorkbookFileType> = ['twb', 'twbx'];
+
+const WORKBOOK_UPLOAD_KIND: StagedUploadKind<WorkbookFileType> = {
+  label: 'Workbook',
+  prefixSegment: WORKBOOK_UPLOAD_PREFIX_SEGMENT,
+  objectBaseName: 'workbook',
+  fileTypes: ['twb', 'twbx'],
+  contentTypeFor: (fileType) =>
+    fileType === 'twb' ? 'application/xml' : 'application/octet-stream',
+};
 
 export type ResolvedWorkbook = {
   fileName: string;
@@ -28,72 +35,35 @@ export type RequestWorkbookUploadResult = {
   requiredHeaders: Record<string, string>;
 };
 
-type WorkbookUploadOptions = {
-  fileName: string;
-  config: BucketS3Config;
-};
-
-type ResolveWorkbookUploadOptions = {
-  workbookUploadId: string;
-  config: BucketS3Config;
-  maxBytes?: number;
-};
-
 export async function requestStagedWorkbookUpload({
   fileName,
   config,
-}: WorkbookUploadOptions): Promise<RequestWorkbookUploadResult> {
-  const fileType = assertWorkbookUploadFileName(fileName);
-
-  const workbookUploadId = randomUUID();
-  const contentType = getWorkbookUploadContentType(fileType);
-  const uploadUrl = await createPresignedPutUrlToS3({
-    key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
-    contentType,
-    bucket: config.bucket,
-    region: config.region,
-    presignTtlSeconds: config.presignTtlSeconds,
+}: {
+  fileName: string;
+  config: BucketS3Config;
+}): Promise<RequestWorkbookUploadResult> {
+  const { uploadId, ...rest } = await requestStagedUpload(WORKBOOK_UPLOAD_KIND, {
+    fileName,
+    config,
   });
-
-  return {
-    workbookUploadId,
-    uploadUrl,
-    expiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000).toISOString(),
-    maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
-    requiredHeaders: { 'Content-Type': contentType },
-  };
+  return { workbookUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
   config,
-  maxBytes = MAX_STAGED_WORKBOOK_BYTES,
-}: ResolveWorkbookUploadOptions): Promise<ResolvedWorkbook> {
-  assertWorkbookUploadId(workbookUploadId);
-
-  for (const fileType of WORKBOOK_FILE_TYPES) {
-    const bytes = await downloadObjectFromS3IfExists({
-      key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
-      bucket: config.bucket,
-      region: config.region,
-      maxBytes,
-    });
-
-    if (bytes === undefined) {
-      continue;
-    }
-
-    if (bytes.byteLength === 0) {
-      throw new Error('Workbook upload bytes must not be empty.');
-    }
-
-    return {
-      fileName: `${workbookUploadId}.${fileType}`,
-      bytes,
-    };
-  }
-
-  throw new Error('Workbook upload not found. Upload the workbook bytes before publishing.');
+  maxBytes,
+}: {
+  workbookUploadId: string;
+  config: BucketS3Config;
+  maxBytes?: number;
+}): Promise<ResolvedWorkbook> {
+  const { fileName, bytes } = await resolveStagedUpload(WORKBOOK_UPLOAD_KIND, {
+    uploadId: workbookUploadId,
+    config,
+    maxBytes,
+  });
+  return { fileName, bytes };
 }
 
 export function buildWorkbookUploadS3Key(
@@ -101,39 +71,9 @@ export function buildWorkbookUploadS3Key(
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
-  assertWorkbookUploadId(workbookUploadId);
-  return `${joinS3Prefix(keyPrefix, WORKBOOK_UPLOAD_PREFIX_SEGMENT)}${workbookUploadId}/workbook.${fileType}`;
-}
-
-function assertWorkbookUploadFileName(fileName: string): WorkbookFileType {
-  const fileType = getWorkbookFileType(fileName);
-  if (!fileType) {
-    throw new Error('Workbook upload filename must end in .twb or .twbx.');
-  }
-  return fileType;
+  return buildStagedUploadS3Key(WORKBOOK_UPLOAD_KIND, keyPrefix, workbookUploadId, fileType);
 }
 
 export function getWorkbookFileType(fileName: string): WorkbookFileType | undefined {
-  const extension = extname(fileName).toLowerCase();
-  if (extension === '.twb') {
-    return 'twb';
-  }
-  if (extension === '.twbx') {
-    return 'twbx';
-  }
-  return undefined;
-}
-
-function getWorkbookUploadContentType(fileType: WorkbookFileType): string {
-  return fileType === 'twb' ? 'application/xml' : 'application/octet-stream';
-}
-
-function assertWorkbookUploadId(workbookUploadId: string): void {
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      workbookUploadId,
-    )
-  ) {
-    throw new Error('Workbook upload id is invalid.');
-  }
+  return getStagedUploadFileType(WORKBOOK_UPLOAD_KIND, fileName);
 }

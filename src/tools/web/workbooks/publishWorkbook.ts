@@ -28,6 +28,7 @@ import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
+import { sanitizeFindingText } from '../utils/sanitizeFindingText.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -509,14 +510,4 @@ function toValidationFinding(issue: ValidationIssue): ValidationFinding {
     column: issue.column,
     elementName: sanitizeFindingText(issue.elementName, 255),
   };
-}
-
-function sanitizeFindingText(value: string, maxLength: number): string {
-  return Array.from(value)
-    .map((character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
-      return codePoint < 32 || codePoint === 127 ? ' ' : character;
-    })
-    .join('')
-    .slice(0, maxLength);
 }

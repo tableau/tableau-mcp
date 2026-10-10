@@ -22,5 +22,13 @@ export const workbookPermissionsSchema = z.object({
   }),
 });
 
+// Query Data Source Permissions response (rest_api_ref_permissions.htm#query_data_source_permissions).
+export const datasourcePermissionsSchema = z.object({
+  permissions: z.object({
+    datasource: z.object({ id: z.string().optional(), name: z.string().optional() }).optional(),
+    granteeCapabilities: z.array(granteeCapabilitySchema).optional(),
+  }),
+});
+
 export type GranteeCapability = z.infer<typeof granteeCapabilitySchema>;
 export type WorkbookPermissions = z.infer<typeof workbookPermissionsSchema>;

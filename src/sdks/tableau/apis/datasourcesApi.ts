@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { dataSourceSchema, publishedDataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
+import { datasourcePermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
 import { paginationParameters } from './paginationParameters.js';
 
@@ -102,10 +103,24 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+/**
+ * Query Data Source Permissions
+ * GET /api/api-version/sites/site-id/datasources/datasource-id/permissions
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_data_source_permissions
+ */
+const queryDatasourcePermissionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/datasources/:datasourceId/permissions',
+  alias: 'queryDatasourcePermissions',
+  description: 'Returns the permissions (grantee capabilities) for the specified data source.',
+  response: datasourcePermissionsSchema,
+});
+
 const datasourcesApi = makeApi([
   listDatasourcesEndpoint,
   queryDatasourceEndpoint,
   deleteDatasourceEndpoint,
   addTagsToDatasourceEndpoint,
+  queryDatasourcePermissionsEndpoint,
 ]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

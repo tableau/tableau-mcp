@@ -15,6 +15,7 @@ export const dataSourceSchema = z.object({
   id: z.string(),
   name: z.string(),
   contentUrl: z.string().optional(),
+  webpageUrl: z.string().optional(),
   description: z.string().optional(),
   // `createdAt` and `isCertified` are returned by the Query Data Sources REST endpoint but were
   // historically not parsed here. The Admin Insights resolver uses them to disambiguate duplicate

@@ -139,4 +139,92 @@ describe('PublishingMethods', () => {
       expect(firstChunkBody.byteLength).toBeGreaterThan(secondChunkBody.byteLength);
     });
   });
+
+  describe('uploadStreamInChunks', () => {
+    function createPublishingMethods(): {
+      publishingMethods: PublishingMethods;
+      appendedChunks: Buffer[];
+      mockPost: ReturnType<typeof vi.fn>;
+    } {
+      const appendedChunks: Buffer[] = [];
+      const mockPost = vi.fn().mockResolvedValue({
+        data: { fileUpload: { uploadSessionId: 'session-1' } },
+      });
+      const publishingMethods = new PublishingMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // Capture the chunk itself rather than the multipart body so ordering and sizes are exact.
+      vi.spyOn(publishingMethods, 'appendToFileUpload').mockImplementation(async ({ chunk }) => {
+        appendedChunks.push(Buffer.from(chunk));
+        return { uploadSessionId: 'session-1' };
+      });
+      // @ts-expect-error - Mocking private property
+      publishingMethods._apiClient = {
+        axios: {
+          post: mockPost,
+          defaults: { baseURL: 'http://test' },
+        } as unknown as AxiosInstance,
+      };
+      return { publishingMethods, appendedChunks, mockPost };
+    }
+
+    it('splits a 150 MB stream into three in-order appends of at most 64 MB', async () => {
+      const { publishingMethods, appendedChunks, mockPost } = createPublishingMethods();
+      const oneMegabyte = 1024 * 1024;
+      async function* stream(): AsyncGenerator<Buffer> {
+        for (let index = 0; index < 150; index++) {
+          // Tag each MB with its index so reordering would be detected.
+          yield Buffer.alloc(oneMegabyte, index);
+        }
+      }
+
+      const result = await publishingMethods.uploadStreamInChunks({
+        siteId: 'site-1',
+        filename: 'datasource.tdsx',
+        stream: stream(),
+      });
+
+      expect(result).toEqual({ uploadSessionId: 'session-1', totalBytes: 150 * oneMegabyte });
+      expect(mockPost).toHaveBeenCalledOnce();
+      expect(appendedChunks.map((chunk) => chunk.byteLength)).toEqual([
+        64 * oneMegabyte,
+        64 * oneMegabyte,
+        22 * oneMegabyte,
+      ]);
+      expect(appendedChunks[0][0]).toBe(0);
+      expect(appendedChunks[0].at(-1)).toBe(63);
+      expect(appendedChunks[1][0]).toBe(64);
+      expect(appendedChunks[2][0]).toBe(128);
+      expect(appendedChunks[2].at(-1)).toBe(149);
+    });
+
+    it('re-chunks pieces that straddle chunk boundaries', async () => {
+      const { publishingMethods, appendedChunks } = createPublishingMethods();
+
+      await publishingMethods.uploadStreamInChunks({
+        siteId: 'site-1',
+        filename: 'datasource.hyper',
+        stream: [Buffer.from('abc'), new Uint8Array([100, 101, 102, 103]), 'hij'],
+        chunkBytes: 4,
+      });
+
+      expect(appendedChunks.map((chunk) => chunk.toString())).toEqual(['abcd', 'efgh', 'ij']);
+    });
+
+    it('rejects chunk sizes above the Tableau limit', async () => {
+      const { publishingMethods, mockPost } = createPublishingMethods();
+
+      await expect(
+        publishingMethods.uploadStreamInChunks({
+          siteId: 'site-1',
+          filename: 'datasource.tdsx',
+          stream: [],
+          chunkBytes: 65 * 1024 * 1024,
+        }),
+      ).rejects.toThrow('chunkBytes must be between');
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+  });
 });

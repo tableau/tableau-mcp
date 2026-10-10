@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { jobSchema } from '../types/job.js';
+import { jobDetailSchema, jobSchema } from '../types/job.js';
 import { paginationSchema } from '../types/pagination.js';
 import { paginationParameters } from './paginationParameters.js';
 
@@ -57,5 +57,32 @@ const listJobsEndpoint = makeEndpoint({
   response: listJobsResponseSchema,
 });
 
-const jobsApi = makeApi([listJobsEndpoint]);
+/**
+ * Query Job
+ * GET /api/api-version/sites/site-id/jobs/job-id
+ * Returns status information about an asynchronous job, such as an `asJob=true` publish.
+ * Tableau Cloud scope: tableau:jobs:read
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#query_job
+ */
+const getJobEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/jobs/:jobId',
+  alias: 'getJob',
+  description: 'Returns status information about the specified asynchronous job.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'jobId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.object({ job: jobDetailSchema }),
+});
+
+const jobsApi = makeApi([listJobsEndpoint, getJobEndpoint]);
 export const jobsApis = [...jobsApi] as const satisfies ZodiosEndpointDefinitions;

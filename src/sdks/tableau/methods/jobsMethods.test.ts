@@ -77,4 +77,20 @@ describe('JobsMethods', () => {
       );
     });
   });
+
+  describe('getJob', () => {
+    it('returns the job from the Query Job response', async () => {
+      const job = { id: 'job-1', type: 'PublishDatasource', finishCode: 0 };
+      const mockApiClient = { getJob: vi.fn().mockResolvedValue({ job }) };
+
+      const jobsMethods = new JobsMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      jobsMethods._apiClient = mockApiClient;
+
+      expect(await jobsMethods.getJob({ siteId: 'site-1', jobId: 'job-1' })).toEqual(job);
+      expect(mockApiClient.getJob).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { siteId: 'site-1', jobId: 'job-1' } }),
+      );
+    });
+  });
 });

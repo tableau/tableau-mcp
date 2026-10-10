@@ -3,7 +3,7 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { jobsApis } from '../apis/jobsApi.js';
 import { RestApiCredentials } from '../restApi.js';
-import { Job } from '../types/job.js';
+import { Job, JobDetail } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -50,5 +50,22 @@ export default class JobsMethods extends AuthenticatedMethods<typeof jobsApis> {
       pagination: response.pagination,
       jobs: response.backgroundJobs.backgroundJob,
     };
+  };
+
+  /**
+   * Returns status information about the specified asynchronous job.
+   *
+   * Required scopes (Tableau Cloud): `tableau:jobs:read`
+   *
+   * @param siteId - The Tableau site ID
+   * @param jobId - The ID of the job
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#query_job
+   */
+  getJob = async ({ siteId, jobId }: { siteId: string; jobId: string }): Promise<JobDetail> => {
+    const response = await this._apiClient.getJob({
+      params: { siteId, jobId },
+      ...this.authHeader,
+    });
+    return response.job;
   };
 }

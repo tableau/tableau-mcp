@@ -1,11 +1,15 @@
 import { isErrorFromAlias, Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DataSource, PublishedDataSource } from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
+import { GranteeCapability } from '../types/permissions.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -171,4 +175,88 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       },
     );
   };
+
+  /**
+   * Returns the permissions (grantee capabilities) configured on the specified data source.
+   *
+   * Required scopes (Tableau Cloud): `tableau:permissions:read`
+   *
+   * @param datasourceId - The ID of the data source
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_data_source_permissions
+   */
+  queryDatasourcePermissions = async ({
+    datasourceId,
+    siteId,
+  }: {
+    datasourceId: string;
+    siteId: string;
+  }): Promise<GranteeCapability[]> => {
+    const response = await this._apiClient.queryDatasourcePermissions({
+      params: { siteId, datasourceId },
+      ...this.authHeader,
+    });
+    return response.permissions.granteeCapabilities ?? [];
+  };
+
+  /**
+   * Publishes a .tdsx or .hyper staged in an upload session as an asynchronous job
+   * (`asJob=true`), returning the job id to poll with `jobsMethods.getJob`. The job result does
+   * not include the new data source's LUID; look it up by name and project once the job succeeds.
+   *
+   * Required scopes (Tableau Cloud): `tableau:datasources:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session holding the file bytes
+   * @param datasourceType - The uploaded file's type
+   * @param name - The name to give the published data source
+   * @param projectId - The LUID of the destination project
+   * @param description - Optional data source description
+   * @param overwrite - Whether to replace a data source with the same name in the project
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_data_source
+   */
+  publishDatasourceAsJob = async ({
+    siteId,
+    uploadSessionId,
+    datasourceType,
+    name,
+    projectId,
+    description,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    datasourceType: 'tdsx' | 'hyper';
+    name: string;
+    projectId: string;
+    description?: string;
+    overwrite: boolean;
+  }): Promise<{ jobId: string }> => {
+    const descriptionAttribute =
+      description !== undefined ? ` description="${escapeXmlAttribute(description)}"` : '';
+    const xml =
+      `<tsRequest><datasource name="${escapeXmlAttribute(name)}"${descriptionAttribute}>` +
+      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      '</datasource></tsRequest>';
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/datasources`,
+      body,
+      {
+        params: { uploadSessionId, datasourceType, overwrite, asJob: true },
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return { jobId: publishJobResponseSchema.parse(response.data).job.id };
+  };
 }
+
+const publishJobResponseSchema = z.object({ job: z.object({ id: z.string() }) });

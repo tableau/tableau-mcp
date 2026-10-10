@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { jobDetailSchema } from '../types/job.js';
 import { listJobsResponseSchema } from './jobsApi.js';
 
 const parseListJobsResponse = (raw: unknown): z.infer<typeof listJobsResponseSchema> =>
@@ -86,5 +87,23 @@ describe('parseListJobsResponse', () => {
       backgroundJobs: { backgroundJob: jobs },
     });
     expect(data.backgroundJobs).toEqual({ backgroundJob: jobs });
+  });
+});
+
+describe('jobDetailSchema', () => {
+  it('coerces finishCode and normalizes a single statusNote to an array', () => {
+    const job = jobDetailSchema.parse({
+      id: 'job-1',
+      finishCode: '1',
+      progress: '100',
+      notes: ['first', 'second'],
+      statusNotes: { statusNote: { type: 'ErrorCode', text: 'bad extract' } },
+    });
+    expect(job).toMatchObject({
+      finishCode: 1,
+      progress: 100,
+      notes: 'first\nsecond',
+      statusNotes: { statusNote: [{ type: 'ErrorCode', text: 'bad extract' }] },
+    });
   });
 });

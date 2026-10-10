@@ -20,6 +20,7 @@ import type { WebToolName } from '../../tools/web/toolName.js';
 export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
+  | 'tableau:mcp:datasource:create'
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
@@ -69,6 +70,7 @@ export type TableauApiScope =
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
+  | 'tableau:datasources:create'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
@@ -86,6 +88,7 @@ export type TableauApiScope =
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
   'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
@@ -199,6 +202,22 @@ export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
 
 /**
+ * Tableau API scopes required by the `publish-datasource` tool. Beyond creating the upload and the
+ * data source, the tool reads content (the pre-publish name check and the post-publish lookup, since
+ * the async job result carries no LUID) and polls the publish job.
+ *
+ * Like publish-workbook, the optional permissions read runs on a separate REST session.
+ */
+export const PUBLISH_DATASOURCE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:datasources:create',
+  'tableau:file_uploads:create',
+  'tableau:content:read',
+  'tableau:jobs:read',
+];
+
+export const PUBLISH_DATASOURCE_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
+
+/**
  * Validates that a scope string is a valid MCP scope
  */
 export async function isValidScope(scope: string, clientId?: string): Promise<boolean> {
@@ -274,6 +293,14 @@ const toolScopeMap: Record<
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+  },
+  'request-datasource-upload': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
+  'publish-datasource': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set(PUBLISH_DATASOURCE_API_SCOPES),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -586,6 +613,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
     enabledTools.delete('download-workbook');
+    enabledTools.delete('request-datasource-upload');
+    enabledTools.delete('publish-datasource');
   }
 
   if (!dataAppsEnabled) {
@@ -623,6 +652,9 @@ export async function getSupportedApiScopes(
 
   if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
     scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+  }
+  if (includeOptionalScopes && enabledTools.has('publish-datasource')) {
+    scopes.add(PUBLISH_DATASOURCE_PERMISSIONS_API_SCOPE);
   }
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {

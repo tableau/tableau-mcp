@@ -74,6 +74,8 @@ describe('server', () => {
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
         'publish-workbook',
+        'request-datasource-upload',
+        'publish-datasource',
       ];
       // knowledge tools are gated off by default (knowledge-tools feature flag)
       const knowledgeTools: ReadonlyArray<WebToolName> = [
@@ -272,6 +274,8 @@ describe('server', () => {
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
         'publish-workbook',
+        'request-datasource-upload',
+        'publish-datasource',
       ];
       // knowledge tools are gated off by default (knowledge-tools feature flag)
       const knowledgeTools: ReadonlyArray<WebToolName> = [

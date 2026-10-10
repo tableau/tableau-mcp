@@ -46,6 +46,7 @@ type JwtScopes =
   | 'tableau:workbooks:update'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasources:create'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'

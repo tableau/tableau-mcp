@@ -627,6 +627,16 @@ describe('scopes', () => {
       ]);
     });
 
+    it('should require publish, lookup and job scopes for publish-datasource, excluding optional permissions read', () => {
+      expect(getRequiredApiScopesForTool('publish-datasource')).toEqual([
+        'tableau:datasources:create',
+        'tableau:file_uploads:create',
+        'tableau:content:read',
+        'tableau:jobs:read',
+      ]);
+      expect(getRequiredApiScopesForTool('request-datasource-upload')).toEqual([]);
+    });
+
     it('should require workbooks update plus resource access scopes for move-workbook', () => {
       expect(getRequiredApiScopesForTool('move-workbook')).toEqual([
         'tableau:workbooks:update',

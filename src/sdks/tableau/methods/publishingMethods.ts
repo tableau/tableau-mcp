@@ -9,6 +9,9 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 /** Tableau's fileUploads endpoint rejects any single chunk larger than 64 MB. */
 export const MAX_FILE_UPLOAD_CHUNK_BYTES = 64 * 1024 * 1024;
 
+type BytePiece = Buffer | Uint8Array | string;
+export type ByteStream = AsyncIterable<BytePiece> | Iterable<BytePiece>;
+
 const publishingApis: ZodiosEndpointDefinitions = [];
 
 /**
@@ -132,5 +135,60 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     }
 
     return uploadSessionId;
+  };
+
+  /**
+   * Streaming variant of {@link uploadFileInChunks}: reads `stream` and appends it to a new upload
+   * session in chunks of `chunkBytes` (at most 64 MB), holding at most one chunk in memory. Use for
+   * content too large to buffer, such as data source extracts.
+   *
+   * @param siteId - The Tableau site ID
+   * @param filename - The filename presented to Tableau for each chunk
+   * @param stream - The file contents, in order
+   * @returns The upload session id and the total number of bytes uploaded
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_publish.htm
+   */
+  uploadStreamInChunks = async ({
+    siteId,
+    filename,
+    stream,
+    chunkBytes = MAX_FILE_UPLOAD_CHUNK_BYTES,
+  }: {
+    siteId: string;
+    filename: string;
+    stream: ByteStream;
+    chunkBytes?: number;
+  }): Promise<{ uploadSessionId: string; totalBytes: number }> => {
+    if (chunkBytes <= 0 || chunkBytes > MAX_FILE_UPLOAD_CHUNK_BYTES) {
+      throw new Error(`chunkBytes must be between 1 and ${MAX_FILE_UPLOAD_CHUNK_BYTES}.`);
+    }
+
+    const { uploadSessionId } = await this.initiateFileUpload({ siteId });
+    const append = (chunk: Buffer): Promise<FileUpload> =>
+      this.appendToFileUpload({ siteId, uploadSessionId, filename, chunk });
+
+    let pending: Buffer[] = [];
+    let pendingBytes = 0;
+    let totalBytes = 0;
+    for await (const piece of stream) {
+      const buffer = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+      pending.push(buffer);
+      pendingBytes += buffer.byteLength;
+      totalBytes += buffer.byteLength;
+
+      while (pendingBytes >= chunkBytes) {
+        const combined = Buffer.concat(pending, pendingBytes);
+        await append(combined.subarray(0, chunkBytes));
+        const remainder = combined.subarray(chunkBytes);
+        pending = remainder.byteLength > 0 ? [remainder] : [];
+        pendingBytes = remainder.byteLength;
+      }
+    }
+
+    if (pendingBytes > 0) {
+      await append(Buffer.concat(pending, pendingBytes));
+    }
+
+    return { uploadSessionId, totalBytes };
   };
 }

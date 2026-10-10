@@ -1,3 +1,4 @@
+import { type ByteStream } from '../../sdks/tableau/methods/publishingMethods.js';
 /**
  * Shared S3 upload core.
  *
@@ -253,6 +254,77 @@ export async function downloadObjectFromS3IfExists({
       return undefined;
     }
     throw error;
+  }
+}
+
+/**
+ * Opens `key` as a byte stream instead of buffering it, resolving to `undefined` when the key
+ * doesn't exist. The returned stream throws once more than `maxBytes` have been read, so a
+ * missing or wrong ContentLength cannot bypass the limit.
+ */
+export async function openObjectStreamFromS3IfExists({
+  key,
+  bucket,
+  region,
+  maxBytes,
+}: {
+  key: string;
+  bucket: string;
+  region: string;
+  maxBytes: number;
+}): Promise<{ stream: ByteStream; contentLength?: number } | undefined> {
+  const { client, GetObjectCommand } = await getS3Bundle(region);
+  let response;
+  try {
+    response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (error) {
+    if (isS3NotFoundError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+
+  let contentLength: number | undefined;
+  if (response.ContentLength !== undefined) {
+    contentLength = Number(response.ContentLength);
+    if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+      throw new Error('S3 object has an invalid byte length.');
+    }
+    if (contentLength > maxBytes) {
+      throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+    }
+  }
+
+  const body: unknown = response.Body;
+  if (!body) {
+    throw new Error('S3 object did not return a body.');
+  }
+  const directBuffer = staticBodyToBuffer(body);
+  if (directBuffer) {
+    return { stream: [assertBufferWithinLimit(directBuffer, maxBytes)], contentLength };
+  }
+  if (!isAsyncIterable(body)) {
+    throw new Error('S3 object body type is not supported.');
+  }
+
+  return { stream: boundStream(body, maxBytes), contentLength };
+}
+
+async function* boundStream(
+  body: AsyncIterable<Buffer | Uint8Array | string>,
+  maxBytes: number,
+): AsyncGenerator<Buffer> {
+  let totalBytes = 0;
+  for await (const chunk of body) {
+    const buffer = staticBodyToBuffer(chunk);
+    if (!buffer) {
+      throw new Error('S3 object stream returned an unsupported chunk type.');
+    }
+    totalBytes += buffer.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+    }
+    yield buffer;
   }
 }
 

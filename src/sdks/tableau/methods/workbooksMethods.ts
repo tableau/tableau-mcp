@@ -2,6 +2,7 @@ import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
@@ -376,20 +377,6 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       throw error;
     }
   };
-}
-
-function escapeXmlAttribute(value: string): string {
-  return (
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      // Numeric char ref, not the named &apos; - &apos; is a valid XML 1.0 entity but is absent from
-      // the HTML predefined set and the Tableau publish endpoint's parser rejects it (a name like
-      // O'Brien then 400s). &#39; is universally accepted.
-      .replace(/'/g, '&#39;')
-  );
 }
 
 function getHeader(headers: Record<string, unknown>, name: string): string | undefined {

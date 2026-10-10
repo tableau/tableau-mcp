@@ -93,6 +93,8 @@ export class Config extends BaseConfig {
     keyPrefix: string;
     presignTtlSeconds: number;
   };
+  // How long publish-datasource polls its async publish job before returning `pending`.
+  publishDatasourceJobTimeoutSeconds: number;
 
   constructor() {
     super();
@@ -167,6 +169,7 @@ export class Config extends BaseConfig {
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
       FILE_TTL: bucketS3PresignTtlSeconds,
+      PUBLISH_DATASOURCE_JOB_TIMEOUT_SECONDS: publishDatasourceJobTimeoutSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -377,6 +380,12 @@ export class Config extends BaseConfig {
         maxValue: 900,
       }),
     };
+
+    this.publishDatasourceJobTimeoutSeconds = parseNumber(publishDatasourceJobTimeoutSeconds, {
+      defaultValue: 120,
+      minValue: 0,
+      maxValue: 900,
+    });
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

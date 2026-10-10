@@ -735,3 +735,20 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
+
+<hr />
+
+## `PUBLISH_DATASOURCE_JOB_TIMEOUT_SECONDS`
+
+How long [Publish Data Source](../../tools/data-qna/publish-datasource.md) waits for Tableau's
+asynchronous publish job to finish before returning `status: "pending"` with the job id. The value is
+in seconds. Set it to `0` to check the job once and return `pending` unless it has already finished.
+
+- Default: `120` (2 minutes).
+- Clamped to the range `0`–`900` (0 seconds–15 minutes).
+
+**Example:**
+
+```bash
+PUBLISH_DATASOURCE_JOB_TIMEOUT_SECONDS=60
+```
