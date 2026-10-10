@@ -31,6 +31,9 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // template to disk or presigns a GET URL against a pre-published S3 object). The callback never
   // reads tableauAuthInfo, so it behaves identically regardless of auth type — safe with passthrough.
   'scaffold-data-app',
+  // Staged data source upload URL creation: no Tableau REST API call. The tool callback explicitly
+  // returns an error for Passthrough auth before issuing a signed upload URL.
+  'request-datasource-upload',
 ];
 
 describe('passthroughAuthMiddleware', () => {

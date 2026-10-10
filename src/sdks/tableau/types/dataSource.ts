@@ -45,3 +45,15 @@ export const publishedDataSourceSchema = dataSourceSchema.extend({
 });
 
 export type PublishedDataSource = z.infer<typeof publishedDataSourceSchema>;
+
+// The Publish Data Source response always carries a `project` but may omit `<tags>` for an untagged
+// data source, and includes a `webpageUrl` pointing at the data source's page in the Tableau web UI
+// (not parsed by Query / List Data Sources). Keep this separate so the base schema's contracts for
+// those endpoints are unchanged.
+export const publishedDataSourceResponseSchema = dataSourceSchema.extend({
+  project: projectSchema,
+  tags: tagsSchema.optional(),
+  webpageUrl: z.string().optional(),
+});
+
+export type PublishedDataSourceResponse = z.infer<typeof publishedDataSourceResponseSchema>;
