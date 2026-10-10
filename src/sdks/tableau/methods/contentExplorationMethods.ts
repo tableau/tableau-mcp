@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { contentExplorationApis } from '../apis/contentExplorationApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { SearchContentResponse } from '../types/contentExploration.js';
@@ -17,7 +16,7 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
   typeof contentExplorationApis
 > {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, contentExplorationApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, contentExplorationApis, { axiosConfig }), creds);
   }
 
   /**

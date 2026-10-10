@@ -1,10 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   getViewLineageByLuid,
   getViewLineageQuery,
@@ -19,7 +19,7 @@ import { WebTool } from '../tool.js';
 import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  viewId: luidSchema,
 };
 
 export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {

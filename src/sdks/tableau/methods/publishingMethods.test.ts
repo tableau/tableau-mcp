@@ -26,7 +26,7 @@ describe('PublishingMethods', () => {
 
       expect(fileUpload).toEqual({ uploadSessionId: 'session-1', fileSize: 0 });
       const [url, body, config] = mockPost.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/fileUploads');
+      expect(url).toBe('/sites/site-1/fileUploads');
       expect(body).toBeUndefined();
       expect(config.headers.Accept).toBe('application/json');
     });
@@ -59,7 +59,7 @@ describe('PublishingMethods', () => {
 
       expect(fileUpload).toEqual({ uploadSessionId: 'session-1', fileSize: 1024 });
       const [url, body, config] = mockPut.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/fileUploads/session-1');
+      expect(url).toBe('/sites/site-1/fileUploads/session-1');
       expect(body.toString('latin1')).toContain(
         'Content-Disposition: form-data; name="tableau_file"; filename="superstore.twbx"',
       );

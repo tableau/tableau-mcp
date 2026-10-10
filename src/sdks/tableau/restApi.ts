@@ -9,6 +9,7 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from '../interceptors.js';
+import { assertSafeRequestUrl } from '../routeSafety/core.js';
 import { AuthConfig } from './authConfig.js';
 import {
   AuthenticatedAuthenticationMethods,
@@ -388,6 +389,10 @@ export class RestApi {
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
     interceptors.request.use(
       (config) => {
+        // Axios runs request interceptors in reverse registration order, so the route guard that
+        // `createGuardedZodios` installed would run after this one. Check the URL here first so an
+        // unsafe URL is never logged or sent to the client as a notification.
+        assertSafeRequestUrl(config.url, config.baseURL);
         this._requestInterceptor?.[0]({
           baseUrl,
           ...getRequestInterceptorConfig(config),

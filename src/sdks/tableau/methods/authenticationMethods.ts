@@ -1,7 +1,6 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { getJwt } from '../../../utils/getJwt.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -18,7 +17,7 @@ import Methods from './methods.js';
  */
 export class AuthenticationMethods extends Methods<typeof authenticationApis> {
   constructor(baseUrl: string, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, authenticationApis, { axiosConfig }));
+    super(createGuardedZodios(baseUrl, authenticationApis, { axiosConfig }));
   }
 
   /**
@@ -91,7 +90,7 @@ export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
   typeof authenticationApis
 > {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, authenticationApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, authenticationApis, { axiosConfig }), creds);
   }
 
   /**

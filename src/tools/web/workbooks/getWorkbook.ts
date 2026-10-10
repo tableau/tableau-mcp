@@ -1,11 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { QueryPermissionResource } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import {
   filterLineageContentsByAllowedIds,
@@ -29,7 +29,7 @@ import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
-  workbookId: z.string(),
+  workbookId: luidSchema,
 };
 
 // Cap on concurrent user-has-query-permissions calls when enriching a workbook's upstream data

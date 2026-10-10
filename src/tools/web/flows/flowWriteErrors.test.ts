@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { McpToolError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { TableauRestError } from '../../../sdks/tableau/tableauRestError.js';
 import { mapCancelFlowRunError, mapFlowWriteError } from './flowWriteErrors.js';
 
@@ -18,6 +19,16 @@ function axiosError(
 }
 
 describe('mapFlowWriteError', () => {
+  it('maps a RouteSafetyError to a 400 args-validation error, not flow-write-failed', () => {
+    const result = mapFlowWriteError(
+      new RouteSafetyError("Path parameter 'flowId' must be a Tableau LUID (UUID format)"),
+      'run this flow',
+    );
+    expect(result).toBeInstanceOf(ArgsValidationError);
+    expect(result.statusCode).toBe(400);
+    expect(result.message).toBe("Path parameter 'flowId' must be a Tableau LUID (UUID format)");
+  });
+
   it('passes an McpToolError through unchanged', () => {
     const original = new McpToolError({ type: 'x', message: 'y', statusCode: 400 });
     expect(mapFlowWriteError(original, 'run this flow')).toBe(original);
@@ -98,6 +109,14 @@ describe('mapFlowWriteError', () => {
 });
 
 describe('mapCancelFlowRunError', () => {
+  it('maps a RouteSafetyError to a 400 args-validation error, not cancel-flow-run-failed', () => {
+    const result = mapCancelFlowRunError(
+      new RouteSafetyError("Path parameter 'flowRunId' must be a Tableau LUID (UUID format)"),
+    );
+    expect(result).toBeInstanceOf(ArgsValidationError);
+    expect(result.statusCode).toBe(400);
+  });
+
   it('passes an McpToolError through unchanged', () => {
     const original = new McpToolError({ type: 'x', message: 'y', statusCode: 403 });
     expect(mapCancelFlowRunError(original)).toBe(original);

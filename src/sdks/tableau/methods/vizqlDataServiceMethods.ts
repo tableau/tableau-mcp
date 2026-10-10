@@ -1,7 +1,8 @@
-import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
+import { isErrorFromAlias, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import {
   DatasourceModelResponse,
   GetDatasourceModelRequest,
@@ -46,7 +47,7 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, vizqlDataServiceApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, vizqlDataServiceApis, { axiosConfig }), creds);
   }
 
   /**

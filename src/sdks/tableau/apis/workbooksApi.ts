@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { paginationSchema } from '../types/pagination.js';
 import { workbookPermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
@@ -13,6 +14,7 @@ const getWorkbookEndpoint = makeEndpoint({
   alias: 'getWorkbook',
   description:
     'Returns information about the specified workbook, including information about views and tags.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: z.object({ workbook: workbookSchema }),
 });
 
@@ -23,11 +25,7 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   description: 'Returns the workbooks on a site.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -50,18 +48,7 @@ const deleteWorkbookEndpoint = makeEndpoint({
   alias: 'deleteWorkbook',
   description:
     'Deletes the specified workbook from the site. On Tableau Cloud the workbook is moved to the recycle bin and can be restored for a limited time.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: z.void(),
 });
 
@@ -71,16 +58,8 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   alias: 'addTagsToWorkbook',
   description: 'Adds one or more tags to the specified workbook.',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',
@@ -96,6 +75,7 @@ const queryWorkbookConnectionsEndpoint = makeEndpoint({
   alias: 'queryWorkbookConnections',
   description:
     'Returns a list of data connections for the specified workbook, including the datasource each connection points to.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: z.object({
     connections: z.object({
       connection: z.optional(z.array(workbookConnectionSchema)),
@@ -113,6 +93,7 @@ const queryWorkbookPermissionsEndpoint = makeEndpoint({
   path: '/sites/:siteId/workbooks/:workbookId/permissions',
   alias: 'queryWorkbookPermissions',
   description: 'Returns the permissions (grantee capabilities) for the specified workbook.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: workbookPermissionsSchema,
 });
 
@@ -129,8 +110,8 @@ const updateWorkbookEndpoint = makeEndpoint({
   alias: 'updateWorkbook',
   description: 'Modifies the project of the specified workbook.',
   parameters: [
-    { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'workbookId', type: 'Path', schema: z.string() },
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',

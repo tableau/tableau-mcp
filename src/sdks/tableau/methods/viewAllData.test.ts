@@ -183,18 +183,21 @@ describe('ViewsMethods.getViewAllData', () => {
     await expect(
       viewsMethods.getViewAllData({
         siteId: 'site-1',
-        viewId: 'view-1',
+        viewId: '11111111-1111-1111-1111-111111111111',
         viewFilters: { Region: 'West', vf_Category: 'Furniture' },
       }),
     ).resolves.toEqual({
       body: multipartBody,
       contentType: `multipart/form-data; boundary=${boundary}`,
     });
-    expect(get).toHaveBeenCalledWith('/sites/site-1/views/view-1/allData', {
-      headers: { Authorization: 'Bearer token' },
-      params: { vf_Region: 'West', vf_Category: 'Furniture' },
-      responseType: 'arraybuffer',
-    });
+    expect(get).toHaveBeenCalledWith(
+      '/sites/site-1/views/11111111-1111-1111-1111-111111111111/allData',
+      {
+        headers: { Authorization: 'Bearer token' },
+        params: { vf_Region: 'West', vf_Category: 'Furniture' },
+        responseType: 'arraybuffer',
+      },
+    );
     expect(log).toHaveBeenCalledWith({
       message: 'Received view all-data response',
       level: 'debug',
@@ -225,14 +228,17 @@ describe('ViewsMethods.queryViewData', () => {
     await expect(
       viewsMethods.queryViewData({
         siteId: 'site-1',
-        viewId: 'view-1',
+        viewId: '11111111-1111-1111-1111-111111111111',
         viewFilters: { Region: 'West', vf_Category: 'Furniture' },
       }),
     ).resolves.toBe('Region,Sales\nWest,100');
-    expect(get).toHaveBeenCalledWith('/sites/site-1/views/view-1/data', {
-      headers: { Authorization: 'Bearer token' },
-      params: { vf_Region: 'West', vf_Category: 'Furniture' },
-      responseType: 'text',
-    });
+    expect(get).toHaveBeenCalledWith(
+      '/sites/site-1/views/11111111-1111-1111-1111-111111111111/data',
+      {
+        headers: { Authorization: 'Bearer token' },
+        params: { vf_Region: 'West', vf_Category: 'Furniture' },
+        responseType: 'text',
+      },
+    );
   });
 });

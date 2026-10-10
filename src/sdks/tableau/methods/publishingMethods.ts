@@ -1,6 +1,8 @@
-import { Zodios, ZodiosEndpointDefinitions } from '@zodios/core';
+import { ZodiosEndpointDefinitions } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { buildRestPath } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { FileUpload, fileUploadResponseSchema } from '../types/fileUpload.js';
@@ -25,7 +27,7 @@ const publishingApis: ZodiosEndpointDefinitions = [];
  */
 export default class PublishingMethods extends AuthenticatedMethods<typeof publishingApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, publishingApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, publishingApis, { axiosConfig }), creds);
   }
 
   /**
@@ -39,7 +41,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
    */
   initiateFileUpload = async ({ siteId }: { siteId: string }): Promise<FileUpload> => {
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/fileUploads`,
+      buildRestPath('sites', siteId, 'fileUploads'),
       undefined,
       {
         headers: {
@@ -88,7 +90,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     ]);
 
     const response = await this._apiClient.axios.put(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/fileUploads/${uploadSessionId}`,
+      buildRestPath('sites', siteId, 'fileUploads', uploadSessionId),
       body,
       {
         headers: {

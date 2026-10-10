@@ -8,6 +8,7 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -21,7 +22,7 @@ import {
 } from './imageToolResult.js';
 
 const paramsSchema = {
-  customViewId: z.string(),
+  customViewId: luidSchema,
   width: z.number().gt(0).int().optional(),
   height: z.number().gt(0).int().optional(),
   format: z

@@ -6,6 +6,7 @@ import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -19,7 +20,7 @@ import {
 } from './workbookToolResult.js';
 
 const paramsSchema = {
-  workbookId: z.string(),
+  workbookId: luidSchema,
   includeExtract: z
     .boolean()
     .optional()

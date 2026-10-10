@@ -1,4 +1,5 @@
-import { McpToolError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 import { extractTableauError, formatTableauError } from './flowErrors.js';
@@ -7,6 +8,10 @@ import { extractTableauError, formatTableauError } from './flowErrors.js';
 export function mapFlowWriteError(error: unknown, verb: string): McpToolError {
   if (error instanceof McpToolError) {
     return error;
+  }
+  // An unsafe ID refused by the REST route-safety guard is a bad argument, not a flow-run failure.
+  if (error instanceof RouteSafetyError) {
+    return new ArgsValidationError(error.message);
   }
 
   const status = error instanceof Error ? getHttpStatus(error) : '';
@@ -63,6 +68,10 @@ export function mapFlowWriteError(error: unknown, verb: string): McpToolError {
 export function mapCancelFlowRunError(error: unknown): McpToolError {
   if (error instanceof McpToolError) {
     return error;
+  }
+  // An unsafe ID refused by the REST route-safety guard is a bad argument, not a flow-run failure.
+  if (error instanceof RouteSafetyError) {
+    return new ArgsValidationError(error.message);
   }
 
   const status = error instanceof Error ? getHttpStatus(error) : '';

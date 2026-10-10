@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowsApis } from '../apis/flowsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { TableauRestError } from '../tableauRestError.js';
@@ -18,7 +17,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class FlowsMethods extends AuthenticatedMethods<typeof flowsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, flowsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, flowsApis, { axiosConfig }), creds);
   }
 
   /**
