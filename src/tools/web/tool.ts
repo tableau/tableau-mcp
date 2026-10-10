@@ -187,11 +187,7 @@ export class WebTool<
       extra,
     );
 
-    const productTelemetryForwarder = getProductTelemetry(
-      config.productTelemetryEndpoint,
-      config.productTelemetryEnabled,
-      config.server,
-    );
+    const productTelemetryForwarder = getProductTelemetry();
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
@@ -279,8 +275,6 @@ export class WebTool<
         session_id: sessionId ?? '',
         site_luid: extra.getSiteLuid(),
         user_luid: extra.getUserLuid(),
-        podname: config.server,
-        is_hyperforce: config.isHyperforce,
         success,
         error_code: errorCode,
         // Only populated for genuine error results (isError: true). The ZodiosValidationError

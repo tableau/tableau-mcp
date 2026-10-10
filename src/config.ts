@@ -74,9 +74,6 @@ export class Config extends BaseConfig {
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
-  productTelemetryEndpoint: string;
-  productTelemetryEnabled: boolean;
-  isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
   breakGlassDisableGlobally: boolean;
@@ -154,9 +151,6 @@ export class Config extends BaseConfig {
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
-      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
-      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
-      IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
@@ -299,10 +293,6 @@ export class Config extends BaseConfig {
     }
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
-    this.productTelemetryEndpoint =
-      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
-    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
-    this.isHyperforce = isHyperforce === 'true';
 
     // Feature gate provider configuration (similar to telemetry provider)
     if (isFeatureGateProvider(featureGateProvider) && featureGateProvider === 'custom') {
