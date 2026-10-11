@@ -26,11 +26,10 @@ const REJECTING_LIFECYCLE_STORE_MODULE =
 // The fixture providers are instantiated inside init.ts's loader, out of the test's reach, so they
 // record their configureNamespace / init / close calls here on globalThis for the test to assert.
 declare global {
-  // eslint-disable-next-line no-var
   var __configureNamespaceCalls: Array<{ namespace: string; options: unknown }> | undefined;
-  // eslint-disable-next-line no-var
+
   var __initCalls: number | undefined;
-  // eslint-disable-next-line no-var
+
   var __closeCalls: number | undefined;
 }
 
