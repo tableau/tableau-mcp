@@ -2,6 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { pathParam } from '../../routeSafety/ids.js';
+import { groupSchema } from '../types/group.js';
 import { paginationSchema } from '../types/pagination.js';
 import { userSchema } from '../types/user.js';
 
@@ -114,5 +115,36 @@ const updateUserEndpoint = makeEndpoint({
   response: z.object({ user: userSchema.partial() }),
 });
 
-const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint, updateUserEndpoint]);
+const listGroupsBodySchema = z.object({
+  pagination: paginationSchema.optional(),
+  groups: z.union([
+    z.object({
+      group: z.union([z.array(groupSchema), groupSchema.transform((g) => [g])]),
+    }),
+    z.array(groupSchema).transform((groups) => ({ group: groups })),
+    z.object({}).transform(() => ({ group: [] })),
+  ]),
+});
+
+const listGroupsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/groups',
+  alias: 'listGroups',
+  description: 'Returns a list of groups on the site.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    { name: 'pageSize', type: 'Query', schema: z.number().optional() },
+    { name: 'pageNumber', type: 'Query', schema: z.number().optional() },
+    { name: 'filter', type: 'Query', schema: z.string().optional() },
+    { name: 'sort', type: 'Query', schema: z.string().optional() },
+  ],
+  response: listGroupsBodySchema,
+});
+
+const usersApi = makeApi([
+  listUsersEndpoint,
+  getUserOnSiteEndpoint,
+  updateUserEndpoint,
+  listGroupsEndpoint,
+]);
 export const usersApis = [...usersApi] as const satisfies ZodiosEndpointDefinitions;
