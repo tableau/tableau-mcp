@@ -8,6 +8,7 @@ import { getConfig } from '../../../config.js';
 import { PreviewNotRunError, UnknownError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   UpdateCloudExtractRefreshSchedule,
   updateCloudExtractRefreshScheduleSchema,
@@ -43,7 +44,7 @@ export type UpdateCloudExtractRefreshTaskConfirmPanel = {
 };
 
 const paramsSchema = {
-  taskId: z.string().uuid('taskId must be a valid UUID'),
+  taskId: luidSchema,
   schedule: updateCloudExtractRefreshScheduleSchema,
   confirm: z
     .boolean()

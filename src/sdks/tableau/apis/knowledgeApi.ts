@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   knowledgeGraphSchema,
   knowledgeLineageSchema,
@@ -104,7 +105,7 @@ const getNodeEndpoint = makeEndpoint({
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
     { name: 'include_children', type: 'Query', schema: z.boolean().optional() },
-    { name: 'node_id', type: 'Path', schema: z.string() },
+    pathParam('node_id', 'segment'),
   ],
   response: knowledgeNodeContextSchema,
 });
@@ -137,7 +138,7 @@ const getLineageEndpoint = makeEndpoint({
   description: 'Returns lineage around one knowledge node.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    { name: 'node_id', type: 'Path', schema: z.string() },
+    pathParam('node_id', 'segment'),
   ],
   response: knowledgeLineageSchema,
 });
@@ -149,7 +150,7 @@ const getNodeImpactEndpoint = makeEndpoint({
   description: 'Returns assets transitively affected by one knowledge node.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    { name: 'node_id', type: 'Path', schema: z.string() },
+    pathParam('node_id', 'segment'),
   ],
   response: knowledgeNodeImpactSchema,
 });
@@ -189,7 +190,7 @@ const listNodeSemanticStatementsEndpoint = makeEndpoint({
   description: 'Lists attached and global semantic statements for a knowledge node.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    { name: 'node_id', type: 'Path', schema: z.string() },
+    pathParam('node_id', 'segment'),
     { name: 'body', type: 'Body', schema: z.object({}) },
   ],
   response: z.array(semanticContextNodeSchema),
@@ -202,7 +203,7 @@ const updateSemanticStatementsEndpoint = makeEndpoint({
   description: 'Updates semantic statements or their attachment.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    { name: 'ctx_id', type: 'Path', schema: z.string() },
+    pathParam('ctx_id', 'segment'),
     { name: 'body', type: 'Body', schema: updateSemanticStatementsBodySchema },
   ],
   response: semanticStatementContextSchema,
@@ -215,7 +216,7 @@ const deleteSemanticStatementsEndpoint = makeEndpoint({
   description: 'Deletes a Knowledge-managed semantic context and its statements.',
   parameters: [
     { name: 'graph_id', type: 'Query', schema: z.string().optional() },
-    { name: 'ctx_id', type: 'Path', schema: z.string() },
+    pathParam('ctx_id', 'segment'),
   ],
   // The Knowledge service returns 204 with an empty-string body, which z.void() rejects.
   response: z.union([z.void(), z.literal('')]),

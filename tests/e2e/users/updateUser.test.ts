@@ -66,7 +66,7 @@ describe('update-user', () => {
       });
     } catch (e) {
       threw = true;
-      expect(String(e)).toContain('uuid');
+      expect(String(e)).toMatch(/uuid/i);
     }
     expect(threw).toBe(true);
   });

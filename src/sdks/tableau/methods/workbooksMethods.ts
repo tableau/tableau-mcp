@@ -1,6 +1,6 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -23,7 +23,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbooksApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, workbooksApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, workbooksApis, { axiosConfig }), creds);
   }
 
   /**
@@ -151,7 +151,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
     const response = await this._apiClient.axios.get<ArrayBuffer>(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/${workbookId}/content`,
+      buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
       {
         params: { includeExtract },
         ...this.authHeader,
@@ -302,7 +302,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     ]);
 
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks`,
+      buildRestPath('sites', siteId, 'workbooks'),
       body,
       {
         params: {
@@ -352,7 +352,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
 
     try {
       const response = await this._apiClient.axios.post(
-        `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
+        buildRestPath('sites', siteId, 'workbooks', 'validateWorkbookAndUpload'),
         body,
         {
           headers: {

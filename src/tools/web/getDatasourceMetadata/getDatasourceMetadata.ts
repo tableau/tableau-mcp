@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { z } from 'zod';
 
 import {
   ArgsValidationError,
@@ -9,6 +8,7 @@ import {
   WorkbookDatasourceNotEnabledError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
@@ -92,7 +92,7 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
   }`;
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: luidSchema,
 };
 
 export type GetDatasourceMetadataError =

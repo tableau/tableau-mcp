@@ -34,6 +34,44 @@ export default [
     },
   },
   {
+    // REST route safety. These selectors are a HINT for reviewers, not the guarantee: static
+    // analysis cannot follow every alias (e.g. an axios instance passed to a helper). The real
+    // guard is runtime: `createGuardedZodios` installs a path-param plugin plus an axios request
+    // interceptor (`assertSafeRequestUrl`) on every client, which checks the final URL axios sends.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.name='Zodios']",
+          message:
+            'Construct Zodios clients with createGuardedZodios(...) from src/sdks/routeSafety/zodios.ts (route-traversal guard).',
+        },
+        {
+          // Raw calls on a Zodios client's axios instance: the URL must be a direct
+          // `buildRestPath(...)` call (validated, individually encoded segments).
+          selector:
+            "CallExpression[callee.object.property.name='axios'][callee.property.name=/^(get|post|put|patch|delete|head|options|postForm|putForm|patchForm)$/]:not([arguments.0.type='CallExpression'][arguments.0.callee.name='buildRestPath'])",
+          message:
+            'Pass buildRestPath(...) directly as the URL of a raw axios call (route-traversal guard).',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='axios'], CallExpression[callee.object.property.name='axios'][callee.property.name='request']",
+          message:
+            'Use client.axios.<verb>(buildRestPath(...), ...) instead of a config-object axios request (route-traversal guard).',
+        },
+        {
+          selector:
+            "VariableDeclarator[init.property.name='axios'], VariableDeclarator > ObjectPattern > Property[key.name='axios']",
+          message:
+            "Do not alias a client's axios instance; call client.axios.<verb>(buildRestPath(...)) so the URL stays lintable (route-traversal guard).",
+        },
+      ],
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',

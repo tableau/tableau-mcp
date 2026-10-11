@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   executeCommandRequestSchema,
   executeCommandResponseSchema,
@@ -14,6 +15,8 @@ const getCommandStatusEndpoint = makeEndpoint({
   path: '/commands/:commandId',
   alias: 'getCommandStatus',
   description: 'Gets the status of a command.',
+  // Server-supplied (from executeCommand), so a generic safe segment rather than a strict LUID.
+  parameters: [pathParam('commandId', 'segment')],
   response: getCommandStatusResponseSchema,
 });
 

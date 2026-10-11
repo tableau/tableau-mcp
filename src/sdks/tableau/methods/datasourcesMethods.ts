@@ -1,7 +1,9 @@
-import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { isErrorFromAlias } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DataSource, PublishedDataSource } from '../types/dataSource.js';
@@ -17,7 +19,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class DatasourcesMethods extends AuthenticatedMethods<typeof datasourcesApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, datasourcesApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, datasourcesApis, { axiosConfig }), creds);
   }
 
   /**
@@ -109,6 +111,8 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
         ).datasource,
       );
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       if (
         isErrorFromAlias(this._apiClient.api, 'queryDatasource', error) &&
         error.response.status === 404

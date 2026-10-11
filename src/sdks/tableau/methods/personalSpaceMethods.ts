@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { personalSpaceApis } from '../apis/personalSpaceApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { PersonalSpace } from '../types/personalSpace.js';
@@ -15,7 +14,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class PersonalSpaceMethods extends AuthenticatedMethods<typeof personalSpaceApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, personalSpaceApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, personalSpaceApis, { axiosConfig }), creds);
   }
 
   /**

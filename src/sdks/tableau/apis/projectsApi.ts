@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { paginationSchema } from '../types/pagination.js';
 import { projectSchema } from '../types/project.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -12,11 +13,7 @@ const queryProjectsEndpoint = makeEndpoint({
   description: 'Returns a list of projects on the specified site.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
