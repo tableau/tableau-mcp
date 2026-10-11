@@ -73,6 +73,7 @@ export type TableauApiScope =
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
+  | 'tableau:groups:read'
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
   | 'tableau:knowledge:write'
@@ -262,6 +263,10 @@ const toolScopeMap: Record<
   'update-user': {
     mcp: ['tableau:mcp:users:write'],
     api: new Set(['tableau:users:update', 'tableau:users:read']),
+  },
+  'list-groups': {
+    mcp: ['tableau:mcp:users:read'],
+    api: new Set(['tableau:groups:read', 'tableau:users:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
@@ -542,6 +547,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('confirm-delete-content');
     enabledTools.delete('list-jobs');
     enabledTools.delete('list-users');
+    enabledTools.delete('list-groups');
     enabledTools.delete('update-user');
     enabledTools.delete('query-admin-insights');
     enabledTools.delete('delete-content');
