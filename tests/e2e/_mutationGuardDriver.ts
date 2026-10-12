@@ -169,7 +169,6 @@ async function main(): Promise<void> {
         resourceType: 'datasource',
         resourceId: dsId,
         confirm: true,
-        tag: 'pending-deletion-driver-never-set',
       },
     });
     const msg = textOf(res);

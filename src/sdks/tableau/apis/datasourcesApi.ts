@@ -81,10 +81,24 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const deleteTagFromDatasourceEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/datasources/:datasourceId/tags/:tagName',
+  alias: 'deleteTagFromDatasource',
+  description: 'Removes a single tag (by label) from the specified data source.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('datasourceId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const datasourcesApi = makeApi([
   listDatasourcesEndpoint,
   queryDatasourceEndpoint,
   deleteDatasourceEndpoint,
   addTagsToDatasourceEndpoint,
+  deleteTagFromDatasourceEndpoint,
 ]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

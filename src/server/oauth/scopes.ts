@@ -63,11 +63,13 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
@@ -485,16 +487,24 @@ const toolScopeMap: Record<
   // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
   // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
   // route through resourceAccessChecker.
+  // Workbook/datasource paths also query Admin Insights Site Content (VDS) for the staleness
+  // precondition (W-24311035). `action: "remove-pending-tags"` additionally needs the tag-delete
+  // scopes (W-24199845).
   'delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
+      'tableau:workbook_tags:delete',
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:datasource_tags:delete',
       'tableau:tasks:read',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -508,6 +518,9 @@ const toolScopeMap: Record<
       'tableau:datasource_tags:update',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
