@@ -24,6 +24,8 @@ function confirmResult(overrides: Record<string, unknown> = {}): unknown {
             project: 'Finance',
             owner: 'owner@example.com',
             expiresAtMs: 60_000,
+            cleanupDate: '2026-09-25',
+            minAgeDays: 90,
             ...overrides,
           },
           url: '',
@@ -90,15 +92,51 @@ describe('renderDeleteWorkbookConfirm', () => {
     await Promise.resolve();
     expect(app.callServerTool).toHaveBeenCalledWith({
       name: 'confirm-delete-content',
-      arguments: { resourceType: 'workbook', resourceId: 'wb-1' },
+      arguments: {
+        resourceType: 'workbook',
+        resourceId: 'wb-1',
+        cleanupDate: '2026-09-25',
+        minAgeDays: 90,
+      },
     });
   });
 
-  it('Cancel button does NOT call the server (no deletion)', () => {
+  it("Cancel removes only this batch's marker and deletes nothing", async () => {
     renderDeleteWorkbookConfirm(app as unknown as App, confirmResult() as never);
     const cancelBtn = document.getElementById('cancelDeleteBtn') as HTMLButtonElement;
+    const confirmBtn = document.getElementById('confirmDeleteBtn') as HTMLButtonElement;
     cancelBtn.click();
-    expect(app.callServerTool).not.toHaveBeenCalled();
+    expect(cancelBtn.disabled).toBe(true);
+    expect(confirmBtn.disabled).toBe(true);
+    expect(app.callServerTool).toHaveBeenCalledTimes(1);
+    expect(app.callServerTool).toHaveBeenCalledWith({
+      name: 'delete-content',
+      arguments: {
+        action: 'remove-pending-tags',
+        resourceType: 'workbook',
+        resourceIds: ['wb-1'],
+        cleanupDate: '2026-09-25',
+      },
+    });
+    await vi.waitFor(() =>
+      expect(document.getElementById('deleteWorkbookConfirm')?.textContent).toContain(
+        'pending-deletion marker was removed',
+      ),
+    );
+  });
+
+  it('Cancel tells the user how to clear the marker when the removal fails', async () => {
+    app.callServerTool.mockResolvedValueOnce({
+      isError: true,
+      content: [{ type: 'text', text: 'boom' }],
+    });
+    renderDeleteWorkbookConfirm(app as unknown as App, confirmResult() as never);
+    (document.getElementById('cancelDeleteBtn') as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(document.getElementById('deleteWorkbookConfirm')?.textContent).toContain(
+        'could not be removed; clear it with delete-content action "remove-pending-tags"',
+      ),
+    );
   });
 
   it('disables Confirm once the TTL window has elapsed (advisory client countdown)', () => {

@@ -94,10 +94,26 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(text).not.toContain('"resourceType": "datasource"');
   });
 
-  it('applies a custom pending-deletion tag', () => {
-    // Tagging only happens in the post-approval (dryRun:false) branch.
-    const text = getText({ dryRun: 'false', tag: 'sunset-2026' });
-    expect(text).toContain('sunset-2026');
+  it('tags with the date-stamped batch tag and threads cleanupDate + minAgeDays to the confirm', () => {
+    const text = getText({ dryRun: 'false', minAgeDays: '120' });
+    expect(text).toContain('pending-deletion-YYYY-MM-DD');
+    expect(text).toContain('`minAgeDays: 120`');
+    expect(text).toContain('Record the `cleanupDate` each preview reports');
+    expect(text).toContain('`cleanupDate` set to the cleanup date its preview step reported');
+    expect(text).not.toContain('tag: "');
+  });
+
+  it('offers marker removal for kept items and a residue-cleanup step', () => {
+    const text = getText({ dryRun: 'false' });
+    expect(text).toContain('action: "remove-pending-tags"');
+    const residueIdx = text.indexOf('Step 8 — Clear residue');
+    expect(residueIdx).toBeGreaterThan(text.indexOf('Step 7 — Delete'));
+    expect(text).toContain('tags:eq:pending-deletion-');
+  });
+
+  it('no longer accepts a custom tag argument', () => {
+    const prompt = getStaleContentCleanupApplyPrompt(new WebMcpServer());
+    expect(prompt.argsSchema).not.toHaveProperty('tag');
   });
 
   it('does not tag anything during a dry run (F1 — no write before approval)', () => {

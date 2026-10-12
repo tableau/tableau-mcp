@@ -222,6 +222,32 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Removes a single tag (by label) from the specified workbook. Responds 204; removing a tag the
+   * workbook does not carry is a no-op on the server.
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbook_tags:delete`
+   *
+   * @param workbookId - The ID of the workbook to untag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabel - The tag label to remove.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_tag_from_workbook
+   */
+  deleteTagFromWorkbook = async ({
+    workbookId,
+    siteId,
+    tagLabel,
+  }: {
+    workbookId: string;
+    siteId: string;
+    tagLabel: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteTagFromWorkbook(undefined, {
+      params: { siteId, workbookId, tagName: tagLabel },
+      ...this.authHeader,
+    });
+  };
+
+  /**
    * Modifies the destination of the specified workbook (i.e. moves it between projects, or into
    * the caller's Personal Space).
    *

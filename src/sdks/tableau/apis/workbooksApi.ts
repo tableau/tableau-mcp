@@ -126,6 +126,19 @@ const updateWorkbookEndpoint = makeEndpoint({
   response: z.object({ workbook: workbookSchema.partial() }),
 });
 
+const deleteTagFromWorkbookEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/workbooks/:workbookId/tags/:tagName',
+  alias: 'deleteTagFromWorkbook',
+  description: 'Removes a single tag (by label) from the specified workbook.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
@@ -133,6 +146,7 @@ const workbooksApi = makeApi([
   queryWorkbookPermissionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  deleteTagFromWorkbookEndpoint,
   updateWorkbookEndpoint,
 ]);
 

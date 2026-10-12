@@ -572,6 +572,26 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
+## `PENDING_DELETION_MAX_AGE_DAYS`
+
+The oldest cleanup batch, in days, that a [`delete-content`](../../tools/content/delete-content.md)
+confirm still accepts for a workbook or data source. A confirm whose `cleanupDate` is older is
+rejected with `cleanup-batch-expired` and nothing is deleted, so a `pending-deletion-YYYY-MM-DD`
+marker left by a crashed or abandoned preview stops authorizing deletes on its own. The marker
+itself is not removed — clear it with
+[`delete-content`](../../tools/content/delete-content.md#pending-deletion-markers) with `action: "remove-pending-tags"`.
+
+Set it longer than any grace/notification window you use between tagging and deleting.
+
+- Default: `30`
+- Minimum: `1`
+- Maximum: `90` (a batch older than this could never be previewed-then-confirmed in practice)
+
+Out-of-range or non-numeric values fall back to the default. Not overridable per site or per
+request.
+
+<hr />
+
 ## `STALE_CONTENT_MAX_ROWS`
 
 Maximum number of stale-content rows the
