@@ -279,12 +279,13 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     if (projectId !== undefined && location !== undefined) {
       throw new Error('updateWorkbook accepts only one of `projectId` or `location`, not both.');
     }
-    const destination =
-      projectId !== undefined
-        ? { project: { id: projectId } }
-        : { location: { id: location!, type: 'PersonalSpace' as const } };
     const { workbook } = await this._apiClient.updateWorkbook(
-      { workbook: destination },
+      {
+        workbook:
+          projectId !== undefined
+            ? { project: { id: projectId } }
+            : { location: { id: location!, type: 'PersonalSpace' } },
+      },
       {
         params: { siteId, workbookId },
         ...this.authHeader,

@@ -130,7 +130,7 @@ describe('moveWorkbookTool', () => {
     expect(payload).toEqual({
       id: mockWorkbook.id,
       name: mockWorkbook.name,
-      projectId: 'target-project-id',
+      location: { id: 'target-project-id', type: 'Project' },
     });
   });
 

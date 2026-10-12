@@ -35,9 +35,11 @@ const paramsSchema = {
     .describe('Set true to move the workbook into your Personal Space instead of a project.'),
 };
 
-export type MoveWorkbookResult =
-  | { id: string; name?: string; projectId: string }
-  | { id: string; name?: string; location: { type: 'PersonalSpace'; id: string } };
+export type MoveWorkbookResult = {
+  id: string;
+  name?: string;
+  location: { id: string; type: string };
+};
 
 export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const moveWorkbookTool = new WebTool({
@@ -99,10 +101,10 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
                   workbookId,
                   projectId,
                 });
-                return new Ok({
+                return new Ok<MoveWorkbookResult>({
                   id: workbook.id ?? workbookId,
                   name: workbook.name,
-                  projectId: workbook.project?.id ?? projectId,
+                  location: { id: workbook.project?.id ?? projectId, type: 'Project' },
                 });
               }
 
@@ -132,13 +134,10 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
                 return notInPersonalSpace.toErr();
               }
 
-              return new Ok({
+              return new Ok<MoveWorkbookResult>({
                 id: workbook.id ?? workbookId,
                 name: workbook.name,
-                location: {
-                  type: 'PersonalSpace' as const,
-                  id: workbook.location?.id ?? personalSpaceLuid,
-                },
+                location: { id: workbook.location?.id ?? personalSpaceLuid, type: 'PersonalSpace' },
               });
             },
           });
