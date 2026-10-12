@@ -366,7 +366,11 @@ const toolScopeMap: Record<
   },
   'move-workbook': {
     mcp: ['tableau:mcp:workbook:write'],
-    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:workbooks:update',
+      'tableau:projects:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
