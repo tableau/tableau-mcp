@@ -247,8 +247,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     projectId?: string;
     location?: string;
   }): Promise<Partial<Workbook>> => {
-    if ((projectId === undefined) === (location === undefined)) {
-      throw new Error('updateWorkbook requires exactly one of `projectId` or `location`.');
+    if (projectId === undefined && location === undefined) {
+      throw new Error('updateWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('updateWorkbook accepts only one of `projectId` or `location`, not both.');
     }
     const destination =
       projectId !== undefined
@@ -300,8 +303,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
-    if ((projectId === undefined) === (location === undefined)) {
-      throw new Error('publishWorkbook requires exactly one of `projectId` or `location`.');
+    if (projectId === undefined && location === undefined) {
+      throw new Error('publishWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('publishWorkbook accepts only one of `projectId` or `location`, not both.');
     }
     const destination =
       projectId !== undefined

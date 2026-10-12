@@ -30,7 +30,7 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 ## Destination arguments
 
-Provide exactly one of `projectId` or `personalSpace: true`.
+Provide exactly one of `projectId` or `personalSpace: true`; passing both is an error.
 
 ### `projectId`
 

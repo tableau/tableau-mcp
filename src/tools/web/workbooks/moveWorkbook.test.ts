@@ -216,15 +216,23 @@ describe('moveWorkbookTool', () => {
     });
 
     it.each([
-      ['both projectId and personalSpace', { projectId: 'target-project-id', personalSpace: true }],
-      ['neither projectId nor personalSpace', {}],
-      ['personalSpace false without projectId', { personalSpace: false }],
-    ])('rejects %s', async (_, args) => {
+      [
+        'both projectId and personalSpace',
+        { projectId: 'target-project-id', personalSpace: true },
+        'accepts only one of projectId or personalSpace: true, not both',
+      ],
+      ['neither projectId nor personalSpace', {}, 'requires one of projectId or personalSpace'],
+      [
+        'personalSpace false without projectId',
+        { personalSpace: false },
+        'requires one of projectId or personalSpace',
+      ],
+    ])('rejects %s', async (_, args, expected) => {
       const result = await getToolResult({ workbookId: mockWorkbook.id, ...args });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('exactly one of projectId or personalSpace');
+      expect(result.content[0].text).toContain(expected);
       expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
       expect(mocks.mockUpdateWorkbook).not.toHaveBeenCalled();
     });

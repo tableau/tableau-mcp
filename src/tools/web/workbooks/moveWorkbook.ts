@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
   ArgsValidationError,
   McpToolError,
-  UnknownError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -19,6 +18,7 @@ import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   mapPersonalSpaceSiteDisabledError,
+  notInPersonalSpaceError,
   resolvePersonalSpace,
 } from '../utils/personalSpaceUtils.js';
 
@@ -46,7 +46,8 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
       'Moves a workbook into a different project. Use list-projects to discover available project IDs.\n' +
-      'Pass personalSpace: true instead of projectId to move it into your Personal Space.',
+      'Pass personalSpace: true instead of projectId to move it into your Personal Space ' +
+      '(passing both is an error).',
     paramsSchema,
     annotations: {
       title: 'Move Workbook',
@@ -62,9 +63,14 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
         args: { workbookId, projectId, personalSpace },
         callback: async () => {
           const usePersonalSpace = personalSpace === true;
-          if ((projectId === undefined) === !usePersonalSpace) {
+          if (projectId === undefined && !usePersonalSpace) {
             return new ArgsValidationError(
-              'Provide exactly one of projectId or personalSpace: true to move a workbook.',
+              'move-workbook requires one of projectId or personalSpace: true.',
+            ).toErr();
+          }
+          if (projectId !== undefined && usePersonalSpace) {
+            return new ArgsValidationError(
+              'move-workbook accepts only one of projectId or personalSpace: true, not both.',
             ).toErr();
           }
 
@@ -121,14 +127,9 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
                 throw error;
               }
 
-              if (workbook.location?.type !== 'PersonalSpace') {
-                const landed = workbook.project?.name ?? workbook.location?.name;
-                return new UnknownError(
-                  'After the move the workbook is in ' +
-                    (landed ? `the "${landed}" project` : 'a project') +
-                    ' instead of your personal space — this Tableau site does not support moving ' +
-                    'workbooks into a personal space. Pass projectId to move it to a project instead.',
-                ).toErr();
+              const notInPersonalSpace = notInPersonalSpaceError(workbook, 'move');
+              if (notInPersonalSpace) {
+                return notInPersonalSpace.toErr();
               }
 
               return new Ok({
@@ -136,7 +137,7 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
                 name: workbook.name,
                 location: {
                   type: 'PersonalSpace' as const,
-                  id: workbook.location.id ?? personalSpaceLuid,
+                  id: workbook.location?.id ?? personalSpaceLuid,
                 },
               });
             },

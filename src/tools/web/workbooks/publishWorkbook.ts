@@ -24,6 +24,7 @@ import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   mapPersonalSpaceSiteDisabledError,
+  notInPersonalSpaceError,
   resolvePersonalSpace,
 } from '../utils/personalSpaceUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
@@ -252,21 +253,11 @@ export const getPublishWorkbookTool = (
                 throw error;
               }
 
-              // Some servers accept the <location> element but silently land the workbook in a
-              // default project instead. Treat a personal-space publish that didn't come back as
-              // PersonalSpace as a failure, not a silent success.
-              if (
-                personalSpaceTarget !== undefined &&
-                publishedWorkbook.location?.type !== 'PersonalSpace'
-              ) {
-                const landed = publishedWorkbook.project?.name ?? publishedWorkbook.location?.name;
-                return new UnknownError(
-                  'This Tableau site published the workbook to ' +
-                    (landed ? `the "${landed}" project` : 'a project') +
-                    ' instead of your personal space — its REST API does not support ' +
-                    'personal-space publishing. Delete it there if unwanted, or publish to a ' +
-                    'project explicitly by passing projectId.',
-                ).toErr();
+              if (personalSpaceTarget !== undefined) {
+                const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');
+                if (notInPersonalSpace) {
+                  return notInPersonalSpace.toErr();
+                }
               }
 
               const url =
