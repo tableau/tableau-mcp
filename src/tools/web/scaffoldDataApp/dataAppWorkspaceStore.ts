@@ -14,9 +14,11 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
+  buildRequestedOriginsGuide,
   DataAppIdentity,
   deriveIdentity,
   PostUnzipPlan,
+  RequestedOriginsGuide,
 } from './templateIdentity.js';
 
 /**
@@ -27,10 +29,13 @@ import {
  *    then unzip and apply `postUnzip`.
  *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
  *    unzip and apply `postUnzip`.
+ * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
+ * app's external origins in it.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
   allowedOrigins: string[];
+  requestedOrigins: RequestedOriginsGuide;
   filePath?: string;
   s3URL?: string;
   postUnzip?: PostUnzipPlan;
@@ -120,6 +125,7 @@ async function createS3Workspace({
   return new Ok({
     datappName,
     allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
     s3URL,
     postUnzip: buildPostUnzipPlan(identity),
   });
@@ -142,6 +148,7 @@ function createLocalWorkspace({
   return new Ok({
     datappName,
     allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
     filePath: zipPath,
     postUnzip: buildPostUnzipPlan(identity),
   });
