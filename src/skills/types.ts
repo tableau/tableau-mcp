@@ -25,7 +25,7 @@ export type SkillResource = {
 };
 
 /**
- * A skill manifest entry returned by `skills/list` (TODO: W-24166652) and `skills/get`
+ * A skill manifest entry returned by `skills/list` and `skills/get`
  * (TODO: W-24166658). `uri` is `skill://<name>/SKILL.md`; `frontmatter` is the flat
  * key/value block parsed from the manifest; `resources` lists every file in the skill directory.
  */
@@ -33,4 +33,18 @@ export type SkillEntry = {
   uri: string; // skill://<name>/SKILL.md
   frontmatter: SkillFrontmatter;
   resources: SkillResource[];
+};
+
+/**
+ * `skills/list` request. The `method` literal is what the SDK routes on. `params` is optional
+ */
+// TODO W-24225975: support `params.cursor` once pagination is implemented.
+export const SkillsListRequestSchema = z.object({
+  method: z.literal('skills/list'),
+  params: z.object({}).passthrough().optional(),
+});
+
+export type SkillsListResult = {
+  resultType: 'complete';
+  skills: SkillEntry[];
 };
