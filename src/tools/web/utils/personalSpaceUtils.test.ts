@@ -42,6 +42,26 @@ describe('resolvePersonalSpace', () => {
   });
 
   it.each([
+    ['publish', 401, 'publishing', 'publish'],
+    ['move', 401, 'moving', 'move'],
+    ['publish', 403, 'publishing', 'publish'],
+    ['move', 403, 'moving', 'move'],
+  ] as const)('asks to re-authorize on %s lookup %i', async (action, status, gerund, verb) => {
+    const result = await resolvePersonalSpace(
+      restApiWith(() => Promise.reject(apiError(status, {}))),
+      action,
+    );
+
+    expect(result.isErr() && result.error.type).toBe('personal-space-unauthorized');
+    expect(result.isErr() && result.error.statusCode).toBe(status);
+    expect(result.isErr() && result.error.message).toBe(
+      `Could not resolve your Personal Space for ${gerund} (Request failed with status code ` +
+        `${status}); reconnect (re-authorize) Tableau MCP so your token is granted the ` +
+        `tableau:projects:read scope, then retry the ${verb}.`,
+    );
+  });
+
+  it.each([
     [
       'publish',
       'cannot be used as a publish target; pass projectId (use list-projects) to publish',

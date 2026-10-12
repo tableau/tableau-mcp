@@ -11,6 +11,7 @@ import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../../../utils/getHttpStatus.js';
 
 export type PersonalSpaceAction = 'publish' | 'move';
 
@@ -56,10 +57,20 @@ export async function resolvePersonalSpace(
       siteId: restApi.siteId,
     });
   } catch (error) {
-    return new ArgsValidationError(
-      `Could not resolve your Personal Space for ${wording[action].gerund} (${getExceptionMessage(error)}); ` +
-        projectIdHint(action),
-    ).toErr();
+    const prefix = `Could not resolve your Personal Space for ${wording[action].gerund} (${getExceptionMessage(error)}); `;
+    // Typically a token minted before tableau:projects:read was requested; projectId won't help.
+    const status = error instanceof Error ? getHttpStatus(error) : '';
+    if (status === '401' || status === '403') {
+      return new McpToolError({
+        type: 'personal-space-unauthorized',
+        statusCode: Number(status),
+        message:
+          prefix +
+          'reconnect (re-authorize) Tableau MCP so your token is granted the ' +
+          `tableau:projects:read scope, then retry the ${wording[action].verb}.`,
+      }).toErr();
+    }
+    return new ArgsValidationError(prefix + projectIdHint(action)).toErr();
   }
 
   if (personalSpace.readOnly) {
