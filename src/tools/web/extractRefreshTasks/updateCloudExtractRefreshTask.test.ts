@@ -168,14 +168,24 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     });
   });
 
-  it('should be disabled when admin tools are not enabled', async () => {
-    const { getConfig } = await import('../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      adminToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      const { getConfig } = await import('../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled } as ReturnType<
+        typeof getConfig
+      >);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(disabled);
+    },
+  );
 
   it('should successfully update an extract refresh task', async () => {
     const result = await previewThenConfirm({ taskId: validTaskId, schedule: validSchedule });

@@ -31,7 +31,7 @@ export const getListJobsTool = (server: WebMcpServer): WebTool<typeof paramsSche
     description: `
   Retrieves a list of background jobs for the Tableau site. Each job represents a background task such as an extract refresh, subscription delivery, flow run, or other asynchronous operations.
 
-  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag to be enabled.
+  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` environment variable to be enabled.
 
   Use this tool when you need to:
   - Monitor the status of background jobs (extract refreshes, subscriptions, flows)

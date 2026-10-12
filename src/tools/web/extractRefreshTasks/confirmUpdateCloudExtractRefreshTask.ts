@@ -39,8 +39,9 @@ const paramsSchema = {
  * update-cloud-extract-refresh-task preview within the MUTATION_PREVIEW_TTL_MINUTES window. Missing
  * approval → PreviewNotRunError, no update.
  *
- * Gated behind the off-by-default `mcp-apps` flag AND ADMIN_TOOLS_ENABLED, so when the flag is off
- * the model never sees a mutating tool that lacks a preview path.
+ * Gated behind admin tools (ADMIN_TOOLS_ENABLED AND the `admin-tools` flag) AND the off-by-default
+ * `mcp-apps` flag, so when mcp-apps is off the model never sees a mutating tool that lacks a preview
+ * path.
  */
 export const getConfirmUpdateCloudExtractRefreshTaskTool = (
   server: WebMcpServer,

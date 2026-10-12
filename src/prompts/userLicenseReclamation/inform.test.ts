@@ -1,6 +1,14 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getUserLicenseReclamationInformPrompt } from './inform.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
+
 afterEach(() => {
   delete process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
   delete process.env.LICENSE_RECLAIM_ROLES;
@@ -12,11 +20,18 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(prompt.name).toBe('user-license-reclamation-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', async () => {
-    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
-    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('instructs the model to call list-users and query-admin-insights', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());

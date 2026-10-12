@@ -211,22 +211,36 @@ describe('server', () => {
     expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 
-  // The server-level `instructions` string (surfaced by the SDK in the `initialize` result) is
-  // passed to the McpServer constructor's second options object. McpServer is globally mocked
-  // (see testSetup.ts), so assert on the constructor arguments the mock captured.
-  function getConstructedInstructions(): string | undefined {
-    const calls = vi.mocked(McpServer).mock.calls;
-    const lastCall = calls[calls.length - 1];
-    return (lastCall?.[1] as { instructions?: string } | undefined)?.instructions;
+  const adminPromptNamesInInstructions = [
+    'stale-content-cleanup-inform',
+    'stale-content-cleanup-apply',
+    'job-optimization-inform',
+    'extract-optimization-apply',
+    'user-license-reclamation-inform',
+    'user-license-reclamation-apply',
+  ];
+
+  // McpServer is globally mocked (see testSetup.ts) and does not copy the constructor's
+  // `instructions` into `server._instructions` like the real SDK, so seed it to mirror the handshake.
+  async function getRegisteredInstructions(): Promise<string> {
+    vi.mocked(McpServer).mockClear();
+    const server = getServer();
+    const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
+      | { instructions?: string }
+      | undefined;
+    const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
+    sdkServer._instructions = constructorOptions?.instructions;
+    await server.registerTools();
+    return sdkServer._instructions ?? '';
   }
 
-  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true"', () => {
-    vi.mocked(McpServer).mockClear();
+  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
     vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-    new WebMcpServer();
-    const instructions = getConstructedInstructions();
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'admin-tools',
+    );
+    const instructions = await getRegisteredInstructions();
 
-    expect(instructions).toBeTruthy();
     // Admin capability menu + generic-intent tie-in.
     expect(instructions).toContain('site-administration capabilities');
     expect(instructions).toContain('general admin/site-health');
@@ -234,14 +248,7 @@ describe('server', () => {
     // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
     // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
     // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
-    for (const promptName of [
-      'stale-content-cleanup-inform',
-      'stale-content-cleanup-apply',
-      'job-optimization-inform',
-      'extract-optimization-apply',
-      'user-license-reclamation-inform',
-      'user-license-reclamation-apply',
-    ]) {
+    for (const promptName of adminPromptNamesInInstructions) {
       expect(instructions).toContain(promptName);
     }
     // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
@@ -256,45 +263,42 @@ describe('server', () => {
     // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
     expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
 
-    // The clause belongs to the admin block specifically: it must be appended after the base
-    // guidance and after the admin lead-in, never spliced into the base sentence.
-    expect(instructions!.startsWith('Tableau MCP exposes tools')).toBe(true);
-    const adminStart = instructions!.indexOf('site-administration capabilities');
-    const clauseStart = instructions!.indexOf('present them as Markdown tables');
+    // The admin block is appended after the base guidance, never spliced into the base sentence.
+    expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
+    const adminStart = instructions.indexOf('site-administration capabilities');
+    const clauseStart = instructions.indexOf('present them as Markdown tables');
     expect(adminStart).toBeGreaterThan(-1);
     expect(clauseStart).toBeGreaterThan(adminStart);
   });
 
-  it('should omit admin guidance from instructions when ADMIN_TOOLS_ENABLED is unset', () => {
-    vi.mocked(McpServer).mockClear();
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
-    new WebMcpServer();
-    const instructions = getConstructedInstructions();
+  it.each([
+    {
+      scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
+      env: 'true',
+      flag: false,
+    },
+    {
+      scenario: 'the admin-tools flag is ON but ADMIN_TOOLS_ENABLED is unset',
+      env: undefined,
+      flag: true,
+    },
+  ])('should omit admin guidance from instructions when $scenario', async ({ env, flag }) => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => flag && featureName === 'admin-tools',
+    );
+    const instructions = await getRegisteredInstructions();
 
     // Base guidance is still present...
-    expect(instructions).toBeTruthy();
     expect(instructions).toContain('Tableau MCP exposes tools');
-    // ...but nothing about admin capabilities.
+    // ...but nothing from the admin-only block.
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
-    // The named admin prompts are part of the admin-only block and must also be absent.
-    for (const promptName of [
-      'stale-content-cleanup-inform',
-      'stale-content-cleanup-apply',
-      'job-optimization-inform',
-      'extract-optimization-apply',
-      'user-license-reclamation-inform',
-      'user-license-reclamation-apply',
-    ]) {
+    for (const promptName of adminPromptNamesInInstructions) {
       expect(instructions).not.toContain(promptName);
     }
-    // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
-    // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
-    // stayed out of the base instructions).
-    expect(instructions).not.toContain('present them as Markdown tables');
     expect(instructions).not.toContain('Markdown tables');
-    // The admin-invocation nudge is part of the admin-only block and must also be absent.
     expect(instructions).not.toContain(
       'Do not require the user to state or re-confirm admin status',
     );
@@ -464,16 +468,8 @@ describe('server', () => {
       };
     }
 
-    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is "true"', async () => {
+    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
       vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-      const { tools, prompts } = await getRegisteredNames();
-
-      expect(tools).toEqual(expect.arrayContaining(adminToolNames));
-      expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
-    });
-
-    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is unset but the admin-tools flag is ON', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
         (featureName: string) => featureName === 'admin-tools',
       );
@@ -481,6 +477,29 @@ describe('server', () => {
 
       expect(tools).toEqual(expect.arrayContaining(adminToolNames));
       expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
+    });
+
+    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      const { tools, prompts } = await getRegisteredNames();
+
+      for (const name of adminToolNames) {
+        expect(tools).not.toContain(name);
+      }
+      expect(prompts).toEqual([]);
+    });
+
+    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is unset but the admin-tools flag is ON', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'admin-tools',
+      );
+      const { tools, prompts } = await getRegisteredNames();
+
+      for (const name of adminToolNames) {
+        expect(tools).not.toContain(name);
+      }
+      expect(prompts).toEqual([]);
     });
 
     it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED and the admin-tools flag are both off', async () => {

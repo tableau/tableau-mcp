@@ -1,6 +1,14 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getStaleContentCleanupApplyPrompt } from './apply.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
+
 function getText(args: Record<string, string> = {}): string {
   const prompt = getStaleContentCleanupApplyPrompt(new WebMcpServer());
   const result = prompt.callback(args as any);
@@ -21,11 +29,18 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(prompt.name).toBe('stale-content-cleanup-apply');
   });
 
-  it('is disabled when adminToolsEnabled is false', async () => {
-    const prompt = getStaleContentCleanupApplyPrompt(new WebMcpServer());
-    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getStaleContentCleanupApplyPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('drives the report tool and forbids recomputation', () => {
     const text = getText();

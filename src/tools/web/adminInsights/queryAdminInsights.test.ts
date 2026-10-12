@@ -11,6 +11,7 @@ import { getQueryAdminInsightsTool } from './queryAdminInsights.js';
 import { adminInsightsResolver } from './resolver.js';
 
 const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
   mockAssertAdmin: vi.fn(),
@@ -37,6 +38,10 @@ vi.mock('../../../restApiInstance.js', () => ({
 
 vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 const validQuery: Query = {
@@ -71,6 +76,26 @@ describe('query-admin-insights tool', () => {
     const tool = getQueryAdminInsightsTool(new WebMcpServer());
     expect(tool.name).toBe('query-admin-insights');
   });
+
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', String(adminToolsEnabled));
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      try {
+        const tool = getQueryAdminInsightsTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(disabled);
+      } finally {
+        vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      }
+    },
+  );
 
   it('dispatches kind=ts-events to the TS Events datasource', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [{ 'Item ID': 'wb-1' }] }));

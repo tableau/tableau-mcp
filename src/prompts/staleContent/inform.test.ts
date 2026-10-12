@@ -1,19 +1,32 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getStaleContentCleanupInformPrompt } from './inform.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
+
 describe('stale-content-cleanup-inform prompt', () => {
   it('registers under the documented name', () => {
     const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
     expect(prompt.name).toBe('stale-content-cleanup-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', async () => {
-    const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
-
-    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-
-    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('instructs the model to call query-admin-insights once and forbid recomputation', async () => {
     const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
