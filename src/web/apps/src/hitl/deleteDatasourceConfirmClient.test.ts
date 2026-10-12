@@ -23,6 +23,8 @@ function confirmResult(overrides: Record<string, unknown> = {}): unknown {
             project: 'Finance',
             owner: 'owner@example.com',
             expiresAtMs: 60_000,
+            cleanupDate: '2026-09-25',
+            minAgeDays: 90,
             ...overrides,
           },
           url: '',
@@ -112,14 +114,51 @@ describe('renderDeleteDatasourceConfirm', () => {
     await Promise.resolve();
     expect(app.callServerTool).toHaveBeenCalledWith({
       name: 'confirm-delete-content',
-      arguments: { resourceType: 'datasource', resourceId: 'ds-1' },
+      arguments: {
+        resourceType: 'datasource',
+        resourceId: 'ds-1',
+        cleanupDate: '2026-09-25',
+        minAgeDays: 90,
+      },
     });
   });
 
-  it('Cancel does NOT call the server', () => {
+  it("Cancel removes only this batch's marker and deletes nothing", async () => {
+    renderDeleteDatasourceConfirm(app as unknown as App, confirmResult() as never);
+    const cancelBtn = document.getElementById('cancelDeleteBtn') as HTMLButtonElement;
+    const confirmBtn = document.getElementById('confirmDeleteBtn') as HTMLButtonElement;
+    cancelBtn.click();
+    expect(cancelBtn.disabled).toBe(true);
+    expect(confirmBtn.disabled).toBe(true);
+    expect(app.callServerTool).toHaveBeenCalledTimes(1);
+    expect(app.callServerTool).toHaveBeenCalledWith({
+      name: 'delete-content',
+      arguments: {
+        action: 'remove-pending-tags',
+        resourceType: 'datasource',
+        resourceIds: ['ds-1'],
+        cleanupDate: '2026-09-25',
+      },
+    });
+    await vi.waitFor(() =>
+      expect(document.getElementById('deleteDatasourceConfirm')?.textContent).toContain(
+        'pending-deletion marker was removed',
+      ),
+    );
+  });
+
+  it('Cancel tells the user how to clear the marker when the removal fails', async () => {
+    app.callServerTool.mockResolvedValueOnce({
+      isError: true,
+      content: [{ type: 'text', text: 'boom' }],
+    });
     renderDeleteDatasourceConfirm(app as unknown as App, confirmResult() as never);
     (document.getElementById('cancelDeleteBtn') as HTMLButtonElement).click();
-    expect(app.callServerTool).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(document.getElementById('deleteDatasourceConfirm')?.textContent).toContain(
+        'could not be removed; clear it with delete-content action "remove-pending-tags"',
+      ),
+    );
   });
 
   it('disables Confirm once the TTL window elapses and a late click does not reach the server', () => {

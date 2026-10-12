@@ -68,6 +68,24 @@ describe('handleConfirmResult', () => {
     expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', undefined, mockApp);
   });
 
+  it('renders nothing for a remove-pending-tags result (no panel, no error)', () => {
+    handleConfirmResult(mockApp, {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            removedCount: 1,
+            items: [{ resourceId: 'wb-1', status: 'removed', removedTags: ['pending-deletion'] }],
+          }),
+        },
+      ],
+    });
+
+    expect(vi.mocked(showError)).not.toHaveBeenCalled();
+    expect(vi.mocked(renderDeleteWorkbookConfirm)).not.toHaveBeenCalled();
+    expect(vi.mocked(renderDeleteDatasourceConfirm)).not.toHaveBeenCalled();
+  });
+
   it('routes a delete-workbook confirm result to renderDeleteWorkbookConfirm', () => {
     vi.mocked(isDeleteWorkbookConfirmResult).mockReturnValue(true);
 

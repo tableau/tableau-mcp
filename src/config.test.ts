@@ -207,6 +207,31 @@ describe('Config', () => {
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
   });
 
+  describe('PENDING_DELETION_MAX_AGE_DAYS', () => {
+    it('defaults to 30 days', () => {
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+    });
+
+    it('accepts a value within 1-90', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '14');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(14);
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '90');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(90);
+    });
+
+    it('falls back to the default when out of range or not a number', () => {
+      for (const raw of ['0', '91', '-5', 'abc']) {
+        vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', raw);
+        expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+      }
+    });
+
+    it('truncates a fractional value to whole days', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '7.9');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(7);
+    });
+  });
+
   it('should set enableMcpSiteSettings to true by default', () => {
     const config = new Config();
     expect(config.enableMcpSiteSettings).toBe(true);
