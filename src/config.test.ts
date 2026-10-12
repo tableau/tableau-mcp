@@ -633,6 +633,7 @@ describe('Config', () => {
       jwePrivateKeyPath: 'path/to/private.pem',
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
+      proxyResolvesHostname: false,
       enforceScopes: true,
       advertiseApiScopes: false,
       ...defaultOAuthTimeoutMs,
@@ -653,6 +654,7 @@ describe('Config', () => {
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
+        proxyResolvesHostname: false,
         enforceScopes: true,
         advertiseApiScopes: false,
         ...defaultOAuthTimeoutMs,
@@ -893,6 +895,20 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+
+    it('should set proxyResolvesHostname to true when OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME is "true"', () => {
+      vi.stubEnv('OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME', 'true');
+
+      const config = new Config();
+      expect(config.oauth.proxyResolvesHostname).toBe(true);
+    });
+
+    it('should set proxyResolvesHostname to false when OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME is not "true"', () => {
+      vi.stubEnv('OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME', 'yes');
+
+      const config = new Config();
+      expect(config.oauth.proxyResolvesHostname).toBe(false);
     });
   });
 

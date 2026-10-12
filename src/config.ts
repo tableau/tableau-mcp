@@ -69,6 +69,7 @@ export class Config extends BaseConfig {
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
+    proxyResolvesHostname: boolean;
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
   };
@@ -142,6 +143,7 @@ export class Config extends BaseConfig {
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
+      OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME: proxyResolvesHostname,
       ADVERTISE_API_SCOPES: advertiseApiScopes,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
@@ -244,6 +246,7 @@ export class Config extends BaseConfig {
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
+      proxyResolvesHostname: proxyResolvesHostname === 'true',
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: milliseconds.fromMinutes(10),
         minValue: 0,

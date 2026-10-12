@@ -273,7 +273,10 @@ The passphrase for the private key if it is encrypted.
 
 The Tableau MCP server supports MCP clients that register using a Client ID Metadata Document (CIMD)
 URL. Part of this process requires resolving the IP address of the host of the document to protect
-against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
+against DNS rebinding and Server-Side Request Forgery (SSRF) attacks. If the document is fetched
+through a proxy, such as one set with `HTTPS_PROXY`, the proxy is asked to connect to the resolved
+address unless [`OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME`](#oauth_cimd_proxy_resolves_hostname) is
+`true`.
 
 By default, the MCP server will use
 [Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1 and
@@ -287,6 +290,34 @@ References:
 
 - https://blog.modelcontextprotocol.io/posts/client_registration/
 - https://client.dev/
+
+<hr />
+
+### `OAUTH_CIMD_PROXY_RESOLVES_HOSTNAME`
+
+Whether a proxy, such as one set with `HTTPS_PROXY`, is asked to connect to the host name of a
+Client ID Metadata Document URL instead of the IP address that the MCP server resolved and checked
+(see [`OAUTH_CIMD_DNS_SERVERS`](#oauth_cimd_dns_servers)).
+
+- Default: `false`
+- When `false`, the proxy is asked to connect to the IP address that the MCP server checked. The
+  host name is still used for TLS (server name and certificate validation) and in the `Host` header,
+  and `NO_PROXY` is matched against the IP address instead of the host name. Proxies that only allow
+  connections to listed domain names reject these requests, and the authorization request fails with
+  `Unable to fetch client metadata`. It also fails if the checked address is an IPv6 address,
+  because IPv6 addresses are not sent to a proxy.
+- When `true`, the MCP server still resolves the host name and checks the resolved IP address, but
+  asks the proxy to connect to the host name. The proxy resolves the host name itself and chooses
+  the address it connects to, so the MCP server's address check no longer limits where the proxy
+  connects.
+- Connections without a proxy always go to the IP address that the MCP server checked.
+
+:::warning
+
+Only set this to `true` if the proxy itself restricts the destinations it connects to, for example
+if it only allows specific domains and does not connect to internal addresses.
+
+:::
 
 <hr />
 
