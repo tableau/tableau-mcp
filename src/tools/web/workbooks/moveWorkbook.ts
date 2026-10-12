@@ -64,13 +64,12 @@ export const getMoveWorkbookTool = (server: WebMcpServer): WebTool<typeof params
         extra,
         args: { workbookId, projectId, personalSpace },
         callback: async () => {
-          const usePersonalSpace = personalSpace === true;
-          if (projectId === undefined && !usePersonalSpace) {
+          if (projectId === undefined && !personalSpace) {
             return new ArgsValidationError(
               'move-workbook requires one of projectId or personalSpace: true.',
             ).toErr();
           }
-          if (projectId !== undefined && usePersonalSpace) {
+          if (projectId !== undefined && personalSpace) {
             return new ArgsValidationError(
               'move-workbook accepts only one of projectId or personalSpace: true, not both.',
             ).toErr();
