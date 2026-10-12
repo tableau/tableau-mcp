@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -58,7 +59,8 @@ export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeo
     name: 'confirm-delete-content',
     disabled: new Provider(
       async () =>
-        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+        !(await isAdminToolsEnabled(config)) ||
+        !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `

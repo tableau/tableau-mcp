@@ -19,10 +19,10 @@ describe('job-optimization-inform prompt', () => {
     expect(prompt.name).toBe('job-optimization-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
+  it('is disabled when adminToolsEnabled is false', async () => {
     const prompt = getJobOptimizationInformPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
+    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
+    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
   it('instructs the model to call the tool once and forbid recomputation', async () => {

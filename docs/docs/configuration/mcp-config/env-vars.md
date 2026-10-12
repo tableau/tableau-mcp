@@ -499,6 +499,10 @@ Enables admin-only tools that require site administrator permissions.
   - ServerAdministrator
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
   have the required permissions.
+- Admin tools are also enabled when the `admin-tools` feature flag is on, even if this variable is
+  `false`. Either switch turns them on. Self-hosted deployments control the flag through
+  `features.json`, where it ships as `false`. The tools' OAuth scopes are advertised and enforced
+  whenever the tools are enabled.
 
 <hr />
 

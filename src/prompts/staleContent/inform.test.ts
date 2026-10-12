@@ -7,12 +7,12 @@ describe('stale-content-cleanup-inform prompt', () => {
     expect(prompt.name).toBe('stale-content-cleanup-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
+  it('is disabled when adminToolsEnabled is false', async () => {
     const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
 
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
+    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
 
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
+    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
   it('instructs the model to call query-admin-insights once and forbid recomputation', async () => {

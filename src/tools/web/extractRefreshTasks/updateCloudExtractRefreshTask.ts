@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { PreviewNotRunError, UnknownError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -15,6 +16,7 @@ import {
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
   AppApprovalEvidence,
@@ -119,7 +121,7 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
   const updateCloudExtractRefreshTaskTool = new WebTool({
     server,
     name: 'update-cloud-extract-refresh-task',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     ...(mcpAppsEnabled
       ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }

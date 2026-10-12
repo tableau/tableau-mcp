@@ -208,7 +208,7 @@ export class WebMcpServer extends Server {
       }
     }
 
-    registerPrompts(this);
+    await registerPrompts(this);
 
     await this.enableSkillsCapability();
     await registerSkills(this);

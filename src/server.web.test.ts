@@ -106,6 +106,7 @@ describe('server', () => {
       clientId: opts?.clientId,
     });
     server.mcpServer.registerTool = vi.fn();
+    server.mcpServer.registerPrompt = vi.fn();
     return server;
   }
 
@@ -433,6 +434,65 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('run-flow');
     expect(registeredToolNames).not.toContain('run-flow-task');
     expect(registeredToolNames).not.toContain('cancel-flow-run');
+  });
+
+  describe('admin tools', () => {
+    const adminToolNames = [
+      'list-extract-refresh-tasks',
+      'update-cloud-extract-refresh-task',
+      'list-jobs',
+      'list-users',
+      'update-user',
+      'query-admin-insights',
+      'delete-content',
+    ];
+    const adminPromptNames = [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ];
+
+    async function getRegisteredNames(): Promise<{ tools: string[]; prompts: string[] }> {
+      const server = getServer();
+      await server.registerTools();
+      return {
+        tools: vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
+        prompts: vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0]),
+      };
+    }
+
+    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is "true"', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      const { tools, prompts } = await getRegisteredNames();
+
+      expect(tools).toEqual(expect.arrayContaining(adminToolNames));
+      expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
+    });
+
+    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is unset but the admin-tools flag is ON', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'admin-tools',
+      );
+      const { tools, prompts } = await getRegisteredNames();
+
+      expect(tools).toEqual(expect.arrayContaining(adminToolNames));
+      expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
+    });
+
+    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED and the admin-tools flag are both off', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      const { tools, prompts } = await getRegisteredNames();
+
+      for (const name of adminToolNames) {
+        expect(tools).not.toContain(name);
+      }
+      expect(prompts).toEqual([]);
+      expect(tools).toContain('list-datasources');
+    });
   });
 
   it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {

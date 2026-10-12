@@ -21,10 +21,10 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(prompt.name).toBe('stale-content-cleanup-apply');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
+  it('is disabled when adminToolsEnabled is false', async () => {
     const prompt = getStaleContentCleanupApplyPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
+    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
+    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
   it('drives the report tool and forbids recomputation', () => {

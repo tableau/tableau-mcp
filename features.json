@@ -11,5 +11,6 @@
   "data-apps": false,
   "skills-over-mcp": false,
   "authoring-with-slack": false,
-  "activity-log": false
+  "activity-log": false,
+  "admin-tools": false
 }

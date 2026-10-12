@@ -4,11 +4,13 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { RegistryEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
@@ -59,7 +61,7 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
     server,
     name: 'update-user',
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     description: `
   Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to "Unlicensed" to reclaim licenses.
 

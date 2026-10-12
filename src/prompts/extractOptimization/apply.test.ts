@@ -19,10 +19,10 @@ describe('extract-optimization-apply prompt', () => {
     expect(prompt.name).toBe('extract-optimization-apply');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
+  it('is disabled when adminToolsEnabled is false', async () => {
     const prompt = getExtractOptimizationApplyPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
+    expect(await prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
+    expect(await prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
   it('orchestrates the four expected tools', async () => {
