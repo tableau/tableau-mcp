@@ -10,7 +10,11 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
-import { buildPostUnzipPlan, deriveIdentity } from './templateIdentity.js';
+import {
+  buildPostUnzipPlan,
+  buildRequestedOriginsGuide,
+  deriveIdentity,
+} from './templateIdentity.js';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -58,6 +62,9 @@ describe('createDataAppWorkspace', () => {
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.requestedOrigins).toEqual(
+        buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
+      );
       invariant(value.filePath);
       expect(existsSync(value.filePath)).toBe(true);
       expect(statSync(value.filePath).size).toBeGreaterThan(0);
@@ -106,10 +113,51 @@ describe('createDataAppWorkspace', () => {
         expect(finalizedTwb).toContain("<referenced-view instances='1' viewId='Sales Demo' />");
         expect(finalizedTwb).not.toContain('Sheet 1');
         expect(finalizedTwb).not.toContain('TODO Sheet Name');
+        expect(finalizedTwb).not.toContain('TODO');
 
         const trex = await readFile(join(pkgDir, 'extensions', 'data-app.trex'), 'utf8');
         expect(trex).toContain('TODO-MANIFEST-ID');
         expect(trex).toContain('TODO App Name');
+        expect(trex).toContain('extension-version="TODO-MANIFEST-VERSION"');
+        expect(trex).toContain('<author name="TODO Author Name"');
+
+        // The package's JSON manifest ships with identity tokens (the same ones as the .trex) and an
+        // empty requestedOrigins.
+        const manifestPath = 'Data App Name/Packages/TODO-MANIFEST-ID/manifest.json';
+        const manifest = await readFile(join(extractDir, manifestPath), 'utf8');
+        expect(JSON.parse(manifest)).toEqual({
+          id: 'TODO-MANIFEST-ID',
+          version: 'TODO-MANIFEST-VERSION',
+          name: 'TODO App Name',
+          author: 'TODO Author Name',
+          requestedOrigins: '',
+        });
+
+        // Applying the plan's edits yields a valid JSON manifest carrying the app's identity, and the
+        // same identity lands in the .trex the server reads.
+        const finalize = (text: string, file: string): string => {
+          for (const { find, replace } of value.postUnzip!.edits.find((edit) => edit.file === file)!
+            .replacements) {
+            text = text.split(find).join(replace);
+          }
+          return text;
+        };
+        expect(JSON.parse(finalize(manifest, manifestPath))).toEqual({
+          id: 'com.tableau.mcp.sales-demo',
+          version: '1.0.0',
+          name: 'Sales Demo',
+          author: 'Tableau MCP',
+          requestedOrigins: '',
+        });
+        const finalizedTrex = finalize(
+          trex,
+          'Data App Name/Packages/TODO-MANIFEST-ID/extensions/data-app.trex',
+        );
+        expect(finalizedTrex).toContain(
+          '<worksheet-extension id="com.tableau.mcp.sales-demo" extension-version="1.0.0">',
+        );
+        expect(finalizedTrex).toContain('<author name="Tableau MCP"');
+        expect(finalizedTrex).not.toContain('TODO');
 
         // Vendored Extensions API library copied byte-for-byte (large binary).
         const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.min.js');
@@ -149,6 +197,9 @@ describe('createDataAppWorkspace', () => {
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
+      expect(value.requestedOrigins).toEqual(
+        buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
+      );
 
       // The server uploads its own build artifact fresh: exactly one PutObjectCommand carrying the
       // real on-disk template bytes under a fixed, prefix-namespaced key.
