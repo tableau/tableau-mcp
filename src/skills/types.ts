@@ -36,7 +36,7 @@ export type SkillEntry = {
 };
 
 /**
- * `skills/list` request. The `method` literal is what the SDK routes on. `params` is optional
+ * `skills/list` request. The `method` literal is what the SDK routes on.
  */
 // TODO W-24225975: support `params.cursor` once pagination is implemented.
 export const SkillsListRequestSchema = z.object({
