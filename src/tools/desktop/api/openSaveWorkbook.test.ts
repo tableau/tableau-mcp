@@ -94,6 +94,9 @@ describe('open-file / save-workbook tools', () => {
       expect(message).toContain('Do not retry without filePath unless the user is at the machine');
       expect(message).not.toContain('Saved the open workbook');
       expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+      expect(result.structuredContent).toMatchObject({
+        message: expect.stringContaining('did not complete'),
+      });
     } finally {
       await harness.close();
     }
