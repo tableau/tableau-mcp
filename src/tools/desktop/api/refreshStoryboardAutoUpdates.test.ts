@@ -63,6 +63,7 @@ describe('refresh-storyboard-auto-updates', () => {
         message: `Refreshed auto-updates for the current point of storyboard "${STORYBOARD_NAME}".`,
       });
       expect(JSON.stringify(parseResult(result))).not.toContain('operation');
+      expect(result.structuredContent).toBeUndefined();
     } finally {
       await harness.close();
     }
@@ -100,6 +101,91 @@ describe('refresh-storyboard-auto-updates', () => {
       expect(result.isError).toBe(false);
       expect(parseResult(result).refreshed).toBe(false);
       expect(parseResult(result).message).toContain('still applying');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it.each([
+    ['PARTIAL with failures', 'PARTIAL', 2, 1, '2 worksheets refreshed, 1 failed'],
+    ['COMPLETE with failures', 'COMPLETE', 1, 1, '1 worksheet refreshed, 1 failed'],
+    ['FAILED with empty arrays', 'FAILED', 0, 0, '0 worksheets refreshed, 0 failed'],
+    ['PARTIAL with empty failed', 'PARTIAL', 1, 0, '1 worksheet refreshed, 0 failed'],
+  ] as const)(
+    'names a SUCCEEDED %s outcome and attaches a review next action',
+    async (_label, outcome, refreshedCount, failedCount, counts) => {
+      const harness = await startHarness((server) => {
+        server.setOverride(`POST ${REFRESH_ROUTE}`, {
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'op-storyboard-non-clean',
+            kind: 'storyboard.refreshNow',
+            state: 'SUCCEEDED',
+            result: {
+              outcome,
+              refreshed: Array.from({ length: refreshedCount }, (_v, i) => ({
+                worksheetId: `ok-${i}`,
+                worksheetName: `Ok ${i}`,
+              })),
+              failed: Array.from({ length: failedCount }, (_v, i) => ({
+                worksheetId: `bad-${i}`,
+                worksheetName: `Bad ${i}`,
+                code: 'refresh-attempt-failed',
+                message: 'The refresh attempt failed.',
+              })),
+            },
+          }),
+        });
+      });
+      try {
+        const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+        const body = parseResult(result);
+
+        expect(result.isError).toBe(false);
+        expect(body.message).toBe(
+          `Desktop reported a ${outcome} refresh of auto-updates for the current point of storyboard "${STORYBOARD_NAME}": ${counts}.`,
+        );
+        expect(body).toMatchObject({ outcome });
+        expect(result.structuredContent).toHaveProperty('nextAction.kind', 'prefill');
+        expect(result.structuredContent).toMatchObject({ message: body.message });
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  it('keeps the review next action and appends Desktop warnings on a non-clean outcome', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride(`POST ${REFRESH_ROUTE}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-storyboard-warned',
+          kind: 'storyboard.refreshNow',
+          state: 'SUCCEEDED',
+          warnings: [{ code: 'slow-refresh', message: 'Refresh was slow.' }],
+          result: { outcome: 'PARTIAL', refreshed: [], failed: [] },
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({ storyboard: STORYBOARD_NAME });
+      const body = parseResult(result) as ReturnType<typeof parseResult> & {
+        warnings?: unknown;
+      };
+
+      expect(result.isError).toBe(false);
+      expect(body.message).toContain(
+        `Desktop reported a PARTIAL refresh of auto-updates for the current point of storyboard "${STORYBOARD_NAME}": 0 worksheets refreshed, 0 failed, but Desktop reported 1 warning(s).`,
+      );
+      expect(body.message).toContain('Refresh was slow.');
+      expect(body.warnings).toEqual([{ code: 'slow-refresh', message: 'Refresh was slow.' }]);
+      expect(result.structuredContent).toMatchObject({
+        message: body.message,
+        warnings: [{ code: 'slow-refresh', message: 'Refresh was slow.' }],
+        nextAction: { kind: 'prefill' },
+      });
     } finally {
       await harness.close();
     }

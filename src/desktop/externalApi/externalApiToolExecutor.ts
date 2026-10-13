@@ -913,7 +913,10 @@ export class ExternalApiToolExecutor {
     dashboardId: string,
     signal: AbortSignal,
   ): Promise<
-    Result<ExecuteCommandResult<typeof dashboardRefreshOutcomeSchema>, ExecuteCommandError>
+    Result<
+      ExecuteCommandResult<undefined> & { parsedResult?: DashboardRefreshOutcome },
+      ExecuteCommandError
+    >
   > {
     const result = await this.applyDocument(
       (http) => http.postEnvelope(dashboardRefreshNowRoute(dashboardId), signal),
@@ -930,11 +933,14 @@ export class ExternalApiToolExecutor {
         : Err({ type: 'invalid-response', error: parsed.error });
     }
 
+    if (result.value.status !== 'completed') {
+      return result;
+    }
     const parsed = dashboardRefreshOutcomeSchema.safeParse(result.value.result);
     if (!parsed.success) {
       return Err({ type: 'invalid-response', error: parsed.error });
     }
-    return Ok({ ...result.value, parsedResult: parsed.data as DashboardRefreshOutcome });
+    return Ok({ ...result.value, parsedResult: parsed.data });
   }
 
   async pauseDashboardAutoUpdates(

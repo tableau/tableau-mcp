@@ -16,9 +16,10 @@ import {
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
-import { attachNextAction, prefillNextAction } from '../structuredContent.js';
+import { attachNextAction, prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
+import { nonCleanRefreshSubject } from './refreshOutcomeSubject.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -112,14 +113,26 @@ export const getRefreshStoryboardAutoUpdatesTool = (
             );
           }
 
-          const subject = `Refreshed auto-updates for the current point of storyboard "${previousName}"`;
+          const nonClean = nonCleanRefreshSubject(
+            `the current point of storyboard "${previousName}"`,
+            result.value.parsedResult,
+          );
+          const subject =
+            nonClean ??
+            `Refreshed auto-updates for the current point of storyboard "${previousName}"`;
+          const body = {
+            storyboard: { id: ref.id, name: previousName },
+            ...result.value.parsedResult,
+            message: `${subject}.`,
+          };
           return new Ok(
             commandOk(
-              {
-                storyboard: { id: ref.id, name: previousName },
-                ...result.value.parsedResult,
-                message: `${subject}.`,
-              },
+              nonClean === undefined
+                ? body
+                : withNextAction(
+                    body,
+                    prefillNextAction('Review failed worksheet updates in the current story point'),
+                  ),
               result.value,
               subject,
             ),

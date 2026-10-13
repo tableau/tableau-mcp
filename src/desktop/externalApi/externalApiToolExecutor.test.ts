@@ -1626,6 +1626,31 @@ describe('ExternalApiToolExecutor', () => {
       });
     });
 
+    it.each([
+      ['QUEUED', 'queued'],
+      ['RUNNING', 'running'],
+    ])(
+      'reports a %s dashboard refresh-now as pending, not invalid-response',
+      async (state, status) => {
+        server.setOverride('POST /v0/workbook/dashboards/dash-exec:refreshNow', {
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'op-dashboard-pending', kind: 'dashboard.refreshNow', state }),
+        });
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', '0.2.19')],
+        });
+        await executor.start();
+
+        const result = await executor.refreshDashboardNow('dash-exec', signal);
+
+        expect(result.isOk()).toBe(true);
+        const value = result.unwrap();
+        expect(value.status).toBe(status);
+        expect(value.parsedResult).toBeUndefined();
+      },
+    );
+
     it('percent-encodes the dashboard id on refresh-now dispatch', async () => {
       const path = '/v0/workbook/dashboards/dash%2Fexec%20now:refreshNow';
       server.setOverride(`POST ${path}`, {

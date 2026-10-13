@@ -2,12 +2,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  ExecuteCommandWarning,
+} from '../../../desktop/externalApi/executorTypes.js';
 import {
   endpointNotInThisBuild,
   resolveItemByNameOrId,
 } from '../../../desktop/externalApi/toolUtils.js';
-import { DashboardItem } from '../../../desktop/externalApi/types.js';
+import { DashboardItem, DashboardRefreshOutcome } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import {
@@ -16,9 +19,10 @@ import {
 } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
-import { attachNextAction, prefillNextAction } from '../structuredContent.js';
+import { attachNextAction, prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
+import { nonCleanRefreshSubject } from './refreshOutcomeSubject.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -27,6 +31,14 @@ const paramsSchema = {
     .describe('Dashboard name or stable id whose pending automatic updates should run now.'),
 };
 const title = 'Refresh Dashboard Auto Updates';
+type RefreshDashboardToolResult = {
+  dashboard: { id: string; name: string };
+  message: string;
+  refreshed?: boolean | DashboardRefreshOutcome['refreshed'];
+  outcome?: DashboardRefreshOutcome['outcome'];
+  failed?: DashboardRefreshOutcome['failed'];
+  warnings?: ExecuteCommandWarning[];
+};
 
 export const getRefreshDashboardAutoUpdatesTool = (
   server: DesktopMcpServer,
@@ -46,7 +58,7 @@ export const getRefreshDashboardAutoUpdatesTool = (
     },
     paramsSchema,
     callback: async ({ session, dashboard }, extra): Promise<CallToolResult> => {
-      return await tool.logAndExecute({
+      return await tool.logAndExecute<RefreshDashboardToolResult>({
         extra,
         args: { session, dashboard },
         getSuccessResult: commandSuccessResult,
@@ -83,17 +95,36 @@ export const getRefreshDashboardAutoUpdatesTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          const subject =
-            result.value.status === 'completed'
-              ? `Refreshed auto-updates for dashboard "${target.name}"`
-              : `Requested refreshing auto-updates for dashboard "${target.name}"; Desktop is still applying it`;
+          const dashboardRef = { id: target.id, name: target.name };
+          if (result.value.status !== 'completed') {
+            const pending = `Requested refreshing auto-updates for dashboard "${target.name}"; Desktop is still applying it`;
+            return new Ok(
+              commandOk(
+                { refreshed: false, dashboard: dashboardRef, message: `${pending}.` },
+                result.value,
+                pending,
+              ),
+            );
+          }
+
+          const nonClean = nonCleanRefreshSubject(
+            `dashboard "${target.name}"`,
+            result.value.parsedResult,
+          );
+          const subject = nonClean ?? `Refreshed auto-updates for dashboard "${target.name}"`;
+          const body = {
+            dashboard: dashboardRef,
+            ...result.value.parsedResult,
+            message: `${subject}.`,
+          };
           return new Ok(
             commandOk(
-              {
-                dashboard: { id: target.id, name: target.name },
-                ...result.value.parsedResult,
-                message: `${subject}.`,
-              },
+              nonClean === undefined
+                ? body
+                : withNextAction(
+                    body,
+                    prefillNextAction('Review failed dashboard refresh targets'),
+                  ),
               result.value,
               subject,
             ),
