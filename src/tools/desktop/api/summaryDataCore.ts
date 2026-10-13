@@ -194,7 +194,7 @@ function columnName(column: unknown): string {
 
 function normalizeColumnName(name: string): string {
   const trimmed = name.trim().replace(/^\[|\]$/g, '');
-  const wrapped = trimmed.match(/^[A-Z][A-Z0-9_ ]*\((.*)\)$/i);
+  const wrapped = trimmed.match(/^[A-Z][A-Z0-9_]*\((.*)\)$/i);
   return (wrapped?.[1] ?? trimmed)
     .trim()
     .replace(/^\[|\]$/g, '')
