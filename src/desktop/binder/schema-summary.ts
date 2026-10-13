@@ -41,6 +41,15 @@ export interface SchemaSummary {
   fields: SchemaField[];
 }
 
+/** Fields of one datasource only; the full summary when no field belongs to it. */
+export function narrowSummaryToDatasource(
+  summary: SchemaSummary,
+  datasourceMatches: (datasource: string) => boolean,
+): SchemaSummary {
+  const fields = summary.fields.filter((field) => datasourceMatches(field.datasource));
+  return fields.length > 0 ? { ...summary, fields } : summary;
+}
+
 /** Strip surrounding brackets from a Tableau field name: "[Region]" -> "Region". */
 export function bareName(name: string): string {
   return name.replace(/^\[|\]$/g, '');

@@ -32,7 +32,12 @@ import {
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
-import { type SchemaField, type SchemaSummary, summarizeSchema } from './schema-summary.js';
+import {
+  narrowSummaryToDatasource,
+  type SchemaField,
+  type SchemaSummary,
+  summarizeSchema,
+} from './schema-summary.js';
 import {
   type BindingProposal,
   type Blocker,
@@ -331,6 +336,21 @@ export function makeTitle(ask: string): string {
   return `${kept.replace(/[\s,;:.—–-]+$/, '')}…`;
 }
 
+/** Names the other datasource when a field resolves only outside the bound one. */
+function foundOnlyInOtherDatasource(
+  summary: SchemaSummary,
+  boundSummary: SchemaSummary,
+  name: string,
+  kind: 'filters' | 'sort',
+): string | undefined {
+  if (boundSummary === summary) return undefined;
+  const elsewhere = resolveInSummary(summary, name);
+  const other = elsewhere.field?.datasource;
+  const bound = boundSummary.fields[0]?.datasource;
+  if (other === undefined || bound === undefined || other === bound) return undefined;
+  return `"${name}" exists only in datasource '${other}'; bind-template ${kind} must come from the bound datasource '${bound}'.`;
+}
+
 /**
  * Validate a concrete proposal against its manifest and, on success, build the
  * injector-ready args. Shared by Call 2 (agent proposal), the no-LLM Call 1 path,
@@ -396,17 +416,22 @@ function validateAndBuild(
   }
 
   const warnings = [...(v.warnings ?? [])];
+  // Sort, filters and the waterfall order field resolve inside the datasource the slots bound to.
+  const boundSummary = narrowSummaryToDatasource(summary, (ds) => escapeXml(ds) === v.datasource);
   let sort = proposal.sort;
   if (proposal.sort) {
-    const sortField = resolveInSummary(summary, proposal.sort.by);
+    const sortField = resolveInSummary(boundSummary, proposal.sort.by);
     if (sortField.kind === 'ambiguous') {
       warnings.push(
         `"${proposal.sort.by}" matches ${sortField.candidates?.length ?? 0} sort fields; ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
     } else if (sortField.kind === 'not_found' || !sortField.field) {
+      const elsewhere = foundOnlyInOtherDatasource(summary, boundSummary, proposal.sort.by, 'sort');
       warnings.push(
-        `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
+        elsewhere !== undefined
+          ? `${elsewhere} Ignoring optional sort and keeping the template's default sort`
+          : `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
     }
@@ -417,7 +442,7 @@ function validateAndBuild(
   // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
   // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
-    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderFields = boundSummary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
     if (orderFields.length > 1) {
       return {
         status: 'escalate',
@@ -435,7 +460,7 @@ function validateAndBuild(
     }
     const orderField = orderFields[0];
     if (orderField) {
-      const resolved = resolveInSummary(summary, orderField.name);
+      const resolved = resolveInSummary(boundSummary, orderField.name);
       if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
         sort = { by: orderField.name, direction: 'asc' };
         warnings.push(
@@ -460,7 +485,7 @@ function validateAndBuild(
   // to its CI, declares the dependency, and emits the context filter + shown card.
   if (proposal.filters && proposal.filters.length > 0) {
     for (const filter of proposal.filters) {
-      const r = resolveInSummary(summary, filter.field);
+      const r = resolveInSummary(boundSummary, filter.field);
       if (r.kind === 'ambiguous') {
         return {
           status: 'escalate',
@@ -482,7 +507,9 @@ function validateAndBuild(
           blockers: [
             {
               code: 'field-not-found',
-              detail: `no filter field named "${filter.field}" in datasource(s)`,
+              detail:
+                foundOnlyInOtherDatasource(summary, boundSummary, filter.field, 'filters') ??
+                `no filter field named "${filter.field}" in datasource(s)`,
               candidates: (r.candidates ?? []).slice(0, 5).map((candidate) => candidate.column_ref),
             },
           ],

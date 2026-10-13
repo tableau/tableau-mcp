@@ -26,6 +26,7 @@ import {
   parseExactFilterIntent,
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
+import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
@@ -2145,7 +2146,7 @@ function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
 function applyProposalSplices({
   xml,
   args,
-  schemaSummary,
+  schemaSummary: fullSchemaSummary,
   literalTitle,
 }: {
   xml: string;
@@ -2159,6 +2160,14 @@ function applyProposalSplices({
   if (!args.sort && args.top_n === undefined && (!args.filters || args.filters.length === 0)) {
     return { ok: true, xml, warnings: [], appliedFilterCount: 0 };
   }
+  const boundDatasource = args.template_parameters['DATASOURCE'];
+  const schemaSummary =
+    boundDatasource === undefined
+      ? fullSchemaSummary
+      : narrowSummaryToDatasource(
+          fullSchemaSummary,
+          (ds) => ds === decodeXmlEntities(boundDatasource),
+        );
   const originalWorksheetXml = worksheetXmlByTitle(xml, literalTitle);
   if (originalWorksheetXml === null) {
     return { ok: false, reason: `proposal splice target worksheet "${literalTitle}" not found` };

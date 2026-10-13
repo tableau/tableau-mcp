@@ -1214,8 +1214,8 @@ describe('binder/bindTemplate — two-call protocol', () => {
 
   it.each([
     {
-      label: 'ambiguous across datasources',
-      field: 'Region',
+      label: 'ambiguous within the bound datasource',
+      field: 'Territory',
       reason: 'ambiguous-field',
       detail: 'matches 2 fields',
     },
@@ -1235,6 +1235,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
     const workbookXml = WORKBOOK_XML.replace(
       '</datasources>',
       "<datasource name='Returns'><column name='[Region]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+    ).replace(
+      "<column name='[Category]'",
+      "<column name='[Terr A]' caption='Territory' role='dimension' type='nominal' datatype='string' /><column name='[Terr B]' caption='Territory' role='dimension' type='nominal' datatype='string' /><column name='[Category]'",
     );
     const result = await bindTemplate({
       ask: `bar chart of Sales by Category filtered by ${field}`,
@@ -1256,6 +1259,55 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0]).toMatchObject({ code: reason });
     expect(result.blockers[0].detail).toContain(detail);
     expect(result.proposal?.filters).toEqual([{ field, context: true }]);
+  });
+});
+
+describe('binder/within-datasource resolution of sort and filters', () => {
+  const twoDatasources = WORKBOOK_XML.replace(
+    '</datasources>',
+    "<datasource name='Targets'><column name='[Region]' role='dimension' type='nominal' datatype='string' /><column name='[Quota Tier]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+  );
+  const bindWith = (extra: Record<string, unknown>): ReturnType<typeof bindTemplate> =>
+    bindTemplate({
+      ask: 'bar chart of Sales by Category',
+      workbookXml: twoDatasources,
+      manifests: descriptors,
+      proposal: {
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        ...extra,
+      },
+    });
+
+  it('binds a filter on a field that exists in both datasources when the bound one has it', async () => {
+    const result = await bindWith({ filters: [{ field: 'Region', context: true }] });
+
+    expect(result.status).toBe('bound');
+  });
+
+  it('refuses a filter field that lives only in another datasource', async () => {
+    const result = await bindWith({ filters: [{ field: 'Quota Tier' }] });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('field-not-found');
+    expect(result.blockers[0].detail).toBe(
+      "\"Quota Tier\" exists only in datasource 'Targets'; bind-template filters must come from the bound datasource 'Superstore'.",
+    );
+  });
+
+  it('drops a sort field that lives only in another datasource with a warning', async () => {
+    const result = await bindWith({ sort: { by: 'Quota Tier', direction: 'asc' } });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.sort).toBeUndefined();
+    expect(result.warnings?.join('\n')).toContain(
+      "\"Quota Tier\" exists only in datasource 'Targets'; bind-template sort must come from the bound datasource 'Superstore'.",
+    );
   });
 });
 
