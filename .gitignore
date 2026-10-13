@@ -50,3 +50,10 @@ src/templates/data-app-template.zip
 *.tsv
 stale-*.md
 /logs/
+
+# SEA build outputs
+tableau-mcp-desktop
+tableau-mcp-desktop.exe
+sea-prep.*.blob
+sea-config.*.generated.json
+asset-manifest.*.generated.json
