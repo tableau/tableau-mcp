@@ -4,6 +4,10 @@ vi.mock('../config.js', () => ({
   getConfig: vi.fn(() => ({ activityLog: { provider: 'noop' } })),
 }));
 vi.mock('../logging/logger.js', () => ({ log: vi.fn() }));
+vi.mock('../utils/loadProviderModule.js', async (importActual) => {
+  const actual = await importActual<typeof import('../utils/loadProviderModule.js')>();
+  return { loadProviderModule: vi.fn(actual.loadProviderModule) };
+});
 const mockIsFeatureEnabled = vi.hoisted(() => vi.fn());
 vi.mock('../features/init.js', () => ({
   getFeatureGate: () => ({ isFeatureEnabled: mockIsFeatureEnabled }),
@@ -11,6 +15,7 @@ vi.mock('../features/init.js', () => ({
 
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
+import { loadProviderModule } from '../utils/loadProviderModule.js';
 import {
   closeActivityLog,
   initializeActivityLog,
@@ -86,6 +91,18 @@ describe('Activity Log init', () => {
         directory: '/home/nodejs/logs',
       });
       expect(globalThis.__activityLogCalls).toEqual([details]);
+    });
+
+    it('loads the custom provider through loadProviderModule so SEA builds can resolve it', async () => {
+      useCustomProvider(RECORDING_MODULE);
+
+      await initializeActivityLog();
+
+      expect(loadProviderModule).toHaveBeenCalledOnce();
+      expect(loadProviderModule).toHaveBeenCalledWith(
+        expect.stringContaining('recordingActivityLogProvider.cjs'),
+        expect.any(Function),
+      );
     });
 
     it('falls back to noop and logs an error when the module is missing', async () => {

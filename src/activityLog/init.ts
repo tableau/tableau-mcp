@@ -8,6 +8,7 @@ import { getConfig } from '../config.js';
 import { getFeatureGate } from '../features/init.js';
 import { log } from '../logging/logger.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { NoOpActivityLogProvider } from './noop.js';
 import type { ActivityLogProvider, ToolCallDetails } from './provider.js';
 import { isActivityLogProvider } from './types.js';
@@ -139,8 +140,7 @@ function loadCustomProvider(config?: Record<string, unknown>): ActivityLogProvid
   try {
     // `module` is trusted operator-controlled config, same trust model as
     // FEATURE_GATE_PROVIDER/TELEMETRY_PROVIDER's custom loaders.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
-    const module = require(resolvedPath);
+    const module = loadProviderModule(resolvedPath, require);
 
     // Look for default export or named export "ActivityLogProvider"
     const ProviderClass = module.default || module.ActivityLogProvider;
