@@ -248,3 +248,25 @@ describe('spliceBoundCalcDefinitions', () => {
     expect(twice).toBe(alreadyBodied);
   });
 });
+
+describe('spliceBoundGroupDefinitions - same group name in two datasources', () => {
+  const twoDatasources = TARGET_WORKBOOK.replace(
+    '</datasources>',
+    `<datasource name='Copy'>
+      <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Product Name (group)]' role='dimension' type='nominal'>
+        <calculation class='categorical-bin' column='[Product Name]' new-bin='true'>
+          <bin default-name='Edited' value='&quot;Edited&quot;'><value>&quot;X&quot;</value></bin>
+        </calculation>
+      </column>
+    </datasource>
+  </datasources>`,
+  );
+
+  it('splices the definition from the bound datasource, not the last one walked', () => {
+    const out = spliceBoundGroupDefinitions(HOLLOW_SHEET, GROUP_MAPPING, twoDatasources);
+
+    expect(out).toContain('Acme');
+    expect(out).not.toContain('Edited');
+  });
+});
