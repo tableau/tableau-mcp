@@ -41,6 +41,20 @@ const WB_AGGREGATED_CALC = `<?xml version="1.0" encoding="UTF-8"?>
   </datasources>
 </workbook>`;
 
+const WB_AGGREGATED_CALC_CAPTION_TWIN = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="Sample - Superstore">
+      <column name="[Calculation_1]" caption="Profit Ratio" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Profit])/SUM([Sales])"/>
+      </column>
+      <column name="[Profit Ratio]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Profit])/SUM([Sales])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
 const WB_NEAR_DUPLICATES = `<?xml version="1.0" encoding="UTF-8"?>
 <workbook>
   <datasources>
@@ -152,6 +166,14 @@ describe('resolveField', () => {
     expect(r.kind).toBe('rewritten');
     expect(r.rewrites).toContain('ignored-redundant-aggregation');
     expect(r.reason).toMatch(/already aggregated/);
+  });
+
+  it('guards aggregated calcs on the ranked multi-candidate path and echoes the original query', () => {
+    const r = resolveField(WB_AGGREGATED_CALC_CAPTION_TWIN, 'sum of Profit Ratio');
+    expect(r.kind).toBe('rewritten');
+    expect(r.query).toBe('sum of Profit Ratio');
+    expect(r.rewrites).toContain('ignored-redundant-aggregation');
+    expect(r.column_ref).not.toMatch(/\[sum:/);
   });
 
   it('uses an exact caption match before a same-name column match', () => {

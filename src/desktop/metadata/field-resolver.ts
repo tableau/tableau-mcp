@@ -531,23 +531,8 @@ export function resolveField(
       const base = baseCandidates[0];
       const rewrites = ['parsed-aggregation-prefix'];
       const note = nearDuplicateNote(allFields, base);
-      // If the base is already aggregated (calc field with SUM(...) etc.),
-      // ignore the requested aggregation — using the base column_ref avoids
-      // double-aggregation. This mirrors coordination.ts's existing behavior
-      // but surfaces it as a rewrite.
       if (base.isAggregated) {
-        rewrites.push('ignored-redundant-aggregation');
-        return {
-          kind: 'rewritten',
-          query,
-          column_ref: base.column_ref,
-          datasource: base.datasource,
-          reason: `field "${baseName}" is already aggregated (formula: ${
-            base.formula ?? '?'
-          }); ignored requested "${reqAgg}".`,
-          rewrites,
-          ...(note ? { notes: [note] } : {}),
-        };
+        return ignoredRedundantAggregation(query, base, baseName, reqAgg, note);
       }
       const mapped = mapAggregationToken(reqAgg);
       if (mapped === undefined) {
@@ -572,10 +557,20 @@ export function resolveField(
       const ranked = disambiguateRanked(baseCandidates, baseName, allFields);
       if (ranked?.column_ref) {
         const base = allFields.find((field) => field.column_ref === ranked.column_ref);
+        if (base?.isAggregated) {
+          return ignoredRedundantAggregation(
+            query,
+            base,
+            baseName,
+            reqAgg,
+            nearDuplicateNote(allFields, base),
+          );
+        }
         const mapped = mapAggregationToken(reqAgg);
         if (base && mapped !== undefined) {
           return {
             ...ranked,
+            query,
             kind: 'rewritten',
             column_ref: buildAggregatedRef(base, mapped),
             reason: `applied aggregation "${reqAgg}" to base field "${baseName}"`,
@@ -611,6 +606,27 @@ export function resolveField(
       fuzzy.length > 0
         ? `no exact match for "${trimmed}"; ${fuzzy.length} did-you-mean candidate(s) returned.`
         : `no match for "${trimmed}".`,
+  };
+}
+
+// An already-aggregated calc (SUM(...) etc.) keeps its own ref: wrapping it again would double-aggregate.
+function ignoredRedundantAggregation(
+  query: string,
+  base: FieldReference & { column_ref: string },
+  baseName: string,
+  reqAgg: string,
+  note: string | undefined,
+): FieldResolution {
+  return {
+    kind: 'rewritten',
+    query,
+    column_ref: base.column_ref,
+    datasource: base.datasource,
+    reason: `field "${baseName}" is already aggregated (formula: ${
+      base.formula ?? '?'
+    }); ignored requested "${reqAgg}".`,
+    rewrites: ['parsed-aggregation-prefix', 'ignored-redundant-aggregation'],
+    ...(note ? { notes: [note] } : {}),
   };
 }
 
