@@ -699,9 +699,10 @@ describe('scopes', () => {
       ]);
     });
 
-    it('should require workbooks update plus resource access scopes for move-workbook', () => {
+    it('should require workbooks update, projects read, and resource access scopes for move-workbook', () => {
       expect(getRequiredApiScopesForTool('move-workbook')).toEqual([
         'tableau:workbooks:update',
+        'tableau:projects:read',
         'tableau:content:read',
         'tableau:mcp_site_settings:read',
       ]);

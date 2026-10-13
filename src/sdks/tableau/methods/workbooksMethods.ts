@@ -248,26 +248,44 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
-   * Modifies the project of the specified workbook (i.e. moves it between projects).
+   * Modifies the destination of the specified workbook (i.e. moves it between projects, or into
+   * the caller's Personal Space).
+   *
+   * The destination is exactly one of `projectId` (sends `project: {id}`) or `location` (sends
+   * `location: {id, type: 'PersonalSpace'}`). The two are mutually exclusive.
    *
    * Required scopes (Tableau Cloud): `tableau:workbooks:update`
    *
    * @param workbookId - The ID of the workbook to update.
    * @param siteId - The Tableau site ID
-   * @param projectId - The ID of the project to move the workbook into.
+   * @param projectId - The ID of the project to move the workbook into (mutually exclusive with `location`)
+   * @param location - The Personal Space LUID to move the workbook into (mutually exclusive with `projectId`)
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
    */
   updateWorkbook = async ({
     workbookId,
     siteId,
     projectId,
+    location,
   }: {
     workbookId: string;
     siteId: string;
-    projectId: string;
+    projectId?: string;
+    location?: string;
   }): Promise<Partial<Workbook>> => {
+    if (projectId === undefined && location === undefined) {
+      throw new Error('updateWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('updateWorkbook accepts only one of `projectId` or `location`, not both.');
+    }
     const { workbook } = await this._apiClient.updateWorkbook(
-      { workbook: { project: { id: projectId } } },
+      {
+        workbook:
+          projectId !== undefined
+            ? { project: { id: projectId } }
+            : { location: { id: location!, type: 'PersonalSpace' } },
+      },
       {
         params: { siteId, workbookId },
         ...this.authHeader,
@@ -312,8 +330,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
-    if ((projectId === undefined) === (location === undefined)) {
-      throw new Error('publishWorkbook requires exactly one of `projectId` or `location`.');
+    if (projectId === undefined && location === undefined) {
+      throw new Error('publishWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('publishWorkbook accepts only one of `projectId` or `location`, not both.');
     }
     const destination =
       projectId !== undefined

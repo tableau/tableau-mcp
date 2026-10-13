@@ -162,6 +162,9 @@ describe('getScaffoldDataAppTool', () => {
         to: 'Sales Demo',
       });
       expect(payload.allowedOrigins).toEqual(['https://example.com']);
+      expect(payload.requestedOrigins.file).toBe(
+        'Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json',
+      );
     });
 
     it('includes allowedOrigins when the site policy is empty', async () => {
