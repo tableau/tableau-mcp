@@ -13,6 +13,8 @@ vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
   checkCacheFileArg: vi.fn(),
+  readContainedCacheTextFile: vi.fn(),
+  writeCacheTextFile: vi.fn(),
 }));
 vi.mock('fs');
 
@@ -44,7 +46,13 @@ describe('worksheetEditBuffer', () => {
       }
       return content;
     });
-    vi.mocked(fs.writeFileSync).mockImplementation((path, data) => {
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockImplementation((path) => {
+      const text = files.get(String(path));
+      return text === undefined
+        ? { ok: false, issue: 'missing' }
+        : { ok: true, path: String(path), text };
+    });
+    vi.mocked(cachePathModule.writeCacheTextFile).mockImplementation((path, data) => {
       files.set(String(path), String(data));
     });
     vi.mocked(fs.unlinkSync).mockImplementation((path) => {

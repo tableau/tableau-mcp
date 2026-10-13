@@ -404,6 +404,27 @@ export function checkCacheFileArg(
   }
 }
 
+/** Says "inside" only when the nearest resolvable ancestor provably lives in the cache; anything else counts as outside. */
+function resolvesOutsideCache(absolutePath: string): boolean {
+  let ancestor = dirname(absolutePath);
+  for (;;) {
+    try {
+      return !isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()));
+    } catch (error) {
+      if (errnoCode(error) === 'ENOENT') {
+        try {
+          if (lstatSync(ancestor).isSymbolicLink()) return true;
+        } catch {
+          // Not even lstat-able: keep climbing.
+        }
+      }
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return true;
+      ancestor = parent;
+    }
+  }
+}
+
 /** A missing path under a planted directory symlink must look the same as an outside path. */
 function missingCacheFileError(
   argName: string,
@@ -411,23 +432,7 @@ function missingCacheFileError(
   raw: string,
   notFound?: (path: string) => McpToolError,
 ): McpToolError {
-  try {
-    let ancestor = dirname(absolutePath);
-    for (;;) {
-      try {
-        if (!isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()))) {
-          return new CacheFileOutsideCacheError(argName);
-        }
-        break;
-      } catch (error) {
-        const parent = dirname(ancestor);
-        if (errnoCode(error) !== 'ENOENT' || parent === ancestor) throw error;
-        ancestor = parent;
-      }
-    }
-  } catch {
-    // An unresolvable ancestor is lexically inside the cache, so plain "missing" reveals nothing.
-  }
+  if (resolvesOutsideCache(absolutePath)) return new CacheFileOutsideCacheError(argName);
   return notFound?.(raw) ?? new FileReadError(new Error(`${argName} does not exist`));
 }
 
@@ -448,6 +453,9 @@ export function readCacheFileArg(
     case CONTAINED_CACHE_READ_ISSUE.missing:
       return new Err(missingCacheFileError(argName, resolved.value, raw, notFound));
     default:
+      if (resolvesOutsideCache(resolved.value)) {
+        return new Err(new CacheFileOutsideCacheError(argName));
+      }
       return new Err(new FileReadError(read.error ?? new Error(`Unable to read ${argName}.`)));
   }
 }
@@ -457,6 +465,11 @@ export function writeCacheTextFile(path: string, text: string): void {
   const written = writeContainedCacheTextFile(path, text);
   if (written.ok) return;
   if (written.issue === CONTAINED_CACHE_WRITE_ISSUE.writeError) throw written.error;
+  if (written.issue === CONTAINED_CACHE_WRITE_ISSUE.unsupportedNewPath) {
+    throw new Error(
+      `refused to write ${path}: new cache files must be created directly in the Desktop cache directory`,
+    );
+  }
   throw new Error(
     `refused to write ${path}: it must be a regular file inside the Desktop cache directory`,
   );

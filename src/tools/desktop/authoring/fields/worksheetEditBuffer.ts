@@ -15,11 +15,15 @@
  * in-memory map, since two server instances/restarts must see the same state a
  * Desktop-side edit would.
  */
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { checkCacheFileArg } from '../../../../desktop/cachePath.js';
+import {
+  checkCacheFileArg,
+  readContainedCacheTextFile,
+  writeCacheTextFile,
+} from '../../../../desktop/cachePath.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
@@ -75,17 +79,23 @@ export function getStickyWorksheetFile({
     return undefined;
   }
 
-  let pointer: Partial<WorksheetEditBufferPointer>;
-  try {
-    pointer = JSON.parse(readFileSync(pointerFile, 'utf-8')) as Partial<WorksheetEditBufferPointer>;
-  } catch (error) {
+  // Log only the issue name: parse errors and raw errors can quote the file's bytes.
+  const warnUnreadable = (issue: string): undefined => {
     log({
       message: 'worksheet edit buffer pointer unreadable — starting a fresh buffer',
       level: 'warning',
       logger: 'worksheetEditBuffer',
-      data: { pointerFile, error: String(error) },
+      data: { pointerFile, issue },
     });
     return undefined;
+  };
+  const read = readContainedCacheTextFile(pointerFile);
+  if (!read.ok) return warnUnreadable(read.issue);
+  let pointer: Partial<WorksheetEditBufferPointer>;
+  try {
+    pointer = JSON.parse(read.text) as Partial<WorksheetEditBufferPointer>;
+  } catch {
+    return warnUnreadable('unparseable');
   }
 
   if (
@@ -137,7 +147,7 @@ export function setStickyWorksheetFile({
     updated_at: new Date().toISOString(),
   };
   try {
-    writeFileSync(pointerFile, JSON.stringify(pointer, null, 2), 'utf-8');
+    writeCacheTextFile(pointerFile, JSON.stringify(pointer, null, 2));
   } catch (error) {
     log({
       message: 'worksheet edit buffer pointer write failed',

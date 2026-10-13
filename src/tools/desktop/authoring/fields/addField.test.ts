@@ -29,6 +29,13 @@ vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   readCacheFileArg: vi.fn(),
   checkCacheFileArg: vi.fn(),
   writeCacheFileArg: vi.fn(),
+  readContainedCacheTextFile: (path: string) => {
+    try {
+      return { ok: true, path, text: String(readFileSync(path, 'utf-8')) };
+    } catch (error) {
+      return { ok: false, issue: 'read-error', error };
+    }
+  },
   writeCacheTextFile: (path: string, text: string) => writeFileSync(path, text, 'utf-8'),
 }));
 vi.mock('../../../../desktop/metadata/index.js');

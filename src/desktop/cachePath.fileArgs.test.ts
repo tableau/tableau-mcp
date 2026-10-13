@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process';
 import {
+  chmodSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,7 @@ import {
   readCacheFileArg,
   readContainedCacheTextFile,
   writeCacheFileArg,
+  writeCacheTextFile,
   writeContainedCacheTextFile,
 } from './cachePath.js';
 
@@ -135,7 +137,13 @@ describe('missing-file messages do not reveal what exists outside the cache', ()
     'answers the same for a nested missing path under a planted directory symlink',
     () => {
       symlinkSync(join(root, 'outside'), join(state.cacheDir, 'd'));
-      for (const name of ['d/missing.twb', 'd/nope/missing.twb', 'd/nope/deeper/missing.twb']) {
+      writeFileSync(join(root, 'outside', 'regular.txt'), 'x');
+      for (const name of [
+        'd/missing.twb',
+        'd/nope/missing.twb',
+        'd/nope/deeper/missing.twb',
+        'd/regular.txt/sub/x.twb',
+      ]) {
         const file = join(state.cacheDir, name);
         for (const result of [
           readCacheFileArg('workbookFile', file),
@@ -144,6 +152,74 @@ describe('missing-file messages do not reveal what exists outside the cache', ()
           expect(result.isErr() && result.error.type).toBe('cache-file-outside-cache');
         }
       }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'gives the Security error, not errno text, for an unreadable outside directory',
+    () => {
+      const locked = join(root, 'locked');
+      mkdirSync(locked);
+      writeFileSync(join(locked, 'x.twb'), 'x');
+      symlinkSync(locked, join(state.cacheDir, 'l'));
+      chmodSync(locked, 0o000);
+      try {
+        const result = readCacheFileArg('workbookFile', join(state.cacheDir, 'l', 'x.twb'));
+        expect(result.isErr() && result.error.type).toBe('cache-file-outside-cache');
+        expect(result.isErr() && result.error.message).not.toContain('EACCES');
+      } finally {
+        chmodSync(locked, 0o700);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'gives the Security error for an unreadable outside directory at depth 2 and deeper',
+    () => {
+      const locked = join(root, 'locked');
+      mkdirSync(join(locked, 'sub'), { recursive: true });
+      writeFileSync(join(locked, 'sub', 'f.twb'), 'x');
+      symlinkSync(locked, join(state.cacheDir, 'l'));
+      chmodSync(locked, 0o000);
+      try {
+        for (const name of ['l/sub/f.twb', 'l/sub/nope/f.twb', 'l/nope/a/b.twb']) {
+          const result = readCacheFileArg('workbookFile', join(state.cacheDir, name));
+          expect(result.isErr() && result.error.type).toBe('cache-file-outside-cache');
+          expect(result.isErr() && result.error.message).not.toContain('EACCES');
+        }
+      } finally {
+        chmodSync(locked, 0o700);
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'answers a dangling directory symlink exactly like a live one',
+    () => {
+      symlinkSync(join(root, 'outside'), join(state.cacheDir, 'live'));
+      symlinkSync(join(root, 'no-such-dir'), join(state.cacheDir, 'dangling'));
+      for (const tail of ['x.twb', 'a/b/x.twb']) {
+        for (const read of [readCacheFileArg, checkCacheFileArg]) {
+          const live = read('workbookFile', join(state.cacheDir, 'live', tail));
+          const dangling = read('workbookFile', join(state.cacheDir, 'dangling', tail));
+          expect(dangling.isErr() && dangling.error.type).toBe('cache-file-outside-cache');
+          expect(dangling.isErr() && dangling.error.message).toBe(
+            live.isErr() ? live.error.message : undefined,
+          );
+        }
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'keeps the errno text for an unreadable file inside the cache',
+    () => {
+      const file = join(state.cacheDir, 'secret.twb');
+      writeFileSync(file, 'x');
+      chmodSync(file, 0o000);
+      const result = readCacheFileArg('workbookFile', file);
+      expect(result.isErr() && result.error.type).not.toBe('cache-file-outside-cache');
+      expect(result.isErr() && result.error.message).toContain('EACCES');
     },
   );
 
@@ -185,16 +261,18 @@ describe.skipIf(process.platform === 'win32')('a FIFO planted in the cache', () 
     writeFileSync(
       script,
       `import { execFileSync } from 'child_process';
+import { rmSync } from 'fs';
 import { join } from 'path';
 import { checkCacheFileArg, getCacheDir, readContainedCacheTextFile, writeContainedCacheTextFile } from ${JSON.stringify(cachePathModule)};
 const fifo = join(getCacheDir(), 'fifo-probe-' + process.pid + '.twb');
 console.log(fifo);
+rmSync(fifo, { force: true });
 execFileSync('mkfifo', [fifo]);
-let refused = 0;
-if (readContainedCacheTextFile(fifo).ok === false) refused++;
-if (writeContainedCacheTextFile(fifo, 'x').ok === false) refused++;
-if (checkCacheFileArg('workbookFile', fifo).isErr()) refused++;
-console.log('REFUSED=' + refused);
+const read = readContainedCacheTextFile(fifo);
+const write = writeContainedCacheTextFile(fifo, 'x');
+console.log('READ=' + (read.ok ? 'ok' : read.issue));
+console.log('WRITE=' + (write.ok ? 'ok' : write.issue));
+console.log('CHECK=' + (checkCacheFileArg('workbookFile', fifo).isErr() ? 'err' : 'ok'));
 `,
     );
 
@@ -207,7 +285,9 @@ console.log('REFUSED=' + refused);
 
     expect(child.error).toBeUndefined();
     expect(child.status).toBe(0);
-    expect(child.stdout).toContain('REFUSED=3');
+    expect(child.stdout).toContain('READ=unsafe-file');
+    expect(child.stdout).toContain('WRITE=unsafe-file');
+    expect(child.stdout).toContain('CHECK=err');
   });
 });
 
@@ -239,5 +319,31 @@ describe.skipIf(process.platform === 'win32')('hardlinks to files outside the ca
     });
     expect(readFileSync(victim, 'utf-8')).toBe('original');
     expect(statSync(victim).mtimeMs).toBe(mtime);
+  });
+});
+
+describe('writeCacheTextFile refusal text', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'cache-write-text-'));
+    state.cacheDir = join(root, 'cache');
+    mkdirSync(join(state.cacheDir, 'sub'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('says where new files must go when a new file is not a direct child of the cache', () => {
+    expect(() => writeCacheTextFile(join(state.cacheDir, 'sub', 'new.xml'), 'x')).toThrow(
+      'new cache files must be created directly in the Desktop cache directory',
+    );
+  });
+
+  it('keeps the regular-file text for an outside path', () => {
+    expect(() => writeCacheTextFile(join(root, 'elsewhere.xml'), 'x')).toThrow(
+      'it must be a regular file inside the Desktop cache directory',
+    );
   });
 });
