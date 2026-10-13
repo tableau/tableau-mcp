@@ -1,9 +1,9 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { getDesktopConfig } from '../../config.desktop.js';
 import { log } from '../../logging/logger.js';
 
-const REGISTRY_DIR_ENV = 'TABLEAU_COMMANDS_REGISTRY_DIR';
 const COMMAND_PARAM_REGISTRY_FILE = 'command_param_registry.json';
 const CODEGEN_REGISTRY_FILE = 'codegen_registry.json';
 
@@ -135,8 +135,7 @@ function loadRegistry(): ParsedRegistry | null {
 }
 
 function normalizedRegistryDir(): string | null {
-  const value = process.env[REGISTRY_DIR_ENV]?.trim();
-  return value ? value : null;
+  return getDesktopConfig().commandsRegistryDir ?? null;
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> {

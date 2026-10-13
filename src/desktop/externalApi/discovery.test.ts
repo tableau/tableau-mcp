@@ -1,11 +1,7 @@
 import { homedir } from 'os';
 import { basename, join } from 'path';
 
-import {
-  discoverInstances,
-  getExternalApiDiscoveryDir,
-  getExternalApiDiscoveryDirs,
-} from './discovery.js';
+import { discoverInstances, getExternalApiDiscoveryDirs } from './discovery.js';
 
 vi.mock('os', () => ({
   homedir: vi.fn(() => '/home/testuser'),
@@ -179,16 +175,16 @@ describe('discoverInstances', () => {
   });
 });
 
-describe('getExternalApiDiscoveryDir', () => {
+describe('getExternalApiDiscoveryDirs', () => {
   beforeEach(() => {
     delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
   });
 
   it('honors an explicit override env var', () => {
-    const dir = getExternalApiDiscoveryDir(
+    const dir = getExternalApiDiscoveryDirs(
       { TABLEAU_EXTERNAL_API_DISCOVERY_DIR: '/custom/dir' },
       'darwin',
-    );
+    )[0];
     expect(dir).toBe('/custom/dir');
   });
 
@@ -196,7 +192,7 @@ describe('getExternalApiDiscoveryDir', () => {
   // `join` so these tests verify the *root selection* per platform rather than a
   // host-specific separator.
   it('uses the macOS Application Support path (doubled Tableau segment first)', () => {
-    const dir = getExternalApiDiscoveryDir(process.env, 'darwin');
+    const dir = getExternalApiDiscoveryDirs(process.env, 'darwin')[0];
     expect(dir).toBe(
       join('/home/testuser', 'Library', 'Application Support', 'Tableau', 'Tableau', 'ExternalApi'),
     );
@@ -215,26 +211,26 @@ describe('getExternalApiDiscoveryDir', () => {
   });
 
   it('uses LOCALAPPDATA on Windows', () => {
-    const dir = getExternalApiDiscoveryDir(
+    const dir = getExternalApiDiscoveryDirs(
       { LOCALAPPDATA: 'C:\\Users\\t\\AppData\\Local' },
       'win32',
-    );
+    )[0];
     expect(dir).toBe(join('C:\\Users\\t\\AppData\\Local', 'Tableau', 'Tableau', 'ExternalApi'));
   });
 
   it('falls back to a homedir-derived LOCALAPPDATA on Windows when unset', () => {
     delete process.env.LOCALAPPDATA;
-    const dir = getExternalApiDiscoveryDir(process.env, 'win32');
+    const dir = getExternalApiDiscoveryDirs(process.env, 'win32')[0];
     expect(dir).toBe(
       join('/home/testuser', 'AppData', 'Local', 'Tableau', 'Tableau', 'ExternalApi'),
     );
   });
 
   it('uses XDG_DATA_HOME on Linux', () => {
-    const dir = getExternalApiDiscoveryDir(
+    const dir = getExternalApiDiscoveryDirs(
       { XDG_DATA_HOME: '/home/testuser/.local/share' },
       'linux',
-    );
+    )[0];
     expect(dir).toBe(join('/home/testuser/.local/share', 'Tableau', 'Tableau', 'ExternalApi'));
   });
 });

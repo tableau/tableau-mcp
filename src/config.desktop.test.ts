@@ -85,6 +85,19 @@ describe('DesktopConfig', () => {
     });
   });
 
+  describe('commands registry dir', () => {
+    it('should expose a trimmed TABLEAU_COMMANDS_REGISTRY_DIR', () => {
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '  /registry  ');
+      expect(new Config().commandsRegistryDir).toBe('/registry');
+    });
+
+    it('should be undefined when unset or an unresolved bundle placeholder', () => {
+      expect(new Config().commandsRegistryDir).toBeUndefined();
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '${user_config.registry}');
+      expect(new Config().commandsRegistryDir).toBeUndefined();
+    });
+  });
+
   describe('pinned Desktop session id', () => {
     it('should be undefined by default', () => {
       expect(new Config().desktopSessionId).toBeUndefined();

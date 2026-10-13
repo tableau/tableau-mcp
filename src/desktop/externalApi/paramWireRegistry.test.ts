@@ -245,6 +245,13 @@ describe('paramWireRegistry', () => {
     expect(listExternalApiCommandRegistryEntries()).toBeNull();
   });
 
+  it('throws instead of silently skipping the registry when TRANSPORT is not stdio', async () => {
+    vi.stubEnv('TRANSPORT', 'http');
+    const { lookupExternalApiCommandRegistry } = await import('./paramWireRegistry.js');
+
+    expect(() => lookupExternalApiCommandRegistry('tabdoc', 'show-me')).toThrow(/stdio/);
+  });
+
   it('parses the files once for a stable env dir', async () => {
     const dir = writeRegistry({
       commands: {
