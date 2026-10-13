@@ -1,4 +1,5 @@
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
+import { exchangeToolNames, isExchangeToolName } from './exchange/toolName.js';
 import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
@@ -12,6 +13,10 @@ describe('ToolName', () => {
       web: {
         toolNames: webToolNames,
         isToolName: isWebToolName,
+      },
+      exchange: {
+        toolNames: exchangeToolNames,
+        isToolName: isExchangeToolName,
       },
     };
 
@@ -32,7 +37,9 @@ describe('ToolName', () => {
 
     for (const toolName of toolNames) {
       expect(
-        [isWebToolName, isDesktopToolName].some((isVariantToolName) => isVariantToolName(toolName)),
+        [isWebToolName, isDesktopToolName, isExchangeToolName].some((isVariantToolName) =>
+          isVariantToolName(toolName),
+        ),
         'This test needs updating. Did you add a new variant?',
       ).toBe(true);
     }
