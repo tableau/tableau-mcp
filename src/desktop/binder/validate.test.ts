@@ -116,6 +116,30 @@ describe('binder/validate — gate 1: slot coverage', () => {
       ).toBe(true);
   });
 
+  it('fire: the same slot_id bound twice → kind-mismatch naming the slot', () => {
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales', derivation: 'avg' },
+        { slot_id: 'field_base_2', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some(
+          (b) =>
+            b.code === 'kind-mismatch' &&
+            b.slot_id === 'field_base_2' &&
+            b.detail.includes('more than once'),
+        ),
+      ).toBe(true);
+  });
+
   it('fire: binding to a template-owned calc slot → kind-mismatch', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {

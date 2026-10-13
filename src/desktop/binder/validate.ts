@@ -488,7 +488,7 @@ export function validateBinding(
     }
   }
 
-  // Index the proposed bindings by slot_id (last wins if duplicated).
+  // Index the proposed bindings by slot_id (a duplicate is blocked in gate 1).
   const boundBySlot = new Map<string, string>();
   const overrideBySlot = new Map<string, Derivation>(); // optional per-slot derivation override
   for (const b of p.bindings) {
@@ -525,7 +525,16 @@ export function validateBinding(
       });
     }
   }
+  const seenBindingSlots = new Set<string>();
   for (const b of p.bindings) {
+    if (seenBindingSlots.has(b.slot_id)) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: b.slot_id,
+        detail: `slot '${b.slot_id}' is bound more than once; give each slot exactly one binding`,
+      });
+    }
+    seenBindingSlots.add(b.slot_id);
     const slot = slotById.get(b.slot_id);
     if (!slot) {
       // Binding to a calc slot or a wholly unknown slot_id.

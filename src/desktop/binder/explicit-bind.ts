@@ -387,11 +387,37 @@ function buildProposalFromFieldMapping(
     });
   }
 
+  warnings.push(...unmatchedMappingKeyWarnings(manifest, mapping));
+
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
   };
+}
+
+function unmatchedMappingKeyWarnings(
+  manifest: TemplateBindingContract,
+  mapping: Record<string, string>,
+): string[] {
+  const valid = new Set<string>();
+  for (const slot of manifest.slots) {
+    if (!slot.bindable) continue;
+    valid.add(slot.slot_id);
+    valid.add(slot.template_field);
+    valid.add(`${slot.template_field}@${slot.derivation}`);
+  }
+  const validNames = [...valid];
+  return Object.keys(mapping)
+    .filter((key) => !valid.has(key))
+    .map((key) => {
+      const near = validNames.find((name) => name.toLowerCase() === key.toLowerCase());
+      return (
+        `Unmatched field_mapping key '${key}' matches no slot and was ignored.` +
+        (near ? ` Did you mean '${near}'?` : '') +
+        ` Valid keys: ${validNames.join(', ')}`
+      );
+    });
 }
 
 function takeCompatibleSource(

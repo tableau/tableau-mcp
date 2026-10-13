@@ -240,6 +240,27 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
+  it('warns, without failing, about a mapping key that matches no slot and suggests a near match', () => {
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        Longitude: '[Superstore].[sum:Longitude:qk]',
+        Latitude: '[Superstore].[sum:Latitude:qk]',
+        Detail: '[Superstore].[none:City:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+        LATITUDE: '[Superstore].[sum:Latitude:qk]',
+        LONGITUDE: '[Superstore].[sum:Longitude:qk]',
+      },
+      SUMMARY,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(result.warnings).toContainEqual(expect.stringContaining("'LATITUDE' matches no slot"));
+    expect(result.warnings.join('\n')).toContain("Did you mean 'latitude'?");
+    expect(result.warnings.join('\n')).toContain("'LONGITUDE' matches no slot");
+  });
+
   it('keeps a single ordered field valid for kpi-text', () => {
     const result = bindExplicitTemplate(KPI.template, ['[Superstore].[sum:Sales:qk]'], SUMMARY, {
       manifests: manifests(KPI),
