@@ -6,6 +6,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -36,6 +37,7 @@ export const getAddWorksheetTool = (server: DesktopMcpServer): DesktopTool<typeo
       return await addWorksheetTool.logAndExecute({
         extra,
         args: { session, index },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const result = await runExternalApiReadTool({
             session,
@@ -50,12 +52,11 @@ export const getAddWorksheetTool = (server: DesktopMcpServer): DesktopTool<typeo
             return result;
           }
 
-          return new Ok({
-            message:
-              result.value.status === 'completed'
-                ? 'Added a blank worksheet.'
-                : 'Requested a new worksheet; Desktop is still applying it.',
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? 'Added a blank worksheet'
+              : 'Requested a new worksheet; Desktop is still applying it';
+          return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
         },
       });
     },

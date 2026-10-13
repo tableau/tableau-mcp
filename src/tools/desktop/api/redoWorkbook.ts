@@ -6,6 +6,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -29,6 +30,7 @@ export const getRedoWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
       return await redoWorkbookTool.logAndExecute({
         extra,
         args: { session },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const result = await runExternalApiReadTool({
             session,
@@ -44,12 +46,11 @@ export const getRedoWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
             return result;
           }
 
-          return new Ok({
-            message:
-              result.value.status === 'completed'
-                ? 'Reapplied the most recently undone change to the open workbook.'
-                : 'Requested redo; Desktop is still applying it.',
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? 'Reapplied the most recently undone change to the open workbook'
+              : 'Requested redo; Desktop is still applying it';
+          return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
         },
       });
     },

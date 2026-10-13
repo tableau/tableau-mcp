@@ -93,10 +93,13 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
 }
 
 /** Desktop's own warnings, one per line, so the agent and user see exactly what it dropped. */
-export function formatDesktopWarnings(desktopWarnings: readonly ExecuteCommandWarning[]): string {
+export function formatDesktopWarnings(
+  desktopWarnings: readonly ExecuteCommandWarning[],
+  context = ' while applying',
+): string {
   if (desktopWarnings.length === 0) return '';
   const lines = desktopWarnings.map((warning) => `- ${warning.code}: ${warning.message}`);
-  return `\n\nDESKTOP WARNINGS — Desktop reported ${desktopWarnings.length} warning(s) while applying; each names something it dropped or changed:\n${lines.join('\n')}`;
+  return `\n\nDESKTOP WARNINGS — Desktop reported ${desktopWarnings.length} warning(s)${context}; each names something it dropped or changed:\n${lines.join('\n')}`;
 }
 
 function unverifiedGuard(

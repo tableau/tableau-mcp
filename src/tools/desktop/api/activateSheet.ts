@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -19,6 +20,7 @@ import {
   wireStructuredContent,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -32,6 +34,7 @@ type ActivateSheetToolResult = {
   sheetName: string;
   message: string;
   availableSheets: string[];
+  warnings?: ExecuteCommandWarning[];
 };
 
 class ActivateSheetNotFoundError extends McpToolError {
@@ -79,6 +82,7 @@ export const getActivateSheetTool = (
       return await activateSheetTool.logAndExecute<ActivateSheetToolResult>({
         extra,
         args: { session, sheetName },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -137,15 +141,22 @@ export const getActivateSheetTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          return new Ok({
-            focus_requested: true,
-            sheetName: resolved.value.name,
-            message:
-              result.value.status === 'completed'
-                ? `Requested focus on sheet "${resolved.value.name}".`
-                : `Requested focus on sheet "${resolved.value.name}"; Desktop is still applying it.`,
-            availableSheets: resolved.value.availableSheets,
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? `Requested focus on sheet "${resolved.value.name}"`
+              : `Requested focus on sheet "${resolved.value.name}"; Desktop is still applying it`;
+          return new Ok(
+            commandOk(
+              {
+                focus_requested: true,
+                sheetName: resolved.value.name,
+                message: `${subject}.`,
+                availableSheets: resolved.value.availableSheets,
+              },
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },

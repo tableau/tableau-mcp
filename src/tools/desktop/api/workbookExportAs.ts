@@ -8,6 +8,7 @@ import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -50,6 +51,7 @@ export const getWorkbookExportAsTool = (
       return await workbookExportAsTool.logAndExecute({
         extra,
         args: { session, format, filePath, targetVersion },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           // A prior-version down-save needs the target release. Reject the missing case here so the
           // caller gets a precise, machine-readable ask (args-validation, 400) instead of a generic
@@ -84,13 +86,11 @@ export const getWorkbookExportAsTool = (
               // exportAs never opens a dialog, so a completed status is authoritative — no
               // post-write inventory re-read is needed (that guard exists only for save-workbook's
               // dismissable Save As dialog).
-              if (result.value.status !== 'completed') {
-                return new Ok({
-                  message: 'Requested exporting the workbook; Desktop is still applying it.',
-                });
-              }
-
-              return new Ok({ message: `Exported the workbook to "${filePath}".` });
+              const subject =
+                result.value.status === 'completed'
+                  ? `Exported the workbook to "${filePath}"`
+                  : 'Requested exporting the workbook; Desktop is still applying it';
+              return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
             },
           });
         },

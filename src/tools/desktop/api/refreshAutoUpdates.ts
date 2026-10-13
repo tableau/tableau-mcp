@@ -10,6 +10,7 @@ import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -41,6 +42,7 @@ export const getRefreshAutoUpdatesTool = (
       return await refreshAutoUpdatesTool.logAndExecute({
         extra,
         args: { session, worksheet },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -69,13 +71,20 @@ export const getRefreshAutoUpdatesTool = (
           }
 
           const completed = result.value.status === 'completed';
-          return new Ok({
-            refreshed: completed,
-            worksheet: { id: ref.id, name: previousName },
-            message: completed
-              ? `Refreshed auto-updates for worksheet "${previousName}".`
-              : `Requested refreshing auto-updates for worksheet "${previousName}"; Desktop is still applying it.`,
-          });
+          const subject = completed
+            ? `Refreshed auto-updates for worksheet "${previousName}"`
+            : `Requested refreshing auto-updates for worksheet "${previousName}"; Desktop is still applying it`;
+          return new Ok(
+            commandOk(
+              {
+                refreshed: completed,
+                worksheet: { id: ref.id, name: previousName },
+                message: `${subject}.`,
+              },
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },

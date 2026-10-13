@@ -6,6 +6,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -38,6 +39,7 @@ export const getOpenFileTool = (server: DesktopMcpServer): DesktopTool<typeof pa
       return await openFileTool.logAndExecute({
         extra,
         args: { session, filePath },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const result = await runExternalApiReadTool({
             session,
@@ -52,12 +54,11 @@ export const getOpenFileTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return result;
           }
 
-          return new Ok({
-            message:
-              result.value.status === 'completed'
-                ? `Opened "${filePath}".`
-                : `Requested opening "${filePath}"; Desktop is still applying it.`,
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? `Opened "${filePath}"`
+              : `Requested opening "${filePath}"; Desktop is still applying it`;
+          return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
         },
       });
     },

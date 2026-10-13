@@ -9,6 +9,7 @@ import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -40,6 +41,7 @@ export const getResumeAutoUpdatesTool = (
       return await resumeAutoUpdatesTool.logAndExecute({
         extra,
         args: { session, sheet },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -75,14 +77,21 @@ export const getResumeAutoUpdatesTool = (
           const scopeSuffix = alsoResumedContainedWorksheets
             ? ' and every worksheet it contains'
             : '';
-          return new Ok({
-            resumed: completed,
-            sheet: { id: ref.id, kind: ref.kind, name: previousName },
-            ...(alsoResumedContainedWorksheets ? { alsoResumedContainedWorksheets: true } : {}),
-            message: completed
-              ? `Resumed auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}.`
-              : `Requested resuming auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}; Desktop is still applying it.`,
-          });
+          const subject = completed
+            ? `Resumed auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}`
+            : `Requested resuming auto-updates for ${ref.kind} "${previousName}"${scopeSuffix}; Desktop is still applying it`;
+          return new Ok(
+            commandOk(
+              {
+                resumed: completed,
+                sheet: { id: ref.id, kind: ref.kind, name: previousName },
+                ...(alsoResumedContainedWorksheets ? { alsoResumedContainedWorksheets: true } : {}),
+                message: `${subject}.`,
+              },
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },

@@ -9,6 +9,7 @@ import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -40,6 +41,7 @@ export const getPauseAutoUpdatesTool = (
       return await pauseAutoUpdatesTool.logAndExecute({
         extra,
         args: { session, sheet },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -70,14 +72,21 @@ export const getPauseAutoUpdatesTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          return new Ok({
-            paused: result.value.status === 'completed',
-            sheet: { id: ref.id, kind: ref.kind, name: previousName },
-            message:
-              result.value.status === 'completed'
-                ? `Paused auto-updates for ${ref.kind} "${previousName}".`
-                : `Requested pausing auto-updates for ${ref.kind} "${previousName}"; Desktop is still applying it.`,
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? `Paused auto-updates for ${ref.kind} "${previousName}"`
+              : `Requested pausing auto-updates for ${ref.kind} "${previousName}"; Desktop is still applying it`;
+          return new Ok(
+            commandOk(
+              {
+                paused: result.value.status === 'completed',
+                sheet: { id: ref.id, kind: ref.kind, name: previousName },
+                message: `${subject}.`,
+              },
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },

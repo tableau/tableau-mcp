@@ -18,6 +18,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -48,6 +49,7 @@ export const getRefreshDashboardAutoUpdatesTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, dashboard },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -81,11 +83,21 @@ export const getRefreshDashboardAutoUpdatesTool = (
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          return new Ok({
-            dashboard: { id: target.id, name: target.name },
-            ...result.value.parsedResult,
-            message: `Refreshed auto-updates for dashboard "${target.name}".`,
-          });
+          const subject =
+            result.value.status === 'completed'
+              ? `Refreshed auto-updates for dashboard "${target.name}"`
+              : `Requested refreshing auto-updates for dashboard "${target.name}"; Desktop is still applying it`;
+          return new Ok(
+            commandOk(
+              {
+                dashboard: { id: target.id, name: target.name },
+                ...result.value.parsedResult,
+                message: `${subject}.`,
+              },
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },
