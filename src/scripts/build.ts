@@ -109,7 +109,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     const desktopDataOut = './build/desktop/data';
     const stagedDesktopData = [
       'twb_2026.2.0.xsd', // searchLibrary WORKBOOK_XSD_PATH — lookup-workbook-schema
-      'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
+      'corpus.json', // searchExamples/searchWorkbookExamples corpus
       'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
       'examples', // searchLibrary EXAMPLES_DIR — search-examples
       'templates', // Compatibility fallback until TAS materializes the published content pack.

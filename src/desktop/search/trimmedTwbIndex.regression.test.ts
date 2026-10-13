@@ -10,18 +10,6 @@ import {
   TWB_RESULTS_LIMIT,
 } from '../../scripts/trimTwbExampleIndex.js';
 
-// Point the real searchWorkbookExamples loader at the committed trimmed file so
-// the production-scorer cross-check below reads the same bytes we assert on.
-// (loadTwbExampleIndex reads TWB_INDEX_PATH at call time; this file is module-
-// isolated under vitest, so setting it before the first call is enough.)
-beforeAll(() => {
-  vi.stubEnv('TWB_INDEX_PATH', DEFAULT_OUT);
-});
-
-afterAll(() => {
-  vi.unstubAllEnvs();
-});
-
 // Reuse the generator's own entry shape so entries pass to topKForQuery without
 // a structural-compatibility cast.
 type Entry = ReturnType<typeof readSourceEntries>[number];

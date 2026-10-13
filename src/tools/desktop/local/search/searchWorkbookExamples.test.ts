@@ -58,7 +58,9 @@ describe('searchWorkbookExamplesTool', () => {
     expect(result.isError).toBeFalsy();
     expect(searchLibrary.searchWorkbookExamples).not.toHaveBeenCalled();
     expect(diffCorpusModule.searchDiffCorpusFormatted).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({
+        examples: expect.arrayContaining([expect.objectContaining({ id: expect.any(String) })]),
+      }),
       'sort',
       5,
     );

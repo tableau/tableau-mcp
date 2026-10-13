@@ -18,10 +18,6 @@ describe('resetConsentTool', () => {
     vi.stubGlobal('fetch', mockFetch);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it('should create a tool instance with correct properties', async () => {
     const tool = getResetConsentTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);

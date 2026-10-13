@@ -56,7 +56,7 @@ export function getResourcesRoot(): string {
 }
 
 // Eager snapshots retained for call sites that still build absolute paths and
-// for the CORPUS_PATH/TEMPLATES_DIR-style env overrides used in tests.
+// for the TEMPLATES_DIR-style env overrides used in tests.
 export const DATA_ROOT = getDataRoot();
 export const RESOURCES_ROOT = getResourcesRoot();
 

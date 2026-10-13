@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config.js';
 export const configShared = {
   test: {
     globals: true,
+    // Each test starts from config env and globals; the unit setup file's beforeEach re-applies its defaults.
+    unstubEnvs: true,
+    unstubGlobals: true,
     // Worker-start env survives vi.unstubAllEnvs(); the discovery dir is a per-user path that never exists.
     env: {
       PRODUCT_TELEMETRY_ENABLED: 'false',

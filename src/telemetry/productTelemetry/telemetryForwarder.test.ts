@@ -28,7 +28,6 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
