@@ -84,6 +84,11 @@ describe('date-like-string-on-time-axis rule', () => {
     expect(issues[0].suggestion).toMatch(/DATE\(\[Month\]\)|categorical intent/i);
   });
 
+  it('still WARNs when the datasource name contains a ]]-escaped bracket', () => {
+    const cols = `[${DS}]]x].[none:month:nk]`;
+    expect(dateLikeStringOnTimeAxisRule.validate(anchoredWorksheet({ cols }))).toHaveLength(1);
+  });
+
   it('stays silent when a DATE() parse calc supplies a date-typed field', () => {
     const xml = withDateParseCalc(anchoredWorksheet({ cols: MONTH_DATE_CALC }));
     expect(dateLikeStringOnTimeAxisRule.validate(xml)).toHaveLength(0);

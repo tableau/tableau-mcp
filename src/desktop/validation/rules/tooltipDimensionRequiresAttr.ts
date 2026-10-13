@@ -26,7 +26,7 @@ import * as xpath from 'xpath';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 import { parseXml } from './parseXml.js';
 
-const FIELD_REF = /\[[^\]]+\]\.\[[^\]]+\]/g;
+const FIELD_REF = /\[(?:[^\]]|\]\])+\]\.\[(?:[^\]]|\]\])+\]/g;
 
 /** Column-instance prefixes that mark a ref as aggregate (the view is aggregated). */
 const AGGREGATE_PREFIXES = new Set([
@@ -57,10 +57,10 @@ interface ParsedRef {
 function parseFieldRef(ref: string): ParsedRef | null {
   const outer = String(ref ?? '')
     .trim()
-    .match(/^\[([^\]]+)\]\.(\[[^\]]+\])$/);
+    .match(/^\[((?:[^\]]|\]\])+)\]\.(\[(?:[^\]]|\]\])+\])$/);
   if (!outer) return null;
   const instance = outer[2];
-  const ci = instance.match(/^\[([^:\]]+):([^:\]]+):([^:\]]+)\]$/);
+  const ci = instance.match(/^\[([^:\]]+):((?:[^:\]]|\]\])+):([^:\]]+)\]$/);
   if (!ci) return null;
   return { datasource: outer[1], instance, derivation: ci[1], field: ci[2], pivot: ci[3] };
 }

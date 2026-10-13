@@ -32,6 +32,14 @@ describe('set-count-malformed-parameter rule', () => {
     expect(issues[0].suggestion).toMatch(/param-domain-type/);
   });
 
+  it('reads a ]]-escaped parameter name whole', () => {
+    expect(
+      setCountMalformedParameterRule.validate(
+        workbook(bareStub.replace('[HN]', '[H]]N]'), set('H]]N')),
+      ),
+    ).toHaveLength(1);
+  });
+
   it('does not fire when the count references a well-formed parameter', () => {
     expect(setCountMalformedParameterRule.validate(workbook(wellFormed, set('HN')))).toHaveLength(
       0,
@@ -138,5 +146,18 @@ describe('set-count-malformed-parameter rule', () => {
       expect(result.issues).toHaveLength(1);
       expect(result.issues[0].message).toMatch(/filter limit|8790065E/);
     });
+  });
+
+  it('reports a malformed parameter whose name contains a double quote instead of throwing', () => {
+    const stub =
+      "<column caption='Q' datatype='integer' name='[Top \"N\"]' role='measure' type='quantitative'/>";
+    const setXml = set('Top "N"').replace(
+      'count="[Parameters].[Top "N"]"',
+      'count=\'[Parameters].[Top "N"]\'',
+    );
+    const result = runValidation(workbook(stub, setXml), 'workbook');
+    expect(result.issues.map((i) => [i.ruleId, i.severity])).toEqual([
+      ['set-count-malformed-parameter', 'error'],
+    ]);
   });
 });

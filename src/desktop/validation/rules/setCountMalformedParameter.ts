@@ -1,6 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+import { decodeXmlEntities } from '../../xmlElement.js';
 import type { ValidationContext, ValidationIssue, ValidationRule } from '../types.js';
 
 export const setCountMalformedParameterRule = {
@@ -19,7 +20,7 @@ export const setCountMalformedParameterRule = {
 
     const countRefs = new Map<string, number>();
     for (const match of s.matchAll(
-      /<groupfilter\b[^>]*\bcount=(['"])\[Parameters\]\.\[([^\]]+)\]\1/gi,
+      /<groupfilter\b[^>]*\bcount=(['"])\[Parameters\]\.\[((?:[^\]]|\]\])+)\]\1/gi,
     )) {
       const paramName = match[2];
       countRefs.set(paramName, (countRefs.get(paramName) ?? 0) + 1);
@@ -41,10 +42,10 @@ export const setCountMalformedParameterRule = {
 
     const issues: ValidationIssue[] = [];
     for (const [paramName, occurrenceCount] of countRefs) {
-      const cols = xpath.select(
-        `//column[@name="[${paramName}]"]`,
-        doc as unknown as Node,
-      ) as Element[];
+      // Compared in JS: a name containing a quote would make an xpath literal throw.
+      const cols = (xpath.select('//column[@name]', doc as unknown as Node) as Element[]).filter(
+        (col) => col.getAttribute('name') === `[${decodeXmlEntities(paramName)}]`,
+      );
       if (cols.length === 0) {
         if (suppressUndeclared) continue;
         issues.push(
