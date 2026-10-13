@@ -57,7 +57,19 @@ function headingSlug(text: string): string {
 /** Every heading in a document, as { level, text, lineIndex }. */
 function headings(lines: string[]): Array<{ level: number; text: string; line: number }> {
   const out: Array<{ level: number; text: string; line: number }> = [];
+  let fence: string | null = null;
   for (let i = 0; i < lines.length; i++) {
+    if (fence !== null) {
+      const closer = lines[i].match(/^\s{0,3}(`{3,}|~{3,})\s*$/);
+      if (closer && closer[1][0] === fence[0] && closer[1].length >= fence.length) fence = null;
+      continue;
+    }
+    // A backtick info string can't contain a backtick, so "```x``` inline" is not an opener.
+    const opener = lines[i].match(/^\s{0,3}(?:(`{3,})(?!.*`)|(~{3,}))/);
+    if (opener) {
+      fence = opener[1] ?? opener[2];
+      continue;
+    }
     const match = lines[i].match(/^(#{1,6})\s+(.*)$/);
     if (match) out.push({ level: match[1].length, text: match[2].trim(), line: i });
   }
@@ -362,9 +374,19 @@ function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
   return _knowledgeBroadNearestFuse;
 }
 
+// Fuse reads ' ! ^ = only at a token start, $ only at a token end, and | and " anywhere.
+export function stripExtendedSearchOperators(query: string): string {
+  return query
+    .replace(/(^|\s)['!^=]+/g, '$1')
+    .replace(/\$+(?=\s|$)/g, '')
+    .replace(/[|"]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function keywordFallbackQuery(query: string): string {
   const tokens = queryTokens(query);
-  return tokens.length > 0 ? tokens.join(' | ') : query.trim();
+  return tokens.length > 0 ? tokens.join(' | ') : stripExtendedSearchOperators(query);
 }
 
 function singularizeToken(word: string): string {
@@ -463,7 +485,7 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
 }
 
 function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHit[] {
-  const q = query.trim();
+  const q = stripExtendedSearchOperators(query);
   if (!q) return [];
 
   return ensureKnowledgeKeywordFuse()
