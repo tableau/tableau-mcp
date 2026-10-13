@@ -23,7 +23,14 @@ const CREDENTIAL_ATTRIBUTE_NAMES = new Set([
 const CREDENTIAL_NAME_SUFFIXES = [...CREDENTIAL_ATTRIBUTE_NAMES];
 const ATTRIBUTE_PARAMETER = /(?:^|[?&;])\s*([^?=&#;\s]+)\s*=\s*([^&#;\s]*)/g;
 const XML_TAG = /<(?:[^"'<>]|"[^"]*"|'[^']*')*>/g;
-const XML_ATTRIBUTE = /(\s+)([^\s=/>]+)(\s*=\s*)(["'])(.*?)\4/g;
+const XML_ATTRIBUTE = /(?<!\s)(\s+)([^\s=/>]+)(\s*=\s*)(["'])([\s\S]*?)\4/g;
+const CONNECTION_TAG = /^<(?:[\w.-]*[:.])?(?:named-)?connection(?=[\s/>])/;
+
+export const REDACTED_CREDENTIAL_SENTINEL = '__TABLEAU_MCP_REDACTED_CREDENTIAL__';
+
+export function containsRedactedCredentialSentinel(xml: string): boolean {
+  return xml.includes(REDACTED_CREDENTIAL_SENTINEL);
+}
 
 function normalizeAttributeName(name: string): string {
   let decoded = name;
@@ -53,13 +60,15 @@ function containsCredentialParameter(value: string): boolean {
 }
 
 /**
- * Removes credential-like attribute values without parsing and reserializing the document.
- * Tableau Desktop normally omits these values, but the MCP boundary must fail safe if an older
- * or regressed host includes one. Tags without credentials remain byte-for-byte unchanged.
+ * Replaces credential attribute values on <connection> and <named-connection> tags with
+ * REDACTED_CREDENTIAL_SENTINEL, without parsing and reserializing the document. Formulas, captions,
+ * names and SQL are never touched. Tableau Desktop normally omits these values, but the MCP boundary
+ * must fail safe if an older or regressed host includes one. A redacted copy must never be applied
+ * back: runApplyPreamble refuses XML that carries the sentinel.
  */
 export function redactDatasourceCredentials(xml: string): string {
   return xml.replace(XML_TAG, (tag) => {
-    if (tag.startsWith('<!--') || tag.startsWith('<![CDATA[') || tag.startsWith('<?')) {
+    if (!CONNECTION_TAG.test(tag)) {
       return tag;
     }
 
@@ -74,7 +83,7 @@ export function redactDatasourceCredentials(xml: string): string {
         value: string,
       ) =>
         (isCredentialAttribute(name) || containsCredentialParameter(value)) && value.trim() !== ''
-          ? `${whitespace}${name}${equals}${quote}${quote}`
+          ? `${whitespace}${name}${equals}${quote}${REDACTED_CREDENTIAL_SENTINEL}${quote}`
           : attribute,
     );
   });
