@@ -94,6 +94,15 @@ export class Config extends BaseConfig {
    */
   allowSkipValidation: boolean;
 
+  /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
+  knowledgeDir: string | undefined;
+
+  // Dev/test overrides for search assets; not user settings.
+  workbookXsdPath: string | undefined;
+  schemaReferencePath: string | undefined;
+  examplesDir: string | undefined;
+  twbIndexPath: string | undefined;
+
   constructor() {
     super();
 
@@ -151,6 +160,20 @@ export class Config extends BaseConfig {
     });
 
     this.allowSkipValidation = allowSkipValidation === 'true';
+
+    const {
+      TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
+      WORKBOOK_XSD_PATH: workbookXsdPath,
+      SCHEMA_REFERENCE_PATH: schemaReferencePath,
+      EXAMPLES_DIR: examplesDir,
+      TWB_INDEX_PATH: twbIndexPath,
+    } = cleansedVars;
+    this.knowledgeDir = knowledgeDir || undefined;
+    this.workbookXsdPath = workbookXsdPath || undefined;
+    this.schemaReferencePath = schemaReferencePath || undefined;
+    // An empty EXAMPLES_DIR still selects the directory route (an empty list), as before.
+    this.examplesDir = examplesDir;
+    this.twbIndexPath = twbIndexPath || undefined;
   }
 }
 

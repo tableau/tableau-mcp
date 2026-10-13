@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { delimiter, join } from 'path';
 
+import { getDesktopConfig } from '../config.desktop.js';
 import { getDirname } from '../utils/getDirname.js';
 import {
   _setSeaApiForTest as _setSharedSeaApiForTest,
@@ -206,13 +207,11 @@ export function readResourceAsset(relPath: string): string | null {
   }
 }
 
-const KNOWLEDGE_DIR_ENV_NAME = 'TABLEAU_KNOWLEDGE_DIR';
-
 // Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
 // each root physically is (protected/user-content/overridable); this file never learns those
 // names, it just merges whatever ordered list it's handed.
 function externalKnowledgeRoots(): string[] {
-  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME];
+  const raw = getDesktopConfig().knowledgeDir;
   if (!raw) {
     return [];
   }

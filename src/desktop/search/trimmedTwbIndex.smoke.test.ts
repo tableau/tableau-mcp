@@ -8,7 +8,14 @@ import { join } from 'path';
 // reads TWB_INDEX_PATH at call time, so setting it before any test call is
 // enough; this file never mocks searchLibrary, so it exercises the real file.
 const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
-process.env.TWB_INDEX_PATH = TRIMMED_INDEX_PATH;
+
+beforeAll(() => {
+  vi.stubEnv('TWB_INDEX_PATH', TRIMMED_INDEX_PATH);
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 import { searchWorkbookExamples } from './searchLibrary.js';
 
