@@ -1,3 +1,4 @@
+import './networkGuard.js';
 import '../../../src/testTelemetryGuard.js';
 
 import { Ok } from 'ts-results-es';

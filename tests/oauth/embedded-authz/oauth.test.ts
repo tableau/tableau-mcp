@@ -851,6 +851,18 @@ describe('OAuth', () => {
   it('should revoke a JWE access token, attempt signout, and delete the associated refresh token', async () => {
     const { app } = await startServer();
 
+    const guardedFetch = globalThis.fetch;
+    const signoutRequests: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      if (new URL(url).pathname.endsWith('/api/3.24/auth/signout')) {
+        signoutRequests.push(url);
+        return new Response(null, { status: 204 });
+      }
+      return guardedFetch(input, init);
+    });
+    onTestFinished(() => fetchSpy.mockRestore());
+
     mocks.mockGetTokenResult.mockResolvedValue({
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
@@ -899,6 +911,8 @@ describe('OAuth', () => {
       });
 
     expect(mcpResponse.status).toBe(200);
+    expect(signoutRequests).toHaveLength(1);
+    expect(new URL(signoutRequests[0]).hostname).toBe('10ax.online.tableau.com');
   });
 
   it('should advertise revocation_endpoint in authorization server metadata (embedded mode)', async () => {

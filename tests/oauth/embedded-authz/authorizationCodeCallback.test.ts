@@ -282,6 +282,23 @@ describe('authorization code callback', () => {
     vi.stubEnv('SITE_NAME', 'other-site');
     vi.stubEnv('OAUTH_LOCK_SITE', 'false');
 
+    // Canned copy of the 302 that Tableau Cloud returns for the site-picker probe (shape captured from a live 10ax response).
+    const guardedFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      if (url.pathname !== '/oauth2/v1/auth') {
+        return guardedFetch(input, init);
+      }
+      const externalRedirect = encodeURIComponent(`${url.pathname}${url.search}`);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: `/#/signin?forceSitePick=true&externalRedirect=${externalRedirect}&target_site=other-site&client_type=tableau-mcp&ensureForceAuthN=true`,
+        },
+      });
+    });
+    onTestFinished(() => fetchSpy.mockRestore());
+
     const { app } = await startServer();
 
     const authzResponse = await request(app).get('/oauth2/authorize').query({
@@ -294,6 +311,7 @@ describe('authorization code callback', () => {
     });
 
     const authzLocation = new URL(authzResponse.headers['location']);
+    expect(authzLocation.hash.startsWith('#/site?')).toBe(true);
     const searchParams = new URLSearchParams(
       authzLocation.hash.substring(authzLocation.hash.indexOf('?')),
     );
