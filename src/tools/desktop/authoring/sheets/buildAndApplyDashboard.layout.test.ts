@@ -72,7 +72,9 @@ describe('build-and-apply-dashboard layout validation', () => {
     vi.mocked(readFileSync).mockReturnValue('<cached/>');
     load = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [], verifiedWorksheetNames: ['A', 'B'] }));
+      .mockResolvedValue(
+        Ok({ validationWarnings: [], documentWarnings: [], verifiedWorksheetNames: ['A', 'B'] }),
+      );
   });
 
   async function expectRefusal(layoutSpec: Layout, pattern: RegExp, title?: string): Promise<void> {
