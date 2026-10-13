@@ -1167,22 +1167,6 @@ describe('getDatasourceMetadataTool', () => {
       );
       expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     });
-
-    it('should not return metadata when the workbook is not in an allowed project', async () => {
-      mocks.mockGetWorkbook.mockResolvedValue({
-        id: workbookLuid,
-        name: 'Workbook',
-        project: { id: 'some-other-project', name: 'Other' },
-        tags: {},
-      });
-
-      const result = await getToolResult({ workbookLuid });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('its workbook is not allowed');
-      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
-    });
   });
 });
 

@@ -23,11 +23,7 @@ data.
 
 - [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](../../configuration/mcp-config/env-vars.md#disable_query_datasource_validation_requests)
 
-  The `query-datasource` tool may issue additional VizQL Data Service and Metadata API requests to
-  validate inputs such as string filter values and the semantic accuracy of the generated query.
-  Setting this variable disables those supplementary calls. We do **not** recommend turning them
-  off: they help an agent self-heal from malformed queries and produce more accurate answers from
-  your data.
+  The `query-datasource` tool may issue additional VizQL Data Service and Metadata API requests to validate inputs such as string filter values and the semantic accuracy of the generated query. Setting this variable disables those supplementary calls. We do **not** recommend turning them off: they help an agent self-heal from malformed queries and produce more accurate answers from your data.
 
 ## Required arguments
 
@@ -135,20 +131,18 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 The tool validates the query for a common pitfall: combining a `TOP`/`BOTTOM` filter with one or
 more dimension filters (`SET`, `DATE`, `MATCH`, or a non-aggregated `QUANTITATIVE_NUMERICAL`/
-`QUANTITATIVE_DATE` filter) that don't set `context: true`. In Tableau's query order of operations,
-`TOP`/`BOTTOM` filters are evaluated _before_ regular dimension filters, so the `TOP` filter selects
-from the full dataset first and the dimension filters are applied afterward — this can produce fewer
-results than expected (e.g. 8 rows when requesting Top 10), because some of the top-ranked values
-may not exist in the filtered subset.
+`QUANTITATIVE_DATE` filter) that don't set `context: true`. In Tableau's query order of
+operations, `TOP`/`BOTTOM` filters are evaluated *before* regular dimension filters, so the `TOP`
+filter selects from the full dataset first and the dimension filters are applied afterward — this
+can produce fewer results than expected (e.g. 8 rows when requesting Top 10), because some of the
+top-ranked values may not exist in the filtered subset.
 
 When this pattern is detected, the result includes a non-blocking `mcp.warnings` array (the query
 still executes and returns data):
 
 ```json
 {
-  "data": [
-    /* ... */
-  ],
+  "data": [ /* ... */ ],
   "mcp": {
     "warnings": [
       {
@@ -162,6 +156,6 @@ still executes and returns data):
 }
 ```
 
-If the intent is to find the Top values _within_ the filtered subset, add `"context": true` to the
-affected dimension filter(s). If the intent is to find the Top values globally and then filter them,
-no change is needed — the warning can be ignored.
+If the intent is to find the Top values *within* the filtered subset, add `"context": true` to
+the affected dimension filter(s). If the intent is to find the Top values globally and then
+filter them, no change is needed — the warning can be ignored.

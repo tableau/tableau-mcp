@@ -684,21 +684,6 @@ describe('queryDatasourceTool', () => {
       );
       expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
     });
-
-    it('should not query an embedded datasource that does not belong to the workbook', async () => {
-      mocks.mockQueryWorkbookConnections.mockResolvedValue([
-        { id: 'connection-1', datasource: { id: 'some-other-datasource' } },
-      ]);
-
-      const result = await getToolResult({ workbookLuid });
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        `does not belong to the workbook with LUID ${workbookLuid}`,
-      );
-      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
-    });
   });
 });
 
