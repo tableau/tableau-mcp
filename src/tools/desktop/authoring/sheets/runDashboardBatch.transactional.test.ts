@@ -6,7 +6,6 @@ import type {
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
 import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
-import { listSheets } from '../../../../desktop/metadata/sheets.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -87,7 +86,7 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
     expect(harness.getCalls()).toBe(4); // baseline, guard, shared readback, validated focus read
-    expect(listSheets(harness.posts[0]!)).toEqual(
+    expect(worksheetNames(harness.posts[0]!)).toEqual(
       expect.arrayContaining(['Existing', 'New A', 'New B']),
     );
     expect(listWorkbookDashboards(harness.posts[0]!)).toEqual(['Keep', 'Executive Overview']);
@@ -363,4 +362,8 @@ function artifactStore(
 function bodyOf(result: CallToolResult): Record<string, any> {
   invariant(result.content[0]?.type === 'text');
   return JSON.parse(result.content[0].text) as Record<string, any>;
+}
+
+function worksheetNames(xml: string): string[] {
+  return [...xml.matchAll(/<worksheet\s[^>]*?\bname=["']([^"']+)["']/g)].map((m) => m[1]);
 }

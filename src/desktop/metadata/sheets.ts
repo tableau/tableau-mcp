@@ -98,12 +98,6 @@ export function addSheet(workbookXml: string, sheetName: string): string {
   return serializeXML(workbook);
 }
 
-export function listSheets(workbookXml: string): string[] {
-  const workbook = parseXML(workbookXml);
-  const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
-  return worksheets.map((ws) => ws['@_name']).filter((name): name is string => !!name);
-}
-
 // `id` is each worksheet's own `<simple-id uuid>` — the same value the External Client API returns
 // as the worksheet id.
 export function listWorksheetRefs(workbookXml: string): Array<{ id: string; name: string }> {

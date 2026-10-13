@@ -37,7 +37,7 @@ export {
   searchWorkbookFields,
   type SearchWorkbookFieldsResult,
 } from './searchWorkbookFields.js';
-export { addSheet, listSheets } from './sheets.js';
+export { addSheet } from './sheets.js';
 export { parseShelfValue } from './shelfTree.js';
 export {
   AggregationType,
