@@ -193,7 +193,7 @@ describe('getApplyDatasourceTool', () => {
       const { result, order, executor } = await invoke({
         datasourceName,
         datasources,
-        file: join(outsideDirectory('must-not-read'), 'missing.xml'),
+        file: datasourceFile('must-not-read'),
       });
 
       expect(result.isError).toBe(true);
@@ -261,17 +261,14 @@ describe('getApplyDatasourceTool', () => {
         return join(directory, 'linked', 'datasource.xml');
       },
     ],
-  ] as const)(
-    'lists the datasource but refuses a %s file before POST',
-    async (_label, makeFile) => {
-      const file = makeFile();
-      const { result, order, executor } = await invoke({ datasourceName: 'Sales', file });
+  ] as const)('refuses a %s file before any Desktop call', async (_label, makeFile) => {
+    const file = makeFile();
+    const { result, order, executor } = await invoke({ datasourceName: 'Sales', file });
 
-      expect(result.isError).toBe(true);
-      expect(order).toEqual(['list']);
-      expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
-    },
-  );
+    expect(result.isError).toBe(true);
+    expect(order).toEqual([]);
+    expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
+  });
 
   it('maps a secure descriptor read failure to the existing file-read error', async () => {
     const file = datasourceFile('unreadable');

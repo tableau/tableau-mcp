@@ -223,6 +223,47 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(writeSidecar).toHaveBeenCalledWith(workbookWrite?.[0], SESSION, acceptedHash);
   });
 
+  it('tells the caller not to retry Phase 1 when the workbook cache write fails after apply', async () => {
+    const extra = makeExtra();
+    vi.mocked(writeFileSync).mockImplementation((_path, contents) => {
+      if (String(contents).startsWith('<?xml')) {
+        throw new Error('ENOSPC: disk full');
+      }
+    });
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('ENOSPC');
+    expect(result.content[0].text).toContain('do not replay or retry Phase 1 automatically');
+    expect(result.content[0].text).not.toContain('Ready for Phase 2');
+  });
+
+  it('gives sheets whose names sanitize alike different cache files', async () => {
+    const extra = makeExtra();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['Sales 2024', 'Sales-2024'],
+        dashboardName: 'My Dashboard',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    const worksheetPaths = vi
+      .mocked(writeFileSync)
+      .mock.calls.filter(([, contents]) => contents === WORKSHEET_XML)
+      .map(([path]) => String(path));
+    expect(worksheetPaths).toHaveLength(2);
+    expect(new Set(worksheetPaths).size).toBe(2);
+  });
+
   it('does not claim Phase 2 ready when the post-apply workbook readback fails', async () => {
     const extra = makeExtra();
     vi.mocked(getWorkbookXml)

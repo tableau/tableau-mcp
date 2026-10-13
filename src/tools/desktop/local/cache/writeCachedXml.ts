@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { parseOuterElement, replaceElement } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
@@ -84,7 +83,6 @@ export const getWriteCachedXmlTool = (
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
-          const resolvedSession = sessionResult.value;
 
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
@@ -196,7 +194,6 @@ export const getWriteCachedXmlTool = (
           if (!writeResult.ok) {
             return new FileReadError(writeResult.error).toErr();
           }
-          restampSidecarAfterEdit(absolutePath, resolvedSession);
           return new Ok({
             filePath,
             bytes: contentToWrite.length,

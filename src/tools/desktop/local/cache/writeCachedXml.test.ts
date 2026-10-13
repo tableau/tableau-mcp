@@ -20,7 +20,6 @@ vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
-import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 
 const CACHE_DIR = resolve('/tmp/test-cache');
 const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
@@ -92,27 +91,38 @@ describe('writeCachedXmlTool', () => {
     );
   });
 
-  it('writes a fingerprint sidecar after writing the cache file', async () => {
+  it('writes the XML to the contained cache file', async () => {
     await getResult(CACHED_FILE, VALID_XML);
 
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+    expect(cachePathModule.writeContainedCacheTextFile).toHaveBeenCalledWith(
       resolve(CACHED_FILE),
-      SESSION,
+      VALID_XML,
     );
   });
 
-  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+  it('writes under the pinned session when no session is passed', async () => {
     mockPinnedSession(SESSION);
 
-    await getResult(CACHED_FILE, VALID_XML, {}, undefined);
+    const result = await getResult(CACHED_FILE, VALID_XML, {}, undefined);
 
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
+    expect(result.isError).toBeFalsy();
+    expect(cachePathModule.writeContainedCacheTextFile).toHaveBeenCalledWith(
       resolve(CACHED_FILE),
-      SESSION,
+      VALID_XML,
     );
   });
 
-  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
+  it('writes nothing when no session is passed, none is pinned and no instance is running', async () => {
+    mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+
+    const result = await getResult(CACHED_FILE, VALID_XML, {}, undefined);
+
+    expect(result.isError).toBe(true);
+    expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects and writes nothing when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
       { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],
@@ -124,7 +134,6 @@ describe('writeCachedXmlTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(SESSION);
     expect(result.content[0].text).toContain('list-instances');
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
     expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
   });
 

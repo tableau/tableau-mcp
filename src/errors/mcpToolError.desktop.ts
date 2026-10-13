@@ -14,6 +14,7 @@ import {
   type WireStructuredContent,
   wireStructuredContent,
 } from '../tools/desktop/structuredContent.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { McpToolError } from './mcpToolError.js';
 
 // Load XML errors preserve Desktop's message when present; otherwise serialize structural errors.
@@ -173,6 +174,32 @@ export class StoryboardXmlLoadFailedError extends McpToolError {
     super({
       type: 'load-storyboard-xml-error',
       message: xmlLoadErrorMessage(error),
+      statusCode: 500,
+    });
+  }
+}
+
+/**
+ * A tool argument that names a cache file resolved outside the Desktop cache directory, or
+ * through a link that leaves it. Never echoes file contents.
+ */
+export class CacheFileOutsideCacheError extends McpToolError {
+  constructor(argName: string) {
+    super({
+      type: 'cache-file-outside-cache',
+      message:
+        `Security error: ${argName} must be a regular file inside the Desktop cache directory. ` +
+        'Use a file path returned by a get-*/read tool (for example get-workbook-xml or get-worksheet-xml).',
+      statusCode: 400,
+    });
+  }
+}
+
+export class CacheFileWriteError extends McpToolError {
+  constructor(argName: string, error?: unknown) {
+    super({
+      type: 'cache-file-write-error',
+      message: `Failed to write ${argName}${error === undefined ? '' : `: ${getExceptionMessage(error)}`}.`,
       statusCode: 500,
     });
   }

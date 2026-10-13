@@ -1,14 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { readCacheFileArg } from '../../../../desktop/cachePath.js';
 import { type FieldResolution, resolveField } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   FileNotFoundError,
-  FileReadError,
   UnknownError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
@@ -112,15 +111,14 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             workbookXml = refresh.xml;
           } else {
-            resolvedWorkbookFile = requestedWorkbookFile;
-            if (!existsSync(resolvedWorkbookFile)) {
-              return new FileNotFoundError(resolvedWorkbookFile).toErr();
-            }
-            try {
-              workbookXml = readFileSync(resolvedWorkbookFile, 'utf-8');
-            } catch (error) {
-              return new FileReadError(error).toErr();
-            }
+            const read = readCacheFileArg(
+              'workbookFile',
+              requestedWorkbookFile,
+              (path) => new FileNotFoundError(path),
+            );
+            if (read.isErr()) return read.error.toErr();
+            resolvedWorkbookFile = read.value.path;
+            workbookXml = read.value.text;
           }
 
           let resolution: FieldResolution;

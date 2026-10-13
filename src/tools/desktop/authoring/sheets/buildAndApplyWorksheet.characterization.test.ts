@@ -17,6 +17,13 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 // the exact (fieldMapping, datasource, metadata) the consumer constructs. The
 // index-based slot assignment itself is UNCHANGED by the migration.
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/templates/fieldReferenceRewriter.js');
@@ -30,6 +37,7 @@ import { rewriteFieldReferencesWithDiagnostics } from '../../../../desktop/templ
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
 const SESSION = 'session-1';
@@ -169,6 +177,7 @@ function parsePayload(result: CallToolResult): { warnings?: string[]; [k: string
 
 describe('buildAndApplyWorksheetTool — mapping construction characterization', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
   });
 

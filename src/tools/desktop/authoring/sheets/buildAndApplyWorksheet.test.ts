@@ -7,6 +7,13 @@ import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/binder/explicit-bind.js', async () => {
@@ -35,6 +42,7 @@ import type { ReadbackFinding } from '../../../../desktop/validation/readback-ve
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorksheetXml } from '../../../../desktop/wrappers/loadWorksheetXml.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
 const SESSION = 'session-1';
@@ -186,6 +194,7 @@ const promisedSortLossWarning: ReadbackFinding = {
 
 describe('buildAndApplyWorksheetTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
   });
 

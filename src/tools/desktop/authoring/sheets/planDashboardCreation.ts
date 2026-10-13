@@ -21,6 +21,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { distinctCacheId } from '../fields/worksheetCache.js';
 import {
   buildWorksheetsFromTemplatesParamsSchema,
   worksheetAggregationSchema,
@@ -256,7 +257,7 @@ export const getPlanDashboardCreationTool = (
           // Cache workbook for subagents
           const workbookFile = cache.getCacheFilePath({
             prefix: 'workbook',
-            id: 'for-parallel-build',
+            id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
           });
 
           // Build worksheet tasks
@@ -264,8 +265,10 @@ export const getPlanDashboardCreationTool = (
           const snapshots = new Map<string, ReturnType<typeof createTemplateRuntimeSnapshot>>();
           const worksheetTasks = [];
           for (const ws of worksheets) {
-            const safeWsName = ws.name.replace(/[^a-zA-Z0-9]/g, '_');
-            const worksheetFile = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
+            const worksheetFile = cache.getCacheFilePath({
+              prefix: 'worksheet',
+              id: distinctCacheId(ws.name, resolvedSession),
+            });
             const templateName = selectTemplate(ws);
             const resolvedEntries = ws.fields
               .map(normalizePlannerField)
@@ -358,8 +361,10 @@ export const getPlanDashboardCreationTool = (
             });
           }
 
-          const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-          const dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
+          const dashboardFile = cache.getCacheFilePath({
+            prefix: 'dashboard',
+            id: distinctCacheId(dashboardName, resolvedSession),
+          });
 
           const canParallelize = worksheets.length >= 5;
           const recommendedParallelism = Math.min(worksheets.length, 10);

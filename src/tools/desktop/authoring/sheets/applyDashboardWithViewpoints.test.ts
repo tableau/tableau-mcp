@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../../desktop/wrappers/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../../desktop/wrappers/loadDashboardXml.js';
@@ -12,10 +13,15 @@ import { FileReadError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getApplyDashboardWithViewpointsTool } from './applyDashboardWithViewpoints.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  readContainedCacheTextFile: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadDashboardXml.js');
@@ -27,6 +33,7 @@ describe('applyDashboardWithViewpointsTool', () => {
   const mockDashboardXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
   beforeEach(() => {
     vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockDashboardXml);
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
@@ -99,6 +106,27 @@ describe('applyDashboardWithViewpointsTool', () => {
     expect(result.isError).toBe(true);
     expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('refuses a stale cache sidecar before any Desktop call (W9)', async () => {
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
+      ok: false,
+      message: 'Cache produced by a different Desktop session — re-read in the current session.',
+    });
+    const mockExecutor = vi.fn().mockResolvedValue({});
+
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1'],
+      mockExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('different Desktop session');
+    expect(mockExecutor).not.toHaveBeenCalled();
+    expect(loadDashboardXmlModule.loadDashboardXml).not.toHaveBeenCalled();
+    sidecarSpy.mockRestore();
   });
 
   it('should return error when dashboard file does not exist', async () => {

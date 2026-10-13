@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkCacheFileArg } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
@@ -71,17 +71,19 @@ export const getBuildAndApplyDashboardTool = (
         extra,
         args: { session, dashboardName, dashboardFile, workbookFile, layoutSpec, worksheetNames },
         callback: async () => {
-          if (!existsSync(workbookFile)) {
-            return new WorkbookNotFoundError(
-              `Workbook cache file not found: ${workbookFile}`,
-            ).toErr();
-          }
+          const workbookRead = checkCacheFileArg(
+            'workbookFile',
+            workbookFile,
+            (path) => new WorkbookNotFoundError(`Workbook cache file not found: ${path}`),
+          );
+          if (workbookRead.isErr()) return workbookRead.error.toErr();
 
-          if (!existsSync(dashboardFile)) {
-            return new WorkbookNotFoundError(
-              `Dashboard cache file not found: ${dashboardFile}`,
-            ).toErr();
-          }
+          const dashboardRead = checkCacheFileArg(
+            'dashboardFile',
+            dashboardFile,
+            (path) => new WorkbookNotFoundError(`Dashboard cache file not found: ${path}`),
+          );
+          if (dashboardRead.isErr()) return dashboardRead.error.toErr();
 
           // The direct and batched dashboard paths share one zone builder.
           const zones = computeZones(titleText, layoutSpec);
@@ -94,11 +96,11 @@ export const getBuildAndApplyDashboardTool = (
 
           // Cross-instance cache-bleed guard (W9): refuse caches produced by a different
           // (or restarted) Desktop session before applying either one.
-          const wbSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+          const wbSidecar = checkSidecar(workbookRead.value, resolvedSession, 'workbook');
           if (!wbSidecar.ok) {
             return new CacheSessionMismatchError(wbSidecar.message!).toErr();
           }
-          const dashSidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+          const dashSidecar = checkSidecar(dashboardRead.value, resolvedSession, 'dashboard');
           if (!dashSidecar.ok) {
             return new CacheSessionMismatchError(dashSidecar.message!).toErr();
           }

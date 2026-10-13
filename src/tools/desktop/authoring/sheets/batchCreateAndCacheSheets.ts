@@ -18,10 +18,12 @@ import {
   IncompleteOperationError,
   WorkbookXmlLoadFailedError,
 } from '../../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { distinctCacheId } from '../fields/worksheetCache.js';
 import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
 
 function getSuccessResult(result: unknown): CallToolResult {
@@ -30,6 +32,9 @@ function getSuccessResult(result: unknown): CallToolResult {
     content: [{ type: 'text', text: JSON.stringify(result) }],
   };
 }
+
+const PHASE1_APPLIED_GUIDANCE =
+  'The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.';
 
 type ArtifactFailure = { name: string; error: string };
 
@@ -128,7 +133,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           if (acceptedWorkbookResult.isErr()) {
             return new DesktopCommandExecutionError(
               acceptedWorkbookResult.error,
-              'Post-apply workbook readback failed. The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.',
+              `Post-apply workbook readback failed. ${PHASE1_APPLIED_GUIDANCE}`,
             ).toErr();
           }
           const acceptedWorkbookXml = acceptedWorkbookResult.value;
@@ -136,9 +141,15 @@ export const getBatchCreateAndCacheSheetsTool = (
           // Cache workbook
           const workbookFile = cache.getCacheFilePath({
             prefix: 'workbook',
-            id: 'for-parallel-build',
+            id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
           });
-          writeFileSync(workbookFile, acceptedWorkbookXml, 'utf-8');
+          try {
+            writeFileSync(workbookFile, acceptedWorkbookXml, 'utf-8');
+          } catch (error) {
+            return new UnknownError(
+              `Workbook cache write failed: ${getExceptionMessage(error)}. ${PHASE1_APPLIED_GUIDANCE}`,
+            ).toErr();
+          }
           // Fingerprint the cache with the producing Desktop instance so a Phase-2 apply
           // can refuse a cache from a different (or restarted) Desktop session (W9).
           writeSidecar(workbookFile, resolvedSession, sourceSha256(acceptedWorkbookXml));
@@ -155,8 +166,10 @@ export const getBatchCreateAndCacheSheetsTool = (
               });
               continue;
             }
-            const safeWsName = name.replace(/[^a-zA-Z0-9]/g, '_');
-            const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
+            const file = cache.getCacheFilePath({
+              prefix: 'worksheet',
+              id: distinctCacheId(name, resolvedSession),
+            });
             try {
               writeFileSync(file, wsResult.value.xml, 'utf-8');
               writeSidecar(file, resolvedSession, sourceSha256(wsResult.value.xml));
@@ -180,8 +193,10 @@ export const getBatchCreateAndCacheSheetsTool = (
               error: fragmentFailureMessage(dashResult.error),
             });
           } else {
-            const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-            const file = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
+            const file = cache.getCacheFilePath({
+              prefix: 'dashboard',
+              id: distinctCacheId(dashboardName, resolvedSession),
+            });
             try {
               writeFileSync(file, dashResult.value.xml, 'utf-8');
               writeSidecar(file, resolvedSession, sourceSha256(dashResult.value.xml));

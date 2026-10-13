@@ -1,11 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { checkCacheFileArg } from '../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { applyDatasourceXml } from '../../../desktop/wrappers/applyDatasourceXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { jsonToolResult, type StructuredResult } from '../structuredContent.js';
@@ -51,14 +53,29 @@ export const getApplyDatasourceTool = (
         extra,
         args: { session, datasourceName, datasourceFile },
         callback: async () => {
+          // Containment first: an outside or symlinked path must cost no Desktop round trip.
+          if (datasourceFile?.trim()) {
+            const checked = checkCacheFileArg(
+              'datasourceFile',
+              datasourceFile,
+              (path) =>
+                new WorkbookNotFoundError(
+                  `Cached datasource file not found: ${path} Provide an existing cached datasource path.`,
+                ),
+            );
+            if (checked.isErr()) {
+              return checked.error.toErr();
+            }
+          }
+
           const datasource = await resolveDatasourceRef({ session, datasourceName, extra });
           if (datasource.isErr()) {
             return datasource;
           }
           const resolved = datasource.value;
 
-          // Resolution must complete before any cache path is opened. A missing or ambiguous
-          // datasource therefore cannot trigger local file access or an apply attempt.
+          // The path check above is a metadata check only; the file is read after resolution,
+          // so a missing or ambiguous datasource never reads the file or triggers an apply.
           const preamble = runApplyPreamble({
             kind: 'datasource',
             file: datasourceFile,

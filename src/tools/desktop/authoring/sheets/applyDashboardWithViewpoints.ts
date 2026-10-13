@@ -1,9 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
 import { parsedXmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
@@ -11,12 +9,9 @@ import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.desktop.js';
-import {
-  ArgsValidationError,
-  FileReadError,
-  WorkbookNotFoundError,
-} from '../../../../errors/mcpToolError.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { runApplyPreamble } from '../../api/applyPreamble.js';
 import { artifactFileParam, sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 
@@ -58,34 +53,29 @@ export const getApplyDashboardWithViewpointsTool = (
         extra,
         args: { session, dashboardName, dashboardFile, worksheetNames },
         callback: async () => {
-          if (!existsSync(dashboardFile)) {
-            return new WorkbookNotFoundError(
-              `Cached dashboard file not found: ${dashboardFile}`,
-            ).toErr();
+          const preamble = runApplyPreamble({
+            kind: 'dashboard',
+            file: dashboardFile,
+            session,
+            emptyPathGuidance: 'Use a cached dashboard path from get-dashboard-xml.',
+            notFoundGuidance: 'Provide an existing cached dashboard path.',
+          });
+          if (preamble.isErr()) {
+            return preamble;
           }
-
-          let dashboardXml: string;
-          try {
-            dashboardXml = readFileSync(dashboardFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const { xml: dashboardXml, resolvedSession, sourceHash } = preamble.value;
 
           if (!dashboardXml.trim()) {
             return new ArgsValidationError(`Dashboard file is empty: ${dashboardFile}`).toErr();
           }
 
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
           // Check registration support before a surgical write and verify its readback.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            expectedSourceHash: sourceHash,
             worksheetNames,
             requireExistingSheet: true,
             verifyReadback: true,
