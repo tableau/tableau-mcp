@@ -129,7 +129,7 @@ import {
 // confidence-required + title-max-80 tightening) lives in proposalSchema.ts.
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { proposalSchema } from './proposalSchema.js';
-import { proposalSignature } from './proposalSignature.js';
+import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
@@ -1712,7 +1712,6 @@ function collisionFreeWorksheetTitle(
 }
 
 const IDEMPOTENCY_ATTRIBUTE = '@_user:tableau-agent-idempotency-key';
-const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
 
 function worksheetTitleForIdempotencyKey(workbookXml: string, key: string): string | undefined {
   let workbook: ParsedWorkbook;
