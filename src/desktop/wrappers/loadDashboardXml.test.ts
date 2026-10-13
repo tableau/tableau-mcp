@@ -1246,3 +1246,24 @@ describe('loadDashboardXml (External Client API transport)', () => {
     );
   });
 });
+
+describe('loadDashboardXml entity-like names', () => {
+  it('rejects a dashboard named literally `A &amp; B` when the caller names `A & B`', async () => {
+    const executor = makeExecutorMock({});
+
+    const result = await loadDashboardXml({
+      dashboardName: 'A & B',
+      xml: "<dashboard name='A &amp;amp; B'><zones/></dashboard>",
+      worksheetNames: [],
+      focus: { navigate: 'none', reason: 'intermediate-leg' },
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(result.unwrapErr()).toMatchObject({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'name-mismatch' },
+    });
+  });
+});

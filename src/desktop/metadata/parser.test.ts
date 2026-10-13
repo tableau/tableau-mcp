@@ -221,3 +221,14 @@ describe('serializeXML', () => {
     });
   });
 });
+
+describe('findWorksheet with entity-like names', () => {
+  it('keeps `A & B` and the literal `A &amp; B` apart', () => {
+    const workbook = parseXML(
+      "<workbook><worksheets><worksheet name='A &amp; B'/><worksheet name='A &amp;amp; B'/></worksheets></workbook>",
+    );
+
+    expect(findWorksheet(workbook, 'A & B')?.['@_name']).toBe('A & B');
+    expect(findWorksheet(workbook, 'A &amp; B')?.['@_name']).toBe('A &amp; B');
+  });
+});

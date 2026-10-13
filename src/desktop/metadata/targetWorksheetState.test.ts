@@ -167,3 +167,21 @@ describe('target worksheet state', () => {
     ).toEqual({ ok: false, reasons: ['datasource-drift'] });
   });
 });
+
+describe('target worksheet window name matching', () => {
+  const book = (name: string): string =>
+    `<workbook><worksheets><worksheet name="${name}"><table/></worksheet></worksheets>` +
+    `<windows><window class="worksheet" name="${name}"><cards/></window></windows></workbook>`;
+
+  it('matches a decomposed-accent sheet and window to the composed selector', () => {
+    const state = captureTargetWorksheetState(book('Cafe\u0301'), 'Caf\u00e9', ARTIFACT);
+
+    expect(state.targetWindow.state).toBe('present');
+  });
+
+  it('does not match an entity-encoded selector to a sheet named with a plain ampersand', () => {
+    const state = captureTargetWorksheetState(book('A &amp; B'), 'A &amp; B', ARTIFACT);
+
+    expect(state.targetWindow.state).toBe('absent');
+  });
+});

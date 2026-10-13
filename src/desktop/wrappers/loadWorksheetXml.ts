@@ -37,7 +37,7 @@ import {
   checkUsedFieldValidity,
   mergeUsedFieldValidityVerification,
 } from '../validation/usedFieldValidity.js';
-import { xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -451,7 +451,7 @@ export function resolveCanonicalWorksheetName(
     return Ok(xmlName);
   }
 
-  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
+  if (!parsedXmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:

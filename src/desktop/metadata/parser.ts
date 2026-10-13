@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
-import { xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import type { ParsedWorkbook, ParsedWorksheet } from './types.js';
 
 const parserOptions = {
@@ -213,7 +213,9 @@ export function normalizeArray<T>(value: T | T[] | undefined): T[] {
 
 export function findWorksheet(workbook: ParsedWorkbook, sheetName: string): ParsedWorksheet | null {
   const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
-  return worksheets.find((ws) => ws['@_name'] && xmlNamesEqual(ws['@_name'], sheetName)) || null;
+  return (
+    worksheets.find((ws) => ws['@_name'] && parsedXmlNamesEqual(ws['@_name'], sheetName)) || null
+  );
 }
 
 export function findAllWorksheets(workbook: ParsedWorkbook): ParsedWorksheet[] {

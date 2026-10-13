@@ -8,7 +8,11 @@ import { normalizeArray, parseXML } from '../metadata/parser.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
-import { loadWorksheetXml, verifyPostApplyWorksheetReadback } from './loadWorksheetXml.js';
+import {
+  loadWorksheetXml,
+  resolveCanonicalWorksheetName,
+  verifyPostApplyWorksheetReadback,
+} from './loadWorksheetXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -1845,5 +1849,17 @@ describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
 
     expect(verification.status).toBe('failed');
     expect(verification.findings.some((f) => f.severity === 'error')).toBe(true);
+  });
+});
+
+describe('resolveCanonicalWorksheetName entity-like names', () => {
+  it('does not equate the literal `A &amp; B` with `A & B`', () => {
+    const literal = "<worksheet name='A &amp;amp; B'/>";
+
+    expect(resolveCanonicalWorksheetName('A & B', literal).isErr()).toBe(true);
+    expect(resolveCanonicalWorksheetName('A &amp; B', literal).unwrap()).toBe('A &amp; B');
+    expect(resolveCanonicalWorksheetName('A & B', "<worksheet name='A &amp; B'/>").unwrap()).toBe(
+      'A & B',
+    );
   });
 });

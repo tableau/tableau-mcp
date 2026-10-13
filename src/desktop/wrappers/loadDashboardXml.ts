@@ -20,7 +20,7 @@ import {
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
-import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import {
@@ -125,7 +125,7 @@ function resolveCanonicalDashboardName(
     });
   }
 
-  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
+  if (!parsedXmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:
