@@ -100,6 +100,43 @@ export default [
     },
   },
   {
+    files: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "AssignmentExpression[left.object.object.name='process'][left.object.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector: "AssignmentExpression[left.object.name='process'][left.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "UnaryExpression[operator='delete'][argument.object.object.name='process'][argument.object.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='Object'][callee.property.name='assign'][arguments.0.object.name='process'][arguments.0.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(deleteProperty|defineProperty|set)$/][arguments.0.object.name='process'][arguments.0.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+      ],
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',
