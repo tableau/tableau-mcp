@@ -13,6 +13,11 @@ on:
       - src/scripts/sea*.ts
       - src/utils/sea.ts
       - src/utils/loadProviderModule.ts
+      - src/server.web.ts
+      - src/features/serverFeatureGate.ts
+      - src/desktop/assets.ts
+      - src/tools/web/scaffoldDataApp/dataAppWorkspaceStore.ts
+      - src/templates/**
       - src/index*.ts
       - src/scripts/variants.ts
       - src/scripts/globalIdentifiers.ts
