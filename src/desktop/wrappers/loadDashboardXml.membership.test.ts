@@ -16,6 +16,8 @@ function fixture(
   names: string[] = [],
   registered = names,
   beforeWrite: (xml: string) => string = (xml) => xml,
+  apiVersion?: string,
+  repair = false,
 ): { executor: ReturnType<typeof makeExecutorMock>; original: string; live: () => string } {
   const original = `<workbook><worksheets>${['A', 'B'].map((name) => `<worksheet name="${name}"><table><rows>[ds].[field]</rows></table></worksheet>`).join('')}</worksheets>
     <dashboards>${fragment(names)}<dashboard name="Unrelated"><zones/></dashboard></dashboards>
@@ -23,6 +25,7 @@ function fixture(
     <window class="dashboard" name="Unrelated"><viewpoints/></window></windows></workbook>`;
   let live = original;
   const executor = makeExecutorMock({
+    desktopApiVersion: apiVersion,
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
     getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment(names) })),
     getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live })),
@@ -39,6 +42,23 @@ function fixture(
       )!;
       const replacement = parser.parseFromString(xml, 'text/xml').documentElement!;
       dashboard.parentNode!.replaceChild(doc.importNode(replacement, true), dashboard);
+      if (repair) {
+        const window = Array.from(doc.getElementsByTagName('window')).find(
+          (node) => node.getAttribute('name') === 'D',
+        )!;
+        const viewpoints = window.getElementsByTagName('viewpoints')[0];
+        const registeredNames = Array.from(viewpoints.getElementsByTagName('viewpoint')).map(
+          (node) => node.getAttribute('name'),
+        );
+        for (const zone of Array.from(replacement.getElementsByTagName('zone'))) {
+          const name = zone.getAttribute('name');
+          if (!name || registeredNames.includes(name)) continue;
+          const viewpoint = doc.createElement('viewpoint');
+          viewpoint.setAttribute('name', name);
+          viewpoints.appendChild(viewpoint);
+          registeredNames.push(name);
+        }
+      }
       live = new XMLSerializer().serializeToString(doc);
       return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
     }),
@@ -50,6 +70,102 @@ describe('dashboard membership apply', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it.each([undefined, '0.2.21'])(
+    'keeps missing registrations blocked on API %s',
+    async (version) => {
+      const { executor } = fixture([], [], undefined, version);
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(['A', 'B']),
+        focus,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ error: { error: { type: 'registration-required' } } });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])(
+    'automatically registers only through dashboard POST (cached=%s)',
+    async (cached) => {
+      const { executor, live } = fixture(['A'], ['A'], undefined, '0.2.22', true);
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment(['A', 'B']),
+        requireExistingSheet: cached,
+        verifyReadback: !cached,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().verifiedWorksheetNames).toEqual(['A', 'B']);
+      expect(live()).toContain('<viewpoint name="B"/>');
+      expect(live()).toContain('<viewpoint name="A"><zoom type="standard"/></viewpoint>');
+      expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('registers device-only worksheet references once during native apply', async () => {
+    const { executor, live } = fixture([], [], undefined, '0.2.22', true);
+    const xml = fragment(['A']).replace(
+      '</dashboard>',
+      '<devicelayouts><devicelayout name="Phone"><zones><zone id="2" name="B"/><zone id="3" name="A"/></zones></devicelayout></devicelayouts></dashboard>',
+    );
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml,
+      focus,
+      executor,
+      signal,
+    });
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().verifiedWorksheetNames).toEqual(['A', 'B']);
+    const window = Array.from(
+      new DOMParser().parseFromString(live(), 'text/xml').getElementsByTagName('window'),
+    ).find((node) => node.getAttribute('name') === 'D')!;
+    expect(window.getElementsByTagName('viewpoint')).toHaveLength(2);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('cannot native-register an extra worksheet absent from the submitted zones', async () => {
+    const { executor } = fixture(['A'], ['A'], undefined, '0.2.22', true);
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A']),
+      worksheetNames: ['A', 'B'],
+      focus,
+      executor,
+      signal,
+    });
+    expect(result).toMatchObject({
+      error: { error: { type: 'registration-required', worksheetNames: ['B'] } },
+    });
+    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('requires repaired registrations in readback even when cached apply disables optional readback', async () => {
+    vi.useFakeTimers();
+    const { executor } = fixture([], [], undefined, '0.2.22');
+    const pending = loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment(['A', 'B']),
+      requireExistingSheet: true,
+      verifyReadback: false,
+      focus,
+      executor,
+      signal,
+    });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ error: { error: { type: 'verification-failed' } } });
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it.each([true, false, undefined])(

@@ -2,6 +2,15 @@ export type ApiVersionFloor = `${number}.${number}.${number}`;
 
 export const WORKBOOK_DIAGNOSTICS_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
 export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
+export const DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION: ApiVersionFloor = '0.2.22';
+
+export function supportsDashboardVisualRegistration(apiVersion: string | undefined): boolean {
+  return (
+    apiVersion !== undefined &&
+    /^\d+\.\d+\.\d+$/.test(apiVersion) &&
+    apiVersionAtLeast(apiVersion, DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION)
+  );
+}
 
 /**
  * Numeric SemVer comparison ("0.2.6" >= "0.2.5"). Missing/unparseable parts read as 0,

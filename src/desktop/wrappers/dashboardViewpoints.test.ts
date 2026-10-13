@@ -9,6 +9,22 @@ import {
 } from './dashboardViewpoints.js';
 
 describe('dashboard viewpoint registration', () => {
+  it('accepts native defaults for new views while requiring retained settings for existing views', () => {
+    const source =
+      '<workbook><worksheets><worksheet name="A"/><worksheet name="B"/></worksheets><dashboards><dashboard name="D"><zones><zone name="A"/></zones></dashboard></dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"><zoom type="fit-width"/></viewpoint></viewpoints></window></windows></workbook>';
+    const expected = composeDashboardWorkbook(
+      source,
+      'D',
+      '<dashboard name="D"><zones><zone name="A"/><zone name="B"/></zones></dashboard>',
+      { useNativeViewpointDefaults: true },
+    ).unwrap().xml;
+    expect(expected).toContain('<viewpoint name="B"/>');
+    const matches = createDashboardReadbackVerifier(expected, 'D');
+    expect(matches(expected)).toBe(true);
+    expect(matches(expected.replace('<viewpoint name="B"/>', ''))).toBe(false);
+    expect(matches(expected.replace('fit-width', 'entire-view'))).toBe(false);
+  });
+
   it('leaves malformed fragments to the validation funnel', () => {
     expect(dashboardWorksheetNames('<dashboard name="D"><zone')).toEqual([]);
   });

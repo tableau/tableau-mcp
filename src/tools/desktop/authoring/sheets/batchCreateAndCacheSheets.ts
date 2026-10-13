@@ -214,7 +214,11 @@ export const getBatchCreateAndCacheSheetsTool = (
           msg += hasArtifactFailures
             ? '\n\nPhase 2 is not ready. Retry the failed fetch/cache steps before continuing.'
             : '\n\nWorksheet caches are ready for build and apply. Dashboard apply is a separate, later step.';
-          const registration = dashboardCreationPrerequisite(dashboardName, worksheetNames);
+          const registration = dashboardCreationPrerequisite(
+            dashboardName,
+            worksheetNames,
+            executor.desktopApiVersion,
+          );
           if (registration.required) {
             msg +=
               '\n\nDashboard apply is blocked until the rendered worksheet views are registered.\n' +
@@ -243,7 +247,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             workbookFile,
             readiness: {
               worksheetBuild: !hasArtifactFailures,
-              dashboardApply: !hasArtifactFailures && !registration.required,
+              dashboardApply: !hasArtifactFailures && worksheetNames.length === 0,
             },
             registration,
           };

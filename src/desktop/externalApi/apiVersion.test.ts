@@ -1,4 +1,4 @@
-import { apiVersionAtLeast } from './apiVersion.js';
+import { apiVersionAtLeast, supportsDashboardVisualRegistration } from './apiVersion.js';
 
 describe('apiVersionAtLeast', () => {
   it.each([
@@ -29,5 +29,22 @@ describe('apiVersionAtLeast', () => {
   it('reads unparseable parts as zero rather than throwing', () => {
     expect(apiVersionAtLeast('0.x.y', '0.0.0')).toBe(true);
     expect(apiVersionAtLeast('0.x.y', '0.1.0')).toBe(false);
+  });
+});
+
+describe('dashboard registration support', () => {
+  it.each([
+    [undefined, false],
+    ['', false],
+    ['unknown', false],
+    ['0.3.unknown', false],
+    ['0.2.22garbage', false],
+    ['0.3', false],
+    ['0.2.21', false],
+    ['0.2.22', true],
+    ['0.2.23', true],
+    ['0.3.0', true],
+  ])('gates registration for API version %s', (version, supported) => {
+    expect(supportsDashboardVisualRegistration(version)).toBe(supported);
   });
 });

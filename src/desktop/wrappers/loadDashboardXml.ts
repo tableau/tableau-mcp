@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
+import { supportsDashboardVisualRegistration } from '../externalApi/apiVersion.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -240,7 +241,7 @@ export async function loadDashboardXml({
   // existing sheet and use only its surgical document endpoint; neither permits creation.
   requireExistingSheet?: boolean;
   expectedSourceHash?: string;
-  // Additional registrations requested by higher-level helpers must exist BEFORE the write.
+  // Registrations outside the submitted zones must exist before the write.
   worksheetNames?: string[];
   verifyReadback?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
@@ -336,9 +337,10 @@ export async function loadDashboardXml({
         return Ok(prepared.value);
       }
       const checked = prepared.value;
-      const names = [
-        ...new Set([...dashboardWorksheetNames(checked.fragmentXml), ...worksheetNames]),
-      ];
+      const referencedNames = dashboardWorksheetNames(checked.fragmentXml);
+      const names = [...new Set([...referencedNames, ...worksheetNames])];
+      const supportsRegistration = supportsDashboardVisualRegistration(executor.desktopApiVersion);
+      let requiresRegistrationReadback = false;
       if (kind === 'dashboard' && snapshot !== null) {
         let missing: string[];
         try {
@@ -349,7 +351,15 @@ export async function loadDashboardXml({
             error: { type: 'invalid-response', error },
           });
         }
-        if (missing.length > 0) {
+        requiresRegistrationReadback = supportsRegistration && missing.length > 0;
+        if (
+          missing.length > 0 &&
+          (!supportsRegistration ||
+            missing.some(
+              (name) =>
+                !referencedNames.some((referenced) => parsedXmlNamesEqual(name, referenced)),
+            ))
+        ) {
           return Err({
             type: 'load-dashboard-xml-error',
             error: {
@@ -357,7 +367,10 @@ export async function loadDashboardXml({
               worksheetNames: missing,
               message:
                 `Dashboard "${checked.name}" needs worksheet view registrations for ${missing.join(', ')}. ` +
-                'This Desktop API cannot add them through the dashboard-only endpoint, and a whole-workbook replacement could overwrite concurrent edits. ' +
+                (supportsRegistration
+                  ? 'Native registration only covers worksheets referenced by the submitted dashboard zones. '
+                  : 'This Desktop API cannot add them through the dashboard-only endpoint. ') +
+                'A whole-workbook replacement could overwrite concurrent edits. ' +
                 'Add the worksheets to this dashboard in Desktop, then re-read the dashboard before retrying the layout edit. ' +
                 'Do not change worksheet zone types or retry with a whole-workbook replacement. No changes were sent to Tableau.',
             },
@@ -365,13 +378,14 @@ export async function loadDashboardXml({
         }
       }
       let matchesReadback: ((workbookXml: string) => boolean) | undefined;
-      if (verifyReadback && snapshot !== null) {
+      if ((verifyReadback || requiresRegistrationReadback) && snapshot !== null) {
         try {
           // Compose only an in-memory expectation for readback, never a workbook POST.
           const expected = composeDashboardWorkbook(
             snapshot.xml,
             checked.name,
             checked.fragmentXml,
+            { useNativeViewpointDefaults: supportsRegistration },
           );
           if (expected.isErr())
             return Err({

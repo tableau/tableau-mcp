@@ -45,7 +45,7 @@ export const getBuildAndApplyDashboardTool = (
     server,
     name: 'build-and-apply-dashboard',
     title,
-    description: 'Edit dashboard; registered views required.',
+    description: 'Build/apply; older Desktop needs views.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -103,7 +103,7 @@ export const getBuildAndApplyDashboardTool = (
 
           const executor = await extra.getExecutor(resolvedSession);
 
-          // Check all requested registrations before a surgical write and verify its readback.
+          // The shared wrapper checks registration support and verifies the surgical write's readback.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
