@@ -57,6 +57,8 @@ Point an MCP client at the entry over stdio:
 }
 ```
 
+For the environment variables this server reads, see the [Desktop section of the environment variable reference](https://tableau.github.io/tableau-mcp/docs/configuration/mcp-config/env-vars#desktop).
+
 ## Requirements
 
 - **`list-templates`** works headless against the bundled snapshot.

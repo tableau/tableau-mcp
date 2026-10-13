@@ -408,6 +408,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  NOTIFICATION_PAYLOAD_MAX_BYTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Notification Payload Max Bytes',
+    description:
+      'The maximum string length included in MCP client notifications and server logs before large payloads are redacted or truncated.',
+    required: false,
+    sensitive: false,
+  },
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: {
     includeInUserConfig: false,
     type: 'number',
