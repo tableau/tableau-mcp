@@ -69,35 +69,31 @@ describe('refresh token grant type', () => {
   });
 
   it('should reject if the refresh token is expired', async () => {
-    process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = '0';
-    try {
-      const { app } = await startServer();
+    vi.stubEnv('OAUTH_REFRESH_TOKEN_TIMEOUT_MS', '0');
+    const { app } = await startServer();
 
-      mocks.mockGetTokenResult.mockResolvedValue({
-        accessToken: 'test-access-token',
-        refreshToken: 'test-refresh-token',
-        expiresInSeconds: 3600,
-        originHost: '10ax.online.tableau.com',
-      });
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
 
-      const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+    const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
-      const tokenResponse = await request(app).post('/oauth2/token').send({
-        grant_type: 'refresh_token',
-        refresh_token,
-        client_id: 'test-client-id',
-        client_secret: 'test-client-secret',
-      });
+    const tokenResponse = await request(app).post('/oauth2/token').send({
+      grant_type: 'refresh_token',
+      refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
 
-      expect(tokenResponse.status).toBe(400);
-      expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
-      expect(tokenResponse.body).toEqual({
-        error: 'invalid_grant',
-        error_description: 'Invalid or expired refresh token',
-      });
-    } finally {
-      process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = undefined;
-    }
+    expect(tokenResponse.status).toBe(400);
+    expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(tokenResponse.body).toEqual({
+      error: 'invalid_grant',
+      error_description: 'Invalid or expired refresh token',
+    });
   });
 
   it('should issue an access token when the refresh token is successfully exchanged', async () => {
