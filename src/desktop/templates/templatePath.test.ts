@@ -365,14 +365,24 @@ describe('TBM catalog', () => {
     expect(readBookmarkFromCatalogEntry(entry!, operations)).toBe(BOOKMARK);
   });
 
-  it('fails closed when one external root exceeds the file-count bound', () => {
+  it('skips one external root that exceeds the file-count bound and keeps the rest of the catalog', () => {
     const root = repositoryRoot();
     const custom = join(root, 'Tableau Agent', 'templates');
+    writeFileSync(join(root, 'Bookmarks', 'healthy-bookmark.tbm'), BOOKMARK);
+    writeFileSync(join(custom, '.vendored', 'overridable', 'healthy-overridable.tbm'), BOOKMARK);
     for (let index = 0; index <= MAX_TEMPLATES_PER_ROOT; index += 1) {
       writeFileSync(join(custom, `template-${index}.tbm`), BOOKMARK);
     }
 
-    expect(() => listTemplateCatalog()).toThrow(/exceeds the maximum/);
+    const catalog = listTemplateCatalog();
+    expect(catalog.some((entry) => entry.provenance === 'custom')).toBe(false);
+    expect(catalog.some((entry) => entry.provenance === 'protected')).toBe(true);
+    expect(catalog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ template: 'healthy-bookmark', provenance: 'bookmark' }),
+        expect.objectContaining({ template: 'healthy-overridable', provenance: 'overridable' }),
+      ]),
+    );
   });
 });
 
