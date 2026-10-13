@@ -823,6 +823,35 @@ describe('server', () => {
     },
   );
 
+  it('registers admin instructions, prompts and skills on the combined-lean shared stateful path', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'admin-tools' || featureName === 'skills-over-mcp',
+    );
+
+    const server = getServer({ shared: true });
+    await server.registerTools();
+
+    const instructions =
+      (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+    expect(instructions).toContain('site-administration capabilities');
+    expect(vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining(['stale-content-cleanup-inform', 'user-license-reclamation-apply']),
+    );
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+    expect(
+      vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.some(([name]) => String(name).startsWith('skill://')),
+    ).toBe(true);
+    expect(vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0])).toEqual([
+      'load-web-tools',
+    ]);
+  });
+
   function createMockAdminTool(): WebTool<any> {
     return {
       name: 'mock-admin-tool' as WebToolName,

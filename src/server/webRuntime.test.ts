@@ -12,6 +12,7 @@ import {
 
 const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
+  activityLogInitPromise: Promise.resolve(),
   connectPromise: Promise.resolve(),
   disconnectShouldReject: false,
   closeActivityLogShouldReject: false,
@@ -21,6 +22,7 @@ const runtimeState = vi.hoisted(() => ({
 
 vi.mock('../activityLog/init.js', () => ({
   initializeActivityLog: vi.fn(async () => {
+    await runtimeState.activityLogInitPromise;
     runtimeState.events.push('activity log init');
   }),
   closeActivityLog: vi.fn(async () => {
@@ -91,6 +93,7 @@ describe('initializeWebRuntime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runtimeState.events = [];
+    runtimeState.activityLogInitPromise = Promise.resolve();
     runtimeState.connectPromise = Promise.resolve();
     runtimeState.disconnectShouldReject = false;
     runtimeState.closeActivityLogShouldReject = false;
@@ -151,6 +154,26 @@ describe('initializeWebRuntime', () => {
     serverInfo.resolve({});
     await serverInfoReady;
     expect(ready).toBe(true);
+  });
+
+  it('waits for Activity Log init before initializing the session store', async () => {
+    const activityLogInit = deferred<void>();
+    runtimeState.activityLogInitPromise = activityLogInit.promise;
+
+    const runtimePromise = initializeWebRuntime(config);
+    await vi.waitFor(() => expect(initializeActivityLog).toHaveBeenCalledOnce());
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
+
+    expect(initializeSessionStore).not.toHaveBeenCalled();
+    expect(runtimeState.events).toEqual(['feature gate']);
+
+    activityLogInit.resolve();
+    await runtimePromise;
+    expect(runtimeState.events.slice(0, 3)).toEqual([
+      'feature gate',
+      'activity log init',
+      'session store init',
+    ]);
   });
 
   it('fails before registering handlers or fetching server info when the store cannot connect', async () => {
