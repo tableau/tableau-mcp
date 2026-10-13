@@ -73,6 +73,15 @@ describe('DesktopConfig', () => {
     expect(config.imageExportTimeoutMs).toBe(30_000);
   });
 
+  it.each([
+    ['IMAGE_EXPORT_TIMEOUT_MS', 'imageExportTimeoutMs'],
+    ['TABLEAU_DESKTOP_CALL_TIMEOUT_MS', 'desktopCallTimeoutMs'],
+  ] as const)('clamps %s above the Node timer limit instead of falling back', (name, field) => {
+    vi.stubEnv(name, '99999999999');
+
+    expect(new Config()[field]).toBe(2_147_483_647);
+  });
+
   describe('knowledge and search overrides', () => {
     it('leaves them undefined by default', () => {
       const config = new Config();

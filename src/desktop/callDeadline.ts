@@ -16,6 +16,9 @@
 /** Ceiling for one desktop tool call. See the band argument above. */
 export const DEFAULT_DESKTOP_CALL_TIMEOUT_MS = 60_000;
 
+/** Node clamps a setTimeout delay above this to 1 ms, which would time every call out at once. */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 /** Floor for the env override — below the observed 37.5s legitimate max, real work gets cut. */
 export const MIN_DESKTOP_CALL_TIMEOUT_MS = 40_000;
 
@@ -126,12 +129,15 @@ export function createCallDeadline({
   // A deadline nobody races must not surface as an unhandled rejection.
   expiry.catch(() => undefined);
 
-  const timer = setTimeout(() => {
-    timedOut = true;
-    const error = new DesktopCallTimeoutError(budgetMs);
-    controller.abort(error);
-    rejectExpiry(error);
-  }, budgetMs);
+  const timer = setTimeout(
+    () => {
+      timedOut = true;
+      const error = new DesktopCallTimeoutError(budgetMs);
+      controller.abort(error);
+      rejectExpiry(error);
+    },
+    Math.min(budgetMs, MAX_TIMER_DELAY_MS),
+  );
   timer.unref?.();
 
   const onClientAbort = (): void => {

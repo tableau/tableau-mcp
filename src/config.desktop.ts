@@ -1,6 +1,7 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
   MIN_DESKTOP_CALL_TIMEOUT_MS,
 } from './desktop/callDeadline.js';
 import {
@@ -149,15 +150,22 @@ export class Config extends BaseConfig {
       minValue: 1,
     });
 
-    this.imageExportTimeoutMs = parseNumber(imageExportTimeoutMs, {
-      defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
-      minValue: 1,
-    });
+    // Node turns a setTimeout delay above 2^31-1 into 1 ms, so "effectively never" must clamp, not fall back.
+    this.imageExportTimeoutMs = Math.min(
+      parseNumber(imageExportTimeoutMs, {
+        defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
+        minValue: 1,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
-    this.desktopCallTimeoutMs = parseNumber(desktopCallTimeoutMs, {
-      defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
-      minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
-    });
+    this.desktopCallTimeoutMs = Math.min(
+      parseNumber(desktopCallTimeoutMs, {
+        defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+        minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
     this.allowSkipValidation = allowSkipValidation === 'true';
 
