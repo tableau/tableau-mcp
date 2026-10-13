@@ -24,7 +24,6 @@ const mockGetProductTelemetry = vi.hoisted(() =>
 );
 vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   getProductTelemetry: mockGetProductTelemetry,
-  DEFAULT_PRODUCT_TELEMETRY_ENDPOINT: 'https://prod.telemetry.tableausoftware.com',
 }));
 
 const tmpDirs: string[] = [];

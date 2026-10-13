@@ -1,4 +1,5 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { getDesktopConfig } from '../config.desktop.js';
@@ -13,7 +14,7 @@ import { sessionRouteState } from './route/route-state.js';
 const tmpDirs: string[] = [];
 
 function tmpDir(): string {
-  const dir = mkdtempSync(join(process.cwd(), 'episode-events-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'episode-events-test-'));
   tmpDirs.push(dir);
   return dir;
 }

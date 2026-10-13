@@ -1,8 +1,18 @@
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { defineConfig } from 'vitest/config.js';
 
 export const configShared = {
   test: {
     globals: true,
+    // Worker-start env survives vi.unstubAllEnvs(); the discovery dir is a per-user path that never exists.
+    env: {
+      PRODUCT_TELEMETRY_ENABLED: 'false',
+      TABLEAU_EXTERNAL_API_DISCOVERY_DIR: join(
+        tmpdir(),
+        `tableau-mcp-test-no-desktop-discovery-${process.getuid?.() ?? 'nouid'}`,
+      ),
+    },
     watch: false,
     include: ['**/*.test.ts'],
     // A few asset-heavy suites (listTemplates, bookmarkTemplate, remoteProvider) walk the

@@ -99,7 +99,6 @@ vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
     pendingDeletionMaxAgeDays: 30,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),

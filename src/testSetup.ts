@@ -1,3 +1,5 @@
+import './testTelemetryGuard.js';
+
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 

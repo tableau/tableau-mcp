@@ -62,7 +62,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
