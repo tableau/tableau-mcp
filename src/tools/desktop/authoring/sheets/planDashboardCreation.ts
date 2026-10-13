@@ -101,7 +101,7 @@ export const getPlanDashboardCreationTool = (
     server,
     name: 'plan-dashboard-creation',
     title: toolTitle,
-    description: 'Plan tasks; manual registration.',
+    description: 'Plan; older Desktop needs views',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -388,6 +388,7 @@ export const getPlanDashboardCreationTool = (
           const registration = dashboardCreationPrerequisite(
             dashboardName,
             dashboardTask.worksheetNames,
+            executor.desktopApiVersion,
           );
 
           const plan = {
@@ -433,9 +434,10 @@ export const getPlanDashboardCreationTool = (
               dependsOn: 'phase2Parallel',
             },
             phase4Dashboard: {
-              dependsOn: 'phase3Registration',
-              description:
-                'Apply the dashboard only after Desktop has registered every requested worksheet view',
+              dependsOn: registration.required ? 'phase3Registration' : 'phase2Parallel',
+              description: registration.required
+                ? 'Apply the dashboard only after Desktop has registered every requested worksheet view'
+                : 'Apply the dashboard after every worksheet is rendered; Desktop registers missing views',
               refreshCaches: [
                 {
                   tool: 'get-workbook-xml',
@@ -492,14 +494,16 @@ export const getPlanDashboardCreationTool = (
 
           lines.push(
             '',
-            'PHASE 3: Register Views in Tableau Desktop (required user action)',
-            ...(registration.required
-              ? registration.instructions
-              : ['No worksheets requested; no registration needed.']),
+            registration.required
+              ? 'PHASE 3: Register Views in Tableau Desktop (required user action)'
+              : 'PHASE 3: Native Registration During Dashboard Apply',
+            ...registration.instructions,
             '',
             'PHASE 4: Refresh Caches and Apply Dashboard',
-            'Only after Phase 3: get-workbook-xml and get-dashboard-xml with mode="file", then build-and-apply-dashboard using their returned file paths.',
-            'Dashboard apply checks the live registrations and verifies readback. A missing registration stops the apply without a write.',
+            `${registration.required ? 'Only after manual registration' : 'After all worksheet applies finish'}: get-workbook-xml and get-dashboard-xml with mode="file", then build-and-apply-dashboard using their returned file paths.`,
+            registration.required
+              ? 'Dashboard apply checks the live registrations and verifies readback. A missing registration stops the apply without a write.'
+              : 'Desktop registers missing views during the surgical apply; readback verifies the layout and registrations.',
           );
 
           if (aggregationWarnings.length > 0) {
