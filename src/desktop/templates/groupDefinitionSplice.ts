@@ -1,4 +1,5 @@
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import { decodeXmlEntities } from '../xmlElement.js';
 
 const GROUP_CALC_CLASSES = new Set(['categorical-bin']);
 
@@ -33,7 +34,9 @@ function mappedFieldName(columnInstance: string): string | null {
 
 function mappedDatasourceName(columnInstance: string): string | null {
   const end = columnInstance.indexOf('].[');
-  return columnInstance.startsWith('[') && end > 0 ? columnInstance.slice(1, end) : null;
+  return columnInstance.startsWith('[') && end > 0
+    ? decodeXmlEntities(columnInstance.slice(1, end))
+    : null;
 }
 
 function definitionKey(datasource: string, name: string): string {
