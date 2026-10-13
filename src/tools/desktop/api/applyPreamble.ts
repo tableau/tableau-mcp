@@ -6,6 +6,7 @@ import {
   readContainedCacheTextFile,
 } from '../../../desktop/cachePath.js';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
+import { containsRedactedCredentialSentinel } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   formatDashboardPromiseCheck,
@@ -85,6 +86,13 @@ export function runApplyPreamble({
           readResult.error ?? new Error(`Unable to read cached ${kind} file.`),
         ).toErr();
     }
+  }
+
+  if (containsRedactedCredentialSentinel(readResult.text)) {
+    return new ArgsValidationError(
+      `This ${kind} file carries credentials that were redacted when it was read, and applying it ` +
+        `cannot restore them. Remove the redacted values or re-read the ${kind} from Desktop before applying.`,
+    ).toErr();
   }
 
   const sessionResult = resolveSession(session);
