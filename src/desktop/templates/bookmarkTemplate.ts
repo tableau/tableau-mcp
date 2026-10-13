@@ -486,8 +486,8 @@ export function bookmarkToTemplateWorkbook(
     const tok = tokenOf.get(sourceField)!;
     const esc = sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`(?<=[:\\[])${esc}(?=[:\\]])`, 'g');
-    body = body.replace(re, tok);
-    win = win.replace(re, tok);
+    body = body.replace(re, () => tok);
+    win = win.replace(re, () => tok);
   }
 
   body = restoreAttrs(body);

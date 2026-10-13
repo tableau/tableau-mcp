@@ -380,7 +380,8 @@ function storySignature(xml: string): string {
 
 function upsertAttribute(tag: string, name: string, value: string): string {
   const pattern = new RegExp(`(\\s${name}\\s*=\\s*)(['"])(.*?)\\2`, 'i');
-  if (pattern.test(tag)) return tag.replace(pattern, `$1'${escapeXml(value)}'`);
+  if (pattern.test(tag))
+    return tag.replace(pattern, (_m, pre: string) => `${pre}'${escapeXml(value)}'`);
   return tag.replace(/\s*\/?\s*>$/, (close) => ` ${name}='${escapeXml(value)}'${close}`);
 }
 

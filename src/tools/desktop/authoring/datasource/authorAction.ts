@@ -1963,7 +1963,7 @@ function mergeActionDatasources(
   if (present) {
     return existing;
   }
-  return existing.replace('</datasources>', `${datasourceXml}</datasources>`);
+  return existing.replace('</datasources>', () => `${datasourceXml}</datasources>`);
 }
 
 // Add the columns to the <datasource-dependencies> block for this datasource, creating the block if
@@ -1998,7 +1998,7 @@ function mergeDependencyBlocks(
   if (additions.length > 0) {
     merged[index] = block.replace(
       '</datasource-dependencies>',
-      `${additions.join('')}</datasource-dependencies>`,
+      () => `${additions.join('')}</datasource-dependencies>`,
     );
   }
   return merged.join('');

@@ -5592,6 +5592,41 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("member='&quot;&quot;'");
   });
 
+  it('m7: filter values holding replacement-string metacharacters reach the workbook verbatim', async () => {
+    const values = ['US$', "a$'b", 'c$`d', 'e$$f'];
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values, context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'dollar-members',
+      ask: 'top 10 products by sales for exact region members',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values, context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("member='&quot;US$&quot;'");
+    expect(xml).toContain("member='&quot;a$&apos;b&quot;'");
+    expect(xml).toContain("member='&quot;c$`d&quot;'");
+    expect(xml).toContain("member='&quot;e$$f&quot;'");
+    expect((xml.match(/<worksheet\b/g) ?? []).length).toBe(1);
+  });
+
   it('shows the filter card for a field whose window already has a legend card for it', async () => {
     const legendXml = INJECTED_M7_RANKING_XML.replace(
       '<cards />',

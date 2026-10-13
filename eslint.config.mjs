@@ -90,6 +90,12 @@ export default [
           message:
             "Do not alias a client's axios instance; call client.axios.<verb>(buildRestPath(...)) so the URL stays lintable (route-traversal guard).",
         },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^replace(All)?$/][arguments.length=2]:not([arguments.1.type=/^(Literal|ArrowFunctionExpression|FunctionExpression)$/]):not([arguments.1.type='TemplateLiteral'][arguments.1.expressions.length=0])",
+          message:
+            "String.replace expands $&, $', $` and $$ in a string replacement. Wrap the replacement in an arrow function, e.g. () => value, unless it is a string literal.",
+        },
       ],
     },
   },

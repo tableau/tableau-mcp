@@ -1823,8 +1823,8 @@ function stampWorksheetIdempotencyKey(
   const escapedKey = escapeXmlAttribute(idempotencyKey);
   const existing = new RegExp(`\\s${attributeName}=(['"])[^'"]*\\1`);
   const stampedWorksheet = existing.test(worksheetXml)
-    ? worksheetXml.replace(existing, ` ${attributeName}='${escapedKey}'`)
-    : worksheetXml.replace(/<worksheet\b/, `<worksheet ${attributeName}='${escapedKey}'`);
+    ? worksheetXml.replace(existing, () => ` ${attributeName}='${escapedKey}'`)
+    : worksheetXml.replace(/<worksheet\b/, () => `<worksheet ${attributeName}='${escapedKey}'`);
   return ensureUserNamespace(
     upsertSheetIntoWorkbook(workbookXml, worksheetTitle, stampedWorksheet),
   );
@@ -2057,18 +2057,21 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
   let out = xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${filterXml}`);
   const sliceEntry = `<column>${sliceColumn}</column>`;
   if (/<slices\b[^>]*\/>/.test(out)) {
-    out = out.replace(/<slices\b[^>]*\/>/, `<slices>${sliceEntry}</slices>`);
+    out = out.replace(/<slices\b[^>]*\/>/, () => `<slices>${sliceEntry}</slices>`);
   } else if (/<slices>[\s\S]*?<\/slices>/.test(out)) {
     // Guard against duplicates by the exact slice ENTRY, not the bare CI ref: the CI ref also
     // appears in the filter node just inserted, so `includes(sliceColumn)` would wrongly skip
     // a legitimate second slice (e.g. planTopN already added the product CI to <slices>).
     if (!out.includes(sliceEntry)) {
-      out = out.replace(/<\/slices>/, `${sliceEntry}</slices>`);
+      out = out.replace(/<\/slices>/, () => `${sliceEntry}</slices>`);
     }
   } else if (/<aggregation\b/.test(out)) {
-    out = out.replace(/(\s*)(<aggregation\b)/, `$1<slices>${sliceEntry}</slices>$1$2`);
+    out = out.replace(
+      /(\s*)(<aggregation\b)/,
+      (_m, ws: string, agg: string) => `${ws}<slices>${sliceEntry}</slices>${ws}${agg}`,
+    );
   } else {
-    out = out.replace(filterXml, `${filterXml}\n      <slices>${sliceEntry}</slices>`);
+    out = out.replace(filterXml, () => `${filterXml}\n      <slices>${sliceEntry}</slices>`);
   }
   return out;
 }
@@ -2103,7 +2106,7 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
   if (emptyCardsRe.test(inner)) {
     return inner.replace(
       emptyCardsRe,
-      `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
+      () => `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
     );
   }
   // No cards node — create the scaffold as the FIRST child (worksheet window content model:
@@ -2255,7 +2258,7 @@ function applyProposalSplices({
       appliedFilterCount += 1;
     }
   }
-  let workbookXml = xml.replace(originalWorksheetXml, out);
+  let workbookXml = xml.replace(originalWorksheetXml, () => out);
   for (const columnRef of shownFilterColumns) {
     // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
     // context filter with no control is invisible. Best-effort (no-op if the window is absent).

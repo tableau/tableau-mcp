@@ -300,15 +300,13 @@ function canonicalDatasourceSegment(datasourceId: string): string {
 }
 
 export function workbookDatasourceRoute(datasourceId: string): string {
-  return EXTERNAL_API_ROUTES.workbookDatasource.replace(
-    '{id}',
+  return EXTERNAL_API_ROUTES.workbookDatasource.replace('{id}', () =>
     canonicalDatasourceSegment(datasourceId),
   );
 }
 
 export function workbookDatasourceDocumentRoute(datasourceId: string): string {
-  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace(
-    '{id}',
+  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace('{id}', () =>
     canonicalDatasourceSegment(datasourceId),
   );
 }

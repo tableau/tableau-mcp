@@ -19,7 +19,7 @@ import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { unsubstitutedTemplateTokenRule } from '../validation/rules/unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { parsedXmlNamesEqual } from '../xmlElement.js';
+import { escapeRegExp, parsedXmlNamesEqual } from '../xmlElement.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import {
@@ -239,7 +239,7 @@ function spliceHistogramBinSize(templateXml: string, binSize: number | undefined
   }
   return templateXml.replace(binCalculation, (tag) =>
     /\bsize=(['"])[^'"]*\1/.test(tag)
-      ? tag.replace(/\bsize=(['"])[^'"]*\1/, `size='${binSize}'`)
+      ? tag.replace(/\bsize=(['"])[^'"]*\1/, () => `size='${binSize}'`)
       : tag.replace(/\s*\/>$|>$/, (end) => ` size='${binSize}'${end}`),
   );
 }
@@ -409,7 +409,7 @@ export function buildInjectedWorkbookXml({
 
   let processed = spliceHistogramBinSize(templateXml, histogramBinSize).replace(
     /\{\{TITLE\}\}/g,
-    AUTHORED_TITLE_SENTINEL,
+    () => AUTHORED_TITLE_SENTINEL,
   );
   const rewriteWarnings: string[] = [];
 
@@ -458,7 +458,9 @@ export function buildInjectedWorkbookXml({
       // field_mapping. Generic parameter replacement would bypass derivation,
       // metadata, optional-prune, and survivor guards.
       if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
-      processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), () => escapeXml(value));
+      processed = processed.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, 'g'), () =>
+        escapeXml(value),
+      );
     }
   }
 
@@ -467,7 +469,7 @@ export function buildInjectedWorkbookXml({
     return { ok: false, issues: templateTokenIssues.map((issue) => issue.message) };
   }
 
-  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), escapeXml(title));
+  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), () => escapeXml(title));
 
   const modifiedXml = injectTemplate(
     baseWorkbookXml,

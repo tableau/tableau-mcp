@@ -415,7 +415,7 @@ export const getBuildAndApplyWorksheetTool = (
           // never mints its own nonce, so derive one from session + apply timestamp
           // (randomUUID guards same-millisecond applies). Distinct nonces => distinct
           // calc-name suffixes => repeated applies into one workbook don't collide.
-          templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
+          templateXml = templateXml.replace(/\{\{TITLE\}\}/g, () => escapeXml(worksheetName));
           const applyNonce = `${resolvedSession}:${Date.now()}:${randomUUID()}`;
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps

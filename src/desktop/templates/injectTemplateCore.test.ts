@@ -760,6 +760,49 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
   });
 });
 
+describe('buildInjectedWorkbookXml - replacement-string metacharacters', () => {
+  const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+  const TEMPLATE = [
+    "<?xml version='1.0'?><workbook>",
+    "<worksheets><worksheet name='{{TITLE}}'><table><style value='{{LABEL}}'/></table></worksheet></worksheets>",
+    "<windows><window class='worksheet' name='{{TITLE}}'/></windows>",
+    '</workbook>',
+  ].join('');
+
+  it.each(["Revenue ($'000)", 'Profit "$"', 'Sales ($<1M)', 'Cost $` plan', 'Total $$'])(
+    'names the sheet exactly %s',
+    (title) => {
+      const result = buildInjectedWorkbookXml({
+        workbookXml: EMPTY_WORKBOOK,
+        templateXml: TEMPLATE,
+        title,
+        sheetType: 'worksheet',
+        templateParameters: { LABEL: 'x' },
+        applyNonce: 'dollar-title',
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(workbookHasSheetNamed(result.xml, title)).toBe(true);
+      expect(result.xml).not.toContain('__TABLEAU_MCP_AUTHORED_TITLE');
+    },
+  );
+
+  it('treats a regex-special template parameter key literally', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: TEMPLATE,
+      title: 'T',
+      sheetType: 'worksheet',
+      templateParameters: { LABEL: 'x', '(': 'boom', '[A-Z_]+': 'boom' },
+      applyNonce: 'regex-key',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('boom');
+    expect(result.xml).toContain('value="x"');
+  });
+});
+
 describe('classifyWorksheetReplaceTarget', () => {
   const WB = `<?xml version='1.0'?>
 <workbook>

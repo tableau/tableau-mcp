@@ -1237,7 +1237,7 @@ function deriveRemappedCalcCaption(
   let replaced = caption;
   for (const [oldName, newName] of changedPairs) {
     const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    replaced = replaced.replace(new RegExp(`\\b${escaped}\\b`, 'g'), newName);
+    replaced = replaced.replace(new RegExp(`\\b${escaped}\\b`, 'g'), () => newName);
   }
   if (replaced !== caption) return replaced;
 
