@@ -258,7 +258,6 @@ const NON_TOOL_VOCABULARY = [
   'validation-failed',
   'validation-passing',
   'var-p',
-  'viewpoint-verification',
   'viz-specific',
   'well-formed',
   'window-screenshot',

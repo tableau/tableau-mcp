@@ -94,6 +94,85 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
   });
 
+  it('shows Desktop warnings and gives a non-done next action', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Desktop reported 1 warning(s)');
+    expect(payload.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(payload.warnings).toEqual(warnings);
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('names Desktop warnings when the post-apply readback fails', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+    vi.mocked(getWorkbookXml)
+      .mockReset()
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(
+        Err({ type: 'execute-command-error', error: 'readback boom' } as never),
+      );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Post-apply workbook readback failed');
+    expect(result.content[0].text).toContain('dropped-node: Removed an unsupported zone.');
+  });
+
+  it('carries Desktop warnings when the workbook cache write fails after apply', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+    vi.mocked(writeCacheTextFile).mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.error).toContain('disk full');
+    expect(payload.error).toContain('dropped-node: Removed an unsupported zone.');
+    expect(payload.warnings).toEqual(warnings);
+  });
+
+  it('omits warnings and next action on a clean Phase 1', async () => {
+    const result = await getResult({
+      session: SESSION,
+      worksheetNames: ['Sheet1'],
+      dashboardName: 'My Dashboard',
+    });
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('warnings');
+    expect(result.structuredContent).toBeUndefined();
+  });
+
   it.each(['0.2.22', '0.2.23', '0.3.0'])(
     'keeps Phase 1 dashboard readiness false on native API %s until worksheets are applied',
     async (apiVersion) => {
@@ -235,6 +314,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('ENOSPC');
     expect(result.content[0].text).toContain('do not replay or retry Phase 1 automatically');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ applied: true, retrySafe: false });
     expect(result.content[0].text).not.toContain('Ready for Phase 2');
   });
 

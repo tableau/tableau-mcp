@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
-import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import { loadStoryboardXml } from '../../../desktop/wrappers/loadDashboardXml.js';
 import {
   DesktopCommandExecutionError,
@@ -13,7 +12,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
+import { acceptedDashboardLoadResult, runApplyPreamble } from './applyPreamble.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -94,14 +93,6 @@ export const getApplyStoryboardTool = (
             }
           }
 
-          // Host verification receipt (W-23447506): storyboard applies have no structural
-          // readback, so say so honestly instead of implying full re-verification happened.
-          // No storyboard-specific promise-check formatter exists; the dashboard one is
-          // shape-identical for this shared loader.
-          const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
-          const hostVerification = result.isOk()
-            ? formatDashboardPromiseCheck(validationWarnings)
-            : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
               type: 'apply_succeeded',
@@ -113,17 +104,13 @@ export const getApplyStoryboardTool = (
             });
           }
 
-          // The shared structured receipt mirrors the text above and nothing more:
-          // dispatch and preflight warnings were observed; the applied structure was
+          // Dispatch, preflight and Desktop's warnings were observed; the applied structure was
           // not, so it is listed as unverified (promise_outcome 'unverified' above).
           return new Ok(
-            acceptedNoReadbackApplyResult({
+            acceptedDashboardLoadResult({
               kind: 'storyboard',
-              appliedName: result.isOk()
-                ? (result.value.appliedName ?? storyboardName)
-                : storyboardName,
-              resultWarnings: validationWarnings,
-              hostVerification,
+              loaded: result.value,
+              fallbackName: storyboardName,
             }),
           );
         },

@@ -11,6 +11,7 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
+import type { ExecuteCommandWarning } from '../externalApi/executorTypes.js';
 import {
   isPromisedSortLossWarning,
   type ReadbackFinding,
@@ -91,25 +92,56 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
   return `\n\nHOST VERIFICATION — ${outcome}: ${parts.join(' · ')}.${guard}`;
 }
 
+/** Desktop's own warnings, one per line, so the agent and user see exactly what it dropped. */
+export function formatDesktopWarnings(desktopWarnings: readonly ExecuteCommandWarning[]): string {
+  if (desktopWarnings.length === 0) return '';
+  const lines = desktopWarnings.map((warning) => `- ${warning.code}: ${warning.message}`);
+  return `\n\nDESKTOP WARNINGS — Desktop reported ${desktopWarnings.length} warning(s) while applying; each names something it dropped or changed:\n${lines.join('\n')}`;
+}
+
+function unverifiedGuard(
+  scope: 'dashboard' | 'sheet-level',
+  desktopWarnings: readonly ExecuteCommandWarning[],
+): string {
+  const state = scope === 'dashboard' ? 'Treat dashboard state' : 'Treat sheet-level state';
+  return desktopWarnings.length > 0
+    ? `. ${state} as unconfirmed until read back; Desktop's warnings are host evidence, so report them to the user.`
+    : `. ${state} as unconfirmed until read back; do not report problems without host evidence.`;
+}
+
+function desktopWarningPart(desktopWarnings: readonly ExecuteCommandWarning[]): string[] {
+  return desktopWarnings.length > 0
+    ? [`Desktop reported ${desktopWarnings.length} warning(s)`]
+    : [];
+}
+
 /**
  * Whole-workbook applies have NO structural readback today — say so instead of
  * letting success text imply full verification.
  */
-export function formatWorkbookPromiseCheck(validationWarnings: ValidationIssue[]): string {
+export function formatWorkbookPromiseCheck(
+  validationWarnings: ValidationIssue[],
+  desktopWarnings: readonly ExecuteCommandWarning[],
+): string {
   const parts = [
     formatPreflight(validationWarnings),
     'apply completed',
+    ...desktopWarningPart(desktopWarnings),
     'full workbook intent NOT re-verified',
   ];
-  return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat sheet-level state as unconfirmed until read back; do not report problems without host evidence.`;
+  return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}${unverifiedGuard('sheet-level', desktopWarnings)}`;
 }
 
 /** Dashboard applies likewise have no structural readback — honest by construction. */
-export function formatDashboardPromiseCheck(validationWarnings: ValidationIssue[]): string {
+export function formatDashboardPromiseCheck(
+  validationWarnings: ValidationIssue[],
+  desktopWarnings: readonly ExecuteCommandWarning[],
+): string {
   const parts = [
     formatPreflight(validationWarnings),
     'apply completed',
+    ...desktopWarningPart(desktopWarnings),
     'full dashboard intent NOT re-verified',
   ];
-  return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat dashboard state as unconfirmed until read back; do not report problems without host evidence.`;
+  return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}${unverifiedGuard('dashboard', desktopWarnings)}`;
 }

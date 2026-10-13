@@ -37,7 +37,11 @@ describe('applyDashboardWithViewpointsTool', () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockDashboardXml);
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [], verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'] }),
+      Ok({
+        validationWarnings: [],
+        documentWarnings: [],
+        verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'],
+      }),
     );
   });
 
@@ -68,7 +72,11 @@ describe('applyDashboardWithViewpointsTool', () => {
 
   it('uses verified registrations without a redundant read or write, even if another read would fail', async () => {
     vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
-      Ok({ validationWarnings: [], verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'] }),
+      Ok({
+        validationWarnings: [],
+        documentWarnings: [],
+        verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'],
+      }),
     );
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
       Err({ type: 'invalid-response', error: new Error('transient read failure') }),
@@ -90,12 +98,14 @@ describe('applyDashboardWithViewpointsTool', () => {
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
-  it('does not treat an unverified requested worksheet as registered', async () => {
+  it('shows Desktop warnings in the success body and gives a non-done next action', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
     vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
-      Ok({ validationWarnings: [], verifiedWorksheetNames: ['Sheet 1'] }),
-    );
-    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
-      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+      Ok({
+        validationWarnings: [],
+        documentWarnings: warnings,
+        verifiedWorksheetNames: ['Sheet 1', 'Sheet 2'],
+      }),
     );
 
     const result = await getToolResult({
@@ -103,9 +113,25 @@ describe('applyDashboardWithViewpointsTool', () => {
       worksheetNames: ['Sheet 1', 'Sheet 2'],
     });
 
-    expect(result.isError).toBe(true);
-    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
-    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(body.message).toContain('Desktop reported 1 warning(s)');
+    expect(body.message).not.toContain('Successfully');
+    expect(body.viewpointState).toBe('success');
+    expect(body.warnings).toEqual(warnings);
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('omits warnings from a clean success body', async () => {
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('warnings');
+    expect(result.structuredContent).toBeUndefined();
   });
 
   it('refuses a stale cache sidecar before any Desktop call (W9)', async () => {
@@ -213,26 +239,6 @@ describe('applyDashboardWithViewpointsTool', () => {
       });
       expect(result.isError).toBe(true);
       expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each([undefined, []])(
-    'reports an incomplete result for missing verification %s',
-    async (verifiedWorksheetNames) => {
-      vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
-        Ok({
-          validationWarnings: [],
-          verifiedWorksheetNames,
-        }),
-      );
-      const result = await getToolResult({
-        dashboardFile: '/path/to/dashboard.xml',
-        worksheetNames: ['Sheet 1', 'Sheet 2'],
-      });
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('viewpoint-verification');
-      expect(result.content[0].text).toContain('Do not replace the workbook');
     },
   );
 });

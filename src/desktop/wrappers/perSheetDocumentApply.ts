@@ -88,8 +88,7 @@ export async function preparePerSheetApply({
 
   const listResult = await listSheetsOfKind(kind, client, signal);
   if (listResult.isErr()) {
-    // A missing list route means the per-sheet POST route is missing too (they ship together) —
-    // let the caller take the whole-workbook path instead of surfacing a route error.
+    // A missing list route means the per-sheet POST route is missing too (they ship together).
     if (isRouteMissing(listResult.error)) {
       return Ok('route-missing');
     }

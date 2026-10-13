@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyWorksheetPromiseOutcome,
   formatDashboardPromiseCheck,
+  formatDesktopWarnings,
   formatWorkbookPromiseCheck,
   formatWorksheetPromiseCheck,
 } from './promise-check.js';
@@ -157,13 +158,30 @@ describe('promise check receipt (W-23447506)', () => {
   );
 
   it('formats workbook applies as honestly unverified', () => {
-    const text = formatWorkbookPromiseCheck([]);
+    const text = formatWorkbookPromiseCheck([], []);
     expect(text).toContain('HOST VERIFICATION — unverified');
     expect(text).toContain('full workbook intent NOT re-verified');
   });
 
   it('formats dashboard applies as honestly unverified', () => {
-    const text = formatDashboardPromiseCheck([]);
+    const text = formatDashboardPromiseCheck([], []);
     expect(text).toContain('full dashboard intent NOT re-verified');
+    expect(text).toContain('do not report problems without host evidence');
+  });
+
+  it.each([formatWorkbookPromiseCheck, formatDashboardPromiseCheck])(
+    'treats Desktop warnings as host evidence instead of telling the model not to report',
+    (format) => {
+      const text = format([], [{ code: 'dropped-node', message: 'zone removed' }]);
+      expect(text).toContain('Desktop reported 1 warning(s)');
+      expect(text).toContain("Desktop's warnings are host evidence");
+      expect(text).not.toContain('do not report problems without host evidence');
+    },
+  );
+
+  it('lists each Desktop warning with its code and message', () => {
+    expect(formatDesktopWarnings([])).toBe('');
+    const text = formatDesktopWarnings([{ code: 'a', message: 'first' }]);
+    expect(text).toContain('- a: first');
   });
 });

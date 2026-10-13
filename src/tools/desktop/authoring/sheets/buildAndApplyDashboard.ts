@@ -6,17 +6,17 @@ import { checkCacheFileArg } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
-import { parsedXmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-  IncompleteOperationError,
 } from '../../../../errors/mcpToolError.desktop.js';
 import {
   CacheSessionMismatchError,
   WorkbookNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { type WithDesktopWarnings, withDesktopWarnings } from '../../api/applyPreamble.js';
+import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 import {
   buildDashboardXml,
@@ -72,8 +72,9 @@ export const getBuildAndApplyDashboardTool = (
       },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute<BuildAndApplyDashboardResult>({
+      return await tool.logAndExecute<WithDesktopWarnings<BuildAndApplyDashboardResult>>({
         extra,
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
         args: { session, dashboardName, dashboardFile, workbookFile, layoutSpec, worksheetNames },
         callback: async () => {
           const checkedWorkbook = checkCacheFileArg(
@@ -141,32 +142,20 @@ export const getBuildAndApplyDashboardTool = (
             }
           }
 
-          const verifiedNames = dashboardApplyResult.value.verifiedWorksheetNames;
-          if (
-            !verifiedNames ||
-            !worksheetNames.every((name) =>
-              verifiedNames.some((verified) => parsedXmlNamesEqual(name, verified)),
-            )
-          ) {
-            return new IncompleteOperationError({
-              dashboardName,
-              dashboardApplied: true,
-              stage: 'viewpoint-verification',
-              viewpoints: { state: 'unknown', requested: worksheetNames },
-              guidance:
-                'Dashboard apply completed without confirming every requested viewpoint. ' +
-                'Re-read the live dashboard before retrying. Do not replace the workbook to inject viewpoints.',
-            }).toErr();
-          }
-
-          return new Ok({
-            message: `Successfully built and applied dashboard "${dashboardName}".`,
-            dashboardName,
-            kpiCount: layoutSpec.kpis.length,
-            chartCount: layoutSpec.charts.length,
-            viewpointCount: worksheetNames.length,
-            viewpointState: 'success',
-          });
+          return new Ok(
+            withDesktopWarnings(
+              {
+                message: `Successfully built and applied dashboard "${dashboardName}".`,
+                dashboardName,
+                kpiCount: layoutSpec.kpis.length,
+                chartCount: layoutSpec.charts.length,
+                viewpointCount: worksheetNames.length,
+                viewpointState: 'success',
+              },
+              dashboardApplyResult.value.documentWarnings,
+              `Built and applied dashboard "${dashboardName}"`,
+            ),
+          );
         },
       });
     },

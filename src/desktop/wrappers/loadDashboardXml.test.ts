@@ -9,7 +9,7 @@ import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
 import { synchronizeDashboardViewpoints } from './dashboardViewpoints.js';
-import { loadDashboardXml } from './loadDashboardXml.js';
+import { loadDashboardXml, loadStoryboardXml } from './loadDashboardXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -904,6 +904,84 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(applyDashboardDocument).toHaveBeenCalledOnce();
   });
 
+  it('carries Desktop document warnings and diagnostics from the dashboard apply', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    const diagnostics = { worksheets: [] };
+    const executor = makeExecutorMock({
+      listDashboards: vi
+        .fn()
+        .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: dashboardName }] })),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+      applyDashboardDocument: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'cmd-apply',
+          status: 'completed',
+          submitted_at: '',
+          warnings,
+          diagnostics,
+        }),
+      ),
+    });
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.documentWarnings).toEqual(warnings);
+      expect(result.value.diagnostics).toEqual(diagnostics);
+    }
+  });
+
+  it('carries Desktop document warnings from a storyboard apply', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported point.' }];
+    const executor = makeExecutorMock({
+      listStoryboards: vi
+        .fn()
+        .mockResolvedValue(Ok({ storyboards: [{ id: 'sb-1', name: dashboardName }] })),
+      getStoryboardDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+      applyStoryboardDocument: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '', warnings }),
+        ),
+    });
+
+    const result = await loadStoryboardXml({
+      storyboardName: dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value.documentWarnings).toEqual(warnings);
+  });
+
+  it('reports no document warnings for a clean dashboard apply', async () => {
+    const { executor } = dispatchingExecutor(liveWorkbook([dashboardName]));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) expect(result.value.documentWarnings).toEqual([]);
+  });
+
   it('surfaces sheet-absent (no whole-workbook fallback) when requireExistingSheet is set', async () => {
     const { executor, calls } = absentDashboardExecutor(['Some Other DB']);
 
@@ -996,7 +1074,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       invariant(result.error.type === 'load-dashboard-xml-error');
-      expect(result.error.error.type).toBe('sheet-absent');
+      expect(result.error.error.type).toBe('route-missing');
+      invariant(result.error.error.type === 'route-missing');
+      expect(result.error.error.message).not.toContain('create the dashboard');
+      expect(result.error.error.message).toContain('No changes were sent');
     }
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
@@ -1024,7 +1105,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       invariant(result.error.type === 'load-dashboard-xml-error');
-      expect(result.error.error.type).toBe('sheet-absent');
+      expect(result.error.error.type).toBe('route-missing');
+      invariant(result.error.error.type === 'route-missing');
+      expect(result.error.error.message).not.toContain('create the dashboard');
+      expect(result.error.error.message).toContain('No changes were sent');
     }
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });

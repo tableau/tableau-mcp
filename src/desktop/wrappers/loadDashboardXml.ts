@@ -5,9 +5,11 @@ import { sanitizeValue } from '../../logging/sanitize.js';
 import { supportsDashboardVisualRegistration } from '../externalApi/apiVersion.js';
 import {
   ExecuteCommandError,
+  type ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
   WorkbookDocument,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
@@ -52,6 +54,8 @@ export type LoadDashboardXmlError =
   | { type: 'registration-required'; message: string; worksheetNames: string[] }
   // All dashboard callers require an existing sheet; no whole-workbook fallback is safe here.
   | { type: 'sheet-absent'; message: string }
+  // The Desktop build lacks the per-sheet document endpoint; nothing was sent.
+  | { type: 'route-missing'; message: string }
   // A dashboard zone references a worksheet that exists by name but has no applied
   // mark/encoding (no visual doc). Desktop's HasVisualDoc would reject this with
   // IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC; we catch it before dispatch. retry-safe: nothing sent.
@@ -60,6 +64,10 @@ export type LoadDashboardXmlError =
 export interface LoadDashboardXmlOk {
   appliedName?: string;
   validationWarnings: ValidationIssue[];
+  /** Nodes Desktop dropped from the applied document; empty on a clean apply. */
+  documentWarnings: ExecuteCommandWarning[];
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
   /** Worksheet registrations observed in the successful post-apply readback. */
   verifiedWorksheetNames?: string[];
 }
@@ -440,11 +448,24 @@ export async function loadDashboardXml({
   }
   const outcome = perSheetResult.value;
   if (typeof outcome === 'object' && 'status' in outcome) {
+    // Invariant: a requested readback that did not run is a failure, never an unverified Ok.
+    if (verifyReadback && !verifiedWorksheetNames) {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: {
+          type: 'verification-failed',
+          message: `Tableau accepted the ${kind} apply, but no readback ran for "${outcome.name}". Changes may have been applied. Re-read the live ${kind} before retrying; do not blindly repeat the apply.`,
+        },
+      });
+    }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt without re-running validation.
     return Ok({
       appliedName: outcome.name,
       validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      documentWarnings: outcome.documentWarnings,
+      ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+      ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
       ...(verifiedWorksheetNames ? { verifiedWorksheetNames } : {}),
     });
   }
@@ -462,6 +483,17 @@ export async function loadDashboardXml({
         message:
           `The ${kind} changed since this cache was read. Re-read it with get-${kind}-xml, ` +
           `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
+      },
+    });
+  }
+  if (outcome === 'route-missing') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'route-missing',
+        message:
+          `This Tableau Desktop build has no per-sheet ${kind} document endpoint, so "${canonicalName}" ` +
+          'cannot be updated in place. Update Tableau Desktop. No changes were sent to Tableau.',
       },
     });
   }

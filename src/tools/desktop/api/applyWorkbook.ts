@@ -92,7 +92,7 @@ export const getApplyWorkbookTool = (
           const diagnostics = result.isOk() ? result.value.diagnostics : undefined;
           const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
           const hostVerification = result.isOk()
-            ? formatWorkbookPromiseCheck(validationWarnings)
+            ? formatWorkbookPromiseCheck(validationWarnings, documentWarnings)
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -121,7 +121,8 @@ export const getApplyWorkbookTool = (
           );
           const accepted = acceptedNoReadbackApplyResult({
             kind: 'workbook',
-            resultWarnings: validationWarnings,
+            preflightWarnings: validationWarnings,
+            resultWarnings: documentWarnings,
             hostVerification,
             ...(diagnosticsCoverage === 'incomplete'
               ? {
@@ -145,7 +146,11 @@ export const getApplyWorkbookTool = (
                     `${accepted.message} The edit was accepted; address the reported invalid fields ` +
                     'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
                 },
-                prefillNextAction('Address invalid fields reported in diagnostics'),
+                prefillNextAction(
+                  documentWarnings.length > 0
+                    ? 'Fix invalid fields; tell the user what Desktop warned about'
+                    : 'Address invalid fields reported in diagnostics',
+                ),
               )
             : accepted;
           return new Ok({

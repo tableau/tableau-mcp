@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
-import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import { loadDashboardXml } from '../../../desktop/wrappers/loadDashboardXml.js';
 import {
   DashboardXmlLoadFailedError,
@@ -13,7 +12,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, artifactNameParam, sessionParam } from '../params.js';
 import { jsonToolResult } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
+import { acceptedDashboardLoadResult, runApplyPreamble } from './applyPreamble.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -88,13 +87,6 @@ export const getApplyDashboardTool = (
             }
           }
 
-          // Host verification receipt (W-23447506): dashboard applies have no
-          // structural readback, so say so honestly instead of implying full
-          // re-verification happened.
-          const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
-          const hostVerification = result.isOk()
-            ? formatDashboardPromiseCheck(validationWarnings)
-            : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
               type: 'apply_succeeded',
@@ -106,17 +98,13 @@ export const getApplyDashboardTool = (
             });
           }
 
-          // The shared structured receipt mirrors the text above and nothing more:
-          // dispatch and preflight warnings were observed; the applied layout was not,
-          // so it is listed as unverified (promise_outcome 'unverified' above).
+          // Dispatch, preflight and Desktop's warnings were observed; the applied structure was
+          // not, so it is listed as unverified (promise_outcome 'unverified' above).
           return new Ok(
-            acceptedNoReadbackApplyResult({
+            acceptedDashboardLoadResult({
               kind: 'dashboard',
-              appliedName: result.isOk()
-                ? (result.value.appliedName ?? dashboardName)
-                : dashboardName,
-              resultWarnings: validationWarnings,
-              hostVerification,
+              loaded: result.value,
+              fallbackName: dashboardName,
             }),
           );
         },

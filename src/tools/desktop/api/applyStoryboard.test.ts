@@ -56,11 +56,32 @@ describe('applyStoryboardTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
+  it('shows Desktop warnings and does not mark a warned storyboard apply done', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.spyOn(loadDashboardXmlModule, 'loadStoryboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+
+    const result = await getToolResult({
+      storyboardXml: '<dashboard name="QBR Story" type="storyboard"><zones></zones></dashboard>',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const { message } = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(message).not.toContain('Successfully applied');
+    expect(message).toContain('Desktop reported 1 warning(s)');
+    expect(message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(message).toContain("Desktop's warnings are host evidence");
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+    expect(result.structuredContent).not.toMatchObject({ nextAction: { kind: 'done' } });
+  });
+
   it('applies the storyboard document via loadStoryboardXml', async () => {
     const mockXml = '<dashboard name="QBR Story" type="storyboard"><zones></zones></dashboard>';
     const loadSpy = vi
       .spyOn(loadDashboardXmlModule, 'loadStoryboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const result = await getToolResult({ storyboardXml: mockXml });
 
@@ -103,7 +124,7 @@ describe('applyStoryboardTool', () => {
     });
     const loadSpy = vi
       .spyOn(loadDashboardXmlModule, 'loadStoryboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const result = await getToolResult({ storyboardFile: '/path/to/storyboard.xml' });
 
@@ -125,7 +146,7 @@ describe('applyStoryboardTool', () => {
     });
     const loadSpy = vi
       .spyOn(loadDashboardXmlModule, 'loadStoryboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const result = await getToolResult({ storyboardFile: '/path/to/storyboard.xml' });
 
@@ -197,7 +218,7 @@ describe('applyStoryboardTool', () => {
     const mockXml = '<dashboard name="QBR Story" type="storyboard"><zones></zones></dashboard>';
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadStoryboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
     const customSignal = new AbortController().signal;
 
     await getToolResult({ storyboardXml: mockXml, customSignal });
