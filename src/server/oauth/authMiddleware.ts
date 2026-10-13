@@ -198,7 +198,8 @@ async function getRequiredApiScopesForRequest(
   }
 
   if (isInitializeRequest(body)) {
-    return getSupportedApiScopes(clientId);
+    // Optional post-publish reads must not prevent clients from initializing or publishing.
+    return getSupportedApiScopes(clientId, { includeOptionalScopes: false });
   }
 
   const toolName = getToolNameFromRequestBody(body);

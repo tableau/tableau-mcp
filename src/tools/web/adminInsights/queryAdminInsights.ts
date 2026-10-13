@@ -4,10 +4,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import {
@@ -111,7 +113,7 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
   const tool = new WebTool({
     server,
     name: 'query-admin-insights',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `
 Queries the Tableau Admin Insights datasources on the current site. Restricted to site

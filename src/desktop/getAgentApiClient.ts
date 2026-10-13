@@ -13,6 +13,7 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from '../sdks/interceptors.js';
+import { RouteSafetyError } from '../sdks/routeSafety/core.js';
 import { isAxiosError } from '../utils/axios.js';
 
 export type AgentApiClientConfig = {
@@ -48,6 +49,14 @@ export const getRequestInterceptor = (): RequestInterceptor => (request) => {
 };
 
 export const getRequestErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
+  if (error instanceof RouteSafetyError) {
+    log({
+      message: `Request rejected by the REST route-safety guard: ${error.message}`,
+      level: 'warning',
+      logger: 'AgentApiClient',
+    });
+    return;
+  }
   if (!isAxiosError(error) || !error.request) {
     log({
       message: 'Request failed',
@@ -70,6 +79,14 @@ export const getResponseInterceptor = (): ResponseInterceptor => (response) => {
 };
 
 export const getResponseErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
+  if (error instanceof RouteSafetyError) {
+    log({
+      message: `Request rejected by the REST route-safety guard: ${error.message}`,
+      level: 'warning',
+      logger: 'AgentApiClient',
+    });
+    return;
+  }
   if (!isAxiosError(error) || !error.response) {
     log({
       message: 'Response failed',

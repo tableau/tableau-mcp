@@ -45,12 +45,24 @@ export function getDefaultEnv(): EnvValues {
     // PAT auth keys: without these the spawned server child cannot start under AUTH=pat
     // (it exits with "PAT_NAME is not set"). Forwarded as '' when unset, so the connected-app
     // path is unaffected. ADMIN_TOOLS_ENABLED is intentionally NOT forwarded here — tests that
-    // need admin tools inject it explicitly on their client env, and the negative
+    // need admin tools use getAdminToolsEnv(), and the negative
     // "tool absent when admin off" tests rely on getDefaultEnv() omitting it.
     'PAT_NAME',
     'PAT_VALUE',
     'FLOW_WRITE_TOOLS_ENABLED',
   ]);
+}
+
+// Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+export function getAdminToolsEnv(): Record<string, string> {
+  return {
+    ...getDefaultEnv(),
+    ADMIN_TOOLS_ENABLED: 'true',
+    FEATURE_GATE_PROVIDER: 'custom',
+    FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
+      module: './tests/e2e/fixtures/adminToolsFeatureGate.cjs',
+    }),
+  };
 }
 
 export function getSuperstoreDatasource(env?: EnvValues): Datasource {

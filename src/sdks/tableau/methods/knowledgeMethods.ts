@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { knowledgeApis } from '../apis/knowledgeApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import type {
@@ -22,7 +21,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 
 export default class KnowledgeMethods extends AuthenticatedMethods<typeof knowledgeApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, knowledgeApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, knowledgeApis, { axiosConfig }), creds);
   }
 
   listGraphs = async (): Promise<KnowledgeGraph[]> =>

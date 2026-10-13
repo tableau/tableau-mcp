@@ -4,27 +4,29 @@ import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ArgsValidationError,
-  FeatureDisabledError,
-  McpToolError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { parseTableauApiError } from '../../../sdks/tableau/tableauApiError.js';
+import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { ValidationIssue } from '../../../sdks/tableau/types/workbookValidation.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
+import { PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
+import {
+  mapPersonalSpaceSiteDisabledError,
+  notInPersonalSpaceError,
+  resolvePersonalSpace,
+} from '../utils/personalSpaceUtils.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -92,6 +94,10 @@ export type PublishWorkbookResult =
       data: Workbook;
       url: string;
       warnings: ValidationFinding[];
+      // Configured grantee rules, not effective user access; returned modes remain unchanged.
+      // Absent for Personal Space or a failed permissions read.
+      permissions?: GranteeCapability[];
+      permissionsNote?: string;
     }
   | {
       status: 'invalid';
@@ -115,14 +121,15 @@ export const getPublishWorkbookTool = (
     name: 'publish-workbook',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description: new Provider(async () => {
-      const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
-      return (
+      const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+      return [
         'Publishes a TWB or TWBX workbook from a local file path or staged upload id to Tableau. ' +
-        (personalSpaceEnabled
-          ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
-          : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
-        'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.'
-      );
+          (dataAppsEnabled
+            ? 'Provide projectId to choose the target project (use list-projects to discover IDs). Without projectId, publishes to your Personal Space unless personalSpace is false, which requires projectId. '
+            : 'Provide projectId to choose the target project (use list-projects to discover IDs). ') +
+          'TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.',
+        'Project publishes also return the workbook permission rules (configured rules, not effective access) in permissions, or permissionsNote if that optional read fails.',
+      ].join('\n\n');
     }),
     paramsSchema: new Provider(async () =>
       (await getFeatureGate().isFeatureEnabled('data-apps'))
@@ -139,7 +146,7 @@ export const getPublishWorkbookTool = (
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
+        !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async (args, extra): Promise<CallToolResult> => {
       const {
@@ -162,11 +169,11 @@ export const getPublishWorkbookTool = (
         },
         callback: async () => {
           // Recheck at execution time in case the client cached a schema from before the flag changed.
-          const personalSpaceEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
+          const dataAppsEnabled = await getFeatureGate().isFeatureEnabled('data-apps');
           // projectId always wins. Without it, the destination is Personal Space unless it is
           // opted out (or the flag is off, e.g. a stale cached schema), which requires projectId.
           const usePersonalSpace =
-            projectId === undefined && personalSpaceEnabled && personalSpace !== false;
+            projectId === undefined && dataAppsEnabled && personalSpace !== false;
           if (projectId === undefined && !usePersonalSpace) {
             throw new ArgsValidationError('projectId is required to publish a workbook.');
           }
@@ -188,7 +195,7 @@ export const getPublishWorkbookTool = (
               // unresolvable space fails before uploading anything.
               let personalSpaceTarget: PersonalSpace | undefined;
               if (usePersonalSpace) {
-                const resolvedPersonalSpace = await resolvePersonalSpace(restApi);
+                const resolvedPersonalSpace = await resolvePersonalSpace(restApi, 'publish');
                 if (resolvedPersonalSpace.isErr()) {
                   return resolvedPersonalSpace;
                 }
@@ -237,28 +244,20 @@ export const getPublishWorkbookTool = (
                 });
               } catch (error) {
                 const mapped =
-                  personalSpaceTarget !== undefined ? mapPersonalSpacePublishError(error) : null;
+                  personalSpaceTarget !== undefined
+                    ? mapPersonalSpaceSiteDisabledError(error, 'publish')
+                    : null;
                 if (mapped) {
                   return mapped.toErr();
                 }
                 throw error;
               }
 
-              // Some servers accept the <location> element but silently land the workbook in a
-              // default project instead. Treat a personal-space publish that didn't come back as
-              // PersonalSpace as a failure, not a silent success.
-              if (
-                personalSpaceTarget !== undefined &&
-                publishedWorkbook.location?.type !== 'PersonalSpace'
-              ) {
-                const landed = publishedWorkbook.project?.name ?? publishedWorkbook.location?.name;
-                return new UnknownError(
-                  'This Tableau site published the workbook to ' +
-                    (landed ? `the "${landed}" project` : 'a project') +
-                    ' instead of your personal space — its REST API does not support ' +
-                    'personal-space publishing. Delete it there if unwanted, or publish to a ' +
-                    'project explicitly by passing projectId.',
-                ).toErr();
+              if (personalSpaceTarget !== undefined) {
+                const notInPersonalSpace = notInPersonalSpaceError(publishedWorkbook, 'publish');
+                if (notInPersonalSpace) {
+                  return notInPersonalSpace.toErr();
+                }
               }
 
               const url =
@@ -275,7 +274,48 @@ export const getPublishWorkbookTool = (
             },
           });
 
-          return result;
+          // Disclose the workbook's permission rules for project publishes only. Personal-space
+          // content has no shareable grantees. Runs after the publish session has signed out: a
+          // second sign-in with the same PAT can invalidate a still-open first session.
+          // Best-effort: a permissions-read failure must not fail an already-completed publish.
+          if (usePersonalSpace || result.isErr() || result.value.status !== 'published') {
+            return result;
+          }
+          const published = result.value;
+          try {
+            // The optional read bypasses the tool's mandatory-scope middleware check.
+            // Honor the same OAuth consent boundary before minting its REST credentials.
+            if (
+              (extra.authInfo !== undefined || extra.tableauAuthInfo !== undefined) &&
+              extra.config.oauth.enforceScopes &&
+              extra.config.oauth.advertiseApiScopes &&
+              !extra.authInfo?.scopes.includes(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE)
+            ) {
+              throw new Error(`Missing scope: ${PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE}`);
+            }
+            const permissions = await useRestApi({
+              ...extra,
+              jwtScopes: [PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE],
+              callback: async (permissionsApi) =>
+                permissionsApi.workbooksMethods.queryWorkbookPermissions({
+                  siteId: permissionsApi.siteId,
+                  workbookId: published.data.id,
+                }),
+            });
+            return new Ok({ ...published, permissions });
+          } catch (error) {
+            log({
+              message: 'publish-workbook: failed to fetch workbook permissions (best-effort)',
+              level: 'warning',
+              logger: 'publish-workbook',
+              data: getExceptionMessage(error),
+            });
+            return new Ok({
+              ...published,
+              permissionsNote:
+                'Published successfully, but the workbook permission rules could not be retrieved.',
+            });
+          }
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({
@@ -402,54 +442,6 @@ function assertMinimumRestApiVersionSupported(): void {
       `publish-workbook requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). The connected server is using REST API version ${RestApi.version}.`,
     );
   }
-}
-
-const PROJECT_ID_HINT = 'pass projectId (use list-projects) to publish to a project instead.';
-
-async function resolvePersonalSpace(
-  restApi: RestApi,
-): Promise<Result<PersonalSpace, McpToolError>> {
-  // Don't pre-check site.personalSpaceEnabled: Query Site is admin-only, and publish-workbook's
-  // callers are typically non-admin Explorers/Creators. A site with Personal Space disabled
-  // surfaces here as a getPersonalSpace failure instead.
-  let personalSpace: PersonalSpace;
-  try {
-    personalSpace = await restApi.personalSpaceMethods.getPersonalSpace({
-      siteId: restApi.siteId,
-    });
-  } catch (error) {
-    return new ArgsValidationError(
-      `Could not resolve your Personal Space for publishing (${getExceptionMessage(error)}); ` +
-        PROJECT_ID_HINT,
-    ).toErr();
-  }
-
-  if (personalSpace.readOnly) {
-    return new ArgsValidationError(
-      `Your Personal Space is read-only and cannot be used as a publish target; ${PROJECT_ID_HINT}`,
-    ).toErr();
-  }
-
-  return new Ok(personalSpace);
-}
-
-// Map the server's "personal-space publish is disabled for this site" gate (code 400000 with a
-// detail mentioning personal space) to a clean tool error, or null so the caller rethrows to the
-// generic handler.
-function mapPersonalSpacePublishError(error: unknown): FeatureDisabledError | null {
-  const parsed = parseTableauApiError(error);
-  if (
-    parsed?.status === 400 &&
-    parsed.code === '400000' &&
-    parsed.detail?.toLowerCase().includes('personal space')
-  ) {
-    return new FeatureDisabledError(
-      'Publishing directly to a personal space is not enabled for this Tableau site. Publish to a ' +
-        'project instead by passing projectId, or ask a site administrator to enable ' +
-        'personal-space publishing.',
-    );
-  }
-  return null;
 }
 
 function toValidationFinding(issue: ValidationIssue): ValidationFinding {

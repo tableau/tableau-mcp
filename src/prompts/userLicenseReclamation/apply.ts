@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { WebPromptFactory } from '../registry.js';
 
@@ -204,7 +205,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
     `Unlicensed via \`${UPDATE_USER_TOOL}\`. Admin-only. ` +
     'Ownership of content is retained after downgrade (no content is deleted).',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const inactiveDays = args.inactiveDays

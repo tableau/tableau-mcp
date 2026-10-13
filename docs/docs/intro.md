@@ -55,7 +55,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [run-flow](tools/flows/run-flow.md)                                                                                   | Opt-in mutating tool. Runs a Tableau Prep flow on demand, returning the async job ([REST API][run-flow-now])        | All SKUs     |
 | [run-flow-task](tools/flows/run-flow-task.md)                                                                         | Opt-in mutating tool. Runs an existing scheduled flow run task now, returning the async job ([REST API][run-flow-task]) | All SKUs     |
 | [cancel-flow-run](tools/flows/cancel-flow-run.md)                                                                     | Opt-in mutating tool. Requests cancellation of a queued or in-progress flow run by flow run id; poll for the final status ([REST API][cancel-flow-run]) | All SKUs     |
-| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
+| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task; workbook/data source deletes need Admin Insights (Tableau Cloud) ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data for the specified view in a Tableau workbook. Tableau REST API 3.30 and later returns all server-exported sheet parts; earlier versions return CSV for the requested worksheet, or the first worksheet of a dashboard. ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
 | [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves CSV data for the specified custom view in a Tableau workbook. A dashboard-based custom view returns its first worksheet. ([REST API][get-custom-view-data]) | All SKUs     |
@@ -77,7 +77,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [query-knowledge-context](tools/knowledge/query-knowledge-context.md)                                                | Queries governed definitions, relationships, lineage, impact, and graph sources through one read-only tool | Tableau+ only |
 | [inspect-knowledge-context](tools/knowledge/inspect-knowledge-context.md)                                            | Inspects graph status, semantic context, health, and improvement suggestions without changing the graph | Tableau+ only |
 | [manage-knowledge-context](tools/knowledge/manage-knowledge-context.md)                                              | Creates, updates, or deletes customer-governed semantic context | Tableau+ only |
-| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
+| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task; workbook/data source deletes need Admin Insights (Tableau Cloud) ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [scaffold-data-app](tools/data-apps/scaffold-data-app.md)                                                             | Disabled by default (`data-apps` feature flag). Scaffolds a starter Tableau data app workspace and requires a site allowed-origins API lookup                                                      | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
@@ -109,6 +109,14 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_data_source
+[query-workbooks-for-site]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site
+[query-datasources]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
+[delete-tag-from-workbook]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_tag_from_workbook
+[delete-tag-from-datasource]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_tag_from_data_source
 [get-flow-task]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
 [run-flow-now]:

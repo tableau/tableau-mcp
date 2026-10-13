@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   extractRefreshTaskSchema,
   updateCloudExtractRefreshTaskRequestSchema,
@@ -54,13 +55,7 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
   alias: 'listExtractRefreshTasks',
   description:
     'Returns a list of extract refresh tasks for the site. Each task is for a data source or workbook extract and includes schedule information (frequency, next run time).',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment')],
   response: listExtractRefreshTasksBodySchema,
 });
 
@@ -106,13 +101,7 @@ const getFlowRunTasksEndpoint = makeEndpoint({
   alias: 'getFlowRunTasks',
   description:
     'Returns the list of scheduled flow run tasks for the site. Each task includes the flow it targets and schedule information (frequency, next run time).',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment')],
   response: getFlowRunTasksBodySchema,
 });
 
@@ -128,18 +117,7 @@ const deleteExtractRefreshTaskEndpoint = makeEndpoint({
   path: '/sites/:siteId/tasks/extractRefreshes/:taskId',
   alias: 'deleteExtractRefreshTask',
   description: 'Deletes an extract refresh task on the specified site.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('taskId')],
   response: z.void(),
 });
 
@@ -158,16 +136,8 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
   alias: 'updateCloudExtractRefreshTask',
   description: 'Updates the schedule of an extract refresh task on Tableau Cloud.',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
+    pathParam('taskId'),
     {
       name: 'body',
       type: 'Body',
@@ -182,18 +152,7 @@ const getFlowRunTaskEndpoint = makeEndpoint({
   path: '/sites/:siteId/tasks/runFlow/:taskId',
   alias: 'getFlowRunTask',
   description: 'Returns a single scheduled flow run task by id.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('taskId')],
   response: z.object({
     task: z.object({
       flowRun: flowRunTaskSchema,
@@ -207,18 +166,7 @@ const runFlowTaskEndpoint = makeEndpoint({
   alias: 'runFlowTask',
   description:
     'Runs an existing scheduled flow run task immediately and returns the async background job.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'taskId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('taskId')],
   response: runFlowJobResponseSchema,
 });
 

@@ -1,6 +1,11 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
+import {
+  ActivityLogConfig,
+  isActivityLogProvider,
+  providerConfigSchema as activityLogProviderConfigSchema,
+} from './activityLog/types.js';
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   FeatureGateConfig,
@@ -24,6 +29,15 @@ type AuthType = (typeof authTypes)[number];
 function isAuthType(auth: unknown): auth is AuthType {
   return authTypes.some((type) => type === auth);
 }
+
+/**
+ * Default and bounds for PENDING_DELETION_MAX_AGE_DAYS, the oldest cleanup batch a delete confirm
+ * still accepts. The upper bound keeps the residue sweep (list-workbooks / list-datasources with a
+ * tags filter) to a handful of calls: every marker that can still authorize a confirm is within it.
+ */
+export const PENDING_DELETION_MAX_AGE_DAYS_DEFAULT = 30;
+export const PENDING_DELETION_MAX_AGE_DAYS_MIN = 1;
+export const PENDING_DELETION_MAX_AGE_DAYS_MAX = 90;
 
 export class Config extends BaseConfig {
   auth: AuthType;
@@ -79,8 +93,10 @@ export class Config extends BaseConfig {
   isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
+  activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
+  pendingDeletionMaxAgeDays: number;
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
@@ -153,12 +169,15 @@ export class Config extends BaseConfig {
       FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
       SESSION_STORE_PROVIDER: sessionStoreProvider,
       SESSION_STORE_PROVIDER_CONFIG: sessionStoreProviderConfig,
+      ACTIVITY_LOG_PROVIDER: activityLogProvider,
+      ACTIVITY_LOG_PROVIDER_CONFIG: activityLogProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
@@ -342,8 +361,36 @@ export class Config extends BaseConfig {
       };
     }
 
+    // Activity Log provider configuration (similar to feature gate provider)
+    if (isActivityLogProvider(activityLogProvider) && activityLogProvider === 'custom') {
+      if (!activityLogProviderConfig) {
+        throw new Error(
+          'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+        );
+      }
+      this.activityLog = {
+        provider: 'custom',
+        providerConfig: activityLogProviderConfigSchema.parse(
+          JSON.parse(activityLogProviderConfig),
+        ),
+      };
+    } else {
+      this.activityLog = {
+        provider: 'noop',
+      };
+    }
+
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
+    // Oldest cleanup batch (days) a delete confirm still accepts. Server-level only — deliberately not
+    // a site/request override, so a caller cannot widen the window an orphaned marker stays usable.
+    this.pendingDeletionMaxAgeDays = Math.floor(
+      parseNumber(pendingDeletionMaxAgeDays, {
+        defaultValue: PENDING_DELETION_MAX_AGE_DAYS_DEFAULT,
+        minValue: PENDING_DELETION_MAX_AGE_DAYS_MIN,
+        maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
+      }),
+    );
     // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
     // while flow rollouts are staged into production. Registering them requires both
     // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
