@@ -97,6 +97,7 @@ export async function guardMutation<TTarget>({
   previewTool,
   binding,
   fallbackTargetKind,
+  precondition,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
@@ -121,6 +122,11 @@ export async function guardMutation<TTarget>({
   // itself fails. Required for polymorphic tools like `delete-content` where the caller knows the
   // dispatched resource kind but `targetKindHint(tool)` cannot derive it from the tool name alone.
   fallbackTargetKind?: MutationTarget['kind'];
+  // Optional state check the target must pass for the mutation to proceed (e.g. delete-content's
+  // "still stale" re-evaluation, W-24311035). Runs on a PREVIEW before evidence is established (so a
+  // rejected preview writes nothing) and on a CONFIRM after evidence verifies, immediately before
+  // the caller mutates. An Err emits a DENIED audit whose denyReason is the error's `type`.
+  precondition?: (target: MutationTarget) => Promise<Result<void, McpToolError>>;
 }): Promise<Result<GuardOutcome, McpToolError>> {
   // (2) Build the actor identity up front so a denied attempt is still attributable in the audit.
   const actor: MutationActor = {
@@ -195,8 +201,28 @@ export async function guardMutation<TTarget>({
           previewTool,
           targetKind: target.kind,
           targetId: target.id,
+          detail: evidence.explainRejection?.(),
         }),
       ).toErr();
+    }
+  }
+
+  // (4b) Target-state precondition. On a preview it runs BEFORE establish so a rejected preview
+  // leaves no evidence (no residue); on a confirm it runs after verify, right before the mutation.
+  if (precondition) {
+    const preconditionResult = await precondition(target);
+    if (preconditionResult.isErr()) {
+      emitAuditRecord({
+        actor,
+        tool,
+        action,
+        phase,
+        target,
+        confirmationEvidence: evidenceDescriptor,
+        result: 'denied',
+        denyReason: preconditionResult.error.type,
+      });
+      return preconditionResult.error.toErr();
     }
   }
 

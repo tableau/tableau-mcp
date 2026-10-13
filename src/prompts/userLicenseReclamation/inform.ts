@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { WebPromptFactory } from '../registry.js';
 
 export const LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT = 90;
@@ -57,7 +58,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     'list. Read-only — no user modifications are performed. ' +
     'Consider for general admin/site-health and cost/license questions.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const inactiveDays = args.inactiveDays
       ? parseInt(args.inactiveDays, 10)

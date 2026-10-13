@@ -1,6 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
+import { ContentNotStaleError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -199,6 +200,76 @@ describe('guardMutation', () => {
     const record = auditRecordSchema.parse(audits[0]);
     expect(record.result).toBe('allowed');
     expect(record.phase).toBe('preview');
+  });
+
+  // --- precondition hook (W-24311035) ---
+
+  describe('precondition', () => {
+    const notStale = (): ReturnType<
+      NonNullable<Parameters<typeof guardMutation>[0]['precondition']>
+    > => Promise.resolve(new ContentNotStaleError('Deletion blocked: used recently').toErr());
+
+    it('on preview, a failing precondition denies BEFORE establishing evidence', async () => {
+      const evidence = makeEvidence();
+      const precondition = vi.fn(notStale);
+      const result = await run({ phase: 'preview', evidence, precondition });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.type).toBe('content-not-stale');
+        expect(result.error.message).toContain('used recently');
+      }
+      expect(precondition).toHaveBeenCalledWith(target);
+      expect(evidence.establish).not.toHaveBeenCalled();
+      const record = auditRecordSchema.parse(getAuditRecords()[0]);
+      expect(getAuditRecords()).toHaveLength(1);
+      expect(record.result).toBe('denied');
+      expect(record.denyReason).toBe('content-not-stale');
+      expect(record.phase).toBe('preview');
+    });
+
+    it('on confirm, the precondition runs only after evidence verifies', async () => {
+      const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
+      const precondition = vi.fn(notStale);
+      const result = await run({ phase: 'confirm', evidence, precondition });
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.type).toBe('preview-not-run');
+      }
+      expect(precondition).not.toHaveBeenCalled();
+    });
+
+    it('on confirm, a failing precondition denies with its own reason and no outcome record', async () => {
+      const precondition = vi.fn(notStale);
+      const result = await run({ phase: 'confirm', precondition });
+      expect(result.isErr()).toBe(true);
+      const audits = getAuditRecords();
+      expect(audits).toHaveLength(1);
+      const record = auditRecordSchema.parse(audits[0]);
+      expect(record.result).toBe('denied');
+      expect(record.denyReason).toBe('content-not-stale');
+      expect(record.phase).toBe('confirm');
+    });
+
+    it('a passing precondition lets the mutation proceed', async () => {
+      const evidence = makeEvidence();
+      const precondition = vi.fn().mockResolvedValue(Ok.EMPTY);
+      const result = await run({ phase: 'preview', evidence, precondition });
+      expect(result.isOk()).toBe(true);
+      expect(evidence.establish).toHaveBeenCalled();
+    });
+  });
+
+  it('passes the evidence rejection detail into the PreviewNotRun message', async () => {
+    const evidence = makeEvidence({
+      verify: vi.fn().mockResolvedValue(false),
+      explainRejection: () =>
+        "It carries 'pending-deletion-2026-08-01' from a different cleanup batch.",
+    });
+    const result = await run({ phase: 'confirm', evidence });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain('different cleanup batch');
+    }
   });
 
   // --- confirm-only mode ---

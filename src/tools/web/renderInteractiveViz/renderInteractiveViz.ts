@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { ViewNotAllowedError, WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -15,10 +16,9 @@ import { AppToolResult, WebTool } from '../tool.js';
 import { constructViewWebUrl, getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
-  luid: z
-    .string()
-    .nonempty()
-    .describe('The LUID of the workbook or view to render as an interactive embedded viz.'),
+  luid: luidSchema.describe(
+    'The LUID of the workbook or view to render as an interactive embedded viz.',
+  ),
   objectType: z
     .enum(['workbook', 'view'])
     .describe('Whether the luid refers to a "workbook" or a "view".'),

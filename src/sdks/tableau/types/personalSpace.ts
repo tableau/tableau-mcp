@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// readOnly gates whether publish-workbook may auto-default into this space — a
+// readOnly gates whether publish-workbook may publish into this space — a
 // security-relevant branch. Unlike project.ts's `tableauBoolean` (which defaults
 // unrecognized input to false), unrecognized/missing input here must fail CLOSED
 // (readOnly: true) so an ambiguous response never silently permits an auto-publish.

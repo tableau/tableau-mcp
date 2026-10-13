@@ -82,6 +82,34 @@ export class PreviewNotRunError extends McpToolError {
   }
 }
 
+// Thrown by delete-content (preview AND confirm) when Admin Insights shows the workbook/datasource no
+// longer meets the stale-content criteria — it was used within the threshold, or accessed on/after
+// the cleanup batch's date (W-24311035). statusCode 409: the resource's state blocks the mutation.
+export class ContentNotStaleError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'content-not-stale', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content when the staleness precondition cannot be evaluated (Admin Insights
+// unavailable, or the item is absent from the Site Content extract). The destructive gate fails
+// CLOSED: missing data never authorizes a deletion.
+export class StalenessUnverifiedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'staleness-unverified', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content / confirm-delete-content when a confirm names a cleanup batch older than
+// PENDING_DELETION_MAX_AGE_DAYS. A marker left by a crashed or abandoned preview expires instead of
+// authorizing a delete indefinitely; the marker itself is left in place for explicit cleanup.
+// statusCode 409: the batch's state blocks the mutation.
+export class CleanupBatchExpiredError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'cleanup-batch-expired', message, statusCode: 409 });
+  }
+}
+
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
     super({ type: 'feature-disabled', message, statusCode: 404 });

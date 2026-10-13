@@ -6,8 +6,9 @@
  */
 
 import { getConfig } from '../../config.js';
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
+import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { getFeatureGate } from '../../features/init.js';
-import { isSlackClient } from '../../telemetry/clientDisplayName.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
@@ -41,6 +42,7 @@ export type McpScope =
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
@@ -62,11 +64,13 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
@@ -74,7 +78,9 @@ export type TableauApiScope =
   | 'tableau:users:update'
   | 'tableau:workbooks:update'
   | 'tableau:knowledge:read'
-  | 'tableau:knowledge:write';
+  | 'tableau:knowledge:write'
+  | 'tableau:permissions:read'
+  | 'tableau:packages:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -168,17 +174,32 @@ export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 
 /**
+ * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
+ * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
+ */
+export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:packages:read',
+];
+
+/**
  * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
- * NOT narrow its JWT scopes per call — it always requests the full set via `tool.requiredApiScopes`
+ * NOT narrow its base JWT scopes per call — it always requests this set via `tool.requiredApiScopes`
  * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
- * `tableau:content:read` before ANY publish-workbook call succeeds, not just personal-space ones —
+ * `tableau:projects:read` for the Personal Space lookup before ANY publish-workbook call succeeds,
+ * not just personal-space ones —
  * simplicity over narrowing the blast radius.
+ *
+ * The optional permissions read uses a separate REST session so a missing permissions scope
+ * cannot prevent publishing. Its scope is advertised when publishing is enabled and optional
+ * scopes are requested.
  */
 export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:workbooks:create',
   'tableau:file_uploads:create',
-  'tableau:content:read',
+  'tableau:projects:read',
 ];
+
+export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -346,7 +367,11 @@ const toolScopeMap: Record<
   },
   'move-workbook': {
     mcp: ['tableau:mcp:workbook:write'],
-    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:workbooks:update',
+      'tableau:projects:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -467,16 +492,24 @@ const toolScopeMap: Record<
   // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
   // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
   // route through resourceAccessChecker.
+  // Workbook/datasource paths also query Admin Insights Site Content (VDS) for the staleness
+  // precondition (W-24311035). `action: "remove-pending-tags"` additionally needs the tag-delete
+  // scopes (W-24199845).
   'delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
+      'tableau:workbook_tags:delete',
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:datasource_tags:delete',
       'tableau:tasks:read',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -490,15 +523,18 @@ const toolScopeMap: Record<
       'tableau:datasource_tags:update',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // The tool makes no Tableau REST API calls at all — it only writes a bundled template to disk
-  // or presigns a GET URL against a pre-published S3 object. Datasource wiring is entirely the
-  // caller's/skill's responsibility, applied outside this tool.
+  // Requires the site's external allowed-origins policy before returning the bundled template
+  // (or uploading it to S3 and presigning a GET URL).
+  // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],
-    api: new Set<TableauApiScope>([]),
+    api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
 };
 
@@ -507,19 +543,18 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
-  const slackClient = isSlackClient(clientId);
-  // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
-  // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
-  // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
+  // Mirrors the per-client `disabled` provider on the authoring tool registrations.
   const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
+    (await featureGate.isFeatureEnabled('authoring-tools')) &&
+    (await isAuthoringAllowedForClient(clientId));
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
+  const adminToolsEnabled = await isAdminToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
-  if (!config.adminToolsEnabled) {
+  if (!adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
@@ -595,12 +630,19 @@ export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(clientId?: string): Promise<TableauApiScope[]> {
+export async function getSupportedApiScopes(
+  clientId?: string,
+  { includeOptionalScopes = true }: { includeOptionalScopes?: boolean } = {},
+): Promise<TableauApiScope[]> {
   const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
   const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
     'enforce-registration-conditions',
   );
+
+  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
+    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+  }
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {

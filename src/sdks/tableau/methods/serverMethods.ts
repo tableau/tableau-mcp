@@ -1,8 +1,10 @@
-import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { isErrorFromAlias } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { serverApis, Session } from '../apis/serverApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { ServerInfo } from '../types/serverInfo.js';
@@ -19,7 +21,7 @@ import Methods from './methods.js';
  */
 export class ServerMethods extends Methods<typeof serverApis> {
   constructor(baseUrl: string, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, serverApis, { axiosConfig }));
+    super(createGuardedZodios(baseUrl, serverApis, { axiosConfig }));
   }
 
   /**
@@ -42,7 +44,7 @@ export class ServerMethods extends Methods<typeof serverApis> {
  */
 export class AuthenticatedServerMethods extends AuthenticatedMethods<typeof serverApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, serverApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, serverApis, { axiosConfig }), creds);
   }
 
   /**
@@ -61,6 +63,8 @@ export class AuthenticatedServerMethods extends AuthenticatedMethods<typeof serv
       });
       return Ok(response.session);
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       if (isErrorFromAlias(this._apiClient.api, 'getCurrentServerSession', error)) {
         return Err({ type: 'unauthorized', message: error.response.data.error });
       }

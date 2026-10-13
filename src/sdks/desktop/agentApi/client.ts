@@ -1,4 +1,4 @@
-import { Zodios, ZodiosInstance } from '@zodios/core';
+import { ZodiosInstance } from '@zodios/core';
 import { existsSync, readFileSync } from 'fs';
 import { Agent } from 'http';
 import { homedir } from 'os';
@@ -12,6 +12,8 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from '../../interceptors.js';
+import { assertSafeRequestUrl } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { agentApis } from './apis.js';
 import {
   agentTokenSchema,
@@ -46,7 +48,7 @@ export class AgentApiClient {
         ? join(process.env.LOCALAPPDATA ?? '', 'Tableau', 'Desktop', 'agent-token.txt')
         : join(homedir(), '.tableau', 'agent-token.txt');
 
-    this._apiClient = new Zodios(baseUrl, agentApis, {
+    this._apiClient = createGuardedZodios(baseUrl, agentApis, {
       axiosConfig: {
         timeout: options.maxRequestTimeoutMs,
         signal: options.signal,
@@ -59,6 +61,9 @@ export class AgentApiClient {
 
     this._apiClient.axios.interceptors.request.use(
       (config) => {
+        // Runs before the route guard installed by `createGuardedZodios` (axios runs request
+        // interceptors in reverse order), so check the URL before it can be logged.
+        assertSafeRequestUrl(config.url, config.baseURL);
         options.requestInterceptor?.[0]({
           baseUrl,
           ...getRequestInterceptorConfig(config),

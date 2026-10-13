@@ -79,12 +79,11 @@ export abstract class Server {
         },
       );
 
-    // Guard against silently dropping instructions on the provided-mcpServer path. The SDK reads
-    // `instructions` ONLY from the McpServer constructor options and never exposes a setter, so when
-    // a caller supplies its own McpServer (e.g. index.combined.ts) it MUST have built that McpServer
-    // WITH the composed instructions (see buildWebInstructions()). We can't set them here after the
-    // fact, so we assert the supplied server already carries them rather than let the discoverability
-    // guidance no-op. `_instructions` is the SDK's internal field (underscore, not truly private).
+    // Guard against silently dropping instructions on the provided-mcpServer path. The SDK takes
+    // `instructions` from the McpServer constructor options and exposes no setter, so a caller that
+    // supplies its own McpServer (e.g. index.combined.ts) MUST have built it WITH the base
+    // instructions (see buildWebInstructions()); later additions go through appendInstructions().
+    // `_instructions` is the SDK's internal field (underscore, not truly private).
     if (mcpServer && instructions) {
       const suppliedInstructions = (mcpServer.server as unknown as { _instructions?: string })
         ._instructions;

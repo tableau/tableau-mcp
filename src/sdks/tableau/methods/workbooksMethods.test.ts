@@ -91,6 +91,90 @@ describe('WorkbooksMethods', () => {
     });
   });
 
+  describe('queryWorkbookPermissions', () => {
+    it('returns the grantee capabilities and calls with site/workbook params', async () => {
+      const granteeCapabilities = [
+        {
+          user: { id: 'user-1', name: 'alice' },
+          capabilities: { capability: [{ name: 'Read', mode: 'Allow' }] },
+        },
+        {
+          group: { id: 'group-1', name: 'Analysts' },
+          capabilities: {
+            capability: [
+              { name: 'Read', mode: 'Allow' },
+              { name: 'Write', mode: 'Deny' },
+            ],
+          },
+        },
+      ];
+      const mockQueryWorkbookPermissions = vi.fn().mockResolvedValue({
+        permissions: { workbook: { id: 'wb-1', name: 'My Workbook' }, granteeCapabilities },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: mockQueryWorkbookPermissions,
+      };
+
+      const result = await workbooksMethods.queryWorkbookPermissions({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+      });
+
+      expect(result).toEqual(granteeCapabilities);
+      expect(mockQueryWorkbookPermissions).toHaveBeenCalledWith({
+        params: { siteId: 'site-1', workbookId: 'wb-1' },
+        headers: { Authorization: 'Bearer test' },
+      });
+    });
+
+    it('returns an empty array when the workbook has no grantee capabilities', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: vi.fn().mockResolvedValue({ permissions: {} }),
+      };
+
+      expect(
+        await workbooksMethods.queryWorkbookPermissions({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual([]);
+    });
+
+    it('passes through grantees that omit capabilities or the user/group name', async () => {
+      const granteeCapabilities = [
+        { user: { id: 'user-1' } },
+        {
+          group: { id: 'group-1' },
+          capabilities: { capability: [{ name: 'Read', mode: 'Allow' }] },
+        },
+      ];
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 't' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        queryWorkbookPermissions: vi
+          .fn()
+          .mockResolvedValue({ permissions: { granteeCapabilities } }),
+      };
+
+      expect(
+        await workbooksMethods.queryWorkbookPermissions({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).toEqual(granteeCapabilities);
+    });
+  });
+
   describe('updateWorkbook', () => {
     it('PUTs the new project id and returns the partial updated workbook', async () => {
       const mockUpdateWorkbook = vi.fn().mockResolvedValue({
@@ -120,6 +204,59 @@ describe('WorkbooksMethods', () => {
           headers: { Authorization: 'Bearer test' },
         },
       );
+    });
+
+    it('PUTs a PersonalSpace location when location is given', async () => {
+      const mockUpdateWorkbook = vi.fn().mockResolvedValue({
+        workbook: { id: 'wb-1', location: { id: 'ps-1', type: 'PersonalSpace' } },
+      });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        updateWorkbook: mockUpdateWorkbook,
+      };
+
+      await workbooksMethods.updateWorkbook({
+        siteId: 'site-1',
+        workbookId: 'wb-1',
+        location: 'ps-1',
+      });
+
+      expect(mockUpdateWorkbook).toHaveBeenCalledWith(
+        { workbook: { location: { id: 'ps-1', type: 'PersonalSpace' } } },
+        {
+          params: { siteId: 'site-1', workbookId: 'wb-1' },
+          headers: { Authorization: 'Bearer test' },
+        },
+      );
+    });
+
+    it('rejects when both or neither of projectId and location are given', async () => {
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      const mockUpdateWorkbook = vi.fn();
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = { updateWorkbook: mockUpdateWorkbook };
+
+      await expect(
+        workbooksMethods.updateWorkbook({
+          siteId: 'site-1',
+          workbookId: 'wb-1',
+          projectId: 'project-2',
+          location: 'ps-1',
+        }),
+      ).rejects.toThrow('accepts only one of `projectId` or `location`, not both');
+      await expect(
+        workbooksMethods.updateWorkbook({ siteId: 'site-1', workbookId: 'wb-1' }),
+      ).rejects.toThrow('requires one of `projectId` or `location`');
+      expect(mockUpdateWorkbook).not.toHaveBeenCalled();
     });
   });
 
@@ -161,7 +298,7 @@ describe('WorkbooksMethods', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
 
       const [url, body, config] = mockPost.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/workbooks');
+      expect(url).toBe('/sites/site-1/workbooks');
       expect(Buffer.isBuffer(body)).toBe(true);
       expect(body.toString('utf-8')).toContain(
         '<tsRequest><workbook name="My Workbook"><project id="project-1"/></workbook></tsRequest>',
@@ -306,7 +443,7 @@ describe('WorkbooksMethods', () => {
           projectId: 'project-1',
           location: 'ps-luid',
         }),
-      ).rejects.toThrow('exactly one of `projectId` or `location`');
+      ).rejects.toThrow('accepts only one of `projectId` or `location`, not both');
     });
 
     it('throws when neither projectId nor location is provided', async () => {
@@ -327,7 +464,7 @@ describe('WorkbooksMethods', () => {
           workbookType: 'twbx',
           name: 'My Workbook',
         }),
-      ).rejects.toThrow('exactly one of `projectId` or `location`');
+      ).rejects.toThrow('requires one of `projectId` or `location`');
     });
 
     it('passes overwrite through as a query param when provided', async () => {
@@ -412,7 +549,7 @@ describe('WorkbooksMethods', () => {
       expect(mockPost).toHaveBeenCalledTimes(1);
 
       const [url, body, config] = mockPost.mock.calls[0];
-      expect(url).toBe('http://test/sites/site-1/workbooks/validateWorkbookAndUpload');
+      expect(url).toBe('/sites/site-1/workbooks/validateWorkbookAndUpload');
       expect(Buffer.isBuffer(body)).toBe(true);
       expect(body.toString('utf-8')).toContain('<workbook />');
       expect(body.toString('latin1')).toContain(

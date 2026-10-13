@@ -1,8 +1,9 @@
-import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import {
   parseGetFlowRunTasksResponse,
   parseListExtractRefreshTasksResponse,
@@ -38,7 +39,7 @@ export type UpdateCloudExtractRefreshTaskError =
  */
 export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, tasksApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, tasksApis, { axiosConfig }), creds);
   }
 
   /**
@@ -127,6 +128,8 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
         schedule: response.schedule ?? response.extractRefresh?.schedule,
       });
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       const parsed = parseTableauApiError(error);
       if (parsed) {
         return new Err({ type: 'tableau-api', ...parsed });
