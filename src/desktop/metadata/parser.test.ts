@@ -32,6 +32,20 @@ describe('parseXML', () => {
   });
 });
 
+describe('parseXML DOCTYPE and entity limits', () => {
+  it('refuses a DOCTYPE entity document instead of expanding ~61 KB into ~20 MB', () => {
+    const xml = `<?xml version="1.0"?><!DOCTYPE w [<!ENTITY a "${'x'.repeat(1000)}">]><w><t>${'&a;'.repeat(20_000)}</t></w>`;
+    expect(xml.length).toBeGreaterThan(60_000);
+    expect(() => parseXML(xml)).toThrow(/DOCTYPE/);
+  });
+
+  it('still parses a workbook with 200k &apos; entities', () => {
+    const xml = `<workbook><worksheets><worksheet name="S"><t>${'&apos;'.repeat(200_000)}</t></worksheet></worksheets></workbook>`;
+    const parsed = parseXML(xml) as any;
+    expect(parsed.workbook.worksheets.worksheet[0].t).toBe("'".repeat(200_000));
+  });
+});
+
 describe('normalizeArray', () => {
   it('should return empty array for undefined', () => {
     expect(normalizeArray(undefined)).toEqual([]);

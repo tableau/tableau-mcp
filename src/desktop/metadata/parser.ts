@@ -172,6 +172,10 @@ const numericEntityPreservingBuilder = new XMLBuilder(numericEntityPreservingBui
 
 export function parseXML(xmlString: string): ParsedWorkbook {
   try {
+    // Workbooks never carry a DOCTYPE, and its internal entities would amplify input into the raised limits above.
+    if (xmlString.includes('<!DOCTYPE')) {
+      throw new Error('DOCTYPE declarations are not allowed in workbook XML');
+    }
     const { protectedXml, sentinel } = protectNumericEntities(xmlString);
     const parsed = parser.parse(protectedXml) as ParsedWorkbook;
     decodeNumericEntitySentinels(parsed, sentinel);
