@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { findMissingPackageTargets } from './packedPackageTargets.js';
+
 interface PackFile {
   path: string;
 }
@@ -14,6 +16,8 @@ interface PackResult {
 }
 
 interface PackedPackage {
+  main?: string;
+  types?: string;
   bin?: Record<string, string>;
   exports?: Record<string, unknown>;
 }
@@ -111,6 +115,13 @@ if (
 
 if (Object.hasOwn(packedPackage.exports ?? {}, './desktop')) {
   fail('package exports must not include ./desktop');
+}
+
+const missingTargets = findMissingPackageTargets(packedPackage, packedPaths);
+if (missingTargets.length > 0) {
+  fail(
+    `package.json main/types/bin/exports targets are missing from the tarball: ${missingTargets.join(', ')}`,
+  );
 }
 
 process.stdout.write(
