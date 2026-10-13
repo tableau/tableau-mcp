@@ -133,6 +133,25 @@ export function buildTemplateWorksheetArtifact({
       ).toErr();
     }
 
+    // The legacy binder forces aggregated calculations to `usr`, including when an
+    // override was requested. Artifact callers require exact aggregation semantics.
+    // Compare raw prefixes so punctuation in datasource and field names stays intact.
+    for (const slot of explicitBind.templateSlots) {
+      const requested = plan.derivationOverrides?.[slot.slot_id];
+      if (requested === undefined) continue;
+      const key = slot.qualified_key_required
+        ? `${slot.template_field}@${slot.derivation}`
+        : slot.template_field;
+      const bound = explicitBind.fieldMapping[key];
+      if (!bound?.startsWith(`[${explicitBind.datasource}].[${requested}:`)) {
+        return new ArgsValidationError(
+          `Aggregation override '${requested}' for slot '${slot.slot_id}' cannot be honored: ` +
+            `the binding emits '${bound}'. Already aggregated fields retain their existing calculation. ` +
+            'Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.',
+        ).toErr();
+      }
+    }
+
     const injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml: snapshot.xml,

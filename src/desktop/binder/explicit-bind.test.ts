@@ -1393,3 +1393,213 @@ describe('schemaSummaryFromAvailableFields', () => {
     expect(summary.fields[0].name).toBe('Sales');
   });
 });
+
+describe('explicit field derivations in ordered planner bindings', () => {
+  it('preserves requested average only when explicitly supplied and keeps legacy defaults', () => {
+    const ref = '[Superstore].[avg:Sales:qk]';
+    const legacy = bindExplicitTemplate('kpi-text', [ref], SUMMARY, { contract: KPI });
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) return;
+    expect(legacy.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[sum:Sales:qk]');
+    const requested = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+      contract: KPI,
+      requestedDerivations: { [ref]: 'avg' },
+    });
+    expect(requested.ok).toBe(true);
+    if (!requested.ok) return;
+    expect(requested.derivationOverrides).toEqual({ field_base_1: 'avg' });
+    expect(requested.fieldMapping['{{field_base_1}}']).toBe(ref);
+  });
+
+  it('uses the requested count to assign a dimension to a quantitative slot', () => {
+    const ref = '[Superstore].[ctd:Order ID:nk]';
+    const result = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+      contract: KPI,
+      requestedDerivations: { [ref]: 'ctd' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.derivationOverrides).toEqual({ field_base_1: 'ctd' });
+    expect(result.fieldMapping['{{field_base_1}}']).toBe('[Superstore].[ctd:Order ID:qk]');
+  });
+
+  it('refuses changing aggregation when the same template field feeds an authored calculation', () => {
+    const ref = '[Superstore].[avg:Sales:qk]';
+    const result = bindExplicitTemplate('x-count-calc', [ref], SUMMARY, {
+      contract: COUNT_CALC,
+      requestedDerivations: { [ref]: 'avg' },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((error) => error.detail.includes('leaving the calculation'))).toBe(
+      true,
+    );
+  });
+
+  it('does not reinterpret the template default date grain', () => {
+    const contract: TemplateBindingContract = {
+      ...KPI,
+      template: 'date-test',
+      slots: [{ ...KPI.slots[0], kind: 'temporal', derivation: 'yr' }],
+    };
+    const result = bindExplicitTemplate(
+      'date-test',
+      ['[Superstore].[none:Order Date:ok]'],
+      SUMMARY,
+      { contract, requestedDerivations: {} },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping['{{field_base_1}}']).toContain('[yr:Order Date:');
+    expect(result.derivationOverrides).toBeUndefined();
+  });
+});
+
+describe('temporal MIN/MAX compatibility through both explicit binding modes', () => {
+  const cases = ['date', 'datetime'].flatMap((datatype) =>
+    (['min', 'max'] as const).flatMap((derivation) =>
+      (['quantitative', 'quantitative-or-categorical'] as const).flatMap((kind) =>
+        [false, true].map((override) => ({ datatype, derivation, kind, override })),
+      ),
+    ),
+  );
+  it.each(cases)(
+    'binds $datatype $derivation to $kind (override=$override)',
+    ({ datatype, derivation, kind, override }) => {
+      const source = field({
+        name: 'Event Time',
+        role: 'dimension',
+        type: 'ordinal',
+        datatype,
+        refDerivation: 'none',
+      });
+      const schema = { datasource: 'Superstore', fields: [source] };
+      const contract: TemplateBindingContract = {
+        ...KPI,
+        slots: [
+          { ...KPI.slots[0], kind, derivation: override ? 'sum' : derivation, instance_role: 'qk' },
+        ],
+      };
+      const ref = `[Superstore].[${derivation}:Event Time:ok]`;
+      const ordered = bindExplicitTemplate('kpi-text', [ref], schema, {
+        contract,
+        ...(override ? { requestedDerivations: { [ref]: derivation } } : {}),
+      });
+      expect(ordered.ok).toBe(true);
+      if (!ordered.ok) return;
+      expect(ordered.fieldMapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${derivation}:Event Time:qk]`,
+      );
+      const mapped = bindExplicitTemplate(
+        'kpi-text',
+        { field_base_1: ordered.fieldMapping['{{field_base_1}}'] },
+        schema,
+        {
+          contract,
+          derivationOverrides: ordered.derivationOverrides,
+        },
+      );
+      expect(mapped.ok).toBe(true);
+      if (!mapped.ok) return;
+      expect(mapped.fieldMapping).toEqual(ordered.fieldMapping);
+      expect(mapped.fieldMetadata['{{field_base_1}}']).toMatchObject({ datatype, type: 'ordinal' });
+    },
+  );
+
+  it.each(['sum', 'avg', 'med', 'std', 'stp', 'var', 'vrp'] as const)(
+    'does not allow %s on a date',
+    (derivation) => {
+      const ref = `[Superstore].[${derivation}:Order Date:ok]`;
+      const result = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+        contract: KPI,
+        requestedDerivations: { [ref]: derivation },
+      });
+      expect(result.ok).toBe(false);
+    },
+  );
+
+  it.each(['min', 'max'] as const)('does not allow %s on a string dimension', (derivation) => {
+    const ref = `[Superstore].[${derivation}:Order ID:nk]`;
+    const result = bindExplicitTemplate('kpi-text', [ref], SUMMARY, {
+      contract: KPI,
+      requestedDerivations: { [ref]: derivation },
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('ordered aggregation binding reserves categorical fields', () => {
+  it.each(
+    (['min', 'max', 'cnt', 'ctd'] as const).flatMap((derivation) =>
+      [false, true].map((reverse) => ({ derivation, reverse })),
+    ),
+  )('keeps optional color empty for $derivation (reverse=$reverse)', ({ derivation, reverse }) => {
+    const contract: TemplateBindingContract = {
+      ...KPI,
+      template: 'optional-color',
+      slots: [
+        {
+          ...KPI.slots[0],
+          slot_id: 'color',
+          template_field: 'Color',
+          kind: 'categorical',
+          derivation: 'none',
+          required: false,
+          role: ['color'],
+        },
+        {
+          ...KPI.slots[0],
+          slot_id: 'category',
+          template_field: 'Category',
+          kind: 'categorical',
+          derivation: 'none',
+          role: ['rows'],
+        },
+        { ...KPI.slots[0], slot_id: 'value', template_field: 'Value', instance_role: 'qk' },
+      ],
+    };
+    const ref = `[Superstore].[${derivation}:Order Date:ok]`;
+    const refs = [ref, '[Superstore].[none:Segment:nk]'];
+    const result = bindExplicitTemplate(
+      'optional-color',
+      reverse ? refs.reverse() : refs,
+      SUMMARY,
+      {
+        contract,
+        requestedDerivations: { [ref]: derivation },
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fieldMapping).toEqual({
+      Category: '[Superstore].[none:Segment:nk]',
+      Value: `[Superstore].[${derivation}:Order Date:qk]`,
+    });
+    expect(result.derivationOverrides).toEqual({ value: derivation });
+  });
+});
+
+describe('temporal aggregate compatibility retains explicit encodings', () => {
+  it.each(['min', 'max'] as const)(
+    'preserves an explicitly targeted categorical %s date encoding',
+    (derivation) => {
+      const contract: TemplateBindingContract = {
+        ...KPI,
+        slots: [{ ...KPI.slots[0], kind: 'categorical', derivation, instance_role: 'ok' }],
+      };
+      const ref = '[Superstore].[none:Order Date:ok]';
+      const authored = bindExplicitTemplate('kpi-text', [ref], SUMMARY, { contract });
+      const explicit = bindExplicitTemplate('kpi-text', { field_base_1: ref }, SUMMARY, {
+        contract,
+        derivationOverrides: { field_base_1: derivation },
+      });
+      expect(authored.ok).toBe(true);
+      expect(explicit.ok).toBe(true);
+      if (!authored.ok || !explicit.ok) return;
+      expect(explicit.fieldMapping).toEqual(authored.fieldMapping);
+      expect(explicit.fieldMapping['{{field_base_1}}']).toBe(
+        `[Superstore].[${derivation}:Order Date:ok]`,
+      );
+    },
+  );
+});

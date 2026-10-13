@@ -22,6 +22,7 @@ import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
 
 function getSuccessResult(result: unknown): CallToolResult {
   return {
@@ -212,7 +213,13 @@ export const getBatchCreateAndCacheSheetsTool = (
           }
           msg += hasArtifactFailures
             ? '\n\nPhase 2 is not ready. Retry the failed fetch/cache steps before continuing.'
-            : '\n\nReady for Phase 2 parallel execution.';
+            : '\n\nWorksheet caches are ready for build and apply. Dashboard apply is a separate, later step.';
+          const registration = dashboardCreationPrerequisite(dashboardName, worksheetNames);
+          if (registration.required) {
+            msg +=
+              '\n\nDashboard apply is blocked until the rendered worksheet views are registered.\n' +
+              registration.instructions.join('\n');
+          }
           // Host verification receipt (W-23447506): the accepted live readback seeds Phase 2,
           // but it is not a structural comparison against the full requested intent.
           msg += applyResult.isOk()
@@ -234,6 +241,11 @@ export const getBatchCreateAndCacheSheetsTool = (
             worksheetFiles,
             dashboardFile,
             workbookFile,
+            readiness: {
+              worksheetBuild: !hasArtifactFailures,
+              dashboardApply: !hasArtifactFailures && !registration.required,
+            },
+            registration,
           };
           if (hasArtifactFailures) {
             return new IncompleteOperationError({

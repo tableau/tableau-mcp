@@ -61,7 +61,9 @@ import { DesktopTool } from '../../tool.js';
 import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
-  resolveRenderedWorksheetNames,
+  emptyWorksheetWarning,
+  findBlankWorksheetNames,
+  resolveLiveWorksheetNames,
   validateComposeDashboardInput,
 } from './composeDashboardCore.js';
 
@@ -120,6 +122,7 @@ type StepReceipt =
       worksheets: string[];
       replaced: boolean;
       verification: { status: 'passed'; issues: [] };
+      warnings?: string[];
     }
   | {
       index: number;
@@ -387,7 +390,7 @@ export const getRunDashboardBatchTool = (
               }
             }
 
-            const resolvedExistingNames = resolveRenderedWorksheetNames(
+            const resolvedExistingNames = resolveLiveWorksheetNames(
               workbookXml,
               requestedExistingNames,
             );
@@ -399,7 +402,7 @@ export const getRunDashboardBatchTool = (
                 steps,
                 orderedArtifactIds,
                 dashboardName,
-                `Missing live rendered worksheet name(s): ${missingExistingNames
+                `Missing live worksheet name(s): ${missingExistingNames
                   .map((name) => `"${name}"`)
                   .join(', ')}.`,
                 'existingWorksheet',
@@ -413,7 +416,7 @@ export const getRunDashboardBatchTool = (
               layoutType === 'executive-summary'
                 ? canonicalDifference(kpiWorksheetNames ?? [], explicitlyResolvedNames)
                 : [];
-            const resolvedImplicitKpiNames = resolveRenderedWorksheetNames(
+            const resolvedImplicitKpiNames = resolveLiveWorksheetNames(
               workbookXml,
               unresolvedKpiRoleNames,
             );
@@ -425,7 +428,7 @@ export const getRunDashboardBatchTool = (
                 steps,
                 orderedArtifactIds,
                 dashboardName,
-                `Missing live rendered KPI worksheet name(s): ${missingKpiNames
+                `Missing live KPI worksheet name(s): ${missingKpiNames
                   .map((name) => `"${name}"`)
                   .join(
                     ', ',
@@ -615,6 +618,8 @@ export const getRunDashboardBatchTool = (
               });
             }
 
+            const emptyWorksheetNames = findBlankWorksheetNames(polled.value, worksheetNames);
+
             await activateSheetWithValidatedGoto({
               sheetName: dashboardName,
               executor,
@@ -643,6 +648,9 @@ export const getRunDashboardBatchTool = (
               worksheets: worksheetNames,
               replaced,
               verification: { status: 'passed', issues: [] },
+              ...(emptyWorksheetNames.length > 0
+                ? { warnings: [emptyWorksheetWarning(emptyWorksheetNames)] }
+                : {}),
             });
             return Ok({ applied: true, retrySafe: false, steps: successSteps });
           } catch (error) {

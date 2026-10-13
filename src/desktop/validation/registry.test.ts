@@ -15,6 +15,17 @@ describe('validation framework', () => {
       expect(introducedBlockingValidationIssues([issue()], [issue()])).toEqual([]);
     });
 
+    it('never grandfathers the worksheet-zone crash hazard, including a reduced occurrence count', () => {
+      const crash = issue({ ruleId: 'dashboard-worksheet-zone-type' });
+      expect(introducedBlockingValidationIssues([crash], [crash])).toEqual([crash]);
+      expect(introducedBlockingValidationIssues([crash, crash], [crash])).toEqual([crash]);
+    });
+
+    it('permits a repair that removes the worksheet-zone crash hazard', () => {
+      const crash = issue({ ruleId: 'dashboard-worksheet-zone-type' });
+      expect(introducedBlockingValidationIssues([crash, issue()], [issue()])).toEqual([]);
+    });
+
     it('returns a newly introduced blocking issue', () => {
       const introduced = issue({ xpath: '//worksheet[@name="New"]' });
 

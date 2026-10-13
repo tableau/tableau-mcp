@@ -35,7 +35,9 @@ export const getGetWorksheetXmlTool = (
     server,
     name: 'get-worksheet-xml',
     title,
-    description: 'Get structure for an EXISTING worksheet.',
+    description:
+      'Get structure for an EXISTING worksheet from live Desktop. Resets its active edit buffer. ' +
+      'For pending drafts, read the cached file instead; do not use this tool.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // Writes to a cache file

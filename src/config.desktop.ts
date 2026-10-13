@@ -8,6 +8,7 @@ import {
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
 } from './desktop/limits/inlineImageCap.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
+import { parseSessionLuid } from './desktop/session/parseSessionLuid.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
 import { parseNumber } from './utils/parseNumber.js';
 
@@ -49,6 +50,32 @@ export class Config extends BaseConfig {
   desktopSessionId: string | undefined;
 
   /**
+   * Stable GUID identity of the launching Tableau Desktop session, pinned via
+   * `TABLEAU_DESKTOP_SESSION_LUID` (the guid counterpart to the pid in `TABLEAU_DESKTOP_SESSION_ID`).
+   * Forwarded as the product-telemetry `session_id`, so a run's desktop tool calls can be
+   * correlated the way the web path correlates by mcp-session-id. Ignored unless it is a
+   * well-formed GUID.
+   */
+  desktopSessionLuid: string | undefined;
+
+  /**
+   * Signed-in Tableau site and user LUID of the launching Desktop session, forwarded by the agent
+   * from `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch) and sent as
+   * product-telemetry context. Empty string when the launcher did not provide them. The server/pod
+   * is resolved separately from `TABLEAU_POD_NAME` in resolveTelemetryEnv (telemetryForwarder.ts).
+   */
+  siteLuid: string;
+  userLuid: string;
+
+  /**
+   * The agent's chat (conversation) id for this session, forwarded by tab-agent-south via
+   * `TABLEAU_CHAT_ID`. The agent spawns one desktop MCP child per chat, so this is stable for
+   * the child's life. Sent as the product-telemetry `chat_id` to correlate a run's desktop tool
+   * calls with the conversation that drove them. Empty string when the launcher did not provide it.
+   */
+  chatId: string;
+
+  /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
    * agent is told Desktop stopped answering. Env-overridable via TABLEAU_DESKTOP_CALL_TIMEOUT_MS;
    * values under MIN_DESKTOP_CALL_TIMEOUT_MS are ignored because they would cut real work.
@@ -74,6 +101,10 @@ export class Config extends BaseConfig {
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
+      TABLEAU_SITE_LUID: siteLuid,
+      TABLEAU_USER_LUID: userLuid,
+      TABLEAU_CHAT_ID: chatId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
     } = cleansedVars;
@@ -87,6 +118,12 @@ export class Config extends BaseConfig {
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
         ? desktopSessionId
         : undefined;
+
+    this.desktopSessionLuid = desktopSessionLuid ? parseSessionLuid(desktopSessionLuid) : undefined;
+
+    this.siteLuid = siteLuid || '';
+    this.userLuid = userLuid || '';
+    this.chatId = chatId || '';
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,

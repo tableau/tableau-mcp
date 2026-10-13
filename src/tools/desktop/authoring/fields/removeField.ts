@@ -19,8 +19,9 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
-import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
+import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { FieldRemovalPlacement, removeFieldResult } from './removeFieldResult.js';
 import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be removed from. */
@@ -39,17 +40,14 @@ const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: z
-    .string()
+  worksheetName: z.string().optional().describe('Sheet to edit; or supply worksheetFile.'),
+  worksheetFile: z.string().optional().describe('Cached path; omit to continue edits by name.'),
+  target: z.enum(FIELD_TARGETS).describe('Confirmed shelf.'),
+  columnRef: z.string().describe('Exact placed reference.'),
+  encodingType: z
+    .enum(ENCODING_TYPES)
     .optional()
-    .describe('Sheet to edit; name-only calls continue the open edit buffer.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe('Cached sheet path to force an edit target; omit to continue the open edit buffer.'),
-  target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
-  columnRef: z.string().describe('Field to remove.'),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
+    .describe('Required for encoding; detail=lod; first pane.'),
 };
 
 const title = 'Removing field';
@@ -58,7 +56,9 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     server,
     name: 'remove-field',
     title,
-    description: 'Remove a field from a shelf (rows/cols/encoding); counterpart to add-field.',
+    description:
+      'Remove a field, without moving it. Inspect current placements first. ' +
+      'Reuse the same cached file for pending edits; live reads reset them.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -107,7 +107,8 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
           }
 
           let modifiedXml: string;
-          let placement: string;
+          let placement: FieldRemovalPlacement;
+          let removalResult: ReturnType<typeof removeFieldResult>;
           try {
             switch (target) {
               case 'rows':
@@ -120,13 +121,15 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
                 break;
               case 'encoding':
                 modifiedXml = removeFieldFromEncoding(worksheetXml, encodingType!, columnRef);
-                placement = `${encodingType} encoding`;
+                placement = `${encodingType!} encoding`;
                 break;
               default: {
                 const _exhaustive: never = target;
                 throw new Error(`Unknown target: ${String(_exhaustive)}`);
               }
             }
+            // Build the receipt before writing so a snapshot failure cannot leave a changed draft.
+            removalResult = removeFieldResult(placement, worksheetFile, columnRef, modifiedXml);
           } catch (error) {
             return new XmlModificationError(
               error instanceof Error ? error.message : String(error),
@@ -146,15 +149,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             return new FileReadError(error).toErr();
           }
 
-          return new Ok(
-            withNextAction(
-              {
-                message: `Successfully removed field from ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
-                file: worksheetFile,
-              },
-              prefillNextAction('Apply worksheet edits'),
-            ),
-          );
+          return new Ok(removalResult);
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

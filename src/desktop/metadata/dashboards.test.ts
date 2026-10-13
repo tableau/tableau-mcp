@@ -1,5 +1,6 @@
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
+  addDashboard,
   deleteDashboard,
   extractDashboardXml,
   listDashboardRefs,
@@ -7,6 +8,20 @@ import {
   resolveDashboardRef,
   upsertDashboardIntoWorkbook,
 } from './dashboards.js';
+import { normalizeArray, parseXML } from './parser.js';
+
+describe('addDashboard', () => {
+  it('creates a dashboard shell with a vertical flow inside the root basic layout', () => {
+    const workbook = parseXML(addDashboard('<workbook/>', 'New Dashboard'));
+    const root = normalizeArray(
+      normalizeArray(workbook.workbook?.dashboards?.dashboard)[0]?.zones?.zone,
+    )[0];
+    expect(root?.['@_type-v2']).toBe('layout-basic');
+    const flow = normalizeArray(root?.zone)[0];
+    expect(flow).toMatchObject({ '@_type-v2': 'layout-flow', '@_param': 'vert' });
+    expect(root?.['@_id']).not.toBe(flow?.['@_id']);
+  });
+});
 
 // Same shape as the worksheet regression (sheets.test.ts): the <workbook> root declares
 // xmlns:user, and a zone's filter carries a user:-prefixed attribute. The declaration lives on

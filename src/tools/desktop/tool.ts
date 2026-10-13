@@ -11,8 +11,10 @@ import {
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
 import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
+import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
@@ -65,7 +67,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     const { requestId } = extra;
     this.notifyInvocation({ requestId, args });
 
-    let toolResult: CallToolResult;
+    let toolResult: CallToolResult | undefined;
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
     const episodeId = currentEpisodeId(sessionId);
 
@@ -77,6 +79,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     });
     const startedAt = performance.now();
 
+    // Mirrors the web path's `tool_call` product-telemetry event (see src/tools/web/tool.ts) so
+    // desktop tool calls land in the same pipeline. Emitted once, in the finally below.
+    const productTelemetryForwarder = getProductTelemetry();
+    let success = false;
+    // errorCode is McpToolError's HTTP statusCode; errorType its stable `type` slug (e.g.
+    // 'args-validation'). Both stay empty unless a typed McpToolError is in play. We send only the
+    // slug as `error_message` — the human-readable message is omitted to keep PII off the wire.
+    let errorCode = '';
+    let errorType = '';
+
     try {
       const result = await raceDeadline(extra, callback);
       if (result.isOk()) {
@@ -87,6 +99,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
         const mappedError = toolResult.isError === true;
+        success = !mappedError;
         if (mappedError) {
           void emitToolErrorEvent({
             config: extra.config,
@@ -109,6 +122,10 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         return toolResult;
       }
 
+      if (result.error instanceof McpToolError) {
+        errorCode = String(result.error.statusCode);
+        errorType = result.error.type;
+      }
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
         isError: true,
@@ -135,6 +152,10 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } catch (error) {
       const timedOut = isDesktopCallTimeout(error);
+      if (error instanceof McpToolError) {
+        errorCode = String(error.statusCode);
+        errorType = error.type;
+      }
       log({
         message: timedOut
           ? 'Tool execution exceeded the Desktop call deadline'
@@ -169,6 +190,25 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         result_size_chars: serializedResultSize(toolResult),
       });
       return toolResult;
+    } finally {
+      productTelemetryForwarder.send('tool_call', {
+        tool_name: this.name,
+        request_id: requestId.toString(),
+        // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
+        session_id: extra.config.desktopSessionLuid ?? '',
+        site_luid: extra.config.siteLuid,
+        user_luid: extra.config.userLuid,
+        chat_id: extra.config.chatId,
+        success,
+        error_code: errorCode,
+        // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
+        // omitted to keep PII off the wire.
+        error_message: errorType,
+        auth_type: 'desktop',
+        // oauth is omitted due to using stdio for desktop
+        oauth_client_id: '',
+        oauth_client_display_name: '',
+      });
     }
   }
 }

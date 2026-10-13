@@ -17,7 +17,7 @@ import {
   FileReadError,
   XmlModificationError,
 } from '../../../../errors/mcpToolError.js';
-import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { DesktopMcpServer, DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
@@ -26,6 +26,7 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
 import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 import { getRemoveFieldTool } from './removeField.js';
+import * as removeFieldResultModule from './removeFieldResult.js';
 
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
@@ -82,7 +83,8 @@ describe('removeFieldTool', () => {
     const tool = getRemoveFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('remove-field');
     expect(tool.description).toBe(
-      'Remove a field from a shelf (rows/cols/encoding); counterpart to add-field.',
+      'Remove a field, without moving it. Inspect current placements first. ' +
+        'Reuse the same cached file for pending edits; live reads reset them.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -93,6 +95,9 @@ describe('removeFieldTool', () => {
       encodingType: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
+    for (const name of ['get-worksheet-xml', 'read-cached-xml', 'remove-field'] as const) {
+      expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has(name)).toBe(true);
+    }
   });
 
   it('should return error when worksheet file does not exist', async () => {
@@ -126,6 +131,52 @@ describe('removeFieldTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new FileReadError(readError).message);
   });
+
+  it.each([
+    { target: 'rows', columnRef: '[Sample].[none:Category:nk]' },
+    { target: 'cols', columnRef: '[Sample].[sum:Profit:qk]' },
+    { target: 'encoding', encodingType: 'size', columnRef: '[Sample].[sum:Profit:qk]' },
+    { target: 'encoding', encodingType: 'angle', columnRef: '[Sample].[sum:Profit:qk]' },
+  ] as const)(
+    'returns current placements without changing the file for a stale $target removal',
+    async (params) => {
+      const metadata = await vi.importActual<typeof metadataModule>(
+        '../../../../desktop/metadata/index.js',
+      );
+      const xml = `<worksheet name="Sheet 1"><table>
+      <rows>[Sample].[sum:Profit:qk]</rows><cols>[Sample].[none:Category:nk]</cols>
+      <panes><pane><encodings><color column="[Sample].[none:Category:nk]"/></encodings></pane></panes>
+    </table></worksheet>`;
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(xml);
+      if (params.target === 'rows') {
+        vi.mocked(metadataModule.removeFieldFromRows).mockImplementationOnce(
+          metadata.removeFieldFromRows,
+        );
+      } else if (params.target === 'cols') {
+        vi.mocked(metadataModule.removeFieldFromCols).mockImplementationOnce(
+          metadata.removeFieldFromCols,
+        );
+      } else {
+        vi.mocked(metadataModule.removeFieldFromEncoding).mockImplementationOnce(
+          metadata.removeFieldFromEncoding,
+        );
+      }
+
+      const result = await getResult({ worksheetFile: WORKSHEET_FILE, ...params });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('"rows":["[Sample].[sum:Profit:qk]"]');
+      expect(result.content[0].text).toContain('"cols":["[Sample].[none:Category:nk]"]');
+      expect(result.content[0].text).toContain('"color":["[Sample].[none:Category:nk]"]');
+      expect(result.content[0].text).toContain('read-cached-xml');
+      expect(result.content[0].text).toContain('get-worksheet-xml');
+      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
+      expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+    },
+  );
 
   // --- target=rows (ported from removeFieldFromRows) ---
   it('should return error when removeFieldFromRows throws (target=rows)', async () => {
@@ -165,6 +216,15 @@ describe('removeFieldTool', () => {
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.message).toContain('Rows shelf');
     expect(body.file).toBe(WORKSHEET_FILE);
+    expect(body).toMatchObject({
+      message: removeFieldResultModule.removeFieldResult(
+        'Rows shelf',
+        WORKSHEET_FILE,
+        COLUMN_REF,
+        MODIFIED_XML,
+      ).message,
+      file: WORKSHEET_FILE,
+    });
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
     expect(metadataModule.removeFieldFromRows).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);
   });
@@ -182,6 +242,126 @@ describe('removeFieldTool', () => {
       SESSION,
     );
   });
+
+  it('does not write the draft when building the result snapshot fails', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    const formatter = vi
+      .spyOn(removeFieldResultModule, 'removeFieldResult')
+      .mockImplementationOnce(() => {
+        throw new Error('Cannot read resulting placements');
+      });
+
+    try {
+      const result = await getResult({
+        worksheetFile: WORKSHEET_FILE,
+        target: 'rows',
+        columnRef: COLUMN_REF,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        new XmlModificationError('Cannot read resulting placements').message,
+      );
+      expect(writeFileSync).not.toHaveBeenCalled();
+      expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
+    } finally {
+      formatter.mockRestore();
+    }
+  });
+
+  it('reports an unapplied draft and directs verification to that file after removal', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({ file: WORKSHEET_FILE, applied: false });
+    expect(body.message).toContain('read-cached-xml');
+    expect(body.message).toContain('filePath set to this file');
+    expect(body.message).toContain('Do not use get-worksheet-xml');
+    expect(body.message).toContain('resets the edit buffer');
+    expect(result.structuredContent).toMatchObject({
+      file: WORKSHEET_FILE,
+      applied: false,
+      message: body.message,
+      nextAction: { label: 'Apply worksheet edits', kind: 'prefill' },
+    });
+    expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it.each(['lod', 'detail'] as const)(
+    'confirms %s removal and reports the actual remaining draft placements',
+    async (encodingType) => {
+      const metadata = await vi.importActual<typeof metadataModule>(
+        '../../../../desktop/metadata/index.js',
+      );
+      const xml = `<worksheet name="Sheet 1"><table>
+        <rows>${COLUMN_REF}</rows><cols>[Sample].[none:Category:nk]</cols>
+        <panes>
+          <pane><encodings><lod column="${COLUMN_REF}"/><color column="${COLUMN_REF}"/></encodings></pane>
+          <pane><encodings><lod column="[Other].[none:Keep:nk]"/></encodings></pane>
+        </panes>
+      </table></worksheet>`;
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(xml);
+      vi.mocked(metadataModule.removeFieldFromEncoding).mockImplementationOnce(
+        metadata.removeFieldFromEncoding,
+      );
+      vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+      const result = await getResult({
+        worksheetFile: WORKSHEET_FILE,
+        target: 'encoding',
+        encodingType,
+        columnRef: COLUMN_REF,
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain('Successfully removed field from Detail (lod) encoding');
+      expect(body.message).toContain('Detail and lod are aliases for the same encoding');
+      expect(body.message).toContain('Do not repeat this removal using the other alias');
+      expect(body).toMatchObject({
+        file: WORKSHEET_FILE,
+        applied: false,
+        removed: { columnRef: COLUMN_REF, placement: 'lod encoding' },
+        currentPlacements: {
+          rows: [COLUMN_REF],
+          cols: ['[Sample].[none:Category:nk]'],
+          encodings: { color: [COLUMN_REF] },
+        },
+      });
+      expect(body.currentPlacements.encodings).not.toHaveProperty('lod');
+      expect(body.message).toContain('encodings cover the first pane');
+      expect(result.structuredContent).toMatchObject({
+        removed: body.removed,
+        currentPlacements: body.currentPlacements,
+      });
+      expect(writeFileSync).toHaveBeenCalledWith(
+        WORKSHEET_FILE,
+        expect.stringContaining('column="[Other].[none:Keep:nk]"'),
+        'utf-8',
+      );
+      expect(metadataModule.removeFieldFromEncoding).toHaveBeenCalledOnce();
+      expect(metadataModule.removeFieldFromEncoding).toHaveBeenCalledWith(
+        xml,
+        encodingType,
+        COLUMN_REF,
+      );
+    },
+  );
 
   it('stamps the sidecar with the pinned session, not the requested one', async () => {
     mockPinnedSession(SESSION);

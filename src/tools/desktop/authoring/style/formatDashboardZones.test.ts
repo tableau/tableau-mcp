@@ -17,12 +17,12 @@ import {
 const DASHBOARD_XML = `<dashboard name='Executive Overview'>
   <style><style-rule element='dashboard'><format attr='background-color' value='#FFFFFF' /></style-rule></style>
   <zones>
-    <zone id='1' name='Sales' type-v2='worksheet'>
+    <zone id='1' name='Sales'>
       <zone-style><format attr='border-color' value='#AAAAAA' /></zone-style>
     </zone>
     <zone h='5000' id='2' type-v2='layout-basic' w='6000'>
       <zone-style><format attr='corner-radius' value='4' /><format attr='padding' value='8' /></zone-style>
-      <zone id='3' name='Profit' type-v2='worksheet'>
+      <zone id='3' name='Profit'>
         <zone-style><format attr='border-color' value='#BBBBBB' /></zone-style>
       </zone>
     </zone>
@@ -37,8 +37,8 @@ const PRODUCTS_DASHBOARD_XML = `<dashboard name='Products'>
       <zone-style><format attr='padding' value='12' /></zone-style>
       <zone id='10' type-v2='text'><zone-style><format attr='font-size' value='18' /></zone-style></zone>
       <zone id='13' type-v2='text'><zone-style><format attr='font-color' value='#222222' /></zone-style></zone>
-      <zone id='11' name='Product Sales' type-v2='worksheet'><zone-style><format attr='border-style' value='none' /></zone-style></zone>
-      <zone id='12' name='Product Profit' type-v2='worksheet'><zone-style><format attr='border-style' value='none' /></zone-style></zone>
+      <zone id='11' name='Product Sales'><zone-style><format attr='border-style' value='none' /></zone-style></zone>
+      <zone id='12' name='Product Profit'><zone-style><format attr='border-style' value='none' /></zone-style></zone>
     </zone>
   </zones>
 </dashboard>`;
@@ -120,7 +120,7 @@ const HIGH_CONTRAST_DASHBOARD_XML = `<dashboard name='Rounded Corners VIP Final'
           <format attr='background-color' value='#FFFFFF' />
         </zone-style>
       </zone>
-      <zone id='11' name='Sales by Category' type-v2='worksheet'>
+      <zone id='11' name='Sales by Category'>
         <zone-style>
           <format attr='border-color' value='#6C5CE7' />
           <format attr='border-style' value='solid' />
@@ -155,7 +155,7 @@ const HIGH_CONTRAST_DASHBOARD_READBACK_XML = `<dashboard name='Rounded Corners V
           <format attr='background-color' value='#ffffff' />
         </zone-style>
       </zone>
-      <zone id='11' name='Sales by Category' type-v2='worksheet'>
+      <zone id='11' name='Sales by Category'>
         <zone-style>
           <format attr='border-color' value='#6c5ce7' />
           <format attr='border-style' value='solid' />
@@ -194,7 +194,7 @@ describe('formatDashboardZonesDocument', () => {
       "<zone id='4' type-v2='layout-basic'><zone-style ><format attr='corner-radius' value='12' /></zone-style></zone>",
     );
     expect(result.xml).toContain(
-      "<zone id='3' name='Profit' type-v2='worksheet'>\n        <zone-style><format attr='border-color' value='#BBBBBB' /></zone-style>",
+      "<zone id='3' name='Profit'>\n        <zone-style><format attr='border-color' value='#BBBBBB' /></zone-style>",
     );
     expect(result.xml).toContain(
       "<style><style-rule element='dashboard'><format attr='background-color' value='#FFFFFF' /></style-rule></style>",
@@ -230,7 +230,7 @@ describe('formatDashboardZonesDocument', () => {
       "<zone id='10' type-v2='text'><zone-style><format attr='font-size' value='18' /></zone-style></zone>",
     );
     expect(containers.xml).toContain(
-      "<zone id='12' name='Product Profit' type-v2='worksheet'><zone-style><format attr='border-style' value='none' /></zone-style></zone>",
+      "<zone id='12' name='Product Profit'><zone-style><format attr='border-style' value='none' /></zone-style></zone>",
     );
 
     const all = formatDashboardZonesDocument(PRODUCTS_DASHBOARD_XML, {
@@ -248,7 +248,7 @@ describe('formatDashboardZonesDocument', () => {
   <zones>
     <zone id='20' type-v2='layout-basic'>
       <zone id='21' type-v2='layout-flow'>
-        <zone id='22' name='Sales' type-v2='worksheet'><zone-style><format attr='margin' value='4' /></zone-style></zone>
+        <zone id='22' name='Sales'><zone-style><format attr='margin' value='4' /></zone-style></zone>
         <zone-style><format attr='padding' value='6' /></zone-style>
       </zone>
       <zone-style><format attr='padding' value='8' /></zone-style>
@@ -264,7 +264,7 @@ describe('formatDashboardZonesDocument', () => {
     if (!result.ok) return;
     expect(result.targetZoneIds).toEqual(['20', '21']);
     expect(result.xml).toContain(
-      "<zone id='21' type-v2='layout-flow'>\n        <zone id='22' name='Sales' type-v2='worksheet'><zone-style><format attr='margin' value='4' /></zone-style></zone>\n        <zone-style><format attr='padding' value='6' /><format attr='corner-radius' value='10' /></zone-style>",
+      "<zone id='21' type-v2='layout-flow'>\n        <zone id='22' name='Sales'><zone-style><format attr='margin' value='4' /></zone-style></zone>\n        <zone-style><format attr='padding' value='6' /><format attr='corner-radius' value='10' /></zone-style>",
     );
     expect(result.xml).toContain(
       "<zone-style><format attr='padding' value='8' /><format attr='corner-radius' value='10' /></zone-style>",
@@ -273,7 +273,7 @@ describe('formatDashboardZonesDocument', () => {
 
   it('inserts a missing direct zone-style last, after nested zone content', () => {
     const source =
-      "<dashboard name='D'><zones><zone id='7' name='Sales' type-v2='worksheet'><zone id='8' type-v2='worksheet' /></zone></zones></dashboard>";
+      "<dashboard name='D'><zones><zone id='7' name='Sales'><zone id='8' /></zone></zones></dashboard>";
     const result = formatDashboardZonesDocument(source, {
       scope: 'zone_ids',
       zoneIds: ['7'],
@@ -283,7 +283,7 @@ describe('formatDashboardZonesDocument', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.xml).toBe(
-      "<dashboard name='D'><zones><zone id='7' name='Sales' type-v2='worksheet'><zone id='8' type-v2='worksheet' /><zone-style><format attr='corner-radius' value='6' /></zone-style></zone></zones></dashboard>",
+      "<dashboard name='D'><zones><zone id='7' name='Sales'><zone id='8' /><zone-style><format attr='corner-radius' value='6' /></zone-style></zone></zones></dashboard>",
     );
   });
 
@@ -305,7 +305,7 @@ describe('formatDashboardZonesDocument', () => {
 
   it('expands a self-closing zone-style without dropping opening-tag attributes', () => {
     const source =
-      "<dashboard name='D'><zones><zone id='7' type-v2='worksheet'><zone-style vendor-keep='yes' future-byte=\"untouched\" /></zone></zones></dashboard>";
+      "<dashboard name='D'><zones><zone id='7'><zone-style vendor-keep='yes' future-byte=\"untouched\" /></zone></zones></dashboard>";
     const result = formatDashboardZonesDocument(source, {
       scope: 'zone_ids',
       zoneIds: ['7'],
@@ -315,7 +315,7 @@ describe('formatDashboardZonesDocument', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.xml).toBe(
-      "<dashboard name='D'><zones><zone id='7' type-v2='worksheet'><zone-style vendor-keep='yes' future-byte=\"untouched\" ><format attr='corner-radius' value='11' /></zone-style></zone></zones></dashboard>",
+      "<dashboard name='D'><zones><zone id='7'><zone-style vendor-keep='yes' future-byte=\"untouched\" ><format attr='corner-radius' value='11' /></zone-style></zone></zones></dashboard>",
     );
   });
 
@@ -356,15 +356,15 @@ describe('formatDashboardZonesDocument', () => {
     [
       'a target with two direct styles',
       DASHBOARD_XML.replace(
-        "<zone id='1' name='Sales' type-v2='worksheet'>",
-        "<zone id='1' name='Sales' type-v2='worksheet'><zone-style />",
+        "<zone id='1' name='Sales'>",
+        "<zone id='1' name='Sales'><zone-style />",
       ),
       { scope: 'zone_ids' as const, zoneIds: ['1'], cornerRadius: 8 },
       'more than one direct zone-style',
     ],
     [
       'a self-closing target zone',
-      "<dashboard name='D'><zones><zone id='7' type-v2='worksheet' /></zones></dashboard>",
+      "<dashboard name='D'><zones><zone id='7' /></zones></dashboard>",
       { scope: 'zone_ids' as const, zoneIds: ['7'], cornerRadius: 8 },
       'self-closing',
     ],
@@ -895,7 +895,7 @@ async function callTool(
           document = options.readbackXml;
         } else if (options.dropNestedZoneOnReadback) {
           document = xml.replace(
-            "      <zone id='3' name='Profit' type-v2='worksheet'>\n        <zone-style><format attr='border-color' value='#BBBBBB' /></zone-style>\n      </zone>\n",
+            "      <zone id='3' name='Profit'>\n        <zone-style><format attr='border-color' value='#BBBBBB' /></zone-style>\n      </zone>\n",
             '',
           );
         } else if (options.dropSiblingStyleOnReadback) {

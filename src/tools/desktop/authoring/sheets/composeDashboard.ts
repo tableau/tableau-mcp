@@ -21,8 +21,8 @@ const paramsSchema = {
     .array(z.string().trim().min(1).max(255))
     .min(1)
     .max(6)
-    .describe('Rendered worksheet names (1-6).'),
-  title: z.string().trim().min(1).max(255).optional().describe('Optional title.'),
+    .describe('Live worksheet names; empty sheets add blank tiles and warn.'),
+  title: z.string().trim().min(1).max(255).optional().describe('Title.'),
   layout: layoutSchema.optional().describe('Layout.'),
 };
 
@@ -33,6 +33,7 @@ type ComposeDashboardSuccess = {
   worksheets: string[];
   replaced: boolean;
   verification: { status: 'passed'; issues: [] };
+  warnings?: string[];
 };
 
 type ComposeDashboardResult = StructuredResult<ComposeDashboardSuccess>;
@@ -46,7 +47,7 @@ export const getComposeDashboardTool = (
     server,
     name: 'compose-dashboard',
     title,
-    description: 'Build dashboard from live worksheets.',
+    description: 'Build a dashboard.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,

@@ -1965,3 +1965,193 @@ describe('binder/validate — geo mirror parity with lockstep classify.ts (GEO-0
     },
   );
 });
+
+describe('temporal MIN/MAX kind and legality gates', () => {
+  it.each(
+    ['date', 'datetime'].flatMap((datatype) =>
+      (['min', 'max'] as const).flatMap((derivation) =>
+        (['quantitative', 'quantitative-or-categorical'] as const).map((kind) => ({
+          datatype,
+          derivation,
+          kind,
+        })),
+      ),
+    ),
+  )('accepts $derivation of $datatype in $kind', ({ datatype, derivation, kind }) => {
+    const source = field({
+      columnName: '[Event Time]',
+      role: 'dimension',
+      type: 'ordinal',
+      datatype,
+    });
+    const base = manifests.get('kpi-text')!;
+    const m = {
+      ...base,
+      slots: base.slots.map((slot) => ({ ...slot, kind, instance_role: 'qk' as const })),
+    };
+    const slotId = m.slots[0].slot_id;
+    const result = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 't',
+        bindings: [{ slot_id: slotId, field: 'Event Time', derivation }],
+      },
+      { datasource: 'Superstore', fields: [source] },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.values(result.field_mapping)).toContain(
+      `[Superstore].[${derivation}:Event Time:qk]`,
+    );
+  });
+
+  it.each(
+    ['date', 'datetime'].flatMap((datatype) =>
+      (['sum', 'avg', 'med', 'std', 'stp', 'var', 'vrp'] as const).map((derivation) => ({
+        datatype,
+        derivation,
+      })),
+    ),
+  )('rejects $derivation of $datatype', ({ datatype, derivation }) => {
+    const source = field({
+      columnName: '[Event Time]',
+      role: 'dimension',
+      type: 'ordinal',
+      datatype,
+    });
+    const m = manifests.get('kpi-text')!;
+    const result = validateBinding(
+      m,
+      {
+        template: m.template,
+        title: 't',
+        bindings: [{ slot_id: m.slots[0].slot_id, field: 'Event Time', derivation }],
+      },
+      { datasource: 'Superstore', fields: [source] },
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('temporal aggregates do not bypass calculation safety', () => {
+  const cases = ['date', 'datetime'].flatMap((datatype) =>
+    (['min', 'max'] as const).flatMap((derivation) =>
+      [false, true].map((override) => ({ datatype, derivation, override })),
+    ),
+  );
+  it.each(cases)(
+    'blocks a $datatype in a calculation input ($derivation, override=$override)',
+    ({ datatype, derivation, override }) => {
+      const base = manifests.get('kpi-text')!;
+      const value = { ...base.slots[0], derivation: override ? ('sum' as const) : derivation };
+      const m: RuntimeTemplateDescriptor = {
+        ...base,
+        slots: [value],
+        calcs: [
+          {
+            slot_id: 'calculation',
+            template_field: 'Calculated Value',
+            derivation: 'usr',
+            role: ['color'],
+            kind: 'calc',
+            bindable: false,
+            required: true,
+            formula: `SUM([${value.template_field}])`,
+            formula_refs: [value.template_field],
+            depends_on_slots: [value.slot_id],
+          },
+        ],
+      };
+      const source = field({
+        columnName: '[Event Time]',
+        role: 'dimension',
+        type: 'ordinal',
+        datatype,
+      });
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 't',
+          bindings: [
+            { slot_id: value.slot_id, field: 'Event Time', ...(override ? { derivation } : {}) },
+          ],
+        },
+        { datasource: 'Superstore', fields: [source] },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.blockers).toContainEqual(
+        expect.objectContaining({ code: 'aggregation-level-mismatch', slot_id: value.slot_id }),
+      );
+    },
+  );
+
+  it('retains a numeric source in the same authored MIN calculation template', () => {
+    const base = manifests.get('kpi-text')!;
+    const value = { ...base.slots[0], derivation: 'min' as const };
+    const m: RuntimeTemplateDescriptor = {
+      ...base,
+      slots: [value],
+      calcs: [
+        {
+          slot_id: 'calculation',
+          template_field: 'Calculated Value',
+          derivation: 'usr',
+          role: ['color'],
+          kind: 'calc',
+          bindable: false,
+          required: true,
+          formula: `SUM([${value.template_field}])`,
+          formula_refs: [value.template_field],
+          depends_on_slots: [value.slot_id],
+        },
+      ],
+    };
+    const result = validateBinding(
+      m,
+      { template: m.template, title: 't', bindings: [{ slot_id: value.slot_id, field: 'Sales' }] },
+      SUMMARY,
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('existing date-compatible calculation encodings stay supported', () => {
+  it.each(['quantitative-or-categorical', 'temporal'] as const)(
+    'preserves an explicit MIN date in a %s calculation input',
+    (kind) => {
+      const base = manifests.get('kpi-text')!;
+      const value = { ...base.slots[0], kind, derivation: 'min' as const };
+      const m: RuntimeTemplateDescriptor = {
+        ...base,
+        slots: [value],
+        calcs: [
+          {
+            slot_id: 'calculation',
+            template_field: 'Calculated Value',
+            derivation: 'usr',
+            role: ['color'],
+            kind: 'calc',
+            bindable: false,
+            required: true,
+            formula: `COUNT([${value.template_field}])`,
+            formula_refs: [value.template_field],
+            depends_on_slots: [value.slot_id],
+          },
+        ],
+      };
+      const result = validateBinding(
+        m,
+        {
+          template: m.template,
+          title: 't',
+          bindings: [{ slot_id: value.slot_id, field: 'Order Date', derivation: 'min' }],
+        },
+        SUMMARY,
+      );
+      expect(result.ok).toBe(true);
+    },
+  );
+});

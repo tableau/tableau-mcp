@@ -20,6 +20,7 @@ import {
   type Blocker,
   columnInstanceSuffix,
   effectiveSlotDerivation,
+  slotAcceptsSource,
   validateBinding,
 } from './validate.js';
 
@@ -47,6 +48,8 @@ export interface ExplicitBindOptions {
   datasource?: string;
   passthroughFieldMapping?: Record<string, string>;
   derivationOverrides?: Record<string, Derivation>;
+  /** Explicit user intent keyed by resolved ref, applied only to its assigned slot. */
+  requestedDerivations?: Record<string, Derivation>;
 }
 
 export interface ExplicitBindError {
@@ -66,6 +69,7 @@ export type ExplicitBindResult =
       fieldMetadata: Record<string, FieldMetadataOverride>;
       consumedFieldRefs: string[];
       templateSlots: SlotSpec[];
+      derivationOverrides?: Record<string, Derivation>;
       optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
@@ -87,6 +91,7 @@ interface ProposalBuild {
   proposal: BindingProposal;
   fieldBySlot: Map<string, SchemaField>;
   warnings: string[];
+  derivationOverrides?: Record<string, Derivation>;
 }
 
 interface GreedyAssignment {
@@ -171,7 +176,14 @@ export function bindExplicitTemplate(
 
   const warnings: string[] = [];
   const built = Array.isArray(input)
-    ? buildProposalFromOrderedRefs(contract, input, schema, opts.title, opts.derivationOverrides)
+    ? buildProposalFromOrderedRefs(
+        contract,
+        input,
+        schema,
+        opts.title,
+        opts.derivationOverrides,
+        opts.requestedDerivations,
+      )
     : buildProposalFromFieldMapping(contract, input, schema, opts.title, opts.derivationOverrides);
   warnings.push(...built.warnings);
 
@@ -209,10 +221,15 @@ export function bindExplicitTemplate(
     ok: true,
     template: templateName,
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
-    fieldMapping: emitRawFieldMapping(contract, built.fieldBySlot, opts.derivationOverrides),
+    fieldMapping: emitRawFieldMapping(
+      contract,
+      built.fieldBySlot,
+      built.derivationOverrides ?? opts.derivationOverrides,
+    ),
     fieldMetadata: fieldMetadataFor(contract, built.fieldBySlot),
     consumedFieldRefs: consumedFieldRefsFor(contract, built.fieldBySlot),
     templateSlots: contract.slots,
+    ...(built.derivationOverrides ? { derivationOverrides: built.derivationOverrides } : {}),
     optionalFieldPrunes: optionalFieldPrunesFor(contract, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
@@ -243,6 +260,7 @@ function buildProposalFromOrderedRefs(
   schema: SchemaSummary,
   title?: string,
   derivationOverrides: Record<string, Derivation> = {},
+  requestedDerivations: Record<string, Derivation> = {},
 ): ProposalBuild {
   const warnings: string[] = [];
   const sources: ResolvedSource[] = [];
@@ -259,9 +277,19 @@ function buildProposalFromOrderedRefs(
   const bindings: BindingProposal['bindings'] = [];
   const greedyAssignments: GreedyAssignment[] = [];
 
+  const assignedOverrides = { ...derivationOverrides };
   const orderedSlots = manifest.slots.filter((slot) => slot.bindable);
   for (const [index, slot] of orderedSlots.entries()) {
-    if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
+    if (
+      shouldReserveCategoricalSource(
+        slot,
+        orderedSlots.slice(index + 1),
+        sources,
+        used,
+        requestedDerivations,
+        derivationOverrides,
+      )
+    ) {
       continue;
     }
     const effectiveDerivation = derivationOverrides[slot.slot_id] ?? slot.derivation;
@@ -271,16 +299,19 @@ function buildProposalFromOrderedRefs(
       sources,
       used,
       reusableByTemplateField,
+      derivationOverrides[slot.slot_id] === undefined ? requestedDerivations : {},
     );
     if (!selection) continue;
     const { source, affinityPlaced } = selection;
+    const requested = derivationOverrides[slot.slot_id] ?? requestedDerivations[source.raw];
+    if (requested !== undefined) assignedOverrides[slot.slot_id] = requested;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({
       slot_id: slot.slot_id,
       field: source.field.column_ref,
-      ...(derivationOverrides[slot.slot_id] !== undefined
-        ? { derivation: derivationOverrides[slot.slot_id] }
+      ...(assignedOverrides[slot.slot_id] !== undefined
+        ? { derivation: assignedOverrides[slot.slot_id] }
         : {}),
     });
     greedyAssignments.push({ slot, field: source.field, affinityPlaced });
@@ -291,6 +322,9 @@ function buildProposalFromOrderedRefs(
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
+    ...(Object.keys(requestedDerivations).length > 0
+      ? { derivationOverrides: assignedOverrides }
+      : {}),
   };
 }
 
@@ -299,11 +333,21 @@ function shouldReserveCategoricalSource(
   laterSlots: SlotSpec[],
   sources: ResolvedSource[],
   used: Set<SchemaField>,
+  requestedDerivations: Record<string, Derivation>,
+  derivationOverrides: Record<string, Derivation>,
 ): boolean {
   if (slot.required || slot.kind !== 'categorical') return false;
   const compatible = sources.filter(
     (source) =>
-      !source.field.isGroup && !used.has(source.field) && kindCompatible(slot.kind, source.field),
+      !source.field.isGroup &&
+      !used.has(source.field) &&
+      slotAcceptsSource(
+        slot,
+        derivationOverrides[slot.slot_id] ?? requestedDerivations[source.raw] ?? slot.derivation,
+        source.field,
+        requestedDerivations[source.raw] !== undefined &&
+          derivationOverrides[slot.slot_id] === undefined,
+      ),
   );
   const laterRequired = laterSlots.filter(
     (candidate) => candidate.required && candidate.kind === 'categorical',
@@ -356,9 +400,18 @@ function takeCompatibleSource(
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
+  requestedDerivations: Record<string, Derivation>,
 ): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && slotAcceptsSource(slot, effectiveDerivation, reusable.field)) {
+  if (
+    reusable &&
+    slotAcceptsSource(
+      slot,
+      requestedDerivations[reusable.raw] ?? effectiveDerivation,
+      reusable.field,
+      requestedDerivations[reusable.raw] !== undefined,
+    )
+  ) {
     return { source: reusable, affinityPlaced: false };
   }
 
@@ -367,7 +420,12 @@ function takeCompatibleSource(
       (source) =>
         !used.has(source.field) &&
         !source.field.isGroup &&
-        kindCompatible(slot.kind, source.field) &&
+        slotAcceptsSource(
+          slot,
+          requestedDerivations[source.raw] ?? effectiveDerivation,
+          source.field,
+          requestedDerivations[source.raw] !== undefined,
+        ) &&
         fieldNameMatchesSlot(source.field, slot),
     );
     if (affine.length === 1) {
@@ -381,7 +439,15 @@ function takeCompatibleSource(
   for (const source of sources) {
     if (used.has(source.field)) continue;
     if (source.field.isGroup) continue;
-    if (!slotAcceptsSource(slot, effectiveDerivation, source.field)) continue;
+    if (
+      !slotAcceptsSource(
+        slot,
+        requestedDerivations[source.raw] ?? effectiveDerivation,
+        source.field,
+        requestedDerivations[source.raw] !== undefined,
+      )
+    )
+      continue;
     const score = slotAffinity(slot, source.field);
     if (score > bestScore) {
       best = source;
@@ -495,43 +561,6 @@ function parseColumnRef(raw: string): { datasource?: string; base: string } | nu
   // Keep bare instances for legacy explicit mappings; fields.ts only accepts full refs.
   const instance = parseColumnInstanceRef(trimmed);
   return instance ? { base: instance.localFieldName } : null;
-}
-
-const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
-const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
-
-function slotAcceptsSource(
-  slot: SlotSpec,
-  effectiveDerivation: Derivation,
-  field: SchemaField,
-): boolean {
-  if (kindCompatible(slot.kind, field)) return true;
-  return (
-    field.role === 'dimension' &&
-    COUNT_AGGREGATION_DERIVATIONS.has(effectiveDerivation) &&
-    (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical')
-  );
-}
-
-function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
-  switch (kind) {
-    case 'quantitative':
-      return f.role === 'measure' || f.isAggregated;
-    case 'categorical':
-      return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
-    case 'quantitative-or-categorical':
-      return (
-        f.role === 'measure' ||
-        f.isAggregated ||
-        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
-      );
-    case 'temporal':
-      return TEMPORAL_DATATYPES.has(f.datatype);
-    case 'geo':
-      return f.role === 'dimension';
-    default:
-      return false;
-  }
 }
 
 function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAssignment[]): void {
