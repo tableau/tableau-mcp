@@ -401,17 +401,29 @@ function unmatchedMappingKeyWarnings(
   mapping: Record<string, string>,
 ): string[] {
   const valid = new Set<string>();
+  const bareCounts = new Map<string, number>();
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
     valid.add(slot.slot_id);
-    valid.add(slot.template_field);
     valid.add(`${slot.template_field}@${slot.derivation}`);
+    bareCounts.set(slot.template_field, (bareCounts.get(slot.template_field) ?? 0) + 1);
+  }
+  const ambiguous = new Set<string>();
+  for (const [field, count] of bareCounts) {
+    if (count === 1) valid.add(field);
+    else ambiguous.add(field);
   }
   const validNames = [...valid];
   return Object.keys(mapping)
     .filter((key) => !valid.has(key))
     .map((key) => {
       const near = validNames.find((name) => name.toLowerCase() === key.toLowerCase());
+      if (ambiguous.has(key)) {
+        return (
+          `field_mapping key '${key}' is ambiguous: ${bareCounts.get(key)} slots use it, so it was ignored.` +
+          ` Use one of: ${validNames.filter((n) => n.startsWith(`${key}@`) || manifest.slots.some((s) => s.bindable && s.template_field === key && s.slot_id === n)).join(', ')}`
+        );
+      }
       return (
         `Unmatched field_mapping key '${key}' matches no slot and was ignored.` +
         (near ? ` Did you mean '${near}'?` : '') +
