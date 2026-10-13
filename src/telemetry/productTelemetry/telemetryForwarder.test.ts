@@ -1,10 +1,13 @@
+import { log } from '../../logging/logger.js';
+import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetryEndpoint.js';
 import {
-  DEFAULT_PRODUCT_TELEMETRY_ENDPOINT,
   exportedForTesting,
   getProductTelemetry,
   resolveTelemetryEnv,
   TableauTelemetryJsonEvent,
 } from './telemetryForwarder.js';
+
+vi.mock('../../logging/logger.js', () => ({ log: vi.fn() }));
 
 describe('DirectTelemetryForwarder', () => {
   const endpoint = 'https://qa.telemetry.tableausoftware.com';
@@ -15,6 +18,7 @@ describe('DirectTelemetryForwarder', () => {
   beforeEach(() => {
     exportedForTesting.resetProductTelemetry();
     vi.unstubAllEnvs();
+    vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', 'true');
     vi.stubEnv('PRODUCT_TELEMETRY_ENDPOINT', endpoint);
     vi.stubEnv('SERVER', server);
     mockFetch.mockImplementation(() => {
@@ -48,6 +52,7 @@ describe('DirectTelemetryForwarder', () => {
     });
 
     it('defaults the endpoint and enables telemetry when env is unset', () => {
+      vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', '');
       vi.stubEnv('PRODUCT_TELEMETRY_ENDPOINT', '');
       vi.stubEnv('SERVER', '');
       expect(resolveTelemetryEnv()).toEqual({
@@ -158,7 +163,7 @@ describe('DirectTelemetryForwarder', () => {
     expect((await sentEvent(1)).pod).toBe(server);
   });
 
-  it('does not throw when request construction fails synchronously', () => {
+  it('does not throw when the endpoint is invalid', () => {
     const forwarder = new exportedForTesting.DirectTelemetryForwarder({
       endpoint: 'not-a-valid-url',
       enabled: true,
@@ -167,6 +172,39 @@ describe('DirectTelemetryForwarder', () => {
     });
 
     expect(() => forwarder.send('tool_call', { foo: 'bar' })).not.toThrow();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('treats an endpoint with credentials as invalid, since Request rejects it', () => {
+    vi.mocked(log).mockClear();
+    const forwarder = new exportedForTesting.DirectTelemetryForwarder({
+      endpoint: 'https://user:pass@telemetry.example.com',
+      enabled: true,
+      pod: server,
+      isHyperforce: false,
+    });
+
+    forwarder.send('tool_call', { n: 1 });
+    forwarder.send('tool_call', { n: 2 });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('logs a bad endpoint once, not on every send', () => {
+    vi.mocked(log).mockClear();
+    const forwarder = new exportedForTesting.DirectTelemetryForwarder({
+      endpoint: 'not-a-valid-url',
+      enabled: true,
+      pod: server,
+      isHyperforce: false,
+    });
+
+    forwarder.send('tool_call', { n: 1 });
+    forwarder.send('tool_call', { n: 2 });
+    forwarder.send('tool_call', { n: 3 });
+
+    expect(log).toHaveBeenCalledTimes(1);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

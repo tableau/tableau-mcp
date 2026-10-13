@@ -445,12 +445,72 @@ LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 
 Enables product telemetry for tool usage tracking.
 
-- Default: `true`
-- When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
-  call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry. Read
+- Default: `true`. This applies to both the web (Tableau Server and Cloud) and the Desktop variants.
+- When `true`, the server sends one `tool_call` event to Tableau's telemetry endpoint for each tool
+  call. See [Product telemetry fields](#product-telemetry-fields) for exactly what each variant
+  sends.
+- Set to `false` to disable product telemetry. Only the exact value `false` disables it. Read
   https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
   information
+
+<hr />
+
+## `PRODUCT_TELEMETRY_ENDPOINT`
+
+The URL product telemetry events are sent to.
+
+- Default: `https://prod.telemetry.tableausoftware.com`
+- If the value is not a valid URL, the server logs one error on the first tool call and sends no
+  product telemetry. Credentials in the URL (`https://user:pass@host`) also count as invalid.
+
+<hr />
+
+## `IS_HYPERFORCE`
+
+Set to `true` to mark the deployment as Hyperforce. Sent as `is_hyperforce` on every product
+telemetry event.
+
+- Default: `false`
+
+<hr />
+
+## `TABLEAU_POD_NAME`
+
+Desktop only. The server URL Desktop is signed in to. Sent as `pod` and `podname` on every product
+telemetry event. The web variants send the value of `SERVER` instead (`SERVER` wins if both are
+set).
+
+<hr />
+
+## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
+
+Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as
+`site_luid`, `user_luid`, `chat_id` and `session_id` on Desktop product telemetry events. Each is
+empty if the launcher did not set it. `TABLEAU_DESKTOP_SESSION_LUID` is ignored unless it is a
+well-formed GUID.
+
+<hr />
+
+## Product telemetry fields
+
+Every event also carries `type`, `host_timestamp` (UTC time of the call), `host_name` (the machine's
+hostname), `service_name` (`tableau-mcp`), `pod`, `podname` and `is_hyperforce`.
+
+| Field                                          | Web                                                                                                                                         | Desktop                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
+| `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
+| `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
+| `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
+| `success`                                      | yes                                                                                                                                         | yes                                                                                   |
+| `error_code`                                   | empty on success. On failure, the HTTP status of the error, empty if the error result carries none, or `500` for a thrown error without one | status code of a typed tool error, else empty                                         |
+| `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
+| `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
+| `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+
+The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
+separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
+1024 characters), `site_luid` and `user_luid`. Calling it also sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:

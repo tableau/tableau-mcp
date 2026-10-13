@@ -393,7 +393,14 @@ record service level metrics and latency observations.
 ##### Product Telemetry
 
 By default, Tableau MCP will send basic product data to Tableau's telemetry endpoint for each tool
-call, including tool name, request ID, session ID, and site name.
+call. This is on by default for the web and Desktop variants. Each event includes the tool name,
+request ID, session ID, site and user LUIDs, the Desktop chat ID, a timestamp, success, an error
+code, an error message (the tool's error text on web, only an error type on Desktop), the auth type,
+the OAuth client, the server URL, the machine's hostname and whether the deployment is Hyperforce.
+The full field list per variant and the variables that control it (`PRODUCT_TELEMETRY_ENABLED`,
+`PRODUCT_TELEMETRY_ENDPOINT`, `IS_HYPERFORCE`, `TABLEAU_POD_NAME` and the Desktop launcher
+variables) are in
+[Environment variables](../configuration/mcp-config/env-vars.md#product_telemetry_enabled).
 
 To disable this, set `PRODUCT_TELEMETRY_ENABLED=false`. Alternatively, you can block outbound
 traffic to Tableau's telemetry endpoints as described in
