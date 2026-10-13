@@ -21,6 +21,29 @@ import {
 } from './updateCloudExtractRefreshTaskConfirmClient.js';
 
 /**
+ * True for a `delete-content` `remove-pending-tags` result (`{ removedCount, items }`). The tool
+ * shares the delete panel's app resource, so a host may render this result into the iframe; it carries
+ * no confirm panel and must not surface the error UI.
+ */
+function isRemovePendingTagsResult(result: CallToolResult): boolean {
+  const first = result.content?.[0];
+  if (!first || first.type !== 'text') {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(first.text);
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { removedCount?: unknown }).removedCount === 'number' &&
+      Array.isArray((parsed as { items?: unknown }).items)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Handles a tool result from a delete/update preview tool and renders the in-iframe MCP-Apps HITL
  * confirm panel. A preview returns a confirm-panel payload keyed by result shape; branch on that
  * shape and render the matching panel. Anything that doesn't match a known confirm shape (including
@@ -49,6 +72,10 @@ export function handleConfirmResult(app: App, result: CallToolResult): void {
   }
   if (isUpdateCloudExtractRefreshTaskConfirmResult(result)) {
     renderUpdateCloudExtractRefreshTaskConfirm(app, result);
+    return;
+  }
+
+  if (isRemovePendingTagsResult(result)) {
     return;
   }
 

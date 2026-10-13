@@ -1,3 +1,4 @@
+import { closeActivityLog, initializeActivityLog } from '../activityLog/init.js';
 import type { Config } from '../config.js';
 import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
@@ -13,8 +14,20 @@ const runtimeState = vi.hoisted(() => ({
   events: [] as string[],
   connectPromise: Promise.resolve(),
   disconnectShouldReject: false,
+  closeActivityLogShouldReject: false,
   serverInfoPromise: Promise.resolve({}),
   shutdownHandlers: new Map<string, () => Promise<void>>(),
+}));
+
+vi.mock('../activityLog/init.js', () => ({
+  initializeActivityLog: vi.fn(async () => {
+    runtimeState.events.push('activity log init');
+  }),
+  closeActivityLog: vi.fn(async () => {
+    if (runtimeState.closeActivityLogShouldReject) {
+      throw new Error('activity log close failed');
+    }
+  }),
 }));
 
 vi.mock('../features/init.js', () => ({
@@ -80,6 +93,7 @@ describe('initializeWebRuntime', () => {
     runtimeState.events = [];
     runtimeState.connectPromise = Promise.resolve();
     runtimeState.disconnectShouldReject = false;
+    runtimeState.closeActivityLogShouldReject = false;
     runtimeState.serverInfoPromise = Promise.resolve({});
     runtimeState.shutdownHandlers.clear();
     RestApi.host = '';
@@ -107,6 +121,7 @@ describe('initializeWebRuntime', () => {
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
       'feature gate',
+      'activity log init',
       'session store init',
       'session store connect',
     ]);
@@ -118,6 +133,7 @@ describe('initializeWebRuntime', () => {
 
     expect(runtimeState.events).toEqual([
       'feature gate',
+      'activity log init',
       'session store init',
       'session store connect',
       'server info',
@@ -143,6 +159,7 @@ describe('initializeWebRuntime', () => {
     await expect(initializeWebRuntime(config)).rejects.toThrow('session store init failed');
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
+    expect(initializeActivityLog).toHaveBeenCalledOnce();
     expect(initializeSessionStore).toHaveBeenCalledOnce();
     expect(getTableauServerInfo).not.toHaveBeenCalled();
     expect(processOnceSpy).not.toHaveBeenCalled();
@@ -172,18 +189,26 @@ describe('initializeWebRuntime', () => {
 
     await runtimeState.shutdownHandlers.get('SIGINT')!();
     expect(disconnectSessionStore).toHaveBeenCalledOnce();
+    expect(closeActivityLog).toHaveBeenCalledOnce();
     expect(processExitSpy).toHaveBeenLastCalledWith(0);
 
     runtimeState.disconnectShouldReject = true;
     await runtimeState.shutdownHandlers.get('SIGTERM')!();
     expect(disconnectSessionStore).toHaveBeenCalledTimes(2);
+    expect(closeActivityLog).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Error closing session store during shutdown',
+        message: 'Error closing session store or Activity Log during shutdown',
         level: 'error',
         logger: 'shutdown',
       }),
     );
+    expect(processExitSpy).toHaveBeenLastCalledWith(1);
+
+    runtimeState.disconnectShouldReject = false;
+    runtimeState.closeActivityLogShouldReject = true;
+    await runtimeState.shutdownHandlers.get('SIGINT')!();
+    expect(closeActivityLog).toHaveBeenCalledTimes(3);
     expect(processExitSpy).toHaveBeenLastCalledWith(1);
   });
 });

@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowDocumentApis } from '../apis/flowDocumentApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { FlowDocument } from '../types/flowDocument.js';
@@ -18,7 +17,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class FlowDocumentMethods extends AuthenticatedMethods<typeof flowDocumentApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, flowDocumentApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, flowDocumentApis, { axiosConfig }), creds);
   }
 
   /**

@@ -14,9 +14,11 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
+  buildRequestedOriginsGuide,
   DataAppIdentity,
   deriveIdentity,
   PostUnzipPlan,
+  RequestedOriginsGuide,
 } from './templateIdentity.js';
 
 /**
@@ -27,9 +29,13 @@ import {
  *    then unzip and apply `postUnzip`.
  *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
  *    unzip and apply `postUnzip`.
+ * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
+ * app's external origins in it.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
+  allowedOrigins: string[];
+  requestedOrigins: RequestedOriginsGuide;
   filePath?: string;
   s3URL?: string;
   postUnzip?: PostUnzipPlan;
@@ -53,9 +59,11 @@ function resolveTemplateZip(): string | undefined {
 
 export async function createDataAppWorkspace({
   datappName,
+  allowedOrigins,
   config,
 }: {
   datappName: string;
+  allowedOrigins: string[];
   config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
@@ -71,17 +79,19 @@ export async function createDataAppWorkspace({
   }
 
   return config.bucketS3.enabled
-    ? await createS3Workspace({ datappName, identity, config, zipPath })
-    : createLocalWorkspace({ datappName, identity, zipPath });
+    ? await createS3Workspace({ datappName, allowedOrigins, identity, config, zipPath })
+    : createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
 }
 
 async function createS3Workspace({
   datappName,
+  allowedOrigins,
   identity,
   config,
   zipPath,
 }: {
   datappName: string;
+  allowedOrigins: string[];
   identity: DataAppIdentity;
   config: Config;
   zipPath: string;
@@ -114,6 +124,8 @@ async function createS3Workspace({
 
   return new Ok({
     datappName,
+    allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
     s3URL,
     postUnzip: buildPostUnzipPlan(identity),
   });
@@ -121,10 +133,12 @@ async function createS3Workspace({
 
 function createLocalWorkspace({
   datappName,
+  allowedOrigins,
   identity,
   zipPath,
 }: {
   datappName: string;
+  allowedOrigins: string[];
   identity: DataAppIdentity;
   zipPath: string;
 }): Result<DataAppWorkspaceResult, McpToolError> {
@@ -133,6 +147,8 @@ function createLocalWorkspace({
   // collide; the client unzips and applies the same `postUnzip` plan to finalize.
   return new Ok({
     datappName,
+    allowedOrigins,
+    requestedOrigins: buildRequestedOriginsGuide(identity),
     filePath: zipPath,
     postUnzip: buildPostUnzipPlan(identity),
   });

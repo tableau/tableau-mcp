@@ -6,6 +6,7 @@ import { getConfig } from '../../../../config.js';
 import { FlowNotAllowedError } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import {
   Flow,
@@ -31,7 +32,7 @@ import { FlowRunFailureSummary, summarizeFlowRunFailures } from '../flowRunFailu
 const FLOW_RUN_LIMIT_MAX = 100;
 
 const paramsSchema = {
-  flowId: z.string().nonempty(),
+  flowId: luidSchema,
   includeConnections: z.boolean().optional().default(true),
   includeFlowRuns: z.boolean().optional().default(true),
   flowRunLimit: z.number().int().min(1).max(FLOW_RUN_LIMIT_MAX).optional().default(10),

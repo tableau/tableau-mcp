@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
+import { PublishedDataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
@@ -170,9 +170,9 @@ export function constrainDatasources({
   datasources,
   boundedContext,
 }: {
-  datasources: Array<DataSource>;
+  datasources: Array<PublishedDataSource>;
   boundedContext: BoundedContext;
-}): ConstrainedResult<Array<DataSource>> {
+}): ConstrainedResult<Array<PublishedDataSource>> {
   if (datasources.length === 0) {
     return {
       type: 'empty',

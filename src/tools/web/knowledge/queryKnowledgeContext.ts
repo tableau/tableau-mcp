@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { assertSafePathSegment } from '../../../sdks/routeSafety/core.js';
 import {
   edgeTypeSchema,
   type KnowledgeNodeContext,
@@ -149,6 +150,29 @@ export function validateQueryArgs(args: QueryArgs): string | null {
   return null;
 }
 
+// For these intents the node ID travels in the URL path (percent-encoded by knowledgeMethods), and
+// the route-safety guard refuses one that would change the route once decoded: a `/` or `\`, or a
+// bare `.` / `..`. Checked up front so the call fails cleanly before any request is sent; "ground"
+// fans out in parallel and would otherwise return a partial result.
+const PATH_NODE_ID_INTENTS: ReadonlySet<QueryArgs['intent']> = new Set([
+  'ground',
+  'lineage',
+  'impact',
+]);
+
+function isRoutableNodeId(nodeId: string): boolean {
+  try {
+    assertSafePathSegment('nodeId', encodeURIComponent(nodeId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const UNSUPPORTED_NODE_ID_MESSAGE =
+  "This nodeId cannot be used: Knowledge node IDs containing '/' or '\\' (or that are only '.' " +
+  "or '..') are not supported. Search with query instead.";
+
 type QueryWarning = {
   type: 'ENTITY_UNAVAILABLE' | 'ATTACHED_CONTEXT_UNAVAILABLE' | 'GLOBAL_CONTEXT_UNAVAILABLE';
   severity: 'WARNING';
@@ -200,6 +224,14 @@ If relationships are truncated, rerun with edgeType and direction before reporti
           const validationError = validateQueryArgs(args);
           if (validationError) {
             return new ArgsValidationError(validationError).toErr();
+          }
+
+          if (
+            args.nodeId &&
+            PATH_NODE_ID_INTENTS.has(args.intent) &&
+            !isRoutableNodeId(args.nodeId)
+          ) {
+            return new ArgsValidationError(UNSUPPORTED_NODE_ID_MESSAGE).toErr();
           }
 
           return new Ok(

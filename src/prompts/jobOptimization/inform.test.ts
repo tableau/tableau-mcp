@@ -1,6 +1,14 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getJobOptimizationInformPrompt } from './inform.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
+
 const textOf = async (args: Record<string, string> = {}): Promise<string> => {
   const prompt = getJobOptimizationInformPrompt(new WebMcpServer());
   const result = await prompt.callback(args);
@@ -19,11 +27,18 @@ describe('job-optimization-inform prompt', () => {
     expect(prompt.name).toBe('job-optimization-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
-    const prompt = getJobOptimizationInformPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getJobOptimizationInformPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('instructs the model to call the tool once and forbid recomputation', async () => {
     const text = await textOf();

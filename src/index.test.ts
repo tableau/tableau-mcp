@@ -33,6 +33,13 @@ vi.mock('./config.js', () => ({
   })),
 }));
 
+vi.mock('./activityLog/init.js', () => ({
+  initializeActivityLog: vi.fn(async () => {
+    startupState.events.push('activity log init');
+  }),
+  closeActivityLog: vi.fn(async () => undefined),
+}));
+
 vi.mock('./features/init.js', () => ({
   initializeFeatureGate: vi.fn(() => {
     startupState.events.push('feature gate');
@@ -154,6 +161,7 @@ describe('default entrypoint startup', () => {
 
     expect(startupState.events).toEqual([
       'feature gate',
+      'activity log init',
       'session store init',
       'session store connected',
       'server info',

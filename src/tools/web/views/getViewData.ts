@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { parseViewAllData } from '../../../sdks/tableau/methods/viewAllData.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -18,7 +19,7 @@ import {
 } from './dataToolResult.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  viewId: luidSchema,
   viewFilters: z
     .record(z.string())
     .optional()

@@ -11,6 +11,7 @@ import {
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   Datasource,
   QueryOutput,
@@ -45,7 +46,7 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: luidSchema,
   query: querySchema,
   limit: z.number().int().min(1).optional(),
 };

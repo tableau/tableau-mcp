@@ -21,6 +21,31 @@ To get the **count** of projects matching the request, read `totalAvailable` fro
 
 ## Optional arguments
 
+### `capability`
+
+Only return projects the current user has this effective capability on. The only supported value
+is `Write`, which returns just the projects the user can publish or create content into. The
+filter is applied by Tableau, so `totalAvailable` counts only the matching projects. Use it when
+asking the user where to publish so they are only offered projects they can publish to.
+
+It combines with [`filter`](#filter), for example `capability: "Write"` with
+`filter: "parentProjectId:eq:abc-123"` lists the publishable child projects of a parent.
+
+:::info[Minimum REST API version and site enablement]
+
+`capability` requires Tableau REST API version 3.30 or later (Tableau Server 2026.3+). On older
+servers it is not advertised, because they ignore it and return every project the user can view.
+
+The filter must also be enabled for the site by Tableau. On a 3.30+ site where it is not yet
+enabled, `capability` is still advertised but is ignored, so the result includes every project the
+user can view and publishing to some of them can fail with a permission error.
+
+:::
+
+Example: `Write`
+
+<hr />
+
 ### `filter`
 
 A

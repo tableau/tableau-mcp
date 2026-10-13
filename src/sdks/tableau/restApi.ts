@@ -9,6 +9,7 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from '../interceptors.js';
+import { assertSafeRequestUrl } from '../routeSafety/core.js';
 import { AuthConfig } from './authConfig.js';
 import {
   AuthenticatedAuthenticationMethods,
@@ -22,6 +23,7 @@ import JobsMethods from './methods/jobsMethods.js';
 import KnowledgeMethods from './methods/knowledgeMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import PackagesMethods from './methods/packagesMethods.js';
 import PersonalSpaceMethods from './methods/personalSpaceMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
 import PublishingMethods from './methods/publishingMethods.js';
@@ -196,6 +198,19 @@ export class RestApi {
     });
     this._addInterceptors(baseUrl, flowDocumentMethods.interceptors);
     return flowDocumentMethods;
+  }
+
+  get packagesMethods(): PackagesMethods {
+    // Experimental endpoint lives under `/api/exp`, not the versioned `/api/3.x`
+    // path, so it uses its own methods class with the `/api/exp` base URL.
+    // TODO: switch to the versioned REST base URL once allowed-origins ships in a numbered version.
+    const baseUrl = `${RestApi.host}/api/exp`;
+    const packagesMethods = new PackagesMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, packagesMethods.interceptors);
+    return packagesMethods;
   }
 
   get metadataMethods(): MetadataMethods {
@@ -374,6 +389,10 @@ export class RestApi {
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
     interceptors.request.use(
       (config) => {
+        // Axios runs request interceptors in reverse registration order, so the route guard that
+        // `createGuardedZodios` installed would run after this one. Check the URL here first so an
+        // unsafe URL is never logged or sent to the client as a notification.
+        assertSafeRequestUrl(config.url, config.baseURL);
         this._requestInterceptor?.[0]({
           baseUrl,
           ...getRequestInterceptorConfig(config),

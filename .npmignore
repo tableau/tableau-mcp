@@ -5,6 +5,8 @@
 !README.md
 !SECURITY.md
 !build/
+!build/activityLog/
+!build/activityLog/provider.d.ts
 !build/features.json
 !build/features/
 !build/features/featureGateProvider.d.ts

@@ -4,7 +4,6 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
-  DEFAULT_PENDING_DELETION_TAG,
   EvidenceContext,
   NoEvidence,
   RegistryEvidence,
@@ -55,52 +54,45 @@ describe('TagEvidence', () => {
     mocks.mockAddTagsToWorkbook.mockResolvedValue(undefined);
   });
 
-  it('describes itself as a tag with the default label when no tag is supplied', () => {
-    const evidence = new TagEvidence({ kind: 'datasource' });
+  const BATCH = '2026-09-25';
+  const BATCH_TAG = 'pending-deletion-2026-09-25';
+
+  it('describes itself as a tag carrying the date-stamped batch label', () => {
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
     const descriptor = evidence.describeEvidence();
     expect(descriptor.kind).toBe('tag');
-    expect(descriptor.detail).toContain(DEFAULT_PENDING_DELETION_TAG);
+    expect(descriptor.detail).toContain(BATCH_TAG);
+    expect(evidence.getPendingTag()).toBe(BATCH_TAG);
   });
 
-  it('falls back to the default tag for empty / whitespace-only labels', () => {
-    expect(new TagEvidence({ tag: '   ', kind: 'datasource' }).describeEvidence().detail).toContain(
-      DEFAULT_PENDING_DELETION_TAG,
-    );
-    expect(new TagEvidence({ tag: '', kind: 'workbook' }).describeEvidence().detail).toContain(
-      DEFAULT_PENDING_DELETION_TAG,
-    );
-  });
-
-  it('establish tags the datasource with the (default) pending-deletion label', async () => {
-    const evidence = new TagEvidence({ kind: 'datasource' });
-    const ctx = makeCtx();
-    await evidence.establish(ctx);
+  it('establish tags the datasource with the batch label', async () => {
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
+    await evidence.establish(makeCtx());
     expect(mocks.mockAddTagsToDatasource).toHaveBeenCalledWith({
       datasourceId: 'target-1',
       siteId: 'test-site-id',
-      tagLabels: [DEFAULT_PENDING_DELETION_TAG],
+      tagLabels: [BATCH_TAG],
     });
   });
 
-  it('establish tags the workbook with a caller-supplied label', async () => {
-    const evidence = new TagEvidence({ tag: 'stale-pending', kind: 'workbook' });
+  it('establish tags the workbook with the batch label', async () => {
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'workbook' });
     const ctx = makeCtx({ target: { id: 'wb-1', kind: 'workbook' }, tool: 'delete-content' });
     await evidence.establish(ctx);
     expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
       workbookId: 'wb-1',
       siteId: 'test-site-id',
-      tagLabels: ['stale-pending'],
+      tagLabels: [BATCH_TAG],
     });
   });
 
-  // --- verify: tag PRESENCE → true, ABSENCE → false (server-authoritative, live re-fetch) ---
+  // --- verify: exact batch tag PRESENCE → true, anything else → false (live re-fetch) ---
 
-  it('verify returns true when the live datasource carries the pending-deletion tag', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue({
-      tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
-    });
-    const evidence = new TagEvidence({ kind: 'datasource' });
+  it('verify returns true when the live datasource carries the batch tag', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue({ tags: { tag: [{ label: BATCH_TAG }] } });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
     await expect(evidence.verify(makeCtx())).resolves.toBe(true);
+    expect(evidence.explainRejection()).toBeUndefined();
     // The check is a fresh live re-fetch, not anything cached.
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasourceId: 'target-1',
@@ -108,23 +100,45 @@ describe('TagEvidence', () => {
     });
   });
 
-  it('verify returns false when the tag is absent', async () => {
+  it('verify returns false with no explanation when no marker is present', async () => {
     mocks.mockQueryDatasource.mockResolvedValue({ tags: {} });
-    const evidence = new TagEvidence({ kind: 'datasource' });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
     await expect(evidence.verify(makeCtx())).resolves.toBe(false);
+    expect(evidence.explainRejection()).toBeUndefined();
   });
 
-  it('verify returns false when a DIFFERENT tag is present (must match the requested label)', async () => {
+  it('verify returns false when an unrelated tag is present', async () => {
     mocks.mockQueryDatasource.mockResolvedValue({ tags: { tag: [{ label: 'some-other-tag' }] } });
-    const evidence = new TagEvidence({ tag: 'stale-pending', kind: 'datasource' });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
     await expect(evidence.verify(makeCtx())).resolves.toBe(false);
   });
 
-  it('verify returns true for a workbook carrying the tag', async () => {
-    mocks.mockGetWorkbook.mockResolvedValue({
-      tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
+  it('verify rejects a marker from a DIFFERENT cleanup batch and explains why', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue({
+      tags: { tag: [{ label: 'pending-deletion-2026-08-01' }] },
     });
-    const evidence = new TagEvidence({ kind: 'workbook' });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'datasource' });
+    await expect(evidence.verify(makeCtx())).resolves.toBe(false);
+    const explanation = evidence.explainRejection();
+    expect(explanation).toContain('pending-deletion-2026-08-01');
+    expect(explanation).toContain('different cleanup batch');
+    expect(explanation).toContain(BATCH_TAG);
+  });
+
+  it('verify rejects the legacy undated pending-deletion tag', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({ tags: { tag: [{ label: 'pending-deletion' }] } });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'workbook' });
+    await expect(
+      evidence.verify(makeCtx({ target: { id: 'wb-1', kind: 'workbook' } })),
+    ).resolves.toBe(false);
+    expect(evidence.explainRejection()).toContain("'pending-deletion'");
+  });
+
+  it('verify returns true for a workbook carrying the batch tag alongside an older marker', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({
+      tags: { tag: [{ label: 'pending-deletion-2026-08-01' }, { label: BATCH_TAG }] },
+    });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'workbook' });
     await expect(
       evidence.verify(makeCtx({ target: { id: 'wb-1', kind: 'workbook' } })),
     ).resolves.toBe(true);
@@ -132,7 +146,7 @@ describe('TagEvidence', () => {
 
   it('verify returns false when the workbook has no tags object at all', async () => {
     mocks.mockGetWorkbook.mockResolvedValue({});
-    const evidence = new TagEvidence({ kind: 'workbook' });
+    const evidence = new TagEvidence({ cleanupDate: BATCH, kind: 'workbook' });
     await expect(
       evidence.verify(makeCtx({ target: { id: 'wb-1', kind: 'workbook' } })),
     ).resolves.toBe(false);
@@ -558,7 +572,7 @@ describe('AllEvidence (AND-composition)', () => {
     vi.clearAllMocks();
     delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
     mocks.mockGetWorkbook.mockResolvedValue({
-      tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
+      tags: { tag: [{ label: 'pending-deletion-2026-09-25' }] },
     });
   });
 
@@ -569,7 +583,10 @@ describe('AllEvidence (AND-composition)', () => {
   it('verify is true only when EVERY strategy verifies (tag present AND approval present)', async () => {
     const approval = new AppApprovalEvidence();
     await approval.establish(appCtx('wb-and-ok'));
-    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    const all = new AllEvidence([
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+      approval,
+    ]);
     await expect(all.verify(appCtx('wb-and-ok'))).resolves.toBe(true);
   });
 
@@ -577,17 +594,40 @@ describe('AllEvidence (AND-composition)', () => {
     mocks.mockGetWorkbook.mockResolvedValue({ tags: { tag: [{ label: 'other' }] } });
     const approval = new AppApprovalEvidence();
     await approval.establish(appCtx('wb-and-notag'));
-    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    const all = new AllEvidence([
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+      approval,
+    ]);
     await expect(all.verify(appCtx('wb-and-notag'))).resolves.toBe(false);
   });
 
   it('verify is false when no human approval exists even if the tag is present', async () => {
-    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), new AppApprovalEvidence()]);
+    const all = new AllEvidence([
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+      new AppApprovalEvidence(),
+    ]);
     await expect(all.verify(appCtx('wb-and-noapproval'))).resolves.toBe(false);
   });
 
+  it('explainRejection delegates to the strategy that failed (cross-batch tag)', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({
+      tags: { tag: [{ label: 'pending-deletion-2026-08-01' }] },
+    });
+    const approval = new AppApprovalEvidence();
+    await approval.establish(appCtx('wb-and-crossbatch'));
+    const all = new AllEvidence([
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+      approval,
+    ]);
+    await expect(all.verify(appCtx('wb-and-crossbatch'))).resolves.toBe(false);
+    expect(all.explainRejection()).toContain('different cleanup batch');
+  });
+
   it('describes itself with the kind of its primary (first) strategy for the audit record', () => {
-    const all = new AllEvidence([new AppApprovalEvidence(), new TagEvidence({ kind: 'workbook' })]);
+    const all = new AllEvidence([
+      new AppApprovalEvidence(),
+      new TagEvidence({ cleanupDate: '2026-09-25', kind: 'workbook' }),
+    ]);
     expect(all.describeEvidence().kind).toBe('registry-nonce');
   });
 });

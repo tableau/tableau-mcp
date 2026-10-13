@@ -24,7 +24,7 @@ describe('personalSpaceSchema', () => {
     expect(personalSpaceSchema.parse({ ...base, readOnly: input }).readOnly).toBe(true);
   });
 
-  // readOnly gates whether publish-workbook may auto-default into this space, so anything
+  // readOnly gates whether publish-workbook may publish into this space, so anything
   // unrecognized must fail CLOSED (readOnly: true) — the opposite of looseBooleanFalsy's polarity.
   it.each([
     ['junk text', 'maybe'],

@@ -38,8 +38,11 @@ async function startServer(): Promise<void> {
   await serverInfoReady;
 
   // The combined bundle supplies its own McpServer to both WebMcpServer and DesktopMcpServer so the
-  // web and desktop tools register onto a single server. Because the SDK reads `instructions` ONLY
-  // from the McpServer constructor options, compose both variants before either registers.
+  // web and desktop tools register onto a single server. The SDK takes `instructions` from the
+  // McpServer constructor options, so we MUST build it here with both variants' instructions composed
+  // — the web part kept in lockstep with the default path via buildWebInstructions(); the base Server
+  // constructor asserts the supplied instructions are contained. Admin guidance is appended later by
+  // WebMcpServer.registerTools.
   const desktopConfig = getDesktopConfig();
   const instructions = `${buildWebInstructions()} ${buildDesktopInstructions({
     sessionPinned: desktopConfig.desktopSessionId !== undefined,

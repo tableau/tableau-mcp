@@ -21,6 +21,8 @@ export default mergeConfig(
           '**/mock*.ts',
           '**/*Fixtures.ts',
           'src/testShared.ts',
+          // Static data app template assets (incl. the vendored, minified Extensions API library).
+          'src/templates/**/*',
           ...coverageConfigDefaults.exclude,
         ],
         reporter: ['text', 'cobertura'],

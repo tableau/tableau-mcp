@@ -33,6 +33,7 @@ import {
 import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
+import { registerSkills } from './skills/index.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -408,6 +409,7 @@ export class DesktopMcpServer extends Server {
     }
 
     await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {

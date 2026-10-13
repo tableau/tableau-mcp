@@ -12,6 +12,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -29,7 +30,7 @@ import {
 } from './flowDocumentSummary.js';
 
 const paramsSchema = {
-  flowId: z.string().nonempty(),
+  flowId: luidSchema,
   // Per-step column schemas are verbose and rarely needed to understand "what
   // does this flow do?", so they are opt-in.
   includeFieldSchemas: z.boolean().optional().default(false),

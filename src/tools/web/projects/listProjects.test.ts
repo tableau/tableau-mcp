@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { OverridableConfig } from '../../../overridableConfig.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
@@ -38,13 +39,33 @@ describe('listProjectsTool', () => {
     vi.clearAllMocks();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const listProjectsTool = getListProjectsTool(new WebMcpServer());
     expect(listProjectsTool.name).toBe('list-projects');
-    expect(listProjectsTool.description).toContain(
+    expect(await Provider.from(listProjectsTool.description)).toContain(
       'Retrieves a list of projects on a Tableau site',
     );
     expect(listProjectsTool.paramsSchema).toMatchObject({});
+  });
+
+  it('should advertise capability on REST API 3.30 and later', async () => {
+    const listProjectsTool = getListProjectsTool(new WebMcpServer());
+    const schema = await Provider.from(listProjectsTool.paramsSchema);
+    expect(schema.safeParse({ capability: 'Write' }).data).toEqual({ capability: 'Write' });
+    expect(await Provider.from(listProjectsTool.description)).toContain('capability: "Write"');
+  });
+
+  it('should not advertise capability below REST API 3.30', async () => {
+    const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
+    try {
+      const listProjectsTool = getListProjectsTool(new WebMcpServer());
+      const schema = await Provider.from(listProjectsTool.paramsSchema);
+      expect(schema.safeParse({ capability: 'Write' }).data).toEqual({});
+      expect(await Provider.from(listProjectsTool.description)).not.toContain('capability');
+    } finally {
+      RestApi.versionIsAtLeast = originalVersionIsAtLeast;
+    }
   });
 
   it('should successfully query projects', async () => {
@@ -189,6 +210,39 @@ describe('listProjectsTool', () => {
     expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
   });
 
+  it('should pass the capability through to the REST API', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    const result = await getToolResult({ filter: 'name:eq:Samples', capability: 'Write' });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
+    expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Samples',
+      capability: 'Write',
+      pageSize: 1000,
+      pageNumber: 1,
+    });
+  });
+
+  it('should not send a capability when none is requested', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    await getToolResult({ filter: 'name:eq:Samples' });
+    expect(mocks.mockQueryProjects.mock.calls[0][0].capability).toBeUndefined();
+  });
+
+  it('should explain an empty result when no projects can be published to', async () => {
+    mocks.mockQueryProjects.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 0 },
+      projects: [],
+    });
+    const result = await getToolResult({ capability: 'Write' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'No projects matching the request were found that you can publish to.',
+    );
+  });
+
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryProjects.mockRejectedValue(new Error(errorMessage));
@@ -214,6 +268,25 @@ describe('listProjectsTool', () => {
       invariant(result.type === 'empty');
       expect(result.message).toBe(
         'No projects were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return a publish-specific empty result when filtering on Write', () => {
+      const result = constrainProjects({
+        projects: [],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
+        capability: 'Write',
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No projects matching the request were found that you can publish to. Either none match the filter, or you do not have Write permission on any that do.',
       );
     });
 
@@ -272,7 +345,8 @@ describe('listProjectsTool', () => {
 });
 
 async function getToolResult(params: {
-  filter: string;
+  filter?: string;
+  capability?: 'Write';
   pageNumber?: number;
   limit?: number;
   maxResultLimit?: number;
@@ -290,7 +364,12 @@ async function getToolResult(params: {
   }
 
   return await callback(
-    { filter: params.filter, pageNumber: params.pageNumber, limit: params.limit },
+    {
+      filter: params.filter,
+      capability: params.capability,
+      pageNumber: params.pageNumber,
+      limit: params.limit,
+    },
     extra,
   );
 }

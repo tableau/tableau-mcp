@@ -1,4 +1,6 @@
 import {
+  getDatasourceNamesAndTagsByLuid,
+  getDatasourceNamesAndTagsQuery,
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
@@ -706,6 +708,47 @@ describe('lineageUtils', () => {
       id: 'u-1',
       displayName: 'Jane Smith',
       username: 'jsmith@acme.com',
+    });
+  });
+
+  describe('getDatasourceNamesAndTagsQuery', () => {
+    it('filters published data sources by the given LUIDs', () => {
+      const query = getDatasourceNamesAndTagsQuery(['ds-1', 'ds-2']);
+      expect(query).toContain(
+        'publishedDatasourcesConnection(filter: { luidWithin: ["ds-1", "ds-2"] })',
+      );
+      expect(query).toContain('name');
+      expect(query).toContain('tags');
+    });
+  });
+
+  describe('getDatasourceNamesAndTagsByLuid', () => {
+    it('maps each data source LUID to its name and tag names', () => {
+      const datasources = getDatasourceNamesAndTagsByLuid({
+        data: {
+          publishedDatasourcesConnection: {
+            nodes: [
+              {
+                luid: 'ds-1',
+                name: 'Superstore',
+                tags: [{ name: 'MCP Enabled' }, { name: 'certified' }],
+              },
+              { luid: 'ds-2', name: 'Finance', tags: null },
+            ],
+          },
+        },
+      });
+
+      expect(datasources).toEqual(
+        new Map([
+          ['ds-1', { name: 'Superstore', tags: ['MCP Enabled', 'certified'] }],
+          ['ds-2', { name: 'Finance', tags: [] }],
+        ]),
+      );
+    });
+
+    it('throws when the response does not have the expected shape', () => {
+      expect(() => getDatasourceNamesAndTagsByLuid({ data: {} })).toThrow();
     });
   });
 });

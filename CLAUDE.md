@@ -279,6 +279,8 @@ Check in code:
 if (getFeatureGate().isFeatureEnabled('my-feature')) { ... }
 ```
 
+Feature flags gate in-development features and are internal: customers don't know about them. Never mention a feature flag in user-facing docs (`docs/`), tool/prompt descriptions, or the bundle manifest. Document only the customer-facing config (e.g. env vars).
+
 ## Code Style
 
 - Keep code comments concise: explain the non-obvious WHY only. Never restate what the code already makes obvious.

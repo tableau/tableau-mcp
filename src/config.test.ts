@@ -207,6 +207,31 @@ describe('Config', () => {
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
   });
 
+  describe('PENDING_DELETION_MAX_AGE_DAYS', () => {
+    it('defaults to 30 days', () => {
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+    });
+
+    it('accepts a value within 1-90', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '14');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(14);
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '90');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(90);
+    });
+
+    it('falls back to the default when out of range or not a number', () => {
+      for (const raw of ['0', '91', '-5', 'abc']) {
+        vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', raw);
+        expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+      }
+    });
+
+    it('truncates a fractional value to whole days', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '7.9');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(7);
+    });
+  });
+
   it('should set enableMcpSiteSettings to true by default', () => {
     const config = new Config();
     expect(config.enableMcpSiteSettings).toBe(true);
@@ -1026,6 +1051,42 @@ describe('Config', () => {
       expect(config.auth).toBe('pat');
       expect(config.enablePassthroughAuth).toBe(true);
       expect(config.oauth.enabled).toBe(false);
+    });
+  });
+
+  describe('Activity Log provider configuration', () => {
+    it('should default to "noop" when ACTIVITY_LOG_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
+    });
+
+    it('should use "custom" when ACTIVITY_LOG_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+      vi.stubEnv(
+        'ACTIVITY_LOG_PROVIDER_CONFIG',
+        '{"module":"./my-activity-log.js","directory":"/home/nodejs/logs"}',
+      );
+
+      const config = new Config();
+      expect(config.activityLog).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './my-activity-log.js', directory: '/home/nodejs/logs' },
+      });
+    });
+
+    it('should throw error when ACTIVITY_LOG_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+      );
+    });
+
+    it('should fall back to "noop" when ACTIVITY_LOG_PROVIDER is invalid', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'invalid');
+
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
     });
   });
 });
