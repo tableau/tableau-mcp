@@ -206,7 +206,7 @@ export function addFieldToEncoding(
   // This must be done to ensure the changes are reflected in the parsed structure
   worksheet.table.panes.pane = panes.length === 1 ? panes[0] : panes;
 
-  // Debug: Verify the encoding was added before serializing
+  // Verify the encoding was added before serializing
   const verifyPanes = normalizeArray(worksheet.table.panes.pane);
   const verifyPane = verifyPanes[0];
   const verifyEncodings = normalizeArray(verifyPane?.encodings?.[encodingType]);
@@ -216,15 +216,6 @@ export function addFieldToEncoding(
   const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === correctedColumnRef);
 
   if (!encodingAdded) {
-    // Log detailed debug info
-    console.error('Encoding verification failed:', {
-      panesCount: verifyPanes.length,
-      hasEncodings: !!verifyPane?.encodings,
-      encodingType,
-      verifyEncodingsCount: verifyEncodings.length,
-      verifyEncodings: verifyEncodings,
-      expectedColumnRef: correctedColumnRef,
-    });
     throw new Error(
       `Failed to add encoding: encoding not found in structure after modification. Expected: ${correctedColumnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
     );

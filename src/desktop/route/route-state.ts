@@ -395,12 +395,6 @@ export class SessionRouteStateStore {
         continue;
       }
 
-      const selfIsTerminal = !this.isActiveBindRecovery(record);
-      if (selfIsTerminal) {
-        state.bindRecoveryByAsk.delete(ask);
-        return false;
-      }
-
       state.bindRecoveryByAsk.delete(ask);
       return false;
     }

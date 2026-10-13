@@ -98,41 +98,6 @@ export function addSheet(workbookXml: string, sheetName: string): string {
   return serializeXML(workbook);
 }
 
-export function deleteSheet(workbookXml: string, sheetName: string): string {
-  const workbook = parseXML(workbookXml);
-
-  if (!findWorksheet(workbook, sheetName)) {
-    throw new Error(`Worksheet "${sheetName}" does not exist`);
-  }
-  if (workbook.workbook?.worksheets) {
-    const worksheets = normalizeArray(workbook.workbook.worksheets.worksheet);
-    const filtered = worksheets.filter((ws) => ws['@_name'] !== sheetName);
-    if (filtered.length === 0) {
-      delete workbook.workbook.worksheets.worksheet;
-    } else if (filtered.length === 1) {
-      workbook.workbook.worksheets.worksheet = filtered[0];
-    } else {
-      workbook.workbook.worksheets.worksheet = filtered;
-    }
-  }
-
-  if (workbook.workbook?.windows) {
-    const windows = normalizeArray(workbook.workbook.windows.window);
-    const filtered = windows.filter(
-      (win) => !(win['@_name'] === sheetName && win['@_class'] === 'worksheet'),
-    );
-    if (filtered.length === 0) {
-      delete workbook.workbook.windows.window;
-    } else if (filtered.length === 1) {
-      workbook.workbook.windows.window = filtered[0];
-    } else {
-      workbook.workbook.windows.window = filtered;
-    }
-  }
-
-  return serializeXML(workbook);
-}
-
 export function listSheets(workbookXml: string): string[] {
   const workbook = parseXML(workbookXml);
   const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);

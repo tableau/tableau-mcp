@@ -3,7 +3,6 @@ import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { parseXML } from './parser.js';
 import {
   addSheet,
-  deleteSheet,
   extractSheetXml,
   extractWorksheetWindowXml,
   listSheets,
@@ -274,11 +273,9 @@ describe('worksheetFragmentSimpleId', () => {
   });
 });
 
-describe('addSheet / deleteSheet', () => {
-  it('round-trips add then delete', () => {
+describe('addSheet', () => {
+  it('adds the sheet to the worksheet list', () => {
     const added = addSheet(WORKBOOK_WITH_USER_NAMESPACE, 'New Sheet');
     expect(listSheets(added)).toContain('New Sheet');
-    const deleted = deleteSheet(added, 'New Sheet');
-    expect(listSheets(deleted)).not.toContain('New Sheet');
   });
 });

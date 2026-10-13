@@ -2,8 +2,8 @@
  * Multi-datasource field resolver.
  *
  * Today the codebase silently picks the first match for a user-friendly field
- * name across `findField` (single-datasource), `coordination.ts` (ad hoc
- * exact + agg-prefix logic), and `field-builder.ts` (`listAvailableFields`).
+ * name across `coordination.ts` (ad hoc exact + agg-prefix logic) and
+ * `field-builder.ts` (`listAvailableFields`).
  * The agent then learns to "trust" the first guess. When the workbook has
  * two datasources both with a "Profit" column — or one with "Profit Ratio"
  * and another with "Profit (USD)" — that silent guess produces XML that
@@ -631,9 +631,8 @@ function ignoredRedundantAggregation(
 }
 
 /**
- * Map a parsed aggregation token to the `AggregationType` enum used by
- * `findAndBuildColumnRef`. Unsupported aggregations (median, stdev, var, ...)
- * return undefined so the caller can fall back to the resolver's "exact"
+ * Map a parsed aggregation token to the `AggregationType` enum. Unsupported aggregations
+ * (median, stdev, var, ...) return undefined so the caller can fall back to the resolver's "exact"
  * path or surface a clearer error.
  */
 function mapAggregationToken(token: string): AggregationType | undefined {
@@ -656,10 +655,8 @@ function mapAggregationToken(token: string): AggregationType | undefined {
     case 'countdistinct':
       return AggregationType.CountDistinct;
     default:
-      // median / stdev / stdevp / var / varp are not in the supported
-      // AggregationType enum yet; leaving undefined causes
-      // `findAndBuildColumnRef` to apply a default, which is worse than
-      // explicit "not_found". The resolver catches that below.
+      // median / stdev / stdevp / var / varp are not in AggregationType yet; undefined lets the
+      // resolver report "not_found" instead of silently defaulting.
       return undefined;
   }
 }
