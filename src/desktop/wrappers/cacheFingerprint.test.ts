@@ -1,27 +1,35 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as loggerModule from '../../logging/logger.js';
 import type { FingerprintResolver, InstanceFingerprint } from './cacheFingerprint.js';
 import * as cacheFingerprintModule from './cacheFingerprint.js';
 
-const {
-  checkSidecar,
-  checkSidecarInput,
-  restampSidecarAfterEdit,
-  sidecarPath,
-  sourceSha256,
-  writeSidecar,
-} = cacheFingerprintModule;
+const { checkSidecar, checkSidecarInput, sidecarPath, sourceSha256, writeSidecar } =
+  cacheFingerprintModule;
 
 const dirs: string[] = [];
 
+const state = vi.hoisted(() => ({ cacheDir: '', counter: 0 }));
+
+vi.mock('../cache.js', () => ({
+  DesktopCache: class {
+    getCacheFilePath({ prefix, id }: { prefix: string; id?: string }): string {
+      return join(state.cacheDir, `${prefix}-${id ?? 'default'}.xml`);
+    }
+  },
+}));
+
+beforeEach(() => {
+  state.cacheDir = mkdtempSync(join(tmpdir(), 'tableau-cache-fingerprint-'));
+  dirs.push(state.cacheDir);
+});
+
 function tempFile(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'tableau-cache-fingerprint-'));
-  dirs.push(dir);
-  return join(dir, 'worksheet.xml');
+  state.counter += 1;
+  return join(state.cacheDir, `worksheet-${state.counter}.xml`);
 }
 
 /** A resolver that returns a fixed fingerprint (or undefined) regardless of session id. */
@@ -168,7 +176,7 @@ describe('cache fingerprint sidecars', () => {
     expect(meta.source_sha256).toBeUndefined();
   });
 
-  it('replaces source A with fresh source B and preserves B across an edit restamp', () => {
+  it('replaces source A with fresh source B and keeps B provenance after a later edit of the cache file', () => {
     const file = tempFile();
     const resolve = resolver({ pid: 1, instanceId: 'inst-a' });
     const sourceA = '<workbook revision="A"/>';
@@ -179,18 +187,6 @@ describe('cache fingerprint sidecars', () => {
     writeFileSync(file, sourceB, 'utf-8');
     writeSidecar(file, '1', sourceSha256(sourceB), resolve);
     writeFileSync(file, '<workbook revision="B" edited="true"/>', 'utf-8');
-    const restampSidecarAfterEdit = (
-      cacheFingerprintModule as typeof cacheFingerprintModule & {
-        restampSidecarAfterEdit?: (
-          cacheFile: string,
-          sessionId: string,
-          resolve: FingerprintResolver,
-        ) => void;
-      }
-    ).restampSidecarAfterEdit;
-    expect(restampSidecarAfterEdit).toBeTypeOf('function');
-    if (restampSidecarAfterEdit === undefined) return;
-    restampSidecarAfterEdit(file, '1', resolve);
 
     expect(checkSidecar(file, '1', 'workbook', resolve)).toEqual({
       ok: true,
@@ -198,53 +194,15 @@ describe('cache fingerprint sidecars', () => {
     });
   });
 
-  it('preserves sidecar A provenance when session B edits the cache file', () => {
-    const file = tempFile();
-    const sourceHash = 'a'.repeat(64);
-    const sidecar = JSON.stringify(
-      {
-        session_id: '1',
-        pid: 1,
-        instanceId: 'inst-a',
-        created_at: '2026-08-13T12:00:00.000Z',
-        source_sha256: sourceHash,
-      },
-      null,
-      2,
-    );
-    writeFileSync(file, '<workbook edited="true"/>', 'utf-8');
-    writeFileSync(sidecarPath(file), sidecar, 'utf-8');
+  it('refuses to write a sidecar next to a file outside the cache', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'tableau-outside-'));
+    dirs.push(outside);
+    const file = join(outside, 'worksheet.xml');
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
 
-    restampSidecarAfterEdit(file, '2', resolver({ pid: 2, instanceId: 'inst-b' }));
+    writeSidecar(file, '1', sourceSha256('<a/>'), resolver({ pid: 1, instanceId: 'inst-a' }));
 
-    expect(readFileSync(sidecarPath(file), 'utf-8')).toBe(sidecar);
-    expect(checkSidecar(file, '2', 'workbook', resolver({ pid: 2, instanceId: 'inst-b' })).ok).toBe(
-      false,
-    );
-    expect(checkSidecar(file, '1', 'workbook', resolver({ pid: 1, instanceId: 'inst-a' }))).toEqual(
-      {
-        ok: true,
-        sourceHash,
-      },
-    );
-  });
-
-  it('does not mint provenance when the sidecar is missing, unreadable, or legacy', () => {
-    const resolveB = resolver({ pid: 2, instanceId: 'inst-b' });
-    const missingFile = tempFile();
-    const unreadableFile = tempFile();
-    const legacyFile = tempFile();
-    const legacySidecar = JSON.stringify({ session_id: '1', pid: 1, created_at: 'legacy' });
-    writeFileSync(sidecarPath(unreadableFile), 'not json', 'utf-8');
-    writeFileSync(sidecarPath(legacyFile), legacySidecar, 'utf-8');
-
-    restampSidecarAfterEdit(missingFile, '2', resolveB);
-    restampSidecarAfterEdit(unreadableFile, '2', resolveB);
-    restampSidecarAfterEdit(legacyFile, '2', resolveB);
-
-    expect(existsSync(sidecarPath(missingFile))).toBe(false);
-    expect(readFileSync(sidecarPath(unreadableFile), 'utf-8')).toBe('not json');
-    expect(readFileSync(sidecarPath(legacyFile), 'utf-8')).toBe(legacySidecar);
+    expect(existsSync(sidecarPath(file))).toBe(false);
   });
 
   it('refuses when the sidecar fingerprint differs from the current session', () => {

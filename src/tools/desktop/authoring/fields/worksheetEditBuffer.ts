@@ -19,6 +19,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { checkCacheFileArg } from '../../../../desktop/cachePath.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
@@ -103,16 +104,18 @@ export function getStickyWorksheetFile({
   if (pointer.worksheet_id !== trimmedId) {
     return undefined;
   }
-  if (!existsSync(pointer.file)) {
+  // The pointer file is plain JSON in the cache; never trust the path inside it.
+  const contained = checkCacheFileArg('worksheetFile', pointer.file);
+  if (contained.isErr()) {
     return undefined;
   }
 
-  const sidecarCheck = checkSidecar(pointer.file, session, 'worksheet');
+  const sidecarCheck = checkSidecar(contained.value, session, 'worksheet');
   if (!sidecarCheck.ok) {
     return undefined;
   }
 
-  return pointer.file;
+  return contained.value;
 }
 
 /** Point the sticky buffer for this sheet+session at `file` (minted, reused, or caller-supplied). */
@@ -201,6 +204,18 @@ export async function resolveWorksheetEditFile({
 
   const trimmedWorksheetName = worksheetName?.trim() || undefined;
 
+  // Check the file before any Desktop call so a bad path costs no round trip or cache write.
+  let resolvedFile: string | undefined;
+  if (worksheetFile?.trim()) {
+    const checked = checkCacheFileArg(
+      'worksheetFile',
+      worksheetFile,
+      (path) => new FileNotFoundError(path),
+    );
+    if (checked.isErr()) return Err(checked.error);
+    resolvedFile = checked.value;
+  }
+
   let bufferWorksheetId: string | undefined;
   if (trimmedWorksheetName) {
     const resolved = await resolveWorksheetBufferId({
@@ -214,7 +229,6 @@ export async function resolveWorksheetEditFile({
     bufferWorksheetId = resolved.value;
   }
 
-  let resolvedFile = worksheetFile?.trim() || undefined;
   if (!resolvedFile) {
     const sticky = getStickyWorksheetFile({
       session: resolvedSession,
@@ -235,16 +249,19 @@ export async function resolveWorksheetEditFile({
     }
   }
 
+  const checked = checkCacheFileArg(
+    'worksheetFile',
+    resolvedFile,
+    (path) => new FileNotFoundError(path),
+  );
+  if (checked.isErr()) return Err(checked.error);
+
   if (bufferWorksheetId) {
     setStickyWorksheetFile({
       session: resolvedSession,
       worksheetId: bufferWorksheetId,
       file: resolvedFile,
     });
-  }
-
-  if (!existsSync(resolvedFile)) {
-    return Err(new FileNotFoundError(resolvedFile));
   }
 
   return Ok(resolvedFile);

@@ -22,9 +22,6 @@ vi.mock('../../../../desktop/cache.js', () => ({
 vi.mock('../../../../desktop/session/sessionResolution.js', () => ({
   resolveSession: (session: string) => ({ isErr: () => false, value: session }),
 }));
-vi.mock('../../../../desktop/wrappers/cacheFingerprint.js', () => ({
-  restampSidecarAfterEdit: vi.fn(),
-}));
 
 describe('cached XML callback containment', () => {
   let root: string;

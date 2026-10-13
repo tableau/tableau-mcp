@@ -4,17 +4,24 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
-import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { UnknownError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
 import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 
 // Real fs and real metadata here on purpose: the sibling suite mocks both, so it
 // cannot show what add-field writes into a worksheet for a field it could not find.
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
 vi.mock('./refreshWorkbookCache.js');
@@ -87,6 +94,7 @@ async function addField(params: {
 
 describe('add-field — an absent column comes back as a tool error, not a crash', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
     vi.mocked(refreshWorkbookCacheModule.refreshWorkbookCache).mockResolvedValue({
@@ -133,10 +141,6 @@ describe('add-field — an absent column comes back as a tool error, not a crash
 
     expect(success.isError).toBe(false);
     expect(readFileSync(worksheetFile, 'utf-8')).toContain('[sum:Profit:qk]');
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
-      worksheetFile,
-      SESSION,
-    );
   });
 
   it('resolves a field that lives only in a nested relation, through the tool', async () => {

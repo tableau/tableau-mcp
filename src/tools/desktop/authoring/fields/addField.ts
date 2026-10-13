@@ -1,10 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import levenshtein from 'fast-levenshtein';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import {
+  checkCacheFileArg,
+  readCacheFileArg,
+  writeCacheFileArg,
+} from '../../../../desktop/cachePath.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
@@ -16,11 +20,9 @@ import {
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
-  FileReadError,
   UnknownError,
   XmlModificationError,
   XmlValidationError,
@@ -162,6 +164,20 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
           workbookFile,
         },
         callback: async () => {
+          for (const [argName, raw] of [
+            ['worksheetFile', worksheetFile],
+            ['workbookFile', workbookFile],
+          ] as const) {
+            if (raw?.trim()) {
+              const checked = checkCacheFileArg(
+                argName,
+                raw,
+                (path) => new FileNotFoundError(path),
+              );
+              if (checked.isErr()) return checked.error.toErr();
+            }
+          }
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -187,24 +203,24 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             ).toErr();
           }
 
-          let worksheetXml: string;
-          try {
-            worksheetXml = readFileSync(worksheetFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const worksheetRead = readCacheFileArg(
+            'worksheetFile',
+            worksheetFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (worksheetRead.isErr()) return worksheetRead.error.toErr();
+          const worksheetXml = worksheetRead.value.text;
 
           let workbookXml: string | undefined;
           const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
           if (requestedWorkbookFile) {
-            if (!existsSync(requestedWorkbookFile)) {
-              return new FileNotFoundError(requestedWorkbookFile).toErr();
-            }
-            try {
-              workbookXml = readFileSync(requestedWorkbookFile, 'utf-8');
-            } catch (error) {
-              return new FileReadError(error).toErr();
-            }
+            const workbookRead = readCacheFileArg(
+              'workbookFile',
+              requestedWorkbookFile,
+              (path) => new FileNotFoundError(path),
+            );
+            if (workbookRead.isErr()) return workbookRead.error.toErr();
+            workbookXml = workbookRead.value.text;
           } else {
             const liveWorkbookFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
             let refresh: Awaited<ReturnType<typeof refreshWorkbookCache>>;
@@ -292,12 +308,8 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new XmlValidationError(errors).toErr();
           }
 
-          try {
-            writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            restampSidecarAfterEdit(worksheetFile, resolvedSession);
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const written = writeCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
+          if (written.isErr()) return written.error.toErr();
 
           return new Ok(
             withNextAction(

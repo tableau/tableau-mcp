@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
 import levenshtein from 'fast-levenshtein';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -11,6 +10,7 @@ import {
   schemaSummaryFromAvailableFields,
 } from '../../../../desktop/binder/explicit-bind.js';
 import type { SlotSpec } from '../../../../desktop/binder/manifest-types.js';
+import { readCacheFileArg } from '../../../../desktop/cachePath.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
 import {
@@ -256,8 +256,15 @@ export const getBuildAndApplyWorksheetTool = (
         callback: async () => {
           const { worksheetName, workbookFile, template, fields } = taskSpec;
 
-          if (workbookFile !== undefined && !existsSync(workbookFile)) {
-            return new FileNotFoundError(workbookFile).toErr();
+          let cachedWorkbook: { path: string; text: string } | undefined;
+          if (workbookFile !== undefined) {
+            const read = readCacheFileArg(
+              'taskSpec.workbookFile',
+              workbookFile,
+              (path) => new FileNotFoundError(path),
+            );
+            if (read.isErr()) return read.error.toErr();
+            cachedWorkbook = read.value;
           }
 
           if (!template) {
@@ -287,14 +294,14 @@ export const getBuildAndApplyWorksheetTool = (
 
           let executor: ExternalApiToolExecutor | undefined;
           let workbookXml: string;
-          if (workbookFile !== undefined) {
+          if (cachedWorkbook) {
             // Cross-instance cache-bleed guard (W9): refuse a cache produced by a different
             // (or restarted) Desktop session — its XML may not match the current workbook.
-            const workbookSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+            const workbookSidecar = checkSidecar(cachedWorkbook.path, resolvedSession, 'workbook');
             if (!workbookSidecar.ok) {
               return new CacheSessionMismatchError(workbookSidecar.message!).toErr();
             }
-            workbookXml = readFileSync(workbookFile, 'utf-8');
+            workbookXml = cachedWorkbook.text;
           } else {
             executor = await extra.getExecutor(resolvedSession);
             const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });

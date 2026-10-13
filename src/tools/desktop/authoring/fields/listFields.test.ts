@@ -7,9 +7,17 @@ import { FileNotFoundError, FileReadError } from '../../../../errors/mcpToolErro
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getListFieldsTool } from './listFields.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('fs');
 
@@ -20,6 +28,7 @@ const resultSchema = z.object({
 
 describe('listFieldsTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
   });
 

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -11,10 +11,18 @@ import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.de
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getBuildAndApplyDashboardTool } from './buildAndApplyDashboard.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadDashboardXml.js');
@@ -36,8 +44,10 @@ describe('buildAndApplyDashboardTool', () => {
   });
 
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<cached/>');
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({
         validationWarnings: [],

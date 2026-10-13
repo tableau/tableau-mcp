@@ -1,8 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  checkCacheFileArg,
+  readCacheFileArg,
+  writeCacheFileArg,
+} from '../../../../desktop/cachePath.js';
 import {
   removeFieldFromCols,
   removeFieldFromEncoding,
@@ -10,10 +14,9 @@ import {
 } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
-  FileReadError,
+  FileNotFoundError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
@@ -74,6 +77,15 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: { session, worksheetName, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
+          if (worksheetFile?.trim()) {
+            const checked = checkCacheFileArg(
+              'worksheetFile',
+              worksheetFile,
+              (path) => new FileNotFoundError(path),
+            );
+            if (checked.isErr()) return checked.error.toErr();
+          }
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -99,12 +111,13 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             ).toErr();
           }
 
-          let worksheetXml: string;
-          try {
-            worksheetXml = readFileSync(worksheetFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const worksheetRead = readCacheFileArg(
+            'worksheetFile',
+            worksheetFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (worksheetRead.isErr()) return worksheetRead.error.toErr();
+          const worksheetXml = worksheetRead.value.text;
 
           let modifiedXml: string;
           let placement: FieldRemovalPlacement;
@@ -142,12 +155,8 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             return new XmlValidationError(errors).toErr();
           }
 
-          try {
-            writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            restampSidecarAfterEdit(worksheetFile, resolvedSession);
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const written = writeCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
+          if (written.isErr()) return written.error.toErr();
 
           return new Ok(removalResult);
         },

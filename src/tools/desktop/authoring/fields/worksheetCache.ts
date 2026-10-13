@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
@@ -20,6 +21,16 @@ import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 /** Sanitize an id or name into a filesystem-safe cache-key segment (shared with {@link worksheetEditBuffer.ts}). */
 export function safeWorksheetCacheId(value: string): string {
   return value.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+/**
+ * Cache id for a sheet or workbook name: the sanitized name plus a short hash of the raw name,
+ * so "Sales 2024" and "Sales-2024" (or two non-ASCII names) never share a file, plus the
+ * session so two Desktop instances never share one.
+ */
+export function distinctCacheId(rawName: string, session: string): string {
+  const hash = createHash('sha256').update(rawName).digest('hex').slice(0, 8);
+  return `${safeWorksheetCacheId(rawName).slice(0, 80)}-${hash}-${safeWorksheetCacheId(session)}`;
 }
 
 /**

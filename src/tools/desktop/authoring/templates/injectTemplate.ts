@@ -1,7 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -10,12 +8,12 @@ import {
   formatExplicitBindErrors,
 } from '../../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
+import { readCacheFileArg, writeCacheFileArg } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { OptionalFieldPruneSpec } from '../../../../desktop/templates/optionalFieldPrune.js';
 import { getRuntimeTemplateSnapshot } from '../../../../desktop/templates/runtimeTemplateCatalog.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -91,14 +89,16 @@ export const getInjectTemplateTool = (
           relativeSheetName,
         },
         callback: async () => {
+          const workbookRead = readCacheFileArg(
+            'workbookFile',
+            workbookFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (workbookRead.isErr()) return workbookRead.error.toErr();
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
-
-          if (!existsSync(resolve(workbookFile))) {
-            return new FileNotFoundError(workbookFile).toErr();
           }
 
           const runtimeSnapshot = getRuntimeTemplateSnapshot(templateName);
@@ -112,7 +112,7 @@ export const getInjectTemplateTool = (
 
           try {
             const templateXml = runtimeSnapshot.xml;
-            const workbookXml = readFileSync(resolve(workbookFile), 'utf-8');
+            const workbookXml = workbookRead.value.text;
 
             // Per-apply calc namespacing identity: the shared core defaults
             // namespacing OFF and never mints its own nonce, so the caller supplies
@@ -186,8 +186,8 @@ export const getInjectTemplateTool = (
               return new XmlValidationError(result.issues).toErr();
             }
 
-            writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
-            restampSidecarAfterEdit(resolve(workbookFile), resolvedSession);
+            const written = writeCacheFileArg('workbookFile', workbookFile, result.xml);
+            if (written.isErr()) return written.error.toErr();
 
             return new Ok({
               workbookFile,
