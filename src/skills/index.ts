@@ -6,6 +6,7 @@ import { getFeatureGate } from '../features/init.js';
 import { log } from '../logging/logger.js';
 import { type Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { registerSkillMethodHandlers } from './methods.js';
 import { getSkillRegistry } from './registry.js';
 
 const LOGGER = 'skills';
@@ -22,9 +23,9 @@ function isTextMimeType(mimeType: string): boolean {
 }
 
 /**
- * When skills-over-mcp is enabled, this is called once on startup. Serves every skill file
- * as an individual `resources/read` resource so clients can fetch `SKILL.md` and its referenced
- * files on demand. If called multiple times, skills are still only registered once.
+ * When skills-over-mcp is enabled, this is called once on startup. Registers the `skills/list`
+ * handler and serves every skill file as an individual `resources/read` resource so clients can
+ * fetch `SKILL.md` and its referenced files on demand. If called multiple times, skills are still only registered once.
  */
 export async function registerSkills(server: Server): Promise<void> {
   if (!(await getFeatureGate().isFeatureEnabled('skills-over-mcp'))) {
@@ -41,6 +42,9 @@ export async function registerSkills(server: Server): Promise<void> {
   registeredServer.add(mcp);
 
   const registry = await getSkillRegistry();
+  // Registered even when the catalog is empty: an empty skills/list is a valid response.
+  registerSkillMethodHandlers(mcp, registry);
+
   const files = registry.files();
 
   if (files.length === 0) {
