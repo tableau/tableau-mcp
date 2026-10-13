@@ -116,7 +116,7 @@ describe('binder/validate — gate 1: slot coverage', () => {
       ).toBe(true);
   });
 
-  it('fire: the same slot_id bound twice → kind-mismatch naming the slot', () => {
+  it('fire: the same slot_id bound twice → duplicate-slot-binding naming the slot', () => {
     const m = manifests.get('ranking-ordered-bar')!;
     const p: BindingProposal = {
       template: m.template,
@@ -133,7 +133,7 @@ describe('binder/validate — gate 1: slot coverage', () => {
       expect(
         r.blockers.some(
           (b) =>
-            b.code === 'kind-mismatch' &&
+            b.code === 'duplicate-slot-binding' &&
             b.slot_id === 'field_base_2' &&
             b.detail.includes('more than once'),
         ),

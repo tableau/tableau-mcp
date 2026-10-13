@@ -697,6 +697,8 @@ function fixForBlocker(b: Blocker): string {
       return 'Provide a compatible field for this required manifest slot.';
     case 'kind-mismatch':
       return 'Bind a field whose role/type/datatype matches the manifest slot kind.';
+    case 'duplicate-slot-binding':
+      return 'Keep exactly one binding per slot_id; remove the repeated binding and retry.';
     case 'derivation-illegal':
       return 'Drop the illegal derivation override or bind a field whose datatype supports it.';
     case 'aggregation-level-mismatch':

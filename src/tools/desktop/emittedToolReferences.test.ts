@@ -78,6 +78,7 @@ const NON_TOOL_VOCABULARY = [
   'diff-corpus',
   'do-nothing',
   'down-saved',
+  'duplicate-slot-binding',
   'edit-group-action',
   'edit-parameter-action',
   'empty-level',

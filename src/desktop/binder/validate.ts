@@ -103,6 +103,7 @@ export type EscalateReason =
   | 'ambiguous-field'
   | 'field-not-found'
   | 'kind-mismatch'
+  | 'duplicate-slot-binding'
   | 'derivation-illegal'
   | 'aggregation-level-mismatch'
   | 'base-column-conflict'
@@ -529,7 +530,7 @@ export function validateBinding(
   for (const b of p.bindings) {
     if (seenBindingSlots.has(b.slot_id)) {
       blockers.push({
-        code: 'kind-mismatch',
+        code: 'duplicate-slot-binding',
         slot_id: b.slot_id,
         detail: `slot '${b.slot_id}' is bound more than once; give each slot exactly one binding`,
       });
