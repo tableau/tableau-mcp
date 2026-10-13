@@ -9,11 +9,11 @@ export const categoricalFilterProliferationRule: ValidationRule = {
   id: 'categorical-filter-proliferation',
   description:
     'Flags more than 5 categorical filter controls in a proposal (performance/usability). ' +
-    'Flag-gated via ENABLE_FILTER_GUARDRAIL; inert and non-blocking by default.',
+    'Flag-gated via ENABLE_FILTER_GUARDRAIL=true; inert and non-blocking by default.',
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    if (!process.env.ENABLE_FILTER_GUARDRAIL) return [];
+    if (process.env.ENABLE_FILTER_GUARDRAIL !== 'true') return [];
 
     const doc = parseXml(xml);
     if (!doc) return [];

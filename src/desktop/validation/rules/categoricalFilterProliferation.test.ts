@@ -1,21 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { runValidation } from '../registry.js';
 import { categoricalFilterProliferationRule } from './categoricalFilterProliferation.js';
 
-const ORIGINAL = process.env.ENABLE_FILTER_GUARDRAIL;
-
-afterEach(() => {
-  if (ORIGINAL === undefined) delete process.env.ENABLE_FILTER_GUARDRAIL;
-  else process.env.ENABLE_FILTER_GUARDRAIL = ORIGINAL;
-});
-
 function enable(): void {
-  process.env.ENABLE_FILTER_GUARDRAIL = '1';
+  vi.stubEnv('ENABLE_FILTER_GUARDRAIL', 'true');
 }
 
 function disable(): void {
-  delete process.env.ENABLE_FILTER_GUARDRAIL;
+  vi.stubEnv('ENABLE_FILTER_GUARDRAIL', undefined);
 }
 
 function buildWorkbookWithFilters(n: number, klass = 'categorical'): string {
@@ -43,7 +36,7 @@ describe('categorical-filter-proliferation rule', () => {
     );
   });
 
-  it('emits an error for 7 categorical filters when ENABLE_FILTER_GUARDRAIL is set', () => {
+  it('emits an error for 7 categorical filters when ENABLE_FILTER_GUARDRAIL is true', () => {
     enable();
     const issues = categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7));
     expect(issues).toHaveLength(1);
@@ -81,5 +74,17 @@ describe('categorical-filter-proliferation rule', () => {
     expect(
       categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7, 'relational')),
     ).toHaveLength(0);
+  });
+
+  it.each([
+    ['unset', undefined],
+    ['false', 'false'],
+    ['0', '0'],
+    ['1', '1'],
+  ])('is inert with 7 filters when ENABLE_FILTER_GUARDRAIL is %s', (_label, value) => {
+    vi.stubEnv('ENABLE_FILTER_GUARDRAIL', value);
+    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7))).toHaveLength(
+      0,
+    );
   });
 });
