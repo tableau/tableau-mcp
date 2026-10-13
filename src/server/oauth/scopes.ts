@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { getFeatureGate } from '../../features/init.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
@@ -550,9 +551,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
+  const adminToolsEnabled = await isAdminToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
-  if (!config.adminToolsEnabled) {
+  if (!adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');

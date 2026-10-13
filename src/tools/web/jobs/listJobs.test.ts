@@ -11,6 +11,7 @@ import { mockJob } from './mockJob.js';
 const mockJobs = [mockJob];
 
 const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
   mockListJobs: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
@@ -33,6 +34,10 @@ vi.mock('../../../restApiInstance.js', () => ({
 
 vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../config.js', () => ({
@@ -61,6 +66,25 @@ describe('listJobsTool', () => {
     expect(listJobsTool.paramsSchema).toHaveProperty('pageSize');
     expect(listJobsTool.paramsSchema).toHaveProperty('pageNumber');
   });
+
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      const { getConfig } = await import('../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled } as ReturnType<
+        typeof getConfig
+      >);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const tool = getListJobsTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(disabled);
+    },
+  );
 
   it('should cap pageSize at 1000', async () => {
     const listJobsTool = getListJobsTool(new WebMcpServer());

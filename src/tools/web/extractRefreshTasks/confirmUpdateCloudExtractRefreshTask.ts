@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
@@ -38,8 +39,9 @@ const paramsSchema = {
  * update-cloud-extract-refresh-task preview within the MUTATION_PREVIEW_TTL_MINUTES window. Missing
  * approval → PreviewNotRunError, no update.
  *
- * Gated behind the off-by-default `mcp-apps` flag AND ADMIN_TOOLS_ENABLED, so when the flag is off
- * the model never sees a mutating tool that lacks a preview path.
+ * Gated behind admin tools (ADMIN_TOOLS_ENABLED AND the `admin-tools` flag) AND the off-by-default
+ * `mcp-apps` flag, so when mcp-apps is off the model never sees a mutating tool that lacks a preview
+ * path.
  */
 export const getConfirmUpdateCloudExtractRefreshTaskTool = (
   server: WebMcpServer,
@@ -51,7 +53,8 @@ export const getConfirmUpdateCloudExtractRefreshTaskTool = (
     name: 'confirm-update-cloud-extract-refresh-task',
     disabled: new Provider(
       async () =>
-        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+        !(await isAdminToolsEnabled(config)) ||
+        !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
     ),
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
     description: `

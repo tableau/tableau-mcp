@@ -9,6 +9,7 @@ import { mockUser } from './mockUser.js';
 import { getUpdateUserTool } from './updateUser.js';
 
 const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockUpdateUser: vi.fn(),
   mockGuardMutation: vi.fn(),
@@ -25,6 +26,10 @@ vi.mock('../../../restApiInstance.js', () => ({
       userId: 'test-user-id',
     }),
   ),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../config.js', () => ({
@@ -78,6 +83,25 @@ describe('updateUserTool', () => {
     expect(updateUserTool.name).toBe('update-user');
     expect(updateUserTool.description).toContain('Updates the site role of a user');
   });
+
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      const { getConfig } = await import('../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled } as ReturnType<
+        typeof getConfig
+      >);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const tool = getUpdateUserTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(disabled);
+    },
+  );
 
   describe('preview phase', () => {
     it('should return preview text with current and proposed role', async () => {

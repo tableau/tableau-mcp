@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { STALE_CONTENT_MIN_AGE_DAYS_DEFAULT } from '../../overridableConfig.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { WebPromptFactory } from '../registry.js';
@@ -86,7 +87,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
     '(all read-only), then — only after a required human-in-the-loop approval — tag the approved ' +
     'items pending-deletion (reversible) and delete them to the recycle bin. Admin-only.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const minAgeDays = args.minAgeDays
       ? parseInt(args.minAgeDays, 10)

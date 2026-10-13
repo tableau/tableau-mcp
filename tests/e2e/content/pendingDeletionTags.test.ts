@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 const REMOVED_TOOLS = ['list-pending-deletion-tags', 'remove-pending-deletion-tags'] as const;
@@ -74,7 +74,7 @@ describe('pending-deletion tags', () => {
   afterAll(resetEnv);
 
   beforeAll(async () => {
-    client = new McpClient({ env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' } });
+    client = new McpClient({ env: getAdminToolsEnv() });
     await client.connect();
     const tools = await client.listTools();
     toolsAvailable = tools.includes('delete-content');
@@ -183,7 +183,7 @@ describe('pending-deletion tags', () => {
       return;
     }
     const strictClient = new McpClient({
-      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true', PENDING_DELETION_MAX_AGE_DAYS: '1' },
+      env: { ...getAdminToolsEnv(), PENDING_DELETION_MAX_AGE_DAYS: '1' },
     });
     await strictClient.connect();
     try {

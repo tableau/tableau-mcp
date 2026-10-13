@@ -179,14 +179,24 @@ describe('deleteContentTool', () => {
     expect(tool.paramsSchema).toHaveProperty('confirmationToken');
   });
 
-  it('is disabled when adminToolsEnabled is false', async () => {
-    const { getConfig } = await import('../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      adminToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = await getDeleteContentTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      const { getConfig } = await import('../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled } as ReturnType<
+        typeof getConfig
+      >);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const tool = await getDeleteContentTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(disabled);
+    },
+  );
 
   it('carries destructive annotations', async () => {
     const tool = await getDeleteContentTool(new WebMcpServer());

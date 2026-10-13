@@ -16,6 +16,7 @@ import { join } from 'path';
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { isAdminToolsEnabled } from './features/adminTools.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
@@ -53,7 +54,7 @@ const BASE_INSTRUCTIONS =
   'Tableau MCP exposes tools for exploring and querying Tableau Cloud/Server content: ' +
   'datasources, workbooks, views, Pulse metrics, and content search.';
 
-// Admin/site-health guidance. Advertised only when ADMIN_TOOLS_ENABLED is set (config.adminToolsEnabled).
+// Admin/site-health guidance. Appended in registerTools only when admin tools are enabled.
 // This is safe with no role lookup: the per-call assertAdmin gate still rejects any non-admin at execution,
 // so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
 // (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
@@ -86,24 +87,15 @@ const SITE_ROLE_UNAVAILABLE_WARNING =
   'Tableau administrator.';
 
 /**
- * Single source of truth for the web server's `initialize` instructions string. Returns the base
- * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
- *
- * ADMIN_TOOLS_ENABLED is read straight from env (matching Config's exact semantics in config.ts:
- * `ADMIN_TOOLS_ENABLED === 'true'`) rather than via getConfig(). The instructions string depends
- * ONLY on this flag, and it is composed at handshake/registration-independent construction time —
- * eagerly building the full Config here would newly require SERVER to be set and would consume test
- * getConfig() mocks. Direct env read keeps composition side-effect-free.
+ * Base `initialize` instructions for the web server. Admin guidance is not included here: it depends
+ * on an async feature-gate check, so registerTools appends it via appendInstructions().
  *
  * Both the default/web path (WebMcpServer constructs its own McpServer) and the combined path
- * (index.combined.ts supplies a pre-built McpServer) MUST feed instructions through this function.
- * The SDK reads `instructions` only from the McpServer constructor options (it is never settable
- * post-construction), so a supplied McpServer that was not built with these instructions would
- * silently drop them — see the guard in server.ts.
+ * (index.combined.ts supplies a pre-built McpServer) MUST construct with this string — see the
+ * guard in server.ts.
  */
 export function buildWebInstructions(): string {
-  const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
-  return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
+  return BASE_INSTRUCTIONS;
 }
 
 export class WebMcpServer extends Server {
@@ -131,6 +123,11 @@ export class WebMcpServer extends Server {
 
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
+
+    // Appended before tool filtering so any registration warnings follow the admin guidance.
+    if (await isAdminToolsEnabled(config)) {
+      this.appendInstructions(ADMIN_INSTRUCTIONS);
+    }
 
     const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
@@ -208,7 +205,7 @@ export class WebMcpServer extends Server {
       }
     }
 
-    registerPrompts(this);
+    await registerPrompts(this);
 
     await this.enableSkillsCapability();
     await registerSkills(this);
