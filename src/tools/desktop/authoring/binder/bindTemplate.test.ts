@@ -5592,6 +5592,47 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("member='&quot;&quot;'");
   });
 
+  it('shows the filter card for a field whose window already has a legend card for it', async () => {
+    const legendXml = INJECTED_M7_RANKING_XML.replace(
+      '<cards />',
+      "<cards><edge name='right'><strip size='160'><card pane-specification-id='0' param='[M7].[none:region:nk]' type='color' /></strip></edge></cards>",
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TwoFilterResult,
+        args: {
+          ...boundM7TwoFilterResult.args,
+          filters: [
+            { field: 'Segment', values: ['Consumer'] },
+            { field: 'Region', context: true },
+          ],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: legendXml },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: 'legend-and-filter-card',
+      ask: 'top 10 products by sales with Region and Segment filters',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [
+          { field: 'Segment', values: ['Consumer'] },
+          { field: 'Region', context: true },
+        ],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:segment:nk]' type='filter' />");
+  });
+
   it('preserves two proposal filters, both slices and shown dropdown cards without losing the grouping shelf', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundM7TwoFilterResult,

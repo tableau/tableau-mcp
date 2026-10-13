@@ -2069,10 +2069,11 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
 /** Splice a filter card into ONE worksheet-window body, creating the cards scaffold if absent. */
 function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string): string {
   // Already carries a filter card for this CI — leave it.
-  if (
-    inner.includes(`param='${escapeXmlAttribute(columnRef)}'`) &&
-    /type=['"]filter['"]/.test(inner)
-  ) {
+  const paramAttr = `param='${escapeXmlAttribute(columnRef)}'`;
+  const hasFilterCard = (inner.match(/<card\b[^>]*>/g) ?? []).some(
+    (tag) => tag.includes(paramAttr) && /type=['"]filter['"]/.test(tag),
+  );
+  if (hasFilterCard) {
     return inner;
   }
   const leftStripRe =
