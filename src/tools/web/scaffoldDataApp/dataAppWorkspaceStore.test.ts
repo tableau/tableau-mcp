@@ -97,6 +97,7 @@ describe('createDataAppWorkspace', () => {
         expect(twb).toContain('TODO Sheet Name');
         // The raw template never hardcodes a literal sheet name - it's always the token above.
         expect(twb).not.toContain('Sheet 1');
+        expect(twb).not.toContain("<card type='title' />");
 
         // Applying the postUnzip plan's .twb edits (as the client does) turns the worksheet tab
         // into the app's display name, not the placeholder token or a hardcoded "Sheet 1".
