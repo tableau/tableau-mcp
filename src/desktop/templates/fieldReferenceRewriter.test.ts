@@ -1251,3 +1251,32 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
     expect(out).not.toContain('name="[sum:Quantity:qk]"');
   });
 });
+
+describe('rewriteFieldReferences — pruning an unmapped optional pill keeps shelf operators', () => {
+  const sheet = (rows: string): string =>
+    `<worksheet name='S'><table><view><datasources><datasource name='{{DATASOURCE}}'/></datasources><datasource-dependencies datasource='{{DATASOURCE}}'><column name='[A]' datatype='real' role='measure' type='quantitative'/><column name='[B]' datatype='real' role='measure' type='quantitative'/><column name='[Opt]' datatype='real' role='measure' type='quantitative'/><column-instance column='[A]' derivation='Sum' name='[sum:A:qk]' pivot='key' type='quantitative'/><column-instance column='[B]' derivation='Sum' name='[sum:B:qk]' pivot='key' type='quantitative'/><column-instance column='[Opt]' derivation='Sum' name='[sum:Opt:qk]' pivot='key' type='quantitative'/></datasource-dependencies></view><rows>${rows}</rows><cols></cols></table></worksheet>`;
+  const slots = [
+    { template_field: 'A', required: true },
+    { template_field: 'B', required: true },
+    { template_field: 'Opt', required: false },
+  ];
+  const d = '[{{DATASOURCE}}]';
+  it.each([
+    [`(${d}.[sum:A:qk] + ${d}.[sum:Opt:qk])`, '[DS].[sum:X:qk]'],
+    [`(${d}.[sum:Opt:qk] / ${d}.[sum:A:qk])`, '[DS].[sum:X:qk]'],
+    [
+      `(${d}.[sum:A:qk] / (${d}.[sum:B:qk] + ${d}.[sum:Opt:qk]))`,
+      '([DS].[sum:X:qk] / [DS].[sum:Y:qk])',
+    ],
+  ])('prunes %s', (rows, expected) => {
+    const result = rewriteFieldReferencesWithDiagnostics(
+      sheet(rows),
+      { A: '[sum:X:qk]', B: '[sum:Y:qk]' },
+      'DS',
+      undefined,
+      { templateSlots: slots },
+    );
+    const out = result.xml.match(/<rows>([^<]*)<\/rows>/)?.[1];
+    expect(out).toBe(expected);
+  });
+});

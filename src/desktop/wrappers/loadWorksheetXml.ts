@@ -107,7 +107,10 @@ export function publicReadbackVerificationResult(
   const findings: VerificationFinding[] = result.findings.map((finding) => ({
     severity: finding.severity,
     source: 'readback' as const,
-    message: `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`,
+    message:
+      finding.readback === 'missing' || finding.readback === 'changed'
+        ? `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`
+        : `Tableau changed ${finding.node}: intended "${finding.intended}", read back "${finding.readback}".`,
   }));
   if (result.status === 'skipped') {
     findings.push({

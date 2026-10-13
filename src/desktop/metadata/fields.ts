@@ -16,6 +16,14 @@ import {
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
+import {
+  insertShelfLeaf,
+  parseShelfValue,
+  removeShelfLeaf,
+  serializeShelfTree,
+  shelfLeaves,
+  shelfTreeFromValue,
+} from './shelfTree.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
 
 /**
@@ -169,7 +177,9 @@ export function addFieldToEncoding(
 
     // Check if mark-labels-show rule already exists
     const hasLabelRule = styleRules.some(
-      (rule: any) => rule['@_element'] === 'mark' && rule.format?.['@_attr'] === 'mark-labels-show',
+      (rule: any) =>
+        rule['@_element'] === 'mark' &&
+        normalizeArray(rule.format).some((f: any) => f?.['@_attr'] === 'mark-labels-show'),
     );
 
     // Add the rule if it doesn't exist
@@ -278,59 +288,6 @@ export function removeFieldFromEncoding(
 }
 
 /**
- * Move a field to a new position within an encoding type
- * @param worksheetXml - The worksheet XML as a string
- * @param encodingType - Type of encoding
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInEncoding(
-  worksheetXml: string,
-  encodingType: EncodingType,
-  columnRef: string,
-  newIndex: number,
-): string {
-  encodingType = canonicalEncodingType(encodingType);
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table?.panes) {
-    throw new Error('No panes found in worksheet');
-  }
-
-  const panes = normalizeArray(worksheet.table.panes.pane);
-  if (panes.length === 0) {
-    throw new Error('No panes found');
-  }
-
-  const firstPane = panes[0];
-  if (!firstPane.encodings?.[encodingType]) {
-    throw new Error(`No ${encodingType} encodings found`);
-  }
-
-  const encodings = normalizeArray(firstPane.encodings[encodingType]);
-  const currentIndex = encodings.findIndex((enc) => enc['@_column'] === columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Encoding ${encodingType} with column ${columnRef} not found`);
-  }
-
-  if (newIndex < 0 || newIndex >= encodings.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${encodings.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = encodings.splice(currentIndex, 1);
-  encodings.splice(newIndex, 0, moved);
-
-  // Update encodings
-  firstPane.encodings[encodingType] = encodings.length === 1 ? encodings[0] : encodings;
-
-  return serializeXML(parsed);
-}
-
-/**
  * Add a field to the rows shelf
  * @param worksheetXml - The worksheet XML as a string
  * @param columnRef - Column reference to add
@@ -382,94 +339,6 @@ export function removeFieldFromRows(worksheetXml: string, columnRef: string): st
  */
 export function removeFieldFromCols(worksheetXml: string, columnRef: string): string {
   return removeFieldFromShelf(worksheetXml, 'cols', columnRef);
-}
-
-/**
- * Move a field to a new position in rows
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInRows(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'rows', columnRef, newIndex);
-}
-
-/**
- * Move a field to a new position in cols
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInCols(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'cols', columnRef, newIndex);
-}
-
-/**
- * Parse a shelf value into pill refs. Shelf text uses "/" between pills, while field
- * names can also contain "/" inside bracketed column-instance refs.
- */
-export function parseShelfValue(value: string | string[] | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-  if (typeof value === 'string') {
-    return splitShelfString(value);
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((v) => splitShelfString(typeof v === 'string' ? v : String(v)));
-  }
-  return [];
-}
-
-function splitShelfString(value: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let inBracketedName = false;
-
-  const pushCurrent = (): void => {
-    const trimmed = current.trim();
-    if (trimmed) {
-      parts.push(trimmed);
-    }
-    current = '';
-  };
-
-  for (let i = 0; i < value.length; i++) {
-    const char = value[i];
-    if (char === '[' && !inBracketedName) {
-      inBracketedName = true;
-      current += char;
-      continue;
-    }
-    if (char === ']' && inBracketedName) {
-      if (value[i + 1] === ']') {
-        current += ']]';
-        i++;
-        continue;
-      }
-      inBracketedName = false;
-      current += char;
-      continue;
-    }
-    if (char === '/' && !inBracketedName) {
-      pushCurrent();
-      continue;
-    }
-    current += char;
-  }
-
-  pushCurrent();
-  return parts;
-}
-
-/**
- * Internal helper to serialize shelf array to string
- */
-function serializeShelfValue(fields: string[]): string {
-  // Join with '/' separator (custom language format)
-  return fields.join(' / ');
 }
 
 /**
@@ -1040,19 +909,10 @@ function addFieldToShelf(
   const correctedColumnRef = `[${parsedRef.datasource}].${correctedColumnInstanceName}`;
 
   // Get current shelf value and parse to array
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
 
   // Note: Tableau allows duplicate fields on the same shelf, so we don't check for existing entries
-
-  // Add at specified index or end (using corrected column ref)
-  if (index !== undefined && index >= 0 && index <= currentArray.length) {
-    currentArray.splice(index, 0, correctedColumnRef);
-  } else {
-    currentArray.push(correctedColumnRef);
-  }
-
-  // Serialize back to string
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(insertShelfLeaf(tree, index, correctedColumnRef));
 
   return serializeXML(parsed);
 }
@@ -1122,50 +982,12 @@ function removeFieldFromShelf(
     throw fieldRemovalError(worksheet, `No ${shelf} shelf found in worksheet`);
   }
 
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const filtered = currentArray.filter((col) => col !== columnRef);
-
-  if (filtered.length === currentArray.length) {
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
+  if (!shelfLeaves(tree).includes(columnRef)) {
     throw fieldRemovalError(worksheet, `Column ${columnRef} not found in ${shelf}`);
   }
 
-  worksheet.table[shelf] = filtered.length > 0 ? serializeShelfValue(filtered) : '';
-
-  return serializeXML(parsed);
-}
-
-/**
- * Internal helper to move field in rows or cols shelf
- */
-function moveFieldInShelf(
-  worksheetXml: string,
-  shelf: 'rows' | 'cols',
-  columnRef: string,
-  newIndex: number,
-): string {
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table) {
-    throw new Error(`No ${shelf} shelf found in worksheet`);
-  }
-
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const currentIndex = currentArray.indexOf(columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Column ${columnRef} not found in ${shelf}`);
-  }
-
-  if (newIndex < 0 || newIndex >= currentArray.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${currentArray.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = currentArray.splice(currentIndex, 1);
-  currentArray.splice(newIndex, 0, moved);
-
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(tree && removeShelfLeaf(tree, columnRef));
 
   return serializeXML(parsed);
 }

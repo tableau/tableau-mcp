@@ -6,8 +6,8 @@
  * structures that must survive for the rendered chart to match the authored
  * XML, while tolerating readback-only formatting/style noise.
  */
-import { parseShelfValue } from '../metadata/fields.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
+import { parseShelfTree, parseShelfValue, type ShelfNode } from '../metadata/shelfTree.js';
 
 export type ReadbackFindingKind = 'encoding' | 'shelf' | 'mark' | 'filter' | 'sort';
 export type ReadbackFindingSeverity = 'error' | 'warning';
@@ -17,7 +17,8 @@ export interface ReadbackFinding {
   node: string;
   column?: string;
   intended: string;
-  readback: 'missing' | 'changed';
+  /** 'missing', 'changed', or for a shelf operator change the shelf text Tableau wrote back. */
+  readback: string;
   severity: ReadbackFindingSeverity;
 }
 
@@ -103,6 +104,15 @@ interface WorksheetSignature {
     rows: string[];
     cols: string[];
   };
+  shelfText: {
+    rows: string;
+    cols: string;
+  };
+  /** Operator structure per shelf with leaves masked, same-op nesting flattened. */
+  shelfShapes: {
+    rows: string;
+    cols: string;
+  };
   marks: MarkSignature[];
   filters: FilterSignature[];
   slices: string[];
@@ -153,46 +163,40 @@ function walkElements(node: unknown, visit: (tag: string, element: XmlRecord) =>
   }
 }
 
-function unwrapGroupingParens(value: string): string {
-  let text = value.trim();
-  while (text.startsWith('(') && text.endsWith(')')) {
-    let depth = 0;
-    let wrapsAll = true;
-    let inBracketedName = false;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (inBracketedName) {
-        if (char === ']' && text[i + 1] === ']') {
-          i++;
-          continue;
-        }
-        if (char === ']') inBracketedName = false;
-        continue;
-      }
-      if (char === '[') {
-        inBracketedName = true;
-        continue;
-      }
-      if (char === '(') depth += 1;
-      else if (char === ')') {
-        depth -= 1;
-        if (depth === 0 && i !== text.length - 1) {
-          wrapsAll = false;
-          break;
-        }
-      }
-    }
-    if (!wrapsAll || depth !== 0) break;
-    text = text.slice(1, -1).trim();
-  }
-  return text;
-}
-
 function shelfValues(value: unknown): string[] {
   return normalizeArray(value)
-    .flatMap((item) => parseShelfValue(unwrapGroupingParens(textValue(item))))
-    .map((item) => unwrapGroupingParens(item))
+    .flatMap((item) => parseShelfValue(textValue(item)))
     .filter(Boolean);
+}
+
+function uniformOp(node: ShelfNode): string | undefined {
+  if ('leaf' in node || node.ops.length === 0) return undefined;
+  return node.ops.every((op) => op === node.ops[0]) ? node.ops[0] : undefined;
+}
+
+function flattenOperands(node: ShelfNode, op: string): ShelfNode[] {
+  if ('leaf' in node || uniformOp(node) !== op) return [node];
+  return node.children.flatMap((child) => flattenOperands(child, op));
+}
+
+function shelfShape(node: ShelfNode | undefined): string {
+  if (!node) return '';
+  if ('leaf' in node) return 'L';
+  const op = uniformOp(node);
+  const operands = op === undefined ? node.children : flattenOperands(node, op);
+  return `${op ?? node.ops.join('')}(${operands.map(shelfShape).join(',')})`;
+}
+
+function shelfText(value: unknown): string {
+  return normalizeArray(value)
+    .map((item) => textValue(item).trim())
+    .join(' ; ');
+}
+
+function shelfShapes(value: unknown): string {
+  return normalizeArray(value)
+    .map((item) => shelfShape(parseShelfTree(textValue(item))))
+    .join(';');
 }
 
 function collectEncodings(worksheet: XmlRecord): EncodingSignature[] {
@@ -337,6 +341,14 @@ function signature(xml: string): WorksheetSignature | null {
         rows: shelfValues(worksheet.table?.rows),
         cols: shelfValues(worksheet.table?.cols),
       },
+      shelfText: {
+        rows: shelfText(worksheet.table?.rows),
+        cols: shelfText(worksheet.table?.cols),
+      },
+      shelfShapes: {
+        rows: shelfShapes(worksheet.table?.rows),
+        cols: shelfShapes(worksheet.table?.cols),
+      },
       marks: collectMarks(worksheet),
       filters: collectFilters(worksheet),
       slices: collectSlices(worksheet),
@@ -473,6 +485,19 @@ export function verifyWorksheetReadback(
         severity: 'error',
       });
     }
+  }
+
+  for (const shelf of ['rows', 'cols'] as const) {
+    if (intended.shelfShapes[shelf] === readback.shelfShapes[shelf]) continue;
+    if (findings.some((f) => f.kind === 'shelf' && f.node === shelf)) continue;
+    findings.push({
+      kind: 'shelf',
+      node: shelf,
+      column: intended.shelfText[shelf],
+      intended: intended.shelfText[shelf],
+      readback: readback.shelfText[shelf],
+      severity: 'error',
+    });
   }
 
   for (const mark of intended.marks) {

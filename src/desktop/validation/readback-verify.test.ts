@@ -186,6 +186,37 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it('treats (A / (B / C)) and (A / B / C) as the same operator structure', () => {
+    const [a, b, c] = ['a', 'b', 'c'].map((n) => `[DS].[none:${n}:nk]`);
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>(${a} / ${b} / ${c})</rows>`,
+    );
+    const readback = intended.replace(
+      `<rows>(${a} / ${b} / ${c})</rows>`,
+      `<rows>(${a} / (${b} / ${c}))</rows>`,
+    );
+    expect(verifyWorksheetReadback(intended, readback).filter((f) => f.kind === 'shelf')).toEqual(
+      [],
+    );
+  });
+
+  it('flags a / to + operator change on the same pills', () => {
+    const [a, b] = ['a', 'b'].map((n) => `[DS].[none:${n}:nk]`);
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>(${a} / ${b})</rows>`,
+    );
+    const readback = intended.replace(`(${a} / ${b})`, `(${a} + ${b})`);
+    const findings = verifyWorksheetReadback(intended, readback).filter((f) => f.kind === 'shelf');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      node: 'rows',
+      intended: `(${a} / ${b})`,
+      readback: `(${a} + ${b})`,
+    });
+  });
+
   it('still flags a nested shelf pill that Tableau actually dropped', () => {
     const group = '[DS].[none:group:nk]';
     const country = '[DS].[none:country:nk]';

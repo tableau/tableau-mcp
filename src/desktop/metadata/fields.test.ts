@@ -4,14 +4,11 @@ import {
   addFieldToEncoding,
   addFieldToRows,
   listFields,
-  moveFieldInCols,
-  moveFieldInEncoding,
-  moveFieldInRows,
-  parseShelfValue,
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
 } from './fields.js';
+import { parseShelfValue } from './shelfTree.js';
 
 // Minimal worksheet XML with one row field, one col field, and one color encoding
 const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -742,50 +739,6 @@ describe('detail encoding normalizes to <lod> (regression: coordinate map single
   it('leaves other encoding types (color/size) unchanged', () => {
     const out = addFieldToEncoding(WORKSHEET_XML, 'size', '[Sample].[sum:Profit:qk]');
     expect(out).toMatch(/<size\b[^>]*column=["']\[Sample\]\.\[sum:Profit:qk\]["']/);
-  });
-});
-
-describe('moveFieldInRows', () => {
-  it('should move a field to a new position', () => {
-    const twoRowsXml = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    const moved = moveFieldInRows(twoRowsXml, '[Sample].[sum:Profit:qk]', 0);
-    const fields = listFields(moved).filter((f) => f.location === 'rows');
-    expect(fields[0]?.column).toBe('[Sample].[sum:Profit:qk]');
-  });
-
-  it('should throw when moving to an invalid index', () => {
-    const twoRowsXml = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    expect(() => moveFieldInRows(twoRowsXml, '[Sample].[sum:Profit:qk]', 99)).toThrow();
-  });
-
-  it('should throw when field is not on rows', () => {
-    expect(() => moveFieldInRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]', 0)).toThrow();
-  });
-});
-
-describe('moveFieldInCols', () => {
-  it('should move a col field to position 0', () => {
-    const twoColsXml = addFieldToCols(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    const moved = moveFieldInCols(twoColsXml, '[Sample].[sum:Profit:qk]', 0);
-    const fields = listFields(moved).filter((f) => f.location === 'cols');
-    expect(fields[0]?.column).toBe('[Sample].[sum:Profit:qk]');
-  });
-});
-
-describe('moveFieldInEncoding', () => {
-  it('should move an encoding field to position 0', () => {
-    const withSize = addFieldToEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Sales:qk]');
-    const moved = moveFieldInEncoding(withSize, 'color', '[Sample].[sum:Sales:qk]', 0);
-    const fields = listFields(moved).filter(
-      (f) => f.location === 'encodings' && f.encodingType === 'color',
-    );
-    expect(fields[0]?.column).toBe('[Sample].[sum:Sales:qk]');
-  });
-
-  it('should throw when field is not in encoding', () => {
-    expect(() =>
-      moveFieldInEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Sales:qk]', 0),
-    ).toThrow();
   });
 });
 

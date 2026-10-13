@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import * as xpath from 'xpath';
 
 import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
+import { pruneShelfLeaves } from '../metadata/shelfTree.js';
 
 // =============================================================================
 // LOCKSTEP-CORE CANDIDATE — shared DOM-structural field-reference rewriter.
@@ -11,7 +12,7 @@ import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
 // both this repo (tableau-mcp) and the source authoring repo (agent-to-tableau-
 // desktop) are converging onto. It is intentionally PURE — no fs, no MCP, no
 // zod, no logging — and its imports are kept minimal and repo-agnostic
-// (@xmldom/xmldom + xpath + node crypto) so a future step can promote it to a
+// (@xmldom/xmldom + xpath + node crypto + the pure ../metadata/shelfTree.js) so a future step can promote it to a
 // byte-identical shared core imported by both repos. Do NOT add repo-specific
 // imports (config, logging, error types, zod) here; keep those in callers.
 //
@@ -844,10 +845,9 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
         (node): node is Text => node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
       )) {
         if (!referencesTemplateField(text.data, templateField)) continue;
-        const kept = text.data
-          .split(/\s+\/\s+/)
-          .filter((pill) => !referencesTemplateField(pill, templateField));
-        text.data = kept.join(' / ');
+        text.data = pruneShelfLeaves(text.data, (pill) =>
+          referencesTemplateField(pill, templateField),
+        );
       }
     }
   }

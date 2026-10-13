@@ -10,7 +10,6 @@ import {
   writeCacheFileArg,
 } from '../../../../desktop/cachePath.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
-import { parseShelfValue } from '../../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
@@ -18,6 +17,7 @@ import {
   listAvailableFields,
 } from '../../../../desktop/metadata/index.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
+import { parseShelfValue } from '../../../../desktop/metadata/shelfTree.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
 import {
