@@ -11,6 +11,7 @@ import {
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
 import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { resolveSession } from '../../desktop/session/sessionResolution.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
@@ -20,6 +21,20 @@ import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
+
+// begin-episode keys episodes by the resolved pid, so tool events must look them up the same way.
+// Resolution scans the discovery dir, so it runs only when episode events are on.
+export function resolveEpisodeKey(
+  config: TableauDesktopRequestHandlerExtra['config'],
+  args: unknown,
+  fallback: string,
+): string {
+  if (!config.episodeEventsEnabled) return fallback;
+  const session =
+    typeof args === 'object' && args !== null ? (args as { session?: unknown }).session : undefined;
+  const resolved = resolveSession(typeof session === 'string' ? session : undefined);
+  return resolved.isOk() ? resolved.value : fallback;
+}
 
 /**
  * The parameters the logAndExecute method
@@ -69,11 +84,12 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
 
     let toolResult: CallToolResult | undefined;
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
-    const episodeId = currentEpisodeId(sessionId);
+    const episodeKey = resolveEpisodeKey(extra.config, args, sessionId);
+    const episodeId = currentEpisodeId(episodeKey);
 
     void emitEpisodeEvent(extra.config, {
       type: 'tool_start',
-      session_id: sessionId,
+      session_id: episodeKey,
       episode_id: episodeId,
       tool: this.name,
     });
@@ -103,14 +119,14 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         if (mappedError) {
           void emitToolErrorEvent({
             config: extra.config,
-            sessionId,
+            sessionId: episodeKey,
             tool: this.name,
             error: 'Tool returned an error result.',
           });
         }
         void emitEpisodeEvent(extra.config, {
           type: 'tool_end',
-          session_id: sessionId,
+          session_id: episodeKey,
           episode_id: episodeId,
           tool: this.name,
           duration_ms: performance.now() - startedAt,
@@ -134,13 +150,13 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       };
       void emitToolErrorEvent({
         config: extra.config,
-        sessionId,
+        sessionId: episodeKey,
         tool: this.name,
         error: result.error.getErrorText(),
       });
       void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
-        session_id: sessionId,
+        session_id: episodeKey,
         episode_id: episodeId,
         tool: this.name,
         duration_ms: performance.now() - startedAt,
@@ -172,15 +188,25 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           tool: this.name,
           session: sessionId,
         });
-        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error: text });
+        void emitToolErrorEvent({
+          config: extra.config,
+          sessionId: episodeKey,
+          tool: this.name,
+          error: text,
+        });
         toolResult = { isError: true, content: [{ type: 'text', text }] };
       } else {
-        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
+        void emitToolErrorEvent({
+          config: extra.config,
+          sessionId: episodeKey,
+          tool: this.name,
+          error,
+        });
         toolResult = getErrorResult(requestId, error);
       }
       void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
-        session_id: sessionId,
+        session_id: episodeKey,
         episode_id: episodeId,
         tool: this.name,
         duration_ms: performance.now() - startedAt,

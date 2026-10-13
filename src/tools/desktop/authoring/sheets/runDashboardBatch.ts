@@ -57,7 +57,7 @@ import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
-import { DesktopTool } from '../../tool.js';
+import { DesktopTool, resolveEpisodeKey } from '../../tool.js';
 import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
@@ -202,7 +202,11 @@ export const getRunDashboardBatchTool = (
       extra,
     ): Promise<CallToolResult> => {
       const startedAt = performance.now();
-      const sessionId = episodeSessionIdFromArgs(extra.config, { session });
+      const sessionId = resolveEpisodeKey(
+        extra.config,
+        { session },
+        episodeSessionIdFromArgs(extra.config, { session }),
+      );
       let executionStarted = false;
       const result = await tool.logAndExecute<RunDashboardBatchResult>({
         extra,

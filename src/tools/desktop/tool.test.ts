@@ -99,6 +99,53 @@ describe('DesktopTool episode telemetry', () => {
     expect(events[2].duration_ms).toEqual(expect.any(Number));
   });
 
+  it.each([
+    ['without session, ok', {}, false],
+    ['with session, ok', { session: '4242' }, false],
+    ['without session, failing callback', {}, true],
+    ['with session, failing callback', { session: '4242' }, true],
+  ])(
+    'keys tool events by the resolved pid after begin-episode (%s)',
+    async (_label, args, fails) => {
+      const dir = tmpDir();
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        config: {
+          ...getMockRequestHandlerExtra().config,
+          episodeEventsEnabled: true,
+          episodeEventsDirectory: dir,
+        },
+      };
+      // Stubbed after the config is built: only resolveSession sees the pin, so the raw key stays 'unknown'.
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      try {
+        const begin = await beginEpisode(extra.config, { sessionId: '4242' });
+
+        await makeTool().logAndExecute({
+          extra,
+          args,
+          callback: async () => {
+            if (fails) throw new Error('boom');
+            return new Ok({ ok: true });
+          },
+        });
+
+        await vi.waitFor(() => {
+          expect(readEvents(dir)).toMatchObject([
+            { type: 'episode_begin' },
+            { type: 'tool_start', session_id: '4242', episode_id: begin.episode_id },
+            ...(fails
+              ? [{ type: 'tool_error', session_id: '4242', episode_id: begin.episode_id }]
+              : []),
+            { type: 'tool_end', session_id: '4242', episode_id: begin.episode_id },
+          ]);
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('returns without waiting for the telemetry sink', async () => {
     const emitSpy = vi
       .spyOn(episodeEvents, 'emitEpisodeEvent')
