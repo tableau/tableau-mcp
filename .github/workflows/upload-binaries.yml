@@ -9,7 +9,6 @@ on:
       - .github/workflows/upload-binaries.yml
       - package.json
       - package-lock.json
-      - sea-config.json
       - src/scripts/build*.ts
       - src/scripts/sea*.ts
       - src/utils/sea.ts
@@ -38,7 +37,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         run: |
@@ -85,7 +84,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         shell: pwsh
@@ -153,7 +152,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         run: |

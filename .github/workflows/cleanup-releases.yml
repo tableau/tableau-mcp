@@ -25,6 +25,7 @@ jobs:
 
             // Keep the assets from the last 10 releases (newest), delete assets from the rest
             const releasesToClean = sortedReleases.slice(10);
+            // These four archives are the ones downstream consumers download by name, so they outlive the 10-release window.
             const preservedAssetNames = new Set([
               'tableau-mcp.zip',
               'tableau-mcp.tar.gz',
