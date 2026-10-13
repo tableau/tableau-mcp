@@ -335,6 +335,23 @@ function formatLiteral(literal: string): string {
   return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
 }
 
+// A `tableau-`/`tableau_` prefix is never part of a registered name; any such token in
+// src/desktop string literals is a stale spelling unless it is one of these.
+const PREFIXED_TOKEN_RE = /(?<![\w-])tableau[-_][a-z][\w-]*/g;
+const DESKTOP_ROOT = join(REPO_ROOT, 'src/desktop');
+const PREFIXED_ALLOWED_TOKENS = new Set([
+  'tableau-error-code',
+  'tableau-operation-id',
+  'tableau-application-version',
+  'tableau-xsd-payload-version',
+]);
+const PREFIXED_ALLOWED_FILES = new Set([
+  // QUERY_TOOL_JARGON is a search stop-word list, never rendered.
+  'src/desktop/knowledge/index.ts',
+  // APPLY_INSTRUCTION is dropped on the served auto-apply path.
+  'src/desktop/binder/binder.ts',
+]);
+
 const scannedCandidates = sourceFiles().flatMap((fullPath) => {
   const file = relative(REPO_ROOT, fullPath).replaceAll('\\', '/');
   return toolNameCandidates(file, readFileSync(fullPath, 'utf-8'));
@@ -374,6 +391,21 @@ describe('Desktop emitted tool references', () => {
         ({ token, file, literal }) => `${token} in ${file}: "${formatLiteral(literal)}"`,
       ),
     ).toEqual([]);
+  });
+
+  it('has no tableau-prefixed tool spellings in src/desktop string literals', () => {
+    const offenders: string[] = [];
+    for (const entry of readdirSync(DESKTOP_ROOT, { recursive: true }).map(String)) {
+      if (!entry.endsWith('.ts') || TEST_SUPPORT_RE.test(entry)) continue;
+      const file = `src/desktop/${entry.replaceAll('\\', '/')}`;
+      if (PREFIXED_ALLOWED_FILES.has(file)) continue;
+      for (const literal of stringLiterals(readFileSync(join(DESKTOP_ROOT, entry), 'utf-8'))) {
+        for (const match of literal.matchAll(PREFIXED_TOKEN_RE)) {
+          if (!PREFIXED_ALLOWED_TOKENS.has(match[0])) offenders.push(`${match[0]} in ${file}`);
+        }
+      }
+    }
+    expect([...new Set(offenders)]).toEqual([]);
   });
 
   it('keeps NON_TOOL_VOCABULARY sorted, unique, and matched by the scan', () => {

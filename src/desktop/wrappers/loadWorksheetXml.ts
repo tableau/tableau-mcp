@@ -455,8 +455,8 @@ export function resolveCanonicalWorksheetName(
     return Err({
       type: 'name-mismatch',
       message:
-        `worksheet_name "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheet_name set to the XML's name ` +
+        `worksheetName "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
+        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheetName set to the XML's name ` +
         `"${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <worksheet name> attribute in the ` +
         `XML to "${worksheetName}" if the caller name is intended.`,
     });
