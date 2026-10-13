@@ -91,17 +91,8 @@ describe('Exchange MCP stdio interoperability', () => {
           idempotentHint: true,
         });
       }
-      for (const tags of [['!!!'], ['Free', '!!!']]) {
-        const invalidTags = await client.callTool({
-          name: 'search-exchange-assets',
-          arguments: { query: '', tags },
-        });
-        expect(invalidTags.isError).toBe(true);
-        expect(JSON.stringify(invalidTags.content)).toContain(
-          'Every tag filter must contain searchable text.',
-        );
-      }
-      expect(gallery.requests).toEqual([]);
+      // The server warms the catalog on startup, before any tool call.
+      await vi.waitFor(() => expect(gallery.requests.length).toBeGreaterThan(0));
       const browse = await call<SearchData>('search-exchange-assets', {
         query: '',
         assetTypes: ['skill', 'extension', 'viz', 'connector', 'accelerator'],
@@ -115,6 +106,18 @@ describe('Exchange MCP stdio interoperability', () => {
         partialProductTypes: [],
         catalogAssetCount: 12,
       });
+      const requestsBeforeInvalid = gallery.requests.length;
+      for (const tags of [['!!!'], ['Free', '!!!']]) {
+        const invalidTags = await client.callTool({
+          name: 'search-exchange-assets',
+          arguments: { query: '', tags },
+        });
+        expect(invalidTags.isError).toBe(true);
+        expect(JSON.stringify(invalidTags.content)).toContain(
+          'Every tag filter must contain searchable text.',
+        );
+      }
+      expect(gallery.requests).toHaveLength(requestsBeforeInvalid);
       const search = await call<SearchData>('search-exchange-assets', {
         query: 'workbook',
         assetTypes: ['skill'],

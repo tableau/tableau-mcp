@@ -95,6 +95,65 @@ describe('SearchEngine', () => {
     expect(repeated.matchedFields).toEqual(single.matchedFields);
   });
 
+  it('ranks a rare query token above a token common across the catalog', () => {
+    const listing = (id: number, name: string, downloads: number): ExchangeAsset => ({
+      ...asset,
+      id,
+      name,
+      shortDescription: '',
+      publisher: { id: 1, name: 'Vendor' },
+      tags: [],
+      downloads,
+    });
+    const catalog = [
+      listing(1, 'Tree Diagram', 1),
+      ...Array.from({ length: 10 }, (_, index) => listing(index + 2, `Chart ${index}`, 1_000)),
+    ];
+    const results = engine.search(catalog, { query: 'tree chart' }, 10).results;
+    expect(results[0].asset.id).toBe(1);
+    expect(results[1].score).toBeLessThan(results[0].score);
+    expect(results[1].reasons).toContain('Name token match: chart (common term)');
+  });
+
+  it('scales the all-tokens bonus down when every query token is common', () => {
+    const catalog = Array.from({ length: 10 }, (_, index) => ({
+      ...asset,
+      id: index + 1,
+      name: `Listing ${index}`,
+      shortDescription: 'Sales pipeline',
+      publisher: { id: 1, name: 'Vendor' },
+      tags: [],
+    }));
+    const result = engine.search(catalog, { query: 'sales pipeline' }, 10).results[0];
+    expect(result.reasons).toContain('All query tokens matched');
+    expect(result.score).toBeLessThan(50); // description phrase 45 plus small common-term points
+  });
+
+  it('scores the publisher only when the query names that publisher', () => {
+    const firstParty = {
+      ...asset,
+      name: 'Sankey',
+      shortDescription: '',
+      publisher: { id: 1, name: 'Salesforce' },
+      tags: [],
+    };
+    const unrelated = { ...firstParty, id: 2, name: 'Gantt' };
+    const mixed = engine.search([firstParty, unrelated], { query: 'salesforce sankey' }, 10);
+    expect(mixed.results.map((result) => result.asset.id)).toEqual([1]);
+    expect(mixed.results[0].matchedFields).toEqual(['name']);
+
+    const byPublisher = engine.search([firstParty, unrelated], { query: 'salesforce' }, 10);
+    expect(byPublisher.results).toHaveLength(2);
+    expect(byPublisher.results[0].reasons).toContain('Publisher phrase match');
+  });
+
+  it('matches singular and plural word forms', () => {
+    const maps = { ...asset, name: 'Maps Pro', shortDescription: 'Category explorer', tags: [] };
+    expect(engine.search([maps], { query: 'map' }, 10).results).toHaveLength(1);
+    expect(engine.search([maps], { query: 'categories' }, 10).results).toHaveLength(1);
+    expect(engine.search([maps], { query: 'pros class' }, 10).results).toHaveLength(1);
+  });
+
   it.each([['!!!'], ['Export', '!!!'], ['—'], ['Export', '…']])(
     'rejects every tag that normalizes to empty: %j',
     (...tags) => {

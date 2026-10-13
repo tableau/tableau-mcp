@@ -14,7 +14,7 @@ describe('Exchange config', () => {
     expect(config.options).toMatchObject({
       locale: 'fr_fr',
       catalogTtlMs: 300_000,
-      pageSize: 100,
+      pageSize: 1_000,
       maxSearchResults: 10,
       source: 'declared-fixture',
     });

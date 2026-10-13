@@ -21,8 +21,20 @@ export function searchableTokens(value: string): string[] {
   ];
 }
 
+/** Folds simple English plurals so "maps" matches "map" and "categories" matches "category". */
+export function stemToken(token: string): string {
+  if (token.length <= 3) return token;
+  if (token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.endsWith('s') && !/(ss|us|is)$/u.test(token)) return token.slice(0, -1);
+  return token;
+}
+
+export function stemmedTokens(text: string): string[] {
+  return normalizeSearchText(text).split(' ').filter(Boolean).map(stemToken);
+}
+
 export function hasToken(text: string, token: string): boolean {
-  return normalizeSearchText(text).split(' ').includes(token);
+  return stemmedTokens(text).includes(stemToken(token));
 }
 
 /**
@@ -30,8 +42,8 @@ export function hasToken(text: string, token: string): boolean {
  * query for "ai" from matching "paid".
  */
 export function hasPhrase(text: string, phrase: string): boolean {
-  const textTokens = normalizeSearchText(text).split(' ').filter(Boolean);
-  const phraseTokens = normalizeSearchText(phrase).split(' ').filter(Boolean);
+  const textTokens = stemmedTokens(text);
+  const phraseTokens = stemmedTokens(phrase);
   if (phraseTokens.length === 0 || phraseTokens.length > textTokens.length) return false;
 
   return textTokens.some((_, start) =>

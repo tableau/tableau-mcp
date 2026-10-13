@@ -14,6 +14,7 @@ async function startServer(): Promise<void> {
     return {};
   });
   await server.mcpServer.connect(new StdioServerTransport());
+  server.service.start();
 }
 
 startServer().catch((error: unknown) => {

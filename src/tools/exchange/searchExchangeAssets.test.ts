@@ -61,6 +61,9 @@ describe('search-exchange-assets', () => {
     ])
       expect(schema.safeParse(args).success).toBe(false);
     expect(await Provider.from(tool.description)).toContain('untrusted');
+    const description = await Provider.from(tool.description);
+    expect(description).toContain('1-3 distinctive keywords');
+    expect(description).toContain('synonyms');
     expect(await Provider.from(tool.annotations)).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,

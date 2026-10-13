@@ -6,7 +6,13 @@ import {
   hasToken,
   normalizeSearchText,
   searchableTokens,
+  stemmedTokens,
+  stemToken,
 } from './searchText.js';
+
+// Below this IDF weight a token match is labelled as a common term in its reason.
+const COMMON_TERM_WEIGHT = 0.5;
+const searchTermsCache = new WeakMap<ExchangeAsset, Set<string>>();
 
 const MATCHED_FIELD_ORDER: Array<AssetSearchResult['matchedFields'][number]> = [
   'name',
@@ -40,9 +46,10 @@ export class SearchEngine {
     }
 
     const filtered = assets.filter((asset) => matchesFilters(asset, input, requestedTags));
+    const weights = hasQuery ? tokenWeights(assets, queryTokens) : new Map<string, number>();
     const ranked = hasQuery
       ? filtered.flatMap((asset) => {
-          const result = scoreAsset(asset, normalizedQuery, queryTokens);
+          const result = scoreAsset(asset, normalizedQuery, queryTokens, weights);
           return result.score > 0 ? [result] : [];
         })
       : filtered.map((asset) => ({ asset, score: 0, reasons: [], matchedFields: [] }));
@@ -102,10 +109,39 @@ function matchesFilters(
   return true;
 }
 
+function searchTerms(asset: ExchangeAsset): Set<string> {
+  let terms = searchTermsCache.get(asset);
+  if (!terms) {
+    const tagText = asset.tags.flatMap((tag) => [tag.name, tag.canonicalName]);
+    terms = new Set(stemmedTokens([asset.name, asset.shortDescription, ...tagText].join(' ')));
+    searchTermsCache.set(asset, terms);
+  }
+  return terms;
+}
+
+/**
+ * BM25-style IDF over the whole catalog, normalized so a token unique to one listing weighs 1.
+ * Words such as "data" or "salesforce" appear on hundreds of listings and would otherwise
+ * score as much as a distinctive word such as "sankey".
+ */
+function tokenWeights(assets: ExchangeAsset[], queryTokens: string[]): Map<string, number> {
+  const count = assets.length;
+  const idf = (frequency: number): number =>
+    Math.log((count - frequency + 0.5) / (frequency + 0.5) + 1);
+  return new Map(
+    queryTokens.map((token) => {
+      const stem = stemToken(token);
+      const frequency = assets.filter((asset) => searchTerms(asset).has(stem)).length;
+      return [token, frequency <= 1 ? 1 : idf(frequency) / idf(1)];
+    }),
+  );
+}
+
 function scoreAsset(
   asset: ExchangeAsset,
   normalizedQuery: string,
   queryTokens: string[],
+  weights: Map<string, number>,
 ): AssetSearchResult {
   const reasons: string[] = [];
   const matched = new Set<AssetSearchResult['matchedFields'][number]>();
@@ -135,43 +171,50 @@ function scoreAsset(
     matched.add('description');
   }
 
+  // Publisher names such as "Tableau" or "Salesforce" only count when the query names the
+  // publisher, so first-party listings are not boosted by an incidental query word.
+  const publisherMatched = hasPhrase(asset.publisher.name, normalizedQuery);
+  if (publisherMatched) {
+    score += 5 * queryTokens.length;
+    matched.add('publisher');
+    reasons.push('Publisher phrase match');
+  }
+
   let everyTokenMatched = true;
   for (const token of queryTokens) {
-    let tokenMatched = false;
+    const weight = weights.get(token) ?? 1;
+    const label = weight < COMMON_TERM_WEIGHT ? `${token} (common term)` : token;
+    let tokenMatched = publisherMatched;
     if (hasToken(asset.name, token)) {
-      score += 20;
+      score += 20 * weight;
       tokenMatched = true;
       matched.add('name');
-      reasons.push(`Name token match: ${token}`);
+      reasons.push(`Name token match: ${label}`);
     }
     if (tags.some((tag) => hasToken(tag, token))) {
-      score += 15;
+      score += 15 * weight;
       tokenMatched = true;
       matched.add('tag');
-      reasons.push(`Tag token match: ${token}`);
+      reasons.push(`Tag token match: ${label}`);
     }
     if (hasToken(description, token)) {
-      score += 8;
+      score += 8 * weight;
       tokenMatched = true;
       matched.add('description');
-      reasons.push(`Description token match: ${token}`);
-    }
-    if (hasToken(asset.publisher.name, token)) {
-      score += 5;
-      tokenMatched = true;
-      matched.add('publisher');
-      reasons.push(`Publisher token match: ${token}`);
+      reasons.push(`Description token match: ${label}`);
     }
     everyTokenMatched &&= tokenMatched;
   }
   if (queryTokens.length > 0 && everyTokenMatched) {
-    score += 15;
+    const meanWeight =
+      queryTokens.reduce((sum, token) => sum + (weights.get(token) ?? 1), 0) / queryTokens.length;
+    score += 15 * meanWeight;
     reasons.push('All query tokens matched');
   }
 
   return {
     asset,
-    score,
+    score: Math.round(score * 10) / 10,
     reasons,
     matchedFields: MATCHED_FIELD_ORDER.filter((field) => matched.has(field)),
   };

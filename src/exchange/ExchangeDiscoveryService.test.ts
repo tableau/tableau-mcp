@@ -73,6 +73,28 @@ function setup(): {
   };
 }
 describe('ExchangeDiscoveryService', () => {
+  it('loads the catalog on start and refreshes it in the background every TTL', async () => {
+    vi.useFakeTimers();
+    const { service, list } = setup();
+    try {
+      service.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const callsPerLoad = list.mock.calls.length;
+      expect(callsPerLoad).toBeGreaterThan(0);
+      expect((await service.search({ query: 'workbook' })).isOk()).toBe(true);
+      expect(list).toHaveBeenCalledTimes(callsPerLoad);
+
+      await vi.advanceTimersByTimeAsync(config.options.catalogTtlMs);
+      expect(list).toHaveBeenCalledTimes(callsPerLoad * 2);
+
+      service.stop();
+      await vi.advanceTimersByTimeAsync(config.options.catalogTtlMs * 2);
+      expect(list).toHaveBeenCalledTimes(callsPerLoad * 2);
+    } finally {
+      service.stop();
+      vi.useRealTimers();
+    }
+  });
   it('gates guessed IDs by catalog membership and compares ordered IDs with unknowns', async () => {
     const { service, detail } = setup();
     const unknown = await service.getAsset({ productId: 99 });

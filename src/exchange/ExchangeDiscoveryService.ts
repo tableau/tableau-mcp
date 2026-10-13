@@ -54,6 +54,7 @@ export class ExchangeDiscoveryService {
   private readonly pendingDetails = new Map<string, Promise<ExchangeAsset>>();
   private tags: { items: ExchangeTag[]; loadedAt: number } | undefined;
   private pendingTags: Promise<ExchangeTag[]> | undefined;
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor({
     client,
@@ -68,6 +69,21 @@ export class ExchangeDiscoveryService {
     this.options = options;
     this.now = now;
     this.catalog = new CatalogCache(client, options, now);
+  }
+
+  /** Warms the catalog so the first tool call does not pay for the full load. */
+  start(): void {
+    if (this.refreshTimer) return;
+    // Refresh failures are already recorded as missing/stale catalog metadata.
+    const reload = (): void => void this.catalog.reload().catch(() => undefined);
+    reload();
+    this.refreshTimer = setInterval(reload, this.options.catalogTtlMs);
+    this.refreshTimer.unref?.();
+  }
+
+  stop(): void {
+    clearInterval(this.refreshTimer);
+    this.refreshTimer = undefined;
   }
 
   async search(input: SearchInput): Promise<Result<ToolResponse<SearchData>, McpToolError>> {
