@@ -57,6 +57,7 @@ import {
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
+  ExternalApiRouteError,
   ImageExportQuery,
   ImageResult,
   imageResultSchema,
@@ -1145,7 +1146,7 @@ export class ExternalApiToolExecutor {
         return finalResult;
       }
 
-      let result = await op(first.value);
+      let result = await runOp(op, first.value);
       if (result.isErr() && result.error.type === 'unauthorized') {
         rescanCount = 1;
         log({
@@ -1159,7 +1160,7 @@ export class ExternalApiToolExecutor {
           finalResult = Err(rescanned.error);
           return finalResult;
         }
-        result = await op(rescanned.value);
+        result = await runOp(op, rescanned.value);
       }
 
       finalResult = result;
@@ -1187,6 +1188,21 @@ export class ExternalApiToolExecutor {
       return Err(mapClientError(result.error, this.deps.pid));
     }
     return Ok(result.value);
+  }
+}
+
+// Route builders throw on an unsafe id; fold that into the Result funnel so nothing is sent.
+async function runOp<T>(
+  op: (http: ExternalApiHttp) => Promise<Result<T, ExecutorOperationError>>,
+  http: ExternalApiHttp,
+): Promise<Result<T, ExecutorOperationError>> {
+  try {
+    return await op(http);
+  } catch (error) {
+    if (error instanceof ExternalApiRouteError) {
+      return Err({ type: 'invalid-response', error });
+    }
+    throw error;
   }
 }
 
@@ -1228,6 +1244,8 @@ function buildCommandStatus(
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
       },
       ...(outcome.result !== undefined ? { result: outcome.result } : {}),
+      ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
+      ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
     });
   }
 
@@ -1384,6 +1402,15 @@ function mapClientError(
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,
         },
+      };
+    case 'accepted-unauthorized':
+      return {
+        type: 'unknown',
+        error:
+          'Tableau Desktop accepted this operation' +
+          (error.operationId ? ` (operation ${error.operationId})` : '') +
+          ', but the External Client API then returned 401 while it was being polled, so its result is unknown. ' +
+          'Check Tableau Desktop for the current state before retrying; the request was not resent.',
       };
     case 'operation-expired':
       return {

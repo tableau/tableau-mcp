@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { WorkbookDocument } from './executorTypes.js';
 import {
+  assertSafeRouteSegment,
   ExternalApiError,
   ExternalApiInstance,
   HEADER_APPLICATION_VERSION,
@@ -46,6 +47,9 @@ function isTerminalState(state: string | undefined): boolean {
 }
 
 const HEADER_LOCATION = 'location';
+const OPERATION_LOCATION = /^\/v0\/operations\/([^/?#\\]+)$/;
+// Caps a server-supplied Retry-After; matches the executor's pending-read wait cap.
+const MAX_POLL_INTERVAL_MS = 5_000;
 const HEADER_RETRY_AFTER = 'retry-after';
 const HEADER_OPERATION_ID = 'x-tableau-operation-id';
 
@@ -132,7 +136,7 @@ export class ExternalApiHttp {
     options?: ExternalApiRequestOptions,
   ): Promise<Result<z.infer<T>, ExternalApiError>> {
     const response = await this.request('GET', route, { signal, timeoutMs: options?.timeoutMs });
-    return this.parseJson(response, schema, signal);
+    return this.parseJson(response, schema, 'GET', signal);
   }
 
   /** GET returning a raw-XML document body plus its version headers; a 202 overflow is polled. */
@@ -148,7 +152,7 @@ export class ExternalApiHttp {
 
     const res = response.value;
     if (res.status === HTTP_ACCEPTED) {
-      const operation = await this.pollOperation(res, signal);
+      const operation = await this.pollOperation(res, 'GET', signal);
       if (operation.isErr()) {
         return Err(operation.error);
       }
@@ -232,7 +236,7 @@ export class ExternalApiHttp {
       body: JSON.stringify(body),
       timeoutMs: options?.timeoutMs,
     });
-    return this.parseJson(response, schema, signal);
+    return this.parseJson(response, schema, 'POST', signal);
   }
 
   /** POST of a JSON body whose response must complete synchronously and never be polled. */
@@ -276,7 +280,7 @@ export class ExternalApiHttp {
       body: xml,
       timeoutMs: options?.timeoutMs,
     });
-    return this.parseJson(response, schema, signal);
+    return this.parseJson(response, schema, 'POST', signal);
   }
 
   private async parseEnvelope(
@@ -288,10 +292,10 @@ export class ExternalApiHttp {
     }
 
     if (response.value.status === HTTP_ACCEPTED) {
-      return this.pollOperation(response.value, signal);
+      return this.pollOperation(response.value, 'POST', signal);
     }
 
-    return this.parseJson(response, operationEnvelopeSchema);
+    return this.parseJson(response, operationEnvelopeSchema, 'POST');
   }
 
   /** Parses a response that must complete synchronously and therefore never follows a 202. */
@@ -327,12 +331,26 @@ export class ExternalApiHttp {
   /** Blocks on the 202's `Location` until a terminal Operation; a blocking dialog returns `awaiting-user`. */
   private async pollOperation(
     accepted: Response,
+    method: 'GET' | 'POST',
     signal?: AbortSignal,
   ): Promise<Result<OperationEnvelope, ExternalApiError>> {
     const location = accepted.headers.get(HEADER_LOCATION);
     const operationId = accepted.headers.get(HEADER_OPERATION_ID) ?? undefined;
     if (!location) {
       return Err({ type: 'invalid-response', error: 'A 202 response carried no Location header.' });
+    }
+    // The poll carries the bearer token, so the Location must be exactly one operation segment.
+    const operationMatch = OPERATION_LOCATION.exec(location);
+    if (operationMatch === null) {
+      return Err({
+        type: 'invalid-response',
+        error: 'A 202 Location header was not a /v0/operations/<id> path.',
+      });
+    }
+    try {
+      assertSafeRouteSegment(operationMatch[1]);
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
     }
 
     let retryAfterMs = parseRetryAfterMs(accepted.headers.get(HEADER_RETRY_AFTER));
@@ -348,7 +366,11 @@ export class ExternalApiHttp {
         });
       }
 
-      await delay(retryAfterMs, signal);
+      try {
+        await delay(Math.min(retryAfterMs, Math.max(0, deadline - Date.now())), signal);
+      } catch (error) {
+        return Err({ type: 'network', error, aborted: true });
+      }
 
       const polled = await this.request('GET', location, { signal });
       if (polled.isErr()) {
@@ -360,7 +382,13 @@ export class ExternalApiHttp {
         return Err({ type: 'operation-expired', operationId });
       }
       if (!res.ok) {
-        return Err(await mapErrorResponse(res));
+        const mapped = await mapErrorResponse(res);
+        // Desktop already accepted the mutation; a rescan-and-resend would run it twice.
+        return Err(
+          mapped.type === 'unauthorized' && method !== 'GET'
+            ? { type: 'accepted-unauthorized', operationId }
+            : mapped,
+        );
       }
 
       const parsed = await parseOperationBody(res);
@@ -393,6 +421,7 @@ export class ExternalApiHttp {
   private async parseJson<T extends z.ZodTypeAny>(
     response: Result<Response, ExternalApiError>,
     schema: T,
+    method: 'GET' | 'POST',
     signal?: AbortSignal,
   ): Promise<Result<z.infer<T>, ExternalApiError>> {
     if (response.isErr()) {
@@ -404,7 +433,7 @@ export class ExternalApiHttp {
     // 200 would have, so poll and read from there. (A 503 precursor overflow is a retry signal,
     // not a pollable operation.)
     if (res.status === HTTP_ACCEPTED) {
-      const operation = await this.pollOperation(res, signal);
+      const operation = await this.pollOperation(res, method, signal);
       if (operation.isErr()) {
         return Err(operation.error);
       }
@@ -448,8 +477,13 @@ export class ExternalApiHttp {
     // meant the default timeout never applied, because every desktop tool passes extra.signal.
     const signal = composeWithTimeout(options.signal, this.effectiveTimeoutMs(options.timeoutMs));
 
+    const target = this.resolveRoute(route);
+    if (target.isErr()) {
+      return Err(target.error);
+    }
+
     try {
-      const res = await this.fetchFn(this.url(route), {
+      const res = await this.fetchFn(target.value, {
         method,
         headers,
         body: options.body,
@@ -476,8 +510,27 @@ export class ExternalApiHttp {
     return overrideMs !== undefined ? Math.min(globalTimeoutMs, overrideMs) : globalTimeoutMs;
   }
 
-  private url(route: string): string {
-    return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
+  // The only place a request URL is built: same origin as the discovered base, one leading slash,
+  // and no dot-segment collapse, so the bearer token can only reach the discovered Desktop.
+  private resolveRoute(route: string): Result<string, ExternalApiError> {
+    const path = route.split('?')[0];
+    let base: URL | undefined;
+    let resolved: URL | undefined;
+    try {
+      base = new URL(this.instance.baseUrl);
+      if (/^\/(?![/\\])/.test(route) && !route.includes('#')) {
+        resolved = new URL(route, base);
+      }
+    } catch {
+      resolved = undefined;
+    }
+    if (!base || !resolved || resolved.origin !== base.origin || resolved.pathname !== path) {
+      return Err({
+        type: 'invalid-response',
+        error: new Error('Refused an External API route that does not stay on the Desktop origin.'),
+      });
+    }
+    return Ok(resolved.href);
   }
 }
 
@@ -489,7 +542,9 @@ function composeWithTimeout(signal: AbortSignal | undefined, timeoutMs: number):
 // `Retry-After` is an integer number of seconds (RFC 9110 §10.2.3); the HTTP-date form is not emitted here.
 function parseRetryAfterMs(headerValue: string | null): number {
   const seconds = Number.parseInt(headerValue ?? '', 10);
-  return (Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_RETRY_AFTER_SECONDS) * 1000;
+  const ms =
+    (Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_RETRY_AFTER_SECONDS) * 1000;
+  return Math.min(ms, MAX_POLL_INTERVAL_MS);
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

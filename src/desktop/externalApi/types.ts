@@ -217,8 +217,49 @@ export type ImageExportQuery = {
 // Concrete `{id}` routes are built here, next to the constants, so the HTTP layer never
 // mentions an endpoint. Ids ride the path segment and must be percent-encoded.
 
+/** Thrown by route builders for an id that would escape its path segment; the executor maps it to an Err. */
+export class ExternalApiRouteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExternalApiRouteError';
+  }
+}
+
+const MAX_SEGMENT_DECODE_PASSES = 8;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+// The one owner of path-segment safety: a dot segment at any decode depth would be collapsed by
+// the URL parser and retarget the route. Slashes stay legal because `encodeURIComponent` keeps them
+// inside the segment (`a%2Fb`), and datasource ids may contain them.
+export function assertSafeRouteSegment(raw: string): void {
+  let value = raw;
+  for (let pass = 0; pass <= MAX_SEGMENT_DECODE_PASSES; pass++) {
+    if (value === '.' || value === '..' || CONTROL_CHARACTERS.test(value)) {
+      throw new ExternalApiRouteError('Refused an unsafe path segment in an External API route.');
+    }
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(value);
+    } catch {
+      break;
+    }
+    if (decoded === value) break;
+    value = decoded;
+  }
+}
+
+function seg(raw: string): string {
+  assertSafeRouteSegment(raw);
+  try {
+    return encodeURIComponent(raw);
+  } catch {
+    throw new ExternalApiRouteError('Refused a malformed path segment in an External API route.');
+  }
+}
+
 export function worksheetRoute(worksheetId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${seg(worksheetId)}`;
 }
 
 export function worksheetDiagnosticsRoute(worksheetId: string): string {
@@ -226,11 +267,11 @@ export function worksheetDiagnosticsRoute(worksheetId: string): string {
 }
 
 export function dashboardRoute(dashboardId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${seg(dashboardId)}`;
 }
 
 export function storyboardRoute(storyboardId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${seg(storyboardId)}`;
 }
 
 export function worksheetDocumentRoute(worksheetId: string): string {
@@ -249,7 +290,13 @@ export function storyboardDocumentRoute(storyboardId: string): string {
 // then encode it once for the outbound segment so encoded delimiters stay inside that segment
 // without being double-encoded.
 function canonicalDatasourceSegment(datasourceId: string): string {
-  return encodeURIComponent(decodeURIComponent(datasourceId));
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(datasourceId);
+  } catch {
+    throw new ExternalApiRouteError('Refused a malformed datasource id in an External API route.');
+  }
+  return seg(decoded);
 }
 
 export function workbookDatasourceRoute(datasourceId: string): string {
@@ -314,7 +361,7 @@ const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
 };
 
 export function sheetActionRoute(sheet: SheetRef, action: 'rename' | 'delete'): string {
-  return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${encodeURIComponent(sheet.id)}:${action}`;
+  return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${seg(sheet.id)}:${action}`;
 }
 
 // `index` is 0-based; omit it (or pass an out-of-range/negative value) to append the new tab at the end.
@@ -397,9 +444,7 @@ export function worksheetLogicalTableDataRoute(
   }
 
   const suffix = search.size > 0 ? `?${search.toString()}` : '';
-  return `${worksheetRoute(worksheetId)}/logicalTables/${encodeURIComponent(
-    logicalTableId,
-  )}/data${suffix}`;
+  return `${worksheetRoute(worksheetId)}/logicalTables/${seg(logicalTableId)}/data${suffix}`;
 }
 
 // Builds the `?filePath=…&mimeType=…` suffix with encodeURIComponent (percent-encoding),
@@ -433,11 +478,11 @@ export function storyboardImageRoute(storyboardId: string, query: ImageExportQue
 const DATASOURCE_ROUTE_PREFIX = '/v0/datasources';
 
 export function datasourceRefreshDataRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshData`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshData`;
 }
 
 export function datasourceRefreshExtractRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshExtract`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshExtract`;
 }
 
 /**
@@ -1063,5 +1108,7 @@ export type ExternalApiError =
   // Blocked on a human; a poll can never clear it.
   | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
+  // A mutation was accepted (202) but its poll got 401: the result is unknown and must not be resent.
+  | { type: 'accepted-unauthorized'; operationId?: string }
   // Diagnostic only: unlike blockingWindows, progressWindows never fails fast on its own.
   | { type: 'poll-timeout'; operationId?: string; progressWindows?: Array<WindowInfo> };
