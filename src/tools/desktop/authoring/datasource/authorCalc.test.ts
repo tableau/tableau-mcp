@@ -744,6 +744,26 @@ async function getToolResult({
         'IF [Parameters].[Parameter 1] = "Top" THEN RANK(SUM([Profit])) <= [Parameters].[Parameter 2] END',
       );
     });
+    it('does not re-qualify an already-qualified parameter reference', async () => {
+      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
+      const workbookXml =
+        "<workbook><datasources><datasource name='Parameters'><column caption='Top N' name='[Parameter 1]' /></datasource></datasources></workbook>";
+      const resolved = resolveCaptionReferencesForTest(
+        'INDEX() <= [Parameters].[Top N] AND [Top N] > 0',
+        "<datasource name='DS'></datasource>",
+        workbookXml,
+      );
+      expect(resolved).toBe('INDEX() <= [Parameters].[Top N] AND [Parameters].[Parameter 1] > 0');
+    });
+
+    it('uses a stored name containing ] verbatim instead of escaping it twice', async () => {
+      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
+      const resolved = resolveCaptionReferencesForTest(
+        'SUM([Revenue & $])',
+        "<datasource name='DS'><column caption='Revenue &amp; $' name='[Sales [USD]]]' /></datasource>",
+      );
+      expect(resolved).toBe('SUM([Sales [USD]]])');
+    });
   });
 
   const extra = {

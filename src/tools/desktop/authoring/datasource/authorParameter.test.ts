@@ -190,6 +190,29 @@ describe('authorParameterTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a"b', '"a""b"'],
+    ['C:\\x', '"C:\\x"'],
+    ["R&D ]x' $1", '"R&D ]x\' $1"'],
+  ])('quotes the string value %s by doubling quotes', async (value, literal) => {
+    const str = await getToolResult({ args: { caption: 'p.Str', datatype: 'string', value } });
+    const strXml = str.applyWorkbookDocument.mock.calls[0][0] as string;
+    const decode = (v: string): string =>
+      v.replaceAll('&quot;', '"').replaceAll('&apos;', "'").replaceAll('&amp;', '&');
+    const strValue = /caption='p\.Str'[^>]* value='([^']*)'/.exec(strXml)?.[1] ?? '';
+    expect(decode(strValue)).toBe(literal);
+  });
+
+  it('writes dates as # literals', async () => {
+    const date = await getToolResult({
+      args: { caption: 'p.When', datatype: 'date', value: '2024-01-01' },
+    });
+    const dateXml = date.applyWorkbookDocument.mock.calls[0][0] as string;
+    expect(dateXml).toContain("datatype='date'");
+    expect(dateXml).toContain("value='#2024-01-01#'");
+    expect(dateXml).toContain("formula='#2024-01-01#'");
+  });
+
   it('rejects an empty caption', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: '', datatype: 'integer', value: '5' },

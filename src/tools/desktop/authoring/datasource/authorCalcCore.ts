@@ -881,6 +881,11 @@ function rewriteUnquotedFieldReferences(
   return `${rewritten}${formula.slice(cursor)}`;
 }
 
+// UNKNOWN pending a live probe: quote doubling is Tableau's documented form; no shipped fixture shows an embedded quote.
+export function quoteCalcString(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
 function renderFieldReference(token: string): string {
   return `[${token.replaceAll(']', ']]')}]`;
 }
@@ -1222,9 +1227,13 @@ function resolveCaptionReferences(
     const name = getAttr(tag, 'name');
     if (cap === undefined || name === undefined) continue;
     const capText = unescapeXml(cap);
-    const nameText = unescapeXml(name).replace(/^\[|\]$/g, '');
+    const storedName = unescapeXml(name);
+    const nameText = storedName.replace(/^\[|\]$/g, '').replaceAll(']]', ']');
     if (capText !== nameText) {
-      captionToRef.set(capText, renderFieldReference(nameText));
+      captionToRef.set(
+        capText,
+        storedName.startsWith('[') ? storedName : renderFieldReference(nameText),
+      );
     }
   }
   // Parameters live in their own datasource, so caption references must be qualified.
@@ -1240,7 +1249,13 @@ function resolveCaptionReferences(
     }
   }
   if (captionToRef.size === 0) return formula;
-  return rewriteUnquotedFieldReferences(formula, (whole, token) => {
+  return rewriteUnquotedFieldReferences(formula, (whole, token, offset, end) => {
+    if (
+      formula.slice(end, end + 2) === '.[' ||
+      formula.slice(Math.max(0, offset - 2), offset) === '].'
+    ) {
+      return whole;
+    }
     return captionToRef.get(token) ?? whole;
   });
 }
@@ -1316,7 +1331,7 @@ function escapeXml(value: string): string {
     .replaceAll('"', '&quot;');
 }
 
-function unescapeXml(value: string): string {
+export function unescapeXml(value: string): string {
   return value
     .replaceAll('&quot;', '"')
     .replaceAll('&apos;', "'")

@@ -17,6 +17,7 @@ import {
   sessionParam,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { unescapeXml } from './authorCalcCore.js';
 import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 // Primitives in, mark-label format XML server-side, readback out. Turns mark labels
@@ -159,7 +160,10 @@ function setMarkLabels(
 
   const existing = /<format\b[^>]*attr=(['"])mark-labels-show\1[^>]*\/>/.exec(wsXml);
   if (existing) {
-    newWsXml = wsXml.replace(existing[0], `<format attr='mark-labels-show' value='${value}' />`);
+    newWsXml = wsXml.replace(
+      existing[0],
+      () => `<format attr='mark-labels-show' value='${value}' />`,
+    );
   } else {
     const styleBlock =
       "<style><style-rule element='mark'>" +
@@ -173,8 +177,9 @@ function setMarkLabels(
 }
 
 function worksheetBounds(xml: string, name: string): { start: number; end: number } | undefined {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const open = new RegExp(`<worksheet\\b[^>]*\\bname=(['"])${escaped}\\1[^>]*>`).exec(xml);
+  const open = [...xml.matchAll(/<worksheet\b[^>]*\bname=(['"])(.*?)\1[^>]*>/g)].find(
+    (match) => unescapeXml(match[2]) === name,
+  );
   if (!open || open.index === undefined) {
     return undefined;
   }
