@@ -412,11 +412,21 @@ function missingCacheFileError(
   notFound?: (path: string) => McpToolError,
 ): McpToolError {
   try {
-    if (!isWithinCacheDir(realpathSync(dirname(absolutePath)), realpathSync(getCacheDir()))) {
-      return new CacheFileOutsideCacheError(argName);
+    let ancestor = dirname(absolutePath);
+    for (;;) {
+      try {
+        if (!isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()))) {
+          return new CacheFileOutsideCacheError(argName);
+        }
+        break;
+      } catch (error) {
+        const parent = dirname(ancestor);
+        if (errnoCode(error) !== 'ENOENT' || parent === ancestor) throw error;
+        ancestor = parent;
+      }
     }
   } catch {
-    // An unresolvable parent is lexically inside the cache, so plain "missing" reveals nothing.
+    // An unresolvable ancestor is lexically inside the cache, so plain "missing" reveals nothing.
   }
   return notFound?.(raw) ?? new FileReadError(new Error(`${argName} does not exist`));
 }
@@ -440,6 +450,16 @@ export function readCacheFileArg(
     default:
       return new Err(new FileReadError(read.error ?? new Error(`Unable to read ${argName}.`)));
   }
+}
+
+/** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
+export function writeCacheTextFile(path: string, text: string): void {
+  const written = writeContainedCacheTextFile(path, text);
+  if (written.ok) return;
+  if (written.issue === CONTAINED_CACHE_WRITE_ISSUE.writeError) throw written.error;
+  throw new Error(
+    `refused to write ${path}: it must be a regular file inside the Desktop cache directory`,
+  );
 }
 
 /** Contained write of a cache-file argument; a write failure is never reported as a read failure. */

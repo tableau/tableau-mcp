@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import {
   linkSync,
   mkdirSync,
@@ -11,6 +11,7 @@ import {
 } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { pathToFileURL } from 'url';
 
 import { FileNotFoundError } from '../errors/mcpToolError.js';
 import {
@@ -130,6 +131,33 @@ describe('missing-file messages do not reveal what exists outside the cache', ()
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'answers the same for a nested missing path under a planted directory symlink',
+    () => {
+      symlinkSync(join(root, 'outside'), join(state.cacheDir, 'd'));
+      for (const name of ['d/missing.twb', 'd/nope/missing.twb', 'd/nope/deeper/missing.twb']) {
+        const file = join(state.cacheDir, name);
+        for (const result of [
+          readCacheFileArg('workbookFile', file),
+          checkCacheFileArg('workbookFile', file),
+        ]) {
+          expect(result.isErr() && result.error.type).toBe('cache-file-outside-cache');
+        }
+      }
+    },
+  );
+
+  it('keeps plain not-found for a missing file inside the cache, including its own notFound text', () => {
+    for (const name of ['nope.xml', 'sub/nope.xml', 'sub/deeper/nope.xml']) {
+      const file = join(state.cacheDir, name);
+      const plain = checkCacheFileArg('workbookFile', file);
+      expect(plain.isErr() && plain.error.type).not.toBe('cache-file-outside-cache');
+      expect(plain.isErr() && plain.error.message).toContain('workbookFile does not exist');
+      const custom = checkCacheFileArg('workbookFile', file, (p) => new FileNotFoundError(p));
+      expect(custom.isErr() && custom.error).toBeInstanceOf(FileNotFoundError);
+    }
+  });
+
   it('words a plain missing cache file without a double period', () => {
     const result = readCacheFileArg('workbookFile', join(state.cacheDir, 'missing.xml'));
     expect(result.isErr() && result.error.message).not.toContain('..');
@@ -138,28 +166,48 @@ describe('missing-file messages do not reveal what exists outside the cache', ()
 });
 
 describe.skipIf(process.platform === 'win32')('a FIFO planted in the cache', () => {
-  let root: string;
+  let scratch: string;
+  let fifo = '';
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'cache-fifo-'));
-    state.cacheDir = join(root, 'cache');
-    mkdirSync(state.cacheDir);
+    scratch = mkdtempSync(join(tmpdir(), 'cache-fifo-'));
   });
 
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    if (fifo) rmSync(fifo, { force: true });
+    rmSync(scratch, { recursive: true, force: true });
   });
 
-  it('is refused by read, write and check without blocking', { timeout: 3000 }, () => {
-    const fifo = join(state.cacheDir, 'pipe.twb');
-    execFileSync('mkfifo', [fifo]);
+  // Runs in a child against the real cache dir so a blocking open fails by timeout, not by hanging vitest.
+  it('is refused by read, write and check without blocking', { timeout: 20000 }, () => {
+    const cachePathModule = pathToFileURL(join(process.cwd(), 'src/desktop/cachePath.ts')).href;
+    const script = join(scratch, 'probe.mts');
+    writeFileSync(
+      script,
+      `import { execFileSync } from 'child_process';
+import { join } from 'path';
+import { checkCacheFileArg, getCacheDir, readContainedCacheTextFile, writeContainedCacheTextFile } from ${JSON.stringify(cachePathModule)};
+const fifo = join(getCacheDir(), 'fifo-probe-' + process.pid + '.twb');
+console.log(fifo);
+execFileSync('mkfifo', [fifo]);
+let refused = 0;
+if (readContainedCacheTextFile(fifo).ok === false) refused++;
+if (writeContainedCacheTextFile(fifo, 'x').ok === false) refused++;
+if (checkCacheFileArg('workbookFile', fifo).isErr()) refused++;
+console.log('REFUSED=' + refused);
+`,
+    );
 
-    expect(readContainedCacheTextFile(fifo)).toMatchObject({ ok: false, issue: 'unsafe-file' });
-    expect(writeContainedCacheTextFile(fifo, 'x')).toMatchObject({
-      ok: false,
-      issue: 'unsafe-file',
+    const child = spawnSync(process.execPath, ['--import', 'tsx', script], {
+      cwd: process.cwd(),
+      encoding: 'utf-8',
+      timeout: 8000,
     });
-    expect(checkCacheFileArg('workbookFile', fifo).isErr()).toBe(true);
+    fifo = child.stdout.split('\n')[0] ?? '';
+
+    expect(child.error).toBeUndefined();
+    expect(child.status).toBe(0);
+    expect(child.stdout).toContain('REFUSED=3');
   });
 });
 

@@ -1,9 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../../desktop/episode-events.js';
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
@@ -144,7 +144,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
           });
           try {
-            writeFileSync(workbookFile, acceptedWorkbookXml, 'utf-8');
+            writeCacheTextFile(workbookFile, acceptedWorkbookXml);
           } catch (error) {
             return new UnknownError(
               `Workbook cache write failed: ${getExceptionMessage(error)}. ${PHASE1_APPLIED_GUIDANCE}`,
@@ -171,7 +171,7 @@ export const getBatchCreateAndCacheSheetsTool = (
               id: distinctCacheId(name, resolvedSession),
             });
             try {
-              writeFileSync(file, wsResult.value.xml, 'utf-8');
+              writeCacheTextFile(file, wsResult.value.xml);
               writeSidecar(file, resolvedSession, sourceSha256(wsResult.value.xml));
             } catch (error) {
               worksheetFailures.push({
@@ -198,7 +198,7 @@ export const getBatchCreateAndCacheSheetsTool = (
               id: distinctCacheId(dashboardName, resolvedSession),
             });
             try {
-              writeFileSync(file, dashResult.value.xml, 'utf-8');
+              writeCacheTextFile(file, dashResult.value.xml);
               writeSidecar(file, resolvedSession, sourceSha256(dashResult.value.xml));
               dashboardFile = file;
             } catch (error) {

@@ -13,10 +13,9 @@ vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/getDashboardXml.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/metadata/index.js');
-vi.mock('fs');
+vi.mock('../../../../desktop/cachePath.js');
 
-import { writeFileSync } from 'fs';
-
+import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
@@ -48,7 +47,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getDashboardXml).mockResolvedValue(
     new Ok({ xml: DASHBOARD_XML, name: 'My Dashboard' }),
   );
-  vi.mocked(writeFileSync).mockImplementation(() => {});
+  vi.mocked(writeCacheTextFile).mockImplementation(() => {});
   vi.mocked(writeSidecar).mockImplementation(() => {});
   vi.mocked(sourceSha256).mockImplementation((xml) => {
     if (xml === WORKBOOK_XML) return 'a'.repeat(64);
@@ -210,14 +209,10 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
     expect(result.isError).toBe(false);
     const workbookWrite = vi
-      .mocked(writeFileSync)
+      .mocked(writeCacheTextFile)
       .mock.calls.find(([, contents]) => contents === ACCEPTED_WORKBOOK_XML);
     expect(workbookWrite).toBeDefined();
-    expect(writeFileSync).not.toHaveBeenCalledWith(
-      expect.any(String),
-      SUBMITTED_WORKBOOK_XML,
-      'utf-8',
-    );
+    expect(writeCacheTextFile).not.toHaveBeenCalledWith(expect.any(String), SUBMITTED_WORKBOOK_XML);
     expect(sourceSha256).toHaveBeenCalledWith(ACCEPTED_WORKBOOK_XML);
     expect(sourceSha256).not.toHaveBeenCalledWith(SUBMITTED_WORKBOOK_XML);
     expect(writeSidecar).toHaveBeenCalledWith(workbookWrite?.[0], SESSION, acceptedHash);
@@ -225,7 +220,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
   it('tells the caller not to retry Phase 1 when the workbook cache write fails after apply', async () => {
     const extra = makeExtra();
-    vi.mocked(writeFileSync).mockImplementation((_path, contents) => {
+    vi.mocked(writeCacheTextFile).mockImplementation((_path, contents) => {
       if (String(contents).startsWith('<?xml')) {
         throw new Error('ENOSPC: disk full');
       }
@@ -257,7 +252,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
     expect(result.isError).toBe(false);
     const worksheetPaths = vi
-      .mocked(writeFileSync)
+      .mocked(writeCacheTextFile)
       .mock.calls.filter(([, contents]) => contents === WORKSHEET_XML)
       .map(([path]) => String(path));
     expect(worksheetPaths).toHaveLength(2);
@@ -287,7 +282,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
       'Post-apply workbook readback failed. The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.',
     );
     expect(result.content[0].text).not.toContain('Ready for Phase 2');
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(writeCacheTextFile).not.toHaveBeenCalled();
     expect(writeSidecar).not.toHaveBeenCalled();
   });
 
@@ -362,7 +357,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
 
   it('should return an error when a fetched worksheet cannot be cached', async () => {
     const extra = makeExtra();
-    vi.mocked(writeFileSync)
+    vi.mocked(writeCacheTextFile)
       .mockImplementationOnce(() => {})
       .mockImplementationOnce(() => {
         throw new Error('disk full');
@@ -423,7 +418,7 @@ describe('batchCreateAndCacheSheetsTool', () => {
       dashboardName: 'DB',
     });
 
-    expect(writeFileSync).toHaveBeenCalled();
+    expect(writeCacheTextFile).toHaveBeenCalled();
     expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'a'.repeat(64));
     expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'b'.repeat(64));
     expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'c'.repeat(64));

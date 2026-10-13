@@ -29,6 +29,7 @@ vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   readCacheFileArg: vi.fn(),
   checkCacheFileArg: vi.fn(),
   writeCacheFileArg: vi.fn(),
+  writeCacheTextFile: (path: string, text: string) => writeFileSync(path, text, 'utf-8'),
 }));
 vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
