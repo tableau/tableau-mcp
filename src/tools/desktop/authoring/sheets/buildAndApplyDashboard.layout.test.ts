@@ -242,8 +242,9 @@ describe('build-and-apply-dashboard layout validation', () => {
     const result = await run({ kpis, charts: [], layoutType: 'rows' });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toMatch(/do not fit on the canvas/);
-    expect(result.content[0].text).not.toMatch(/charts|kpiStripHeight/);
+    expect(result.content[0].text).toMatch(/The KPI strip does not fit on the canvas/);
+    expect(result.content[0].text).not.toMatch(/charts|kpiStripHeight|title/i);
+    expect(result.content[0].text).toMatch(/Use fewer KPIs\./);
   });
 
   it('does not offer kpiStripHeight when even a 1% strip leaves no room', async () => {
@@ -258,5 +259,39 @@ describe('build-and-apply-dashboard layout validation', () => {
   it('accepts a KPI-only custom dashboard with no customZones', async () => {
     const result = await run({ kpis: ['A', 'B'], charts: [], layoutType: 'custom' });
     expect(result.isError).toBe(false);
+  });
+
+  it('names only the KPI strip when there is no title', async () => {
+    const result = await run({
+      kpis: ['K'],
+      charts: ['A'],
+      layoutType: 'rows',
+      kpiStripHeight: 100,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/The KPI strip leaves no room for the charts/);
+    expect(result.content[0].text).toMatch(/Lower kpiStripHeight\./);
+    expect(result.content[0].text).not.toMatch(/title/i);
+  });
+
+  it('names only the title when there are no KPIs', async () => {
+    const charts = Array.from({ length: 95000 }, (_, i) => `C${i}`);
+    const result = await run({ kpis: [], charts, layoutType: 'rows' }, 'Sales');
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/The title leaves no room for the charts/);
+    expect(result.content[0].text).toMatch(/Drop the title or use fewer sheets\./);
+    expect(result.content[0].text).not.toMatch(/KPI/);
+  });
+
+  it('says the charts do not fit when there is no title and no KPIs', async () => {
+    const charts = Array.from({ length: 100001 }, (_, i) => `C${i}`);
+    const result = await run({ kpis: [], charts, layoutType: 'rows' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/The charts do not fit on the canvas/);
+    expect(result.content[0].text).toMatch(/Use fewer sheets\./);
+    expect(result.content[0].text).not.toMatch(/title|KPI/i);
   });
 });

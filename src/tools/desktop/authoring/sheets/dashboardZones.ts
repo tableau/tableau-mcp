@@ -132,22 +132,42 @@ export function validateLayoutSpec(
   if (outOfCanvas) {
     const label = outOfCanvas.kind === 'worksheet' ? `"${outOfCanvas.name}"` : 'the title';
     const detail = `the zone for ${label} would be x=${outOfCanvas.x}, y=${outOfCanvas.y}, width=${outOfCanvas.w}, height=${outOfCanvas.h} on a ${MAX_COORD} canvas`;
+    const hasTitle = Boolean(titleText);
+    const hasKpis = kpis.length > 0;
+    const sentence = (options: string[]): string => {
+      const text = options.join(' or ');
+      return `${text[0].toUpperCase()}${text.slice(1)}.`;
+    };
     if (charts.length === 0) {
+      const subject =
+        hasTitle && hasKpis ? 'The title and KPI strip' : hasKpis ? 'The KPI strip' : 'The title';
+      const options = [
+        ...(hasTitle ? ['drop the title'] : []),
+        ...(hasKpis ? ['use fewer KPIs'] : []),
+      ];
       return new ArgsValidationError(
-        `The title and KPI strip do not fit on the canvas: ${detail}. Drop the title or use fewer KPIs.`,
+        `${subject} do${hasTitle && hasKpis ? '' : 'es'} not fit on the canvas: ${detail}. ${sentence(options)}`,
       );
     }
     const slimStripFits =
       layoutType !== 'executive-summary' &&
-      kpis.length > 0 &&
+      hasKpis &&
       !computeZones(titleText, { ...(layoutSpec as LayoutSpec), kpiStripHeight: 1 }).some(
         doesNotFit,
       );
-    return new ArgsValidationError(
-      `The title and KPI strip leave no room for the charts: ${detail}. ${
-        slimStripFits ? 'Lower kpiStripHeight' : 'Drop the title or use fewer sheets'
-      }.`,
-    );
+    const advice = slimStripFits
+      ? 'Lower kpiStripHeight.'
+      : sentence([...(hasTitle ? ['drop the title'] : []), 'use fewer sheets']);
+    if (!hasTitle && !hasKpis) {
+      return new ArgsValidationError(`The charts do not fit on the canvas: ${detail}. ${advice}`);
+    }
+    const subject =
+      hasTitle && hasKpis
+        ? 'The title and KPI strip leave'
+        : hasKpis
+          ? 'The KPI strip leaves'
+          : 'The title leaves';
+    return new ArgsValidationError(`${subject} no room for the charts: ${detail}. ${advice}`);
   }
   return undefined;
 }
