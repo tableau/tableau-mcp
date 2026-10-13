@@ -1274,6 +1274,23 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
     expect(out).not.toContain('name="[sum:Latitude (generated):qk]"');
   });
 
+  it('synthesizes a declaration for a colon-named field without splitting its name', () => {
+    const colonMap =
+      "<worksheet name='m'><table><view>" +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column datatype='real' name='[min: Duration]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies>' +
+      '<panes><pane><encodings>' +
+      "<size column='[{{DATASOURCE}}].[sum:min: Duration:qk]' />" +
+      '</encodings></pane></panes>' +
+      '</view></table></worksheet>';
+    const out = rewriteFieldReferences(colonMap, {}, 'DS');
+
+    expect(out).toContain(
+      '<column-instance column="[min: Duration]" derivation="Sum" name="[sum:min: Duration:qk]" pivot="key" type="quantitative"/>',
+    );
+  });
+
   it('carries the synthesized instance through a rename, matching the renamed base column', () => {
     // color references [sum:Quantity:qk]; Quantity is remapped to Profit → the
     // synthesized declaration must name the RENAMED base column, not the donor's.

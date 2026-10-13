@@ -1098,9 +1098,10 @@ function parseInstanceName(
       break;
     }
   }
-  if (roleIdx < 1) return null;
-  const field = parts[roleIdx - 1];
-  const deriv = parts.slice(0, roleIdx - 1).join(':');
+  if (roleIdx < 2) return null;
+  const derivationEnd = Math.max(columnInstancePrefixLength(parts, roleIdx), 1);
+  const field = parts.slice(derivationEnd, roleIdx).join(':');
+  const deriv = parts.slice(0, derivationEnd).join(':');
   const trailing = parts.slice(roleIdx).join(':');
   if (!deriv || !field) return null;
   return { deriv, field, trailing };

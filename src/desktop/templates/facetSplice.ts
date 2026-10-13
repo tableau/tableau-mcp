@@ -36,6 +36,8 @@
  * picks it up uniformly.
  */
 
+import { columnInstancePrefixLength } from '../derivations.js';
+
 /** Minimal runtime slot shape needed to locate an optional facet generically. */
 export interface FacetSlotReference {
   slot_id?: string;
@@ -209,7 +211,9 @@ function fieldFromInstanceName(inner: string): string | null {
   if (parts.length < 3) return null;
   for (let i = parts.length - 1; i >= 1; i--) {
     if (parts[i] === 'nk' || parts[i] === 'ok' || parts[i] === 'qk') {
-      return parts[i - 1] || null;
+      if (i < 2) return null;
+      const prefixEnd = Math.max(columnInstancePrefixLength(parts, i), 1);
+      return parts.slice(prefixEnd, i).join(':') || null;
     }
   }
   return null;
