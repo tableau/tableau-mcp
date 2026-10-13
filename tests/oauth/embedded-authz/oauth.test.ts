@@ -1,6 +1,5 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
 
 import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
@@ -10,6 +9,7 @@ import {
   PassthroughAuthInfo,
   passthroughAuthInfoSchema,
 } from '../../../src/server/passthroughAuthMiddleware.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';

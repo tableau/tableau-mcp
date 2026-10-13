@@ -1,8 +1,12 @@
 import { generateKeyPairSync } from 'crypto';
 import express from 'express';
-import request from 'supertest';
 
 import { SessionStore } from '../../sessionStore/sessionStore.js';
+import {
+  closeLoopbackServer,
+  default as request,
+  startLoopbackServer,
+} from '../../testLoopbackRequest.js';
 import { token } from './token.js';
 import { AuthorizationCode, RefreshTokenData } from './types.js';
 
@@ -79,7 +83,10 @@ describe('refresh_token rotation write ordering', () => {
     tableauClientId: 'tableau-client',
   };
 
-  beforeEach(() => {
+  afterEach(closeLoopbackServer);
+
+  beforeEach(async () => {
+    await startLoopbackServer();
     vi.clearAllMocks();
 
     authorizationCodes = new FakeSessionStore<AuthorizationCode>();

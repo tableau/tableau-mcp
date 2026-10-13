@@ -1,9 +1,10 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
+import type { Test } from 'supertest';
 
 import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
@@ -256,7 +257,7 @@ describe('refresh token grant type', () => {
         ),
     );
 
-    const sendRefresh = (): request.Test =>
+    const sendRefresh = (): Test =>
       request(app).post('/oauth2/token').send({
         grant_type: 'refresh_token',
         refresh_token,

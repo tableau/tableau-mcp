@@ -1,11 +1,11 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
 import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../src/config.js';
 import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
