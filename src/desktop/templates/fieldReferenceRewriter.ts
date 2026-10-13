@@ -2,7 +2,11 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
 
-import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
+import {
+  canonicalShortDerivation,
+  columnInstancePrefixLength,
+  resolveDerivation,
+} from '../derivations.js';
 import { pruneShelfLeaves } from '../metadata/shelfTree.js';
 
 // =============================================================================
@@ -184,21 +188,24 @@ export function rewriteFieldReferencesWithDiagnostics(
   // Parse a mapped column-instance value into the actual field info we write.
   // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role],
   // with an optional trailing table-calc index after the role.
-  // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
-  // real Tableau writes) keeps its wrappers instead of being read as field "sum".
-  // Anchoring the role to Tableau's role markers prevents an optional trailing index
-  // ([pcto:sum:Sales:qk:3]) from being mistaken for the role and shifting the field to qk.
+  // Only a table-calc wrapper may be followed by another prefix, so field names may hold ':'.
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/^\[(.+):([^:]+):(nk|ok|qk)(?::[^:\]]+)?\]$/);
-    if (!match) {
-      return null;
-    }
-
-    const [, derivShortRaw, actualFieldName, role] = match;
+    if (!strippedInstance.startsWith('[') || !strippedInstance.endsWith(']')) return null;
+    const parts = strippedInstance.slice(1, -1).split(':');
+    const isRole = (part: string): boolean => part === 'nk' || part === 'ok' || part === 'qk';
+    const roleIndex = [parts.length - 1, parts.length - 2].find(
+      (index) => index >= 2 && isRole(parts[index]) && parts[parts.length - 1] !== '',
+    );
+    if (roleIndex === undefined) return null;
+    const derivationEnd = Math.max(columnInstancePrefixLength(parts, roleIndex), 1);
+    const derivShortRaw = parts.slice(0, derivationEnd).join(':');
+    const actualFieldName = parts.slice(derivationEnd, roleIndex).join(':');
+    if (actualFieldName === '') return null;
+    const role = parts[roleIndex];
     const derivation = derivShortRaw.toLowerCase();
     const derivationAttr = resolveDerivation(derivation);
     return { name: actualFieldName, derivation, derivationAttr, role };

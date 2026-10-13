@@ -54,6 +54,43 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
     expect(out).not.toContain('name="[qk]"');
   });
 
+  it.each([
+    ['[DS].[none:Order: Date:nk]', 'none', 'Order: Date'],
+    ['[DS].[sum:Q1: Sales:qk]', 'sum', 'Q1: Sales'],
+    ['[DS].[pcto:cum:sum:A:B:C:qk:3]', 'pcto:cum:sum', 'A:B:C'],
+    ['[DS].[none:Sum: Total:nk]', 'none', 'Sum: Total'],
+    ['[DS].[sum:Sum: Total:qk]', 'sum', 'Sum: Total'],
+    ['[DS].[sum:min: Duration:qk]', 'sum', 'min: Duration'],
+  ])('keeps a colon inside a bound field name for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`:${field}:`);
+    expect(out).not.toContain(`name="[${field.split(':').pop()}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each([
+    ['[DS].[pcto:sum:Sales:qk]', 'pcto:sum', 'Sales'],
+    ['[DS].[cum:usr:Calc:qk]', 'cum:usr', 'Calc'],
+    ['[DS].[cum:Sum:Sales:qk]', 'cum:sum', 'Sales'],
+    ['[DS].[pcto:cum:sum:Sales:qk]', 'pcto:cum:sum', 'Sales'],
+  ])('consumes a table-calc wrapper chain for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each(['[DS].[sum::qk]', '[DS].[pcto:sum::qk]'])(
+    'skips a malformed mapping with an empty field name: %s',
+    (mapped) => {
+      const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+      expect(out).not.toContain('name="[]"');
+    },
+  );
+
   it('rewrites an unqualified generated-instance source reference', () => {
     const forecastXml = xml.replace(
       "name='[none:Field:nk]'",
