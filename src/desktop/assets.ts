@@ -39,8 +39,8 @@ function resolveRoot(candidates: string[]): string {
 
 export function getDataRoot(): string {
   return resolveRoot([
+    // Bundled: build/desktop/data next to the bundle. Never the repo's src tree.
     join(safeDirname(), 'desktop', 'data'),
-    join(safeDirname(), '..', 'src', 'desktop', 'data'),
     // Unbundled source/vitest: getDirname() is src/utils, so the data dir is a sibling.
     join(safeDirname(), '..', 'desktop', 'data'),
   ]);
@@ -48,8 +48,8 @@ export function getDataRoot(): string {
 
 export function getResourcesRoot(): string {
   return resolveRoot([
+    // Bundled: build/resources/desktop next to the bundle. Never the repo's resources tree.
     join(safeDirname(), 'resources', 'desktop'),
-    join(safeDirname(), '..', 'resources', 'desktop'),
     // Unbundled source/vitest: getDirname() is src/utils, so resources live two levels up.
     join(safeDirname(), '..', '..', 'resources', 'desktop'),
   ]);

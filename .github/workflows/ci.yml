@@ -43,6 +43,9 @@ jobs:
       - name: Build desktop variant
         run: npm run build:desktop:dirty
 
+      - name: Check Desktop bundle runs from outside the repo
+        run: npx tsx src/scripts/assertDesktopBundle.ts
+
       - name: Build Docker image
         run: npm run build:docker
 
