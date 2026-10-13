@@ -97,6 +97,24 @@ describe('target worksheet state', () => {
     });
   });
 
+  it('does not throw on a malformed qualified reference and still tracks valid ones', () => {
+    const artifact = ARTIFACT.replace(
+      '<cols>',
+      '<caption>[Superstore].[none:Unrelated:nk] then [x].[</caption><cols>',
+    );
+    const expected = captureTargetWorksheetState(BASE, 'Target', artifact);
+    const changed = BASE.replace(
+      "name='[Unrelated]' role='dimension'",
+      "name='[Unrelated]' role='measure'",
+    );
+
+    expect(compareTargetWorksheetState(expected, BASE, artifact)).toEqual({ ok: true });
+    expect(compareTargetWorksheetState(expected, changed, artifact)).toEqual({
+      ok: false,
+      reasons: ['datasource-drift'],
+    });
+  });
+
   it('canonicalizes formatting and attribute order for target/dependency fingerprints', () => {
     const expected = captureTargetWorksheetState(BASE, 'Target', ARTIFACT);
     const reformatted = BASE.replace(

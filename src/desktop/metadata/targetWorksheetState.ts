@@ -192,8 +192,7 @@ function qualifiedReferences(value: string): Array<{ datasource: string; instanc
     const datasource = parseBracketSegment(value, index);
     if (!datasource || value.slice(datasource.end, datasource.end + 2) !== '.[') continue;
     const field = parseBracketSegment(value, datasource.end + 1);
-    if (!field)
-      throw new Error(`Malformed datasource-qualified reference near ${value.slice(index)}`);
+    if (!field) continue;
     references.push({ datasource: datasource.identifier, instance: field.identifier });
     index = field.end - 1;
   }
