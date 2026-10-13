@@ -29,7 +29,10 @@ import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/bind
 import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
-import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  type ExecuteCommandWarning,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   parseCanonicalColumnRef,
@@ -70,6 +73,7 @@ import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templat
 import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import {
   classifyWorksheetPromiseOutcome,
+  formatDesktopWarnings,
   formatWorksheetPromiseCheck,
 } from '../../../../desktop/validation/promise-check.js';
 import {
@@ -99,6 +103,7 @@ import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { desktopWarningNextAction } from '../../api/applyPreamble.js';
 import {
   fetchWorksheetSummaryData,
   type SummaryDataRead,
@@ -213,6 +218,8 @@ type AppliedFastPathResult = {
   applied: true;
   authored_calcs?: string[];
   warnings?: string[];
+  /** Desktop's own apply warnings; present only when Desktop returned any. */
+  desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
@@ -2577,6 +2584,7 @@ async function performAutoApply({
     };
   }
   const applyMs = Date.now() - applyStart;
+  const documentWarnings = applyResult.value.documentWarnings;
 
   // ── Host verification receipt on the HOT path (W-23447506) ────────
   // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
@@ -2799,12 +2807,15 @@ async function performAutoApply({
           )
         : needsFollowUp
           ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
-          : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+          : documentWarnings.length > 0
+            ? receiptText
+            : `${receiptText} ${terminalGuidance}`
+  }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
+    ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
     guidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
@@ -2823,6 +2834,17 @@ async function performAutoApply({
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
+  if (documentWarnings.length > 0) {
+    return {
+      ...(needsFollowUp || unfilledEncodings ? { incomplete: true as const } : {}),
+      result: withNextAction(
+        applied,
+        unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain
+          ? prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings))
+          : desktopWarningNextAction(),
+      ),
+    };
+  }
   if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
     return {
       incomplete: true,
@@ -2868,6 +2890,9 @@ async function performAutoApply({
         ),
       };
 }
+
+const DESKTOP_WARNINGS_GUIDANCE =
+  'Desktop reported warnings while applying this sheet. Read them below and tell the user what Desktop dropped or changed before you continue.';
 
 function renderAuthoredCalcPrefix(
   captions: string[] | undefined,

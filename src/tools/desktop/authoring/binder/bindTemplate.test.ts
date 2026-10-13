@@ -7485,6 +7485,63 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
   });
 
+  it("reports Desktop's apply warnings, is not done, and still remembers the applied sheet", async () => {
+    const warning = { code: 'node-dropped', message: 'Dropped an unknown <foo> node' };
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
+      dispatch: Ok({
+        command_id: 'cmd-1',
+        status: 'completed',
+        submitted_at: '',
+        result: {},
+        warnings: [warning],
+      }),
+    });
+    const ask = 'bar chart of Sales by Region';
+
+    const firstResult = await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const first = body(firstResult);
+
+    expect(first.applied).toBe(true);
+    expect(first.desktop_warnings).toEqual([warning]);
+    expect(first.guidance).toContain('node-dropped: Dropped an unknown <foo> node');
+    expect(first.guidance).not.toContain('no further tool calls');
+    expect(first.guidance).not.toContain('waterfall');
+    expect(firstResult.structuredContent?.nextAction).toMatchObject({ kind: 'prefill' });
+    expect(firstResult.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
+
+    // A reworded ask collapses onto the remembered sheet: the warned apply was still recorded.
+    const reworded = body(
+      await getToolResult({
+        session: '1',
+        ask: 'Sales by Region as a bar chart',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+    expect(reworded.reused).toBe(true);
+  });
+
+  it('omits desktop_warnings when Desktop returned none', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      structuralReadback: true,
+    });
+
+    const first = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(first.applied).toBe(true);
+    expect(first).not.toHaveProperty('desktop_warnings');
+  });
+
   it('a repeated ask reuses the sheet, then its guided target rebuild applies', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
@@ -7918,6 +7975,41 @@ describe('bind-template — reports what it actually built', () => {
       (result.structuredContent as { nextAction: { kind: string } } | undefined)?.nextAction.kind,
     ).not.toBe('done');
     expect(body.guidance).not.toContain('no further tool calls');
+  });
+
+  it('keeps the unfilled-encoding next action and adds the warnings when Desktop also warned', async () => {
+    const warning = { code: 'node-dropped', message: 'Dropped an unknown <foo> node' };
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithUnfilledColorResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      structuralReadback: true,
+      dispatch: Ok({
+        command_id: 'cmd-1',
+        status: 'completed',
+        submitted_at: '',
+        result: {},
+        warnings: [warning],
+      }),
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, warmer dots for more sales',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(parsed.desktop_warnings).toEqual([warning]);
+    expect(parsed.encodings).toEqual({ filled: ['size'], unfilled: ['color'] });
+    const nextAction = (
+      result.structuredContent as { nextAction: { kind: string; label: string } } | undefined
+    )?.nextAction;
+    expect(nextAction?.kind).toBe('prefill');
+    expect(nextAction?.label).toContain('Add color');
+    expect(parsed.guidance).toContain('node-dropped: Dropped an unknown <foo> node');
+    expect(parsed.guidance).toContain('add-field');
   });
 
   it('names the missing encoding and the concrete next call', async () => {
