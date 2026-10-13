@@ -1288,6 +1288,36 @@ describe('binder/within-datasource resolution of sort and filters', () => {
     expect(result.status).toBe('bound');
   });
 
+  it.each(['Sales &amp; Ops', 'Partner&apos;s data'])(
+    'narrows sort and filters to a bound datasource named %s',
+    async (escapedName) => {
+      const renamed = twoDatasources.replace("name='Superstore'", `name='${escapedName}'`);
+      const bindRenamed = (extra: Record<string, unknown>): ReturnType<typeof bindTemplate> =>
+        bindTemplate({
+          ask: 'bar chart of Sales by Category',
+          workbookXml: renamed,
+          manifests: descriptors,
+          proposal: {
+            ...rankingProposal(),
+            bindings: [
+              { slot_id: 'field_base_1', field: 'Category' },
+              { slot_id: 'field_base_2', field: 'Sales' },
+            ],
+            ...extra,
+          },
+        });
+
+      const shared = await bindRenamed({ filters: [{ field: 'Region', context: true }] });
+      expect(shared.status).toBe('bound');
+
+      const sorted = await bindRenamed({ sort: { by: 'Quota Tier', direction: 'asc' } });
+      expect(sorted.status).toBe('bound');
+      if (sorted.status !== 'bound') return;
+      expect(sorted.args.sort).toBeUndefined();
+      expect(sorted.warnings?.join('\n')).toContain("exists only in datasource 'Targets'");
+    },
+  );
+
   it('refuses a filter field that lives only in another datasource', async () => {
     const result = await bindWith({ filters: [{ field: 'Quota Tier' }] });
 

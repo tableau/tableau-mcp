@@ -5355,6 +5355,51 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).not.toContain('using="[PL].[sum:amount:qk]"></computed-sort>');
   });
 
+  it('auto_apply=true resolves the sort inside a bound datasource whose name needs XML escaping', async () => {
+    const escapedName = 'Sales &amp; Ops';
+    const rename = (xml: string): string =>
+      xml
+        .replaceAll("name='PL'", `name='${escapedName}'`)
+        .replaceAll("datasource='PL'", `datasource='${escapedName}'`)
+        .replaceAll('[PL]', `[${escapedName}]`);
+    const workbookXml = rename(P_AND_L_WORKBOOK_XML).replace(
+      '</datasources>',
+      "<datasource name='Plan'><column name='[display_order]' role='measure' type='quantitative' datatype='integer' /></datasource></datasources>",
+    );
+    const bind: BinderResult = {
+      ...boundWaterfallWithSortResult,
+      args: {
+        ...boundWaterfallWithSortResult.args,
+        template_parameters: { DATASOURCE: escapedName },
+        field_mapping: {
+          Profit: `[${escapedName}].[sum:amount:qk]`,
+          'Sub-Category': `[${escapedName}].[none:line_item:nk]`,
+        },
+      },
+    };
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind,
+      inject: { ok: true, xml: rename(REAL_INJECTED_WATERFALL_SORT_SHAPE_XML) },
+      workbookReads: [workbookXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall in display_order',
+      proposal: { ...sampleProposal, sort: { by: 'display_order', direction: 'asc' } },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(result.isError, JSON.stringify(body)).toBe(false);
+    expect(body.warnings?.join(' ') ?? '').not.toContain('sort splice skipped');
+    expect(appliedXml(applyWorkbookDocument)).toContain(
+      `using='[${escapedName}].[sum:display_order:qk]'`,
+    );
+  });
+
   it('auto_apply=true keeps the waterfall built-in sort and warns when sort field is unresolvable', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallWithSortResult,

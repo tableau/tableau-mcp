@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { decodeXmlEntities } from '../xmlElement.js';
 import { escapeXml } from './escape.js';
 
 describe('binder/escapeXml', () => {
@@ -31,5 +32,13 @@ describe('binder/escapeXml', () => {
     expect(escapeXml("Evil'/><datasource name='pwn")).toBe(
       'Evil&apos;/&gt;&lt;datasource name=&apos;pwn',
     );
+  });
+});
+
+describe('binder/escapeXml round trip', () => {
+  it('decodeXmlEntities undoes escapeXml for names with every metacharacter', () => {
+    const name = 'Partner\'s "R&D" <Ops> &amp;';
+
+    expect(decodeXmlEntities(escapeXml(name))).toBe(name);
   });
 });
