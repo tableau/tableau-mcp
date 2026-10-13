@@ -3,7 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../../desktop/episode-events.js';
 import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
@@ -175,7 +174,7 @@ export const getBatchCreateAndCacheSheetsTool = (
               id: distinctCacheId(name, resolvedSession),
             });
             try {
-              writeCacheTextFile(file, wsResult.value.xml);
+              writeRedactedXmlCacheFile(file, wsResult.value.xml);
               writeSidecar(file, resolvedSession, sourceSha256(wsResult.value.xml));
             } catch (error) {
               worksheetFailures.push({
@@ -202,7 +201,7 @@ export const getBatchCreateAndCacheSheetsTool = (
               id: distinctCacheId(dashboardName, resolvedSession),
             });
             try {
-              writeCacheTextFile(file, dashResult.value.xml);
+              writeRedactedXmlCacheFile(file, dashResult.value.xml);
               writeSidecar(file, resolvedSession, sourceSha256(dashResult.value.xml));
               dashboardFile = file;
             } catch (error) {

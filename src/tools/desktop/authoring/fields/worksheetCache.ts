@@ -2,8 +2,8 @@ import { createHash } from 'crypto';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
+import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
@@ -139,7 +139,7 @@ export async function fetchAndCacheWorksheet({
   const cacheFile = new DesktopCache().getCacheFilePath({
     prefix: `worksheet-${safeWorksheetCacheId(fetched.value.name)}`,
   });
-  writeCacheTextFile(cacheFile, fetched.value.xml);
+  writeRedactedXmlCacheFile(cacheFile, fetched.value.xml);
   writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value.xml));
   return Ok(cacheFile);
 }

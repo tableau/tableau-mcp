@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import * as configModule from '../../../../config.desktop.js';
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
@@ -234,6 +235,22 @@ describe('removeFieldTool', () => {
     });
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
     expect(metadataModule.removeFieldFromRows).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);
+  });
+
+  it('redacts connection credentials in the worksheet cache file', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(
+      "<worksheet><connection password='hunter2' username='y'/></worksheet>",
+    );
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
+
+    const written = vi.mocked(writeFileSync).mock.calls.find(([path]) => path === WORKSHEET_FILE);
+    invariant(written);
+    expect(String(written[1])).not.toContain('hunter2');
+    expect(String(written[1])).toContain(REDACTED_CREDENTIAL_SENTINEL);
   });
 
   it('writes the modified XML to the worksheet cache file', async () => {

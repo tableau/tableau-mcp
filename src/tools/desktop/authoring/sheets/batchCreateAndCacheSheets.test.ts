@@ -114,6 +114,27 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(workbookWrite[1]).toContain(REDACTED_CREDENTIAL_SENTINEL);
   });
 
+  it('redacts connection credentials in the worksheet and dashboard cache files', async () => {
+    const extra = makeExtra();
+    const leaky = "<x><connection password='hunter2' username='y'/></x>";
+    vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: leaky, name: 'Sheet1' }));
+    vi.mocked(getDashboardXml).mockResolvedValue(new Ok({ xml: leaky, name: 'My Dashboard' }));
+
+    await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    const writes = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.filter(([, text]) => text.includes('<connection'));
+    expect(writes).toHaveLength(2);
+    for (const [, text] of writes) {
+      expect(text).not.toContain('hunter2');
+      expect(text).toContain(REDACTED_CREDENTIAL_SENTINEL);
+    }
+  });
+
   it('shows Desktop warnings and gives a non-done next action', async () => {
     const extra = makeExtra();
     const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];

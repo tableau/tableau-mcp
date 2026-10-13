@@ -2,11 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  checkCacheFileArg,
-  readCacheFileArg,
-  writeCacheFileArg,
-} from '../../../../desktop/cachePath.js';
+import { checkCacheFileArg, readCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import {
   removeFieldFromCols,
   removeFieldFromEncoding,
@@ -155,7 +152,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             return new XmlValidationError(errors).toErr();
           }
 
-          const written = writeCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
+          const written = writeRedactedXmlCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
           if (written.isErr()) return written.error.toErr();
 
           return new Ok(removalResult);

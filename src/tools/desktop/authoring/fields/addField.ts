@@ -4,11 +4,8 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
-import {
-  checkCacheFileArg,
-  readCacheFileArg,
-  writeCacheFileArg,
-} from '../../../../desktop/cachePath.js';
+import { checkCacheFileArg, readCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import {
   addFieldToCols,
@@ -308,7 +305,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new XmlValidationError(errors).toErr();
           }
 
-          const written = writeCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
+          const written = writeRedactedXmlCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
           if (written.isErr()) return written.error.toErr();
 
           return new Ok(

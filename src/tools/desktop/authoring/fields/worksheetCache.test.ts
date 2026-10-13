@@ -4,6 +4,7 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { distinctCacheId, fetchAndCacheWorksheet } from './worksheetCache.js';
@@ -65,6 +66,35 @@ describe.skipIf(process.platform === 'win32')('fetchAndCacheWorksheet cache writ
         fetchAndCacheWorksheet({ worksheetName: 'Sheet1', resolvedSession: '1', extra }),
       ).rejects.toThrow(/refused to write/);
       expect(readFileSync(victim, 'utf-8')).toBe('precious');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('fetchAndCacheWorksheet redaction', () => {
+  it('writes the worksheet cache with connection credentials redacted', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ws-cache-'));
+    try {
+      state.cacheDir = root;
+      vi.mocked(getWorksheetXml).mockResolvedValue(
+        new Ok({
+          xml: "<worksheet name='S'><connection password='hunter2' username='y'/></worksheet>",
+          name: 'S',
+        }),
+      );
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({});
+
+      const result = await fetchAndCacheWorksheet({
+        worksheetName: 'S',
+        resolvedSession: '1',
+        extra,
+      });
+
+      const onDisk = readFileSync(result.unwrap(), 'utf-8');
+      expect(onDisk).not.toContain('hunter2');
+      expect(onDisk).toContain(REDACTED_CREDENTIAL_SENTINEL);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
