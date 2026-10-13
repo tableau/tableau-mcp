@@ -36,6 +36,21 @@ authentication failures.
 
 :::
 
+### Site
+
+:::warning
+
+With `AUTH=passthrough`, [`SITE_NAME`](../env-vars.md#site_name) does not restrict which site a token
+may belong to, and a request without a token is rejected. REST calls and per-site state, such as
+[site settings](../site-settings.md), use the site part of the token. Site settings are cached under that site only when it matches the
+session site Tableau validated. The server does not compare the token's site to `SITE_NAME`.
+
+`SITE_NAME` applies only to requests with no auth info: PAT, UAT, and direct-trust over HTTP, an
+embedded-OAuth `X-Tableau-Auth` request with no access token, and stdio. When `ENABLE_PASSTHROUGH_AUTH` is set beside [OAuth](oauth.md), a request without a
+passthrough token uses the site of its OAuth token.
+
+:::
+
 ### JWT Scopes
 
 :::warning

@@ -12,6 +12,7 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import { log } from './logging/logger.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -226,7 +227,16 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    const purePassthroughAuth = auth === 'passthrough';
+    const normalizedAuth = auth?.trim().toLowerCase();
+    // Like TRANSPORT and the provider vars, an unknown value falls back to the default; warn so a typo (e.g. "passthru") is not silent.
+    if (normalizedAuth && !isAuthType(normalizedAuth)) {
+      log({
+        message: `Unknown AUTH "${auth}"; expected one of ${authTypes.join(', ')}. Falling back to the default.`,
+        level: 'warning',
+        logger: 'config',
+      });
+    }
+    const purePassthroughAuth = normalizedAuth === 'passthrough';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true' || purePassthroughAuth;
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
@@ -416,7 +426,7 @@ export class Config extends BaseConfig {
       }),
     };
 
-    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
+    this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
     if (

@@ -16,6 +16,7 @@ const runtimeState = vi.hoisted(() => ({
   connectPromise: Promise.resolve(),
   disconnectShouldReject: false,
   closeActivityLogShouldReject: false,
+  disconnectNeverResolves: false,
   serverInfoPromise: Promise.resolve({}),
   shutdownHandlers: new Map<string, () => Promise<void>>(),
 }));
@@ -62,6 +63,9 @@ vi.mock('../sessionStore/init.js', () => ({
     return runtimeState.connectPromise;
   }),
   disconnectSessionStore: vi.fn(async () => {
+    if (runtimeState.disconnectNeverResolves) {
+      await new Promise(() => undefined);
+    }
     if (runtimeState.disconnectShouldReject) {
       throw new Error('session store close failed');
     }
@@ -97,6 +101,7 @@ describe('initializeWebRuntime', () => {
     runtimeState.connectPromise = Promise.resolve();
     runtimeState.disconnectShouldReject = false;
     runtimeState.closeActivityLogShouldReject = false;
+    runtimeState.disconnectNeverResolves = false;
     runtimeState.serverInfoPromise = Promise.resolve({});
     runtimeState.shutdownHandlers.clear();
     RestApi.host = '';
@@ -233,5 +238,23 @@ describe('initializeWebRuntime', () => {
     await runtimeState.shutdownHandlers.get('SIGINT')!();
     expect(closeActivityLog).toHaveBeenCalledTimes(3);
     expect(processExitSpy).toHaveBeenLastCalledWith(1);
+  });
+
+  it('logs and exits one when shutdown hangs past the timeout', async () => {
+    const { serverInfoReady } = await initializeWebRuntime(config);
+    await serverInfoReady;
+    runtimeState.disconnectNeverResolves = true;
+    vi.useFakeTimers();
+    try {
+      void runtimeState.shutdownHandlers.get('SIGTERM')!();
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(processExitSpy).toHaveBeenLastCalledWith(1);
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({ logger: 'shutdown', level: 'error' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

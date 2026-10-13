@@ -1,4 +1,5 @@
 import { Config } from './config.js';
+import * as logger from './logging/logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { milliseconds } from './utils/milliseconds.js';
 
@@ -169,6 +170,33 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.transport).toBe('http');
+  });
+
+  it('accepts AUTH case and whitespace variants', () => {
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('AUTH', ' Passthrough ');
+    vi.stubEnv('PAT_NAME', undefined);
+    vi.stubEnv('PAT_VALUE', undefined);
+
+    const config = new Config();
+    expect(config.auth).toBe('passthrough');
+    expect(config.enablePassthroughAuth).toBe(true);
+  });
+
+  it('warns and falls back to the default for an unknown AUTH value', () => {
+    const logSpy = vi.spyOn(logger, 'log');
+    vi.stubEnv('AUTH', 'passthru');
+
+    const config = new Config();
+
+    expect(config.auth).toBe('pat');
+    expect(config.enablePassthroughAuth).toBe(false);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('Unknown AUTH "passthru"'),
+      }),
+    );
   });
 
   it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {

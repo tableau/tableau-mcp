@@ -17,7 +17,7 @@ import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationCondi
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -88,6 +88,7 @@ describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
@@ -850,6 +851,163 @@ describe('server', () => {
     expect(vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0])).toEqual([
       'load-web-tools',
     ]);
+  });
+
+  describe('combined-lean group loading', () => {
+    const contentTool = (): WebTool<any> =>
+      ({ ...createMockAdminTool(), name: 'delete-content' }) as WebTool<any>;
+
+    async function setup(): Promise<WebMcpServer> {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      return server;
+    }
+
+    const registered = (server: WebMcpServer): string[] =>
+      vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
+
+    it('returns the role-fetch warning in the tool result, keeps the group retryable, and leaves instructions alone', async () => {
+      const server = await setup();
+      const before = getInstructions(server);
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('site role could not be determined'),
+      ]);
+      expect(first.warnings?.[0]).toContain('Call load-web-tools again');
+      expect(first.warnings?.[0]).not.toContain('reconnect');
+      expect(getInstructions(server)).toBe(before);
+
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+      expect(second.warnings).toBeUndefined();
+      expect(registered(server)).toContain('delete-content');
+
+      const third = await server.loadWebTools('content');
+      expect(third.status).toBe('already-loaded');
+    });
+
+    it('treats a tool omitted for a low role as loaded so the role is not refetched', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockClear().mockResolvedValue('Viewer');
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first).toEqual({ status: 'loaded', toolNames: [] });
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('already-loaded');
+      expect(mocks.mockGetCurrentUserSiteRole).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a registration error as a warning and retries the group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+      vi.mocked(server.mcpServer.registerTool).mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('Failed to register delete-content: boom'),
+      ]);
+
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+    });
+
+    const pulseTool = (): WebTool<any> =>
+      ({
+        ...createMockConditionalTool(),
+        name: 'list-all-pulse-metric-definitions',
+        minRequiredRole: SiteRole.VIEWER,
+      }) as WebTool<any>;
+
+    it('retries a Pulse group after an indeterminate condition probe and registers it once the probe succeeds', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions
+        .mockResolvedValueOnce({
+          registrationConditionsMet: false,
+          failingCondition: 'RequiresPulse',
+          indeterminate: true,
+        })
+        .mockResolvedValueOnce({ registrationConditionsMet: true });
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([pulseTool()])
+        .mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([expect.stringContaining('could not be confirmed')]);
+      expect(first.notes).toBeUndefined();
+
+      const second = await server.loadWebTools('pulse');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['list-all-pulse-metric-definitions']);
+    });
+
+    it('reports a definitive unmet condition as a note and closes the group', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresPulse',
+      });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('loaded');
+      expect(first.warnings).toBeUndefined();
+      expect(first.notes).toEqual([expect.stringContaining('Pulse is not available')]);
+      expect((await server.loadWebTools('pulse')).status).toBe('already-loaded');
+    });
+
+    it('only reports problems for tools in the requested group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const result = await server.loadWebTools('datasource');
+
+      expect(result.status).toBe('loaded');
+      expect(result.warnings).toBeUndefined();
+      expect(result.notes).toBeUndefined();
+    });
+
+    it('describes every group and tool in the load-web-tools description', async () => {
+      const server = await setup();
+      const config = vi.mocked(server.mcpServer.registerTool).mock.calls[0][1] as {
+        description: string;
+      };
+      expect(config.description).toContain('"partial"');
+      for (const [group, tools] of Object.entries(webToolGroups)) {
+        expect(config.description).toContain(group);
+        for (const tool of tools) {
+          expect(config.description).toContain(tool);
+        }
+      }
+    });
   });
 
   function createMockAdminTool(): WebTool<any> {

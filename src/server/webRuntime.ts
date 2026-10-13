@@ -13,13 +13,27 @@ import {
 // Minimal shutdown hook: release the session store's backend resources and flush the Activity Log
 // on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
 // draining, no Express close).
+const SHUTDOWN_TIMEOUT_MS = 5000;
+
 function registerSessionStoreShutdown(): void {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, async () => {
+      let timer: NodeJS.Timeout | undefined;
       try {
-        await Promise.all([disconnectSessionStore(), closeActivityLog()]);
+        // A hung backend must not keep the process alive after SIGTERM.
+        await Promise.race([
+          Promise.all([disconnectSessionStore(), closeActivityLog()]),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS} ms`)),
+              SHUTDOWN_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        clearTimeout(timer);
         process.exit(0);
       } catch (error) {
+        clearTimeout(timer);
         log({
           message: 'Error closing session store or Activity Log during shutdown',
           level: 'error',

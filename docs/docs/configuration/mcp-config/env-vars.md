@@ -214,6 +214,38 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 <hr />
 
+## `TOOL_PROFILE`
+
+Selects which tools the Desktop authoring server registers, and whether the combined Web and Desktop
+server loads its Web tools lazily. The value is trimmed and lowercased.
+
+- Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
+- `full`: every Desktop tool.
+- `demo`: the demo subset.
+- `spec-loop`: the spec-loop subset.
+- `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
+- Any other value registers every Desktop tool and logs a warning.
+
+`combined-lean` only takes effect on the combined server, which runs over stdio with one identity per
+process. There, only the `load-web-tools` tool is listed for the Web half at startup. A client calls
+it with a tool group name (or `all`), the server registers that group's tools, and it sends a
+`tools/list_changed` notification. The tool's description lists every group and its tools. Standalone
+Web servers ignore `combined-lean` and register every Web tool.
+
+The `load-web-tools` result is JSON `{ status, toolNames, warnings?, notes? }`:
+
+- `status` is `loaded`, `already-loaded`, or `partial`. `partial` means a retryable failure dropped
+  some of the requested tools; call `load-web-tools` again for that group.
+- `warnings` lists retryable problems for the requested group only, such as a failed site role
+  lookup, a registration condition check that could not be completed, or a tool that failed to
+  register.
+- `notes` lists deliberate omissions for the requested group, such as a registration condition that
+  is not met. Calling again does not change these.
+- Tools left out on purpose (site role, `INCLUDE_TOOLS`/`EXCLUDE_TOOLS`, unmet conditions) count as
+  loaded, so the group is not retried.
+
+<hr />
+
 ## `MAX_REQUEST_TIMEOUT_MS`
 
 The maximum timeout for requests to the Tableau Server REST API.
