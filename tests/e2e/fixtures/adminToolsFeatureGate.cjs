@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+/* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-require-imports */
 
 const features = require('../../../features.json');
 
