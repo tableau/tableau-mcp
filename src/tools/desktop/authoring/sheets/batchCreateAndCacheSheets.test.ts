@@ -95,6 +95,30 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
   });
 
+  it.each(['0.2.22', '0.2.23', '0.3.0'])(
+    'keeps Phase 1 dashboard readiness false on native API %s until worksheets are applied',
+    async (apiVersion) => {
+      const extra = makeExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({ desktopApiVersion: apiVersion });
+      const result = await getResult(
+        { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+        extra,
+      );
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+      expect(payload.registration).toMatchObject({
+        required: false,
+        status: 'ready',
+        kind: 'native',
+      });
+      expect(payload.registration.instructions[0]).toContain(
+        'Finish applying every worksheet first',
+      );
+    },
+  );
+
   it('does not require worksheet registration for an empty dashboard', async () => {
     const result = await getResult({
       session: SESSION,

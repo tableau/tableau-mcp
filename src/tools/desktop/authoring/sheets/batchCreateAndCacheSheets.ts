@@ -247,7 +247,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             workbookFile,
             readiness: {
               worksheetBuild: !hasArtifactFailures,
-              dashboardApply: !hasArtifactFailures && !registration.required,
+              dashboardApply: !hasArtifactFailures && worksheetNames.length === 0,
             },
             registration,
           };

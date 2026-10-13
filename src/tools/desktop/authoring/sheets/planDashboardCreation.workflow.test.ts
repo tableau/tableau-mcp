@@ -181,7 +181,11 @@ describe('planned dashboard creation through live dashboard apply', () => {
       const batch = await Provider.from(getBatchCreateAndCacheSheetsTool(server).callback);
       const created = await batch(plan.phase1Prework.params, extra);
       expect(created.isError).toBe(false);
-      expect(payload(created).readiness).toEqual({ worksheetBuild: true, dashboardApply: native });
+      expect(payload(created).readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+      expect(payload(created).registration).toMatchObject({
+        required: !native,
+        kind: native ? 'native' : 'manual',
+      });
       expect(
         new DOMParser().parseFromString(live, 'text/xml').getElementsByTagName('viewpoint'),
       ).toHaveLength(0);
