@@ -16,6 +16,7 @@ vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/cachePath.js');
 
 import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
@@ -92,6 +93,25 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(payload.registration).toMatchObject({ required: true, kind: 'manual' });
     expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
     expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
+  });
+
+  it('redacts connection credentials in the workbook cache file', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml).mockResolvedValue(
+      new Ok("<workbook><connection password='hunter2'/></workbook>"),
+    );
+
+    await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    const workbookWrite = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.find(([, text]) => text.includes('<connection'));
+    invariant(workbookWrite);
+    expect(workbookWrite[1]).not.toContain('hunter2');
+    expect(workbookWrite[1]).toContain(REDACTED_CREDENTIAL_SENTINEL);
   });
 
   it('shows Desktop warnings and gives a non-done next action', async () => {

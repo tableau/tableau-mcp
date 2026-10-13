@@ -1,4 +1,5 @@
-import { resolveCacheFileArg, writeCacheFileArg } from '../../../../desktop/cachePath.js';
+import { resolveCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { McpToolError, UnknownError } from '../../../../errors/mcpToolError.js';
@@ -78,7 +79,7 @@ export async function refreshWorkbookCache({
     }
 
     const xml = result.value;
-    const written = writeCacheFileArg('workbookFile', workbookFile, xml);
+    const written = writeRedactedXmlCacheFileArg('workbookFile', workbookFile, xml);
     if (written.isErr()) {
       return { ok: false, reason: getExceptionMessage(written.error), error: written.error };
     }

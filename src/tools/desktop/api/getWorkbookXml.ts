@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { redactDatasourceCredentials } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
@@ -60,7 +61,7 @@ export const getGetWorkbookXmlTool = (
             toolName: 'get-workbook-xml',
             applyTool: 'apply-workbook',
             pathParam: 'workbookFile',
-            xml: result.value,
+            xml: redactDatasourceCredentials(result.value),
             mode,
             capBytes: extra.config.inlineXmlMaxBytes,
             resolvedSession,

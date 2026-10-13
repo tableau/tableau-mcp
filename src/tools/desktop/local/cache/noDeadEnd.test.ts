@@ -22,6 +22,7 @@ vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   ...(await importOriginal<typeof cachePathModule>()),
   readContainedCacheTextFile: vi.fn(),
   writeContainedCacheTextFile: vi.fn(),
+  writeCacheTextFile: vi.fn(),
 }));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
@@ -57,6 +58,9 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
       store.set(String(p), String(data));
     });
     mockContainedCacheReadFromFs();
+    vi.mocked(cachePathModule.writeCacheTextFile).mockImplementation((path, text) => {
+      store.set(path, text);
+    });
     vi.mocked(cachePathModule.writeContainedCacheTextFile).mockImplementation((path, text) => {
       store.set(path, text);
       return { ok: true, path };

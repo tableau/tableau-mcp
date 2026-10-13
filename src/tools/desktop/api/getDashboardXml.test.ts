@@ -17,6 +17,10 @@ import { getGetDashboardXmlTool } from './getDashboardXml.js';
 
 vi.mock('../../../desktop/wrappers/getDashboardXml.js');
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 describe('getDashboardXmlTool', () => {
   const inlineResultSchema = z.object({

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
 import * as configModule from '../../../../config.desktop.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import {
   buildInjectedWorkbookXml,
   removeSameNamedWorksheet,
@@ -149,6 +150,20 @@ describe('injectTemplateTool', () => {
     await getResult(BASE_PARAMS);
 
     expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), INJECTED_XML, 'utf-8');
+  });
+
+  it('redacts connection credentials in the injected workbook it writes', async () => {
+    const extra = makeExtra();
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: "<workbook><connection password='hunter2'/></workbook>",
+    });
+
+    await getResult(BASE_PARAMS, extra);
+
+    const written = vi.mocked(writeFileSync).mock.calls[0][1];
+    expect(written).not.toContain('hunter2');
+    expect(written).toContain(REDACTED_CREDENTIAL_SENTINEL);
   });
 
   it('writes the injected workbook XML to the cache file', async () => {

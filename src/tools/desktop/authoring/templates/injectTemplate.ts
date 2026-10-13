@@ -8,7 +8,8 @@ import {
   formatExplicitBindErrors,
 } from '../../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
-import { readCacheFileArg, writeCacheFileArg } from '../../../../desktop/cachePath.js';
+import { readCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../../desktop/templates/injectTemplateCore.js';
 import type { OptionalFieldPruneSpec } from '../../../../desktop/templates/optionalFieldPrune.js';
@@ -186,7 +187,7 @@ export const getInjectTemplateTool = (
               return new XmlValidationError(result.issues).toErr();
             }
 
-            const written = writeCacheFileArg('workbookFile', workbookFile, result.xml);
+            const written = writeRedactedXmlCacheFileArg('workbookFile', workbookFile, result.xml);
             if (written.isErr()) return written.error.toErr();
 
             return new Ok({

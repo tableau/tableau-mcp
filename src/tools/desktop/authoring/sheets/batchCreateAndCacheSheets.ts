@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../../desktop/episode-events.js';
+import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
 import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -142,7 +143,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
           });
           try {
-            writeCacheTextFile(workbookFile, acceptedWorkbookXml);
+            writeRedactedXmlCacheFile(workbookFile, acceptedWorkbookXml);
           } catch (error) {
             return new IncompleteOperationError({
               stage: 'workbookCacheWrite',

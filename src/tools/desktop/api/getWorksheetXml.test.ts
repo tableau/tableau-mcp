@@ -19,6 +19,10 @@ import { getGetWorksheetXmlTool } from './getWorksheetXml.js';
 vi.mock('../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 describe('getWorksheetXmlTool', () => {
   const inlineResultSchema = z.object({
