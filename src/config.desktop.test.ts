@@ -115,7 +115,7 @@ describe('DesktopConfig', () => {
     });
 
     it('should leave the discovery-dir override undefined by default', () => {
-      delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+      vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', undefined);
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
     });
   });

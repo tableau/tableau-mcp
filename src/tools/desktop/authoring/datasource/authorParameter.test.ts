@@ -103,21 +103,17 @@ const XML_TWO_CAPTIONED_DATASOURCES = [
   '</workbook>',
 ].join('');
 
-let originalDesktopSessionId: string | undefined;
-
 beforeEach(() => {
   vi.clearAllMocks();
-  originalDesktopSessionId = process.env.TABLEAU_DESKTOP_SESSION_ID;
-  delete process.env.TABLEAU_DESKTOP_SESSION_ID;
+  vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', undefined);
 });
 afterEach(() => {
-  restoreEnv('TABLEAU_DESKTOP_SESSION_ID', originalDesktopSessionId);
   vi.restoreAllMocks();
 });
 
 describe('authorParameterTool', () => {
   it('creates a list parameter in place against the same session (no reopen)', async () => {
-    process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     const { result, applyWorkbookDocument, getExecutor } = await getToolResult({
@@ -349,7 +345,7 @@ describe('authorParameterTool', () => {
   });
 
   it('errors when the readback does not contain the new parameter (did not materialize)', async () => {
-    process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     const { result } = await getToolResult({
@@ -473,12 +469,4 @@ function datasourceBlock(xml: string, datasourceName: string): string {
     cursor = xml.indexOf('<datasource', openEnd);
   }
   throw new Error(`missing datasource ${datasourceName}`);
-}
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-    return;
-  }
-  process.env[name] = value;
 }

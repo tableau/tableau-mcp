@@ -33,28 +33,18 @@ describe('revokeAccessTokenTool', () => {
   });
 
   describe('disabled property', () => {
-    let savedEnv: NodeJS.ProcessEnv;
-
-    beforeEach(() => {
-      savedEnv = { ...process.env };
-    });
-
-    afterEach(() => {
-      process.env = savedEnv;
-    });
-
     it('should be disabled when AUTH is not oauth (default PAT mode)', async () => {
       // Default test env uses PAT auth, not oauth
-      delete process.env.OAUTH_ISSUER;
+      vi.stubEnv('OAUTH_ISSUER', undefined);
       const tool = getRevokeAccessTokenTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
     it('should be enabled when AUTH=oauth', async () => {
       // Use OAUTH_EMBEDDED_AUTHZ_SERVER=false to avoid the JWE private key requirement
-      process.env.AUTH = 'oauth';
-      process.env.OAUTH_ISSUER = MOCK_ISSUER;
-      process.env.OAUTH_EMBEDDED_AUTHZ_SERVER = 'false';
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', MOCK_ISSUER);
+      vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
       const tool = getRevokeAccessTokenTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
     });

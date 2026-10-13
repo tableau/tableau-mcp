@@ -18,7 +18,6 @@ import {
 // Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). The fs mock below
 // stands in for one such root; each test declares the files it contains by absolute path.
 const KNOWLEDGE_ROOT = join('/', 'mock', 'knowledge');
-const ORIGINAL_KNOWLEDGE_DIR = process.env.TABLEAU_KNOWLEDGE_DIR;
 
 function makeDirent(name: string, isDir: boolean): Dirent {
   return {
@@ -58,15 +57,7 @@ describe('knowledge/index', () => {
     vi.clearAllMocks();
     clearKnowledgeCache();
     _resetKnowledgeSearchCache();
-    process.env.TABLEAU_KNOWLEDGE_DIR = KNOWLEDGE_ROOT;
-  });
-
-  afterEach(() => {
-    if (ORIGINAL_KNOWLEDGE_DIR === undefined) {
-      delete process.env.TABLEAU_KNOWLEDGE_DIR;
-    } else {
-      process.env.TABLEAU_KNOWLEDGE_DIR = ORIGINAL_KNOWLEDGE_DIR;
-    }
+    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', KNOWLEDGE_ROOT);
   });
 
   describe('listKnowledgeResources', () => {
@@ -88,7 +79,7 @@ describe('knowledge/index', () => {
 
     it('returns [] when no knowledge root is configured', () => {
       // No external root -> empty corpus, not an error.
-      delete process.env.TABLEAU_KNOWLEDGE_DIR;
+      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', undefined);
       setupFsMock({});
 
       expect(listKnowledgeResources()).toEqual([]);

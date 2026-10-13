@@ -41,14 +41,8 @@ const BOOKMARK =
   '</bookmark>';
 
 describe('template path', () => {
-  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
-
-  afterEach(() => {
-    restoreEnvironment('TEMPLATES_DIR', originalTemplatesDir);
-  });
-
   it('resolves the canonical TBM path', () => {
-    process.env['TEMPLATES_DIR'] = '/tmp/tableau-template-path';
+    vi.stubEnv('TEMPLATES_DIR', '/tmp/tableau-template-path');
     expect(getBookmarkPath('ranking-ordered-bar')).toBe(
       '/tmp/tableau-template-path/ranking-ordered-bar.tbm',
     );
@@ -62,13 +56,9 @@ describe('template path', () => {
 });
 
 describe('TBM catalog', () => {
-  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
-  const originalRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
   const temporaryRoots: string[] = [];
 
   afterEach(() => {
-    restoreEnvironment('TEMPLATES_DIR', originalTemplatesDir);
-    restoreEnvironment('TABLEAU_REPOSITORY_DIR', originalRepositoryDir);
     for (const root of temporaryRoots.splice(0)) {
       rmSync(root, { recursive: true, force: true });
     }
@@ -86,8 +76,8 @@ describe('TBM catalog', () => {
       recursive: true,
     });
     mkdirSync(join(root, 'Bookmarks'), { recursive: true });
-    process.env['TABLEAU_REPOSITORY_DIR'] = root;
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TABLEAU_REPOSITORY_DIR', root);
+    vi.stubEnv('TEMPLATES_DIR', undefined);
     return root;
   }
 
@@ -299,7 +289,7 @@ describe('TBM catalog', () => {
     writeFileSync(join(override, 'dev-only.tbm'), BOOKMARK);
     writeFileSync(join(override, 'ignored.xml'), '<workbook/>');
     writeFileSync(join(override, 'ignored.json'), '{}');
-    process.env['TEMPLATES_DIR'] = override;
+    vi.stubEnv('TEMPLATES_DIR', override);
 
     expect(listTemplateCatalog()).toEqual([
       expect.objectContaining({ template: 'dev-only', provenance: 'dev-override' }),
@@ -385,8 +375,3 @@ describe('TBM catalog', () => {
     );
   });
 });
-
-function restoreEnvironment(name: string, value: string | undefined): void {
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
-}

@@ -172,7 +172,7 @@ describe('confirmDeleteContentTool', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(`${testBatch}T12:00:00Z`));
     mockCheckContentStillStale.mockResolvedValue(Ok.EMPTY);
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);

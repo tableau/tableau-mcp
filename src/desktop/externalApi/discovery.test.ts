@@ -177,7 +177,7 @@ describe('discoverInstances', () => {
 
 describe('getExternalApiDiscoveryDirs', () => {
   beforeEach(() => {
-    delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+    vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', undefined);
   });
 
   it('honors an explicit override env var', () => {
@@ -219,7 +219,7 @@ describe('getExternalApiDiscoveryDirs', () => {
   });
 
   it('falls back to a homedir-derived LOCALAPPDATA on Windows when unset', () => {
-    delete process.env.LOCALAPPDATA;
+    vi.stubEnv('LOCALAPPDATA', undefined);
     const dir = getExternalApiDiscoveryDirs(process.env, 'win32')[0];
     expect(dir).toBe(
       join('/home/testuser', 'AppData', 'Local', 'Tableau', 'Tableau', 'ExternalApi'),

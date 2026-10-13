@@ -7,14 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readDataAsset } from '../assets.js';
 import { searchWorkbookSchema } from './searchLibrary.js';
 
-const originalWorkbookXsdPath = process.env.WORKBOOK_XSD_PATH;
-const originalSchemaReferencePath = process.env.SCHEMA_REFERENCE_PATH;
-
 afterEach(() => {
-  if (originalWorkbookXsdPath === undefined) delete process.env.WORKBOOK_XSD_PATH;
-  else process.env.WORKBOOK_XSD_PATH = originalWorkbookXsdPath;
-  if (originalSchemaReferencePath === undefined) delete process.env.SCHEMA_REFERENCE_PATH;
-  else process.env.SCHEMA_REFERENCE_PATH = originalSchemaReferencePath;
   vi.resetModules();
 });
 
@@ -143,10 +136,10 @@ describe('searchWorkbookSchema', () => {
   });
 
   it('keeps SCHEMA_REFERENCE_PATH as a deprecated alias for an XSD path', async () => {
-    delete process.env.WORKBOOK_XSD_PATH;
-    process.env.SCHEMA_REFERENCE_PATH = path.join(
-      process.cwd(),
-      'src/desktop/data/twb_2026.2.0.xsd',
+    vi.stubEnv('WORKBOOK_XSD_PATH', undefined);
+    vi.stubEnv(
+      'SCHEMA_REFERENCE_PATH',
+      path.join(process.cwd(), 'src/desktop/data/twb_2026.2.0.xsd'),
     );
     vi.resetModules();
 
@@ -155,8 +148,8 @@ describe('searchWorkbookSchema', () => {
   });
 
   it('prefers WORKBOOK_XSD_PATH over the deprecated schema path alias', async () => {
-    process.env.WORKBOOK_XSD_PATH = path.join(process.cwd(), 'src/desktop/data/twb_2026.2.0.xsd');
-    process.env.SCHEMA_REFERENCE_PATH = path.join(process.cwd(), 'does-not-exist.json');
+    vi.stubEnv('WORKBOOK_XSD_PATH', path.join(process.cwd(), 'src/desktop/data/twb_2026.2.0.xsd'));
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', path.join(process.cwd(), 'does-not-exist.json'));
     vi.resetModules();
 
     const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
@@ -164,8 +157,8 @@ describe('searchWorkbookSchema', () => {
   });
 
   it('bounds override read errors without exposing an untrusted path', async () => {
-    process.env.WORKBOOK_XSD_PATH = `PRIVATE_MARKER_${'x'.repeat(70 * 1024)}`;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', `PRIVATE_MARKER_${'x'.repeat(70 * 1024)}`);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
@@ -186,8 +179,8 @@ describe('searchWorkbookSchema', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmcp-schema-'));
     const flattenedPath = path.join(tempDir, 'workbook-schema-reference.json');
     fs.writeFileSync(flattenedPath, '{"version":"old-flattened-schema"}');
-    delete process.env.WORKBOOK_XSD_PATH;
-    process.env.SCHEMA_REFERENCE_PATH = flattenedPath;
+    vi.stubEnv('WORKBOOK_XSD_PATH', undefined);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', flattenedPath);
     vi.resetModules();
 
     try {
@@ -207,8 +200,8 @@ describe('searchWorkbookSchema', () => {
       malformedPath,
       '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name=broken/></xs:schema>',
     );
-    process.env.WORKBOOK_XSD_PATH = malformedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -229,8 +222,8 @@ describe('searchWorkbookSchema', () => {
       malformedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name=${privateContent}/></xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = malformedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -259,8 +252,8 @@ describe('searchWorkbookSchema', () => {
       malformedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><${privateContent}></xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = malformedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -285,8 +278,8 @@ describe('searchWorkbookSchema', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmcp-not-xsd-'));
     const nonSchemaPath = path.join(tempDir, 'PRIVATE_MARKER non-schema.xsd');
     fs.writeFileSync(nonSchemaPath, '<not-schema/>');
-    process.env.WORKBOOK_XSD_PATH = nonSchemaPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', nonSchemaPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -311,8 +304,8 @@ describe('searchWorkbookSchema', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmcp-empty-xsd-'));
     const emptySchemaPath = path.join(tempDir, 'PRIVATE_MARKER empty.xsd');
     fs.writeFileSync(emptySchemaPath, '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>');
-    process.env.WORKBOOK_XSD_PATH = emptySchemaPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', emptySchemaPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -341,8 +334,8 @@ describe('searchWorkbookSchema', () => {
       oversizedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="Oversized-ST"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = oversizedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -368,8 +361,8 @@ describe('searchWorkbookSchema', () => {
       oversizedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="${privateName}"><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = oversizedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -400,8 +393,8 @@ describe('searchWorkbookSchema', () => {
       oversizedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="Target-ST"><xs:annotation><xs:documentation>PRIVATE_PARENT_MARKER</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType>${references}</xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = oversizedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -427,8 +420,8 @@ describe('searchWorkbookSchema', () => {
       oversizedPath,
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="First-ST"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType><xs:complexType name="Second-CT"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:sequence/></xs:complexType></xs:schema>`,
     );
-    process.env.WORKBOOK_XSD_PATH = oversizedPath;
-    delete process.env.SCHEMA_REFERENCE_PATH;
+    vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
+    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
