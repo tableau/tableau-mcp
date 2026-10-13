@@ -116,7 +116,7 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).toContain('exact returned action');
     expect(message).toContain('at most one invoke-dialog-action call');
     expect(message).toContain('Do not guess or assume Cancel is safe');
-    expect(message).toContain('action-invoked-dialog-remains');
+    expect(message).toContain('status.effect is dialog-remains');
     expect(message).toContain('ask the user to handle the dialog');
     expect(message).toContain('list-instances');
   });

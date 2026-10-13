@@ -8,10 +8,11 @@ import {
   dashboardListSchema,
   dashboardRoute,
   datasourceListSchema,
+  DialogRequestStatus,
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   InvokeDialogActionRequest,
-  legacyInvokeDialogActionResultSchema as invokeDialogActionResultSchema,
+  invokeDialogActionResultSchema,
   logicalTableListSchema,
   sheetActionRoute,
   showMeOptionsResultSchema,
@@ -56,9 +57,25 @@ const invokeDialogActionRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-save-changes',
+    revision: 1,
   },
+  requestId: 'request-qt',
   action: { kind: 'button', label: 'Discard' },
 };
+
+function completionStatus(
+  request: InvokeDialogActionRequest,
+  effect: DialogRequestStatus['effect'] = 'dialog-dismissed',
+): DialogRequestStatus {
+  return {
+    sessionId: request.dialog.sessionId,
+    revision: request.dialog.revision,
+    requestId: request.requestId,
+    state: 'completed',
+    effect,
+  };
+}
 
 describe('ExternalApiHttp', () => {
   let server: MockExternalApiServer;
@@ -896,16 +913,19 @@ describe('ExternalApiHttp', () => {
         objectName: ' save-dialog ',
         title: 'Save “Regional Sales”?',
         className: 'QMessageBox',
+        sessionId: 'session-exact',
+        revision: 2,
       },
+      requestId: 'request-exact',
       action: { kind: 'button', label: ' &Discard ' },
     };
     server.setOverride('POST /v0/app:invokeDialogAction', {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        outcome: 'dismissed',
+        outcome: 'completed',
         dialog: exactRequest.dialog,
-        action: exactRequest.action,
+        status: completionStatus(exactRequest),
         dialogs: [],
       }),
     });
@@ -917,9 +937,9 @@ describe('ExternalApiHttp', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toEqual({
-      outcome: 'dismissed',
+      outcome: 'completed',
       dialog: exactRequest.dialog,
-      action: exactRequest.action,
+      status: completionStatus(exactRequest),
       dialogs: [],
     });
     const posted = server.requests.at(-1);
@@ -929,9 +949,11 @@ describe('ExternalApiHttp', () => {
     expect(posted?.body).toBe(JSON.stringify(exactRequest));
   });
 
-  it('preserves all fields in an action-invoked-dialog-remains response', async () => {
+  it('preserves current status/effect and dialog details when a completed action leaves the dialog open', async () => {
     const remainingDialog = {
       ...invokeDialogActionRequest.dialog,
+      family: 'qt',
+      status: 'active',
       messageText: ' Save this workbook? ',
       informativeText: 'The label is exact.',
       detailedText: '/private/example.twb',
@@ -949,11 +971,10 @@ describe('ExternalApiHttp', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        outcome: 'action-invoked-dialog-remains',
+        outcome: 'completed',
         dialog: invokeDialogActionRequest.dialog,
-        action: invokeDialogActionRequest.action,
+        status: completionStatus(invokeDialogActionRequest, 'dialog-remains'),
         dialogs: [remainingDialog],
-        responseExtension: true,
       }),
     });
 
@@ -964,11 +985,10 @@ describe('ExternalApiHttp', () => {
     );
 
     expect(result.unwrap()).toEqual({
-      outcome: 'action-invoked-dialog-remains',
+      outcome: 'completed',
       dialog: invokeDialogActionRequest.dialog,
-      action: invokeDialogActionRequest.action,
+      status: completionStatus(invokeDialogActionRequest, 'dialog-remains'),
       dialogs: [remainingDialog],
-      responseExtension: true,
     });
   });
 

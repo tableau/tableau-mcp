@@ -40,7 +40,21 @@ export function makeExecutorMock(
     ),
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
-      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
+      .mockImplementation(async ({ dialog, requestId }) =>
+        Ok({
+          outcome: 'failed',
+          dialog,
+          status: {
+            sessionId: dialog.sessionId,
+            revision: dialog.revision,
+            requestId,
+            state: 'failed',
+            effect: 'none',
+            code: 'dialog-not-found',
+          },
+          dialogs: [],
+        }),
+      ),
     getSite: vi.fn(),
     listSiteWorkbooks: vi.fn(),
     listSiteDatasources: vi.fn(),

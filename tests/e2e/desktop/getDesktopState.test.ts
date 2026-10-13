@@ -10,6 +10,7 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import {
   desktopStateSchema,
   dialogListSchema,
+  invokeDialogActionRequestSchema,
   invokeDialogActionResultSchema,
 } from '../../../src/desktop/externalApi/types.js';
 import { buildVariant } from '../build.js';
@@ -21,11 +22,16 @@ const DECOY_TOKEN = 'fixture-decoy-state-token';
 const SESSION = String(process.pid);
 const DECOY_PID = process.ppid;
 const MISSING_PID = 99_999_991;
+const MODAL_REQUEST_ID = 'headless-modal-request-1';
 
 const dialog = {
   objectName: 'saveChangesDialog',
   title: 'Save Changes',
   className: 'QMessageBox',
+  sessionId: 'headless-save-dialog',
+  revision: 3,
+  family: 'qt' as const,
+  status: 'active' as const,
   messageText: 'Save the workbook?',
   informativeText: 'Unsaved work may be lost.',
   detailedText: 'Workbook: Regional Sales',
@@ -164,11 +170,37 @@ describe('get-desktop-state real stdio MCP boundary', () => {
       schema: dialogListSchema,
       toolArgs: { session: SESSION },
     });
-    expect(inspected.dialogs).toEqual(before.blockingWindows);
+    expect(inspected).toEqual({
+      dialogs: [
+        {
+          ...dialog,
+          actions: [
+            {
+              kind: 'button',
+              label: 'Discard',
+              input: { fields: [{ name: 'label', type: 'string', required: true }] },
+            },
+            {
+              kind: 'button',
+              label: 'Cancel',
+              input: { fields: [{ name: 'label', type: 'string', required: true }] },
+            },
+            { kind: 'close', input: { fields: [] } },
+          ],
+        },
+      ],
+      uiSnapshotAvailable: true,
+      recentActions: [],
+    });
 
     const selectedDialog = inspected.dialogs[0];
     const selectedAction = selectedDialog.actions?.[0];
-    expect(selectedAction).toEqual({ kind: 'button', label: 'Discard' });
+    expect(selectedAction).toEqual({
+      kind: 'button',
+      label: 'Discard',
+      input: { fields: [{ name: 'label', type: 'string', required: true }] },
+    });
+    if (selectedAction?.kind !== 'button') throw new Error('Expected the observed Discard button.');
     expect(
       await requireClient().callTool('invoke-dialog-action', {
         schema: invokeDialogActionResultSchema,
@@ -178,18 +210,29 @@ describe('get-desktop-state real stdio MCP boundary', () => {
             objectName: selectedDialog.objectName,
             title: selectedDialog.title,
             className: selectedDialog.className,
+            sessionId: selectedDialog.sessionId,
+            revision: selectedDialog.revision,
           },
-          action: selectedAction,
+          requestId: MODAL_REQUEST_ID,
+          action: { kind: selectedAction.kind, label: selectedAction.label },
         },
       }),
     ).toEqual({
-      outcome: 'dismissed',
+      outcome: 'completed',
       dialog: {
         objectName: dialog.objectName,
         title: dialog.title,
         className: dialog.className,
+        sessionId: dialog.sessionId,
+        revision: dialog.revision,
       },
-      action: { kind: 'button', label: 'Discard' },
+      status: {
+        sessionId: dialog.sessionId,
+        revision: dialog.revision,
+        requestId: MODAL_REQUEST_ID,
+        state: 'completed',
+        effect: 'dialog-dismissed',
+      },
       dialogs: [],
     });
     expect(await readState()).toMatchObject({ state: 'IDLE', blockingWindows: [] });
@@ -391,25 +434,39 @@ describe('get-desktop-state real stdio MCP boundary', () => {
     }
 
     if (request.method === 'GET' && request.url === '/v0/app/dialogs') {
-      sendJson(response, 200, { dialogs: dialogOpen ? [dialog] : [] });
+      sendJson(response, 200, {
+        dialogs: dialogOpen ? [dialog] : [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
       return;
     }
 
     if (request.method === 'POST' && request.url === '/v0/app:invokeDialogAction') {
-      const parsed = JSON.parse(body) as { dialog: Record<string, unknown>; action: unknown };
+      const parsed = invokeDialogActionRequestSchema.parse(JSON.parse(body));
+      expect(request.headers['content-type']).toContain('application/json');
       expect(parsed).toEqual({
         dialog: {
           objectName: dialog.objectName,
           title: dialog.title,
           className: dialog.className,
+          sessionId: dialog.sessionId,
+          revision: dialog.revision,
         },
+        requestId: MODAL_REQUEST_ID,
         action: { kind: 'button', label: 'Discard' },
       });
       dialogOpen = false;
       sendJson(response, 200, {
-        outcome: 'dismissed',
+        outcome: 'completed',
         dialog: parsed.dialog,
-        action: parsed.action,
+        status: {
+          sessionId: parsed.dialog.sessionId,
+          revision: parsed.dialog.revision,
+          requestId: parsed.requestId,
+          state: 'completed',
+          effect: 'dialog-dismissed',
+        },
         dialogs: [],
       });
       return;
@@ -469,7 +526,7 @@ describe('get-desktop-state real stdio MCP boundary', () => {
         tokenType: 'Bearer',
         token: args.token,
         applicationVersion: 'headless-fixture',
-        apiVersion: '0.2.14',
+        apiVersion: '0.2.23',
         startedAt: args.startedAt,
       }),
       'utf8',

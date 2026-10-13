@@ -32,7 +32,10 @@ const defaultRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-save-changes',
+    revision: 1,
   },
+  requestId: 'request-qt',
   action: { kind: 'button', label: 'Discard' },
 };
 
@@ -41,51 +44,52 @@ const exactStringRequest: InvokeDialogActionRequest = {
     objectName: ' dialog object ',
     title: 'Café & Save?',
     className: 'Custom::Dialog',
+    sessionId: 'session-exact-string',
+    revision: 2,
   },
+  requestId: 'request-exact-string',
   action: { kind: 'button', label: exactButtonLabel },
 };
 
-const successCases: Array<[string, InvokeDialogActionResult]> = [
-  ['no active dialog', { outcome: 'no-active-dialog', dialogs: [] }],
-  [
-    'a click that dismisses the selected dialog',
-    {
-      outcome: 'dismissed',
-      dialog: exactStringRequest.dialog,
-      action: exactStringRequest.action,
-      dialogs: [
-        {
-          objectName: 'nextDialog',
-          title: 'Next decision',
-          className: 'QMessageBox',
-          messageText: 'Continue?',
-          informativeText: 'A second dialog is now active.',
-          detailedText: 'Details stay intact.',
-          detailedTextTruncated: true,
-          iconLevel: 'question',
-          buttons: ['No', 'Yes'],
-        },
-      ],
+function settledResult(
+  request: InvokeDialogActionRequest,
+  effect: 'dialog-dismissed' | 'dialog-remains' = 'dialog-dismissed',
+): InvokeDialogActionResult {
+  return {
+    outcome: 'completed',
+    dialog: request.dialog,
+    status: {
+      sessionId: request.dialog.sessionId,
+      revision: request.dialog.revision,
+      requestId: request.requestId,
+      state: 'completed',
+      effect,
     },
+    dialogs:
+      effect === 'dialog-remains' ? [{ ...request.dialog, family: 'qt', status: 'active' }] : [],
+  };
+}
+
+const successCases: Array<[string, InvokeDialogActionResult]> = [
+  ['a click that dismisses the selected dialog', settledResult(exactStringRequest)],
+  [
+    'a completed action after which the selected dialog remains',
+    settledResult(exactStringRequest, 'dialog-remains'),
   ],
   [
-    'an action after which the selected dialog remains',
+    'a rejected action with a precise status code',
     {
-      outcome: 'action-invoked-dialog-remains',
+      outcome: 'failed',
       dialog: exactStringRequest.dialog,
-      action: exactStringRequest.action,
-      dialogs: [
-        {
-          ...exactStringRequest.dialog,
-          messageText: 'Validation is still running.',
-          buttons: ['  Discard & Close  ', 'Cancel'],
-        },
-        {
-          objectName: '',
-          title: '',
-          className: 'QDialog',
-        },
-      ],
+      status: {
+        sessionId: exactStringRequest.dialog.sessionId,
+        revision: exactStringRequest.dialog.revision,
+        requestId: exactStringRequest.requestId,
+        state: 'failed',
+        effect: 'none',
+        code: 'dialog-not-found',
+      },
+      dialogs: [],
     },
   ],
 ];
@@ -96,12 +100,12 @@ describe('invoke-dialog-action tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the destructive, non-idempotent 0.2.13 action contract', () => {
+  it('declares the destructive, non-idempotent 0.2.23 action contract', () => {
     const tool = getInvokeDialogActionTool(new DesktopMcpServer());
     const schema = z.object(tool.paramsSchema as z.ZodRawShape);
 
     expect(tool.name).toBe('invoke-dialog-action');
-    expect(tool.minApiVersion).toBe('0.2.13');
+    expect(tool.minApiVersion).toBe('0.2.23');
     expect(tool.description).toContain('get-active-dialogs');
     expect(tool.description).toContain('context');
     expect(tool.description).toContain('exact action');
@@ -157,12 +161,7 @@ describe('invoke-dialog-action tool', () => {
 
   it('redacts invocation logging while forwarding the exact sensitive request once', async () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('321'));
-    const response: InvokeDialogActionResult = {
-      outcome: 'dismissed',
-      dialog: exactStringRequest.dialog,
-      action: exactStringRequest.action,
-      dialogs: [],
-    };
+    const response = settledResult(exactStringRequest);
     const harness = await startHarness();
     setSuccess(harness.server, response);
     const notifyInvocation = vi.spyOn(harness.tool, 'notifyInvocation');
@@ -185,8 +184,10 @@ describe('invoke-dialog-action tool', () => {
             objectName: '[redacted]',
             title: '[redacted]',
             className: '[redacted]',
+            sessionId: '[redacted]',
+            revision: 0,
           },
-          requestId: undefined,
+          requestId: '[redacted]',
           action: { kind: 'button', label: '[redacted]' },
         },
       });
@@ -210,15 +211,13 @@ describe('invoke-dialog-action tool', () => {
         objectName: 'UnifiedDetailedErrorDialog',
         title: 'Unable to complete action',
         className: 'UnifiedDetailedErrorDialog',
+        sessionId: 'session-error',
+        revision: 3,
       },
+      requestId: 'request-close',
       action: { kind: 'close' },
     };
-    const response: InvokeDialogActionResult = {
-      outcome: 'dismissed',
-      dialog: request.dialog,
-      action: request.action,
-      dialogs: [],
-    };
+    const response = settledResult(request);
     const harness = await startHarness();
     setSuccess(harness.server, response);
 
@@ -236,6 +235,31 @@ describe('invoke-dialog-action tool', () => {
       await harness.close();
     }
   });
+
+  it.each(['button', 'close', 'cancel'] as const)(
+    'requires session identity for every %s action',
+    async (kind) => {
+      const harness = await startHarness();
+      try {
+        const tupleOnly = {
+          objectName: 'saveChangesDialog',
+          title: 'Save Changes',
+          className: 'QMessageBox',
+        };
+        const schema = z.object(harness.tool.paramsSchema as z.ZodRawShape);
+        expect(schema.safeParse({ dialog: tupleOnly, action: { kind } }).success).toBe(false);
+        const result = await harness.callTool({
+          session: undefined,
+          dialog: tupleOnly as typeof defaultRequest.dialog,
+          action: kind === 'button' ? { kind, label: 'Discard' } : { kind },
+        });
+        expect(result.isError).toBe(true);
+        expect(dialogPosts(harness.server)).toHaveLength(0);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 
   it('rejects dialog identities with fields outside the fresh inspection result', async () => {
     const harness = await startHarness();
@@ -268,7 +292,7 @@ describe('invoke-dialog-action tool', () => {
       requestId: 'request-1',
       action: { kind: 'choose-color' as const, red: 0, green: 0, blue: 256 },
     };
-    const harness = await startHarness('0.2.22');
+    const harness = await startHarness('0.2.23');
 
     try {
       const result = await harness.callTool(malformedColor);
@@ -279,6 +303,23 @@ describe('invoke-dialog-action tool', () => {
       await harness.close();
     }
   });
+
+  it.each(['', 'request with spaces', 'r'.repeat(129), 'request-非ascii'])(
+    'rejects malformed requestId without posting or echoing it: %s',
+    async (requestId) => {
+      const harness = await startHarness();
+      try {
+        const result = await harness.callTool({ session: undefined, ...defaultRequest, requestId });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('printable opaque identifier');
+        if (requestId !== '') expect(result.content[0].text).not.toContain(requestId);
+        expect(dialogPosts(harness.server)).toHaveLength(0);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 
   it('rejects unknown action properties so selection payloads stay in the closed invocation contract', async () => {
     const requestWithUnknownActionProperty = {
@@ -303,7 +344,7 @@ describe('invoke-dialog-action tool', () => {
   });
 
   it('does not down-convert a native Qt identity to an older Desktop tuple', async () => {
-    const harness = await startHarness('0.2.21');
+    const harness = await startHarness('0.2.22');
 
     try {
       const result = await harness.callTool({
@@ -315,32 +356,27 @@ describe('invoke-dialog-action tool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('cannot safely apply a native dialog identity');
+      expect(result.content[0].text).toContain('Dialog tools require External Client API 0.2.23');
       expect(dialogPosts(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
     }
   });
 
-  it('uses the contract-faithful endpoint and returns its dismissed result unchanged', async () => {
+  it('uses the contract-faithful endpoint and returns its current completion status unchanged', async () => {
     const harness = await startHarness();
     try {
       const result = await harness.callTool({ session: undefined, ...defaultRequest });
 
       expect(result.isError).toBe(false);
-      expect(parseSuccess(result)).toEqual({
-        outcome: 'dismissed',
-        dialog: defaultRequest.dialog,
-        action: defaultRequest.action,
-        dialogs: [],
-      });
+      expect(parseSuccess(result)).toEqual(settledResult(defaultRequest));
       expect(dialogPosts(harness.server)).toHaveLength(1);
     } finally {
       await harness.close();
     }
   });
 
-  it('uses the 0.2.22 native request shape, generates a request id, and does not log selection input', async () => {
+  it('uses the 0.2.23 native request shape, generates a request id, and does not log selection input', async () => {
     const request = {
       session: undefined,
       dialog: {
@@ -364,7 +400,7 @@ describe('invoke-dialog-action tool', () => {
       },
       dialogs: [],
     };
-    const harness = await startHarness('0.2.22');
+    const harness = await startHarness('0.2.23');
     harness.server.setOverride('POST /v0/app:invokeDialogAction', {
       status: 200,
       contentType: 'application/json',
@@ -390,7 +426,7 @@ describe('invoke-dialog-action tool', () => {
 
   it('surfaces the same generated request id from the dispatched native POST after the outer deadline wins', async () => {
     const deadline = createCallDeadline({ budgetMs: 250 });
-    const harness = await startHarness('0.2.22', deadline);
+    const harness = await startHarness('0.2.23', deadline);
     harness.server.setOverride('POST /v0/app:invokeDialogAction', { status: 200, hang: true });
 
     try {
@@ -416,7 +452,7 @@ describe('invoke-dialog-action tool', () => {
   });
 
   it('surfaces the generated request id after an indeterminate native response without replay or selection echo', async () => {
-    const harness = await startHarness('0.2.22');
+    const harness = await startHarness('0.2.23');
     harness.server.setOverride('POST /v0/app:invokeDialogAction', {
       status: 200,
       contentType: 'application/json',
@@ -548,7 +584,7 @@ function parseSuccess(result: CallToolResult): InvokeDialogActionResult {
 }
 
 async function startHarness(
-  apiVersion = '0.2.13',
+  apiVersion = '0.2.23',
   deadline?: ReturnType<typeof createCallDeadline>,
 ): Promise<{
   server: MockExternalApiServer;
@@ -589,14 +625,14 @@ type InvokeDialogActionToolArgs = {
     objectName: string;
     title: string;
     className: string;
-    sessionId?: string;
-    revision?: number;
+    sessionId: string;
+    revision: number;
   };
   requestId?: string;
   action: DialogActionInvocation;
 };
 
-function instanceFor(server: MockExternalApiServer, apiVersion = '0.2.13'): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer, apiVersion = '0.2.23'): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',

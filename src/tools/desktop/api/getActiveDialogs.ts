@@ -1,10 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import {
-  DIALOG_ACTION_INPUTS,
-  DialogList,
-  LegacyDialogList,
-} from '../../../desktop/externalApi/types.js';
+import { DIALOG_ACTION_INPUTS, DialogList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -22,10 +18,10 @@ export const getActiveDialogsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-active-dialogs',
-    minApiVersion: '0.2.13',
+    minApiVersion: '0.2.23',
     title,
     description:
-      'List current dialog blockers and capabilities. Only active dialogs advertise actions. Copy the exact identity into invoke-dialog-action; send the chosen action kind and values required by its input.fields, honoring its constraints. recentActions reports bounded sanitized completion status. Older Qt-only builds return legacy button/close actions.',
+      'List current dialog blockers and capabilities. Only active dialogs advertise actions. Copy the exact identity into invoke-dialog-action; send the chosen action kind and values required by its input.fields, honoring its constraints. recentActions reports bounded sanitized completion status.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -34,7 +30,7 @@ export const getActiveDialogsTool = (
       openWorldHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {
-      return await tool.logAndExecute<DialogList | LegacyDialogList>({
+      return await tool.logAndExecute<DialogList>({
         extra,
         args: { session },
         callback: async () => {
@@ -57,11 +53,7 @@ export const getActiveDialogsTool = (
   return tool;
 };
 
-function withActionInputMetadata(
-  result: DialogList | LegacyDialogList,
-): DialogList | LegacyDialogList {
-  if (!isNativeDialogList(result)) return result;
-
+function withActionInputMetadata(result: DialogList): DialogList {
   return {
     ...result,
     dialogs: result.dialogs.map((dialog) => ({
@@ -72,8 +64,4 @@ function withActionInputMetadata(
       })),
     })),
   };
-}
-
-function isNativeDialogList(result: DialogList | LegacyDialogList): result is DialogList {
-  return 'uiSnapshotAvailable' in result && 'recentActions' in result;
 }

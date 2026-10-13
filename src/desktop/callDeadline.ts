@@ -42,7 +42,8 @@ export const BLOCKING_DIALOG_GUIDANCE =
   'retry the originating operation. Call get-active-dialogs for fresh state. Only when the task ' +
   'or user intent makes the choice unambiguous, copy the exact returned dialog identity and exact ' +
   'returned action into at most one invoke-dialog-action call. Do not guess or assume Cancel is ' +
-  'safe, and do not retry invoke-dialog-action after action-invoked-dialog-remains. If inspection times ' +
+  'safe. Do not retry invoke-dialog-action when status.state is pending or completed, or ' +
+  'status.effect is dialog-remains. Inspect recentActions instead; never replay the request. If inspection times ' +
   'out, either dialog tool is unavailable or version-gated, the identity or intent is ambiguous, ' +
   'or no action is clearly safe, ask the user to handle the dialog. After the dialog is handled, ' +
   'correct its cause before retrying the originating operation, then call list-instances to confirm ' +

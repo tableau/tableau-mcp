@@ -883,27 +883,6 @@ export const nativeWindowInfoSchema = windowInfoSchema.extend({
 });
 export type NativeWindowInfo = z.infer<typeof nativeWindowInfoSchema>;
 
-/** The 0.2.13–0.2.21 Qt-only response shape, retained for pre-GA Desktop compatibility. */
-export const legacyDialogActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('button'), label: z.string().min(1) }),
-  z.object({ kind: z.literal('close'), label: z.never().optional() }),
-]);
-export const legacyWindowInfoSchema = z
-  .object({
-    objectName: z.string(),
-    title: z.string(),
-    className: z.string(),
-    messageText: z.string().optional(),
-    informativeText: z.string().optional(),
-    detailedText: z.string().optional(),
-    detailedTextTruncated: z.boolean().optional(),
-    iconLevel: z.string().optional(),
-    buttons: z.array(z.string()).optional(),
-    actions: z.array(legacyDialogActionSchema).optional(),
-  })
-  .passthrough();
-export type LegacyWindowInfo = z.infer<typeof legacyWindowInfoSchema>;
-
 /** Exact current-dialog identity copied from an item returned by `GET /v0/app/dialogs`. */
 export const dialogIdentitySchema = z
   .object({
@@ -915,15 +894,6 @@ export const dialogIdentitySchema = z
   })
   .passthrough();
 export type DialogIdentity = z.infer<typeof dialogIdentitySchema>;
-
-export const legacyDialogIdentitySchema = z
-  .object({
-    objectName: z.string(),
-    title: z.string(),
-    className: z.string(),
-  })
-  .passthrough();
-export type LegacyDialogIdentity = z.infer<typeof legacyDialogIdentitySchema>;
 
 /** Current actionable Desktop dialogs returned independently of operation state. */
 export const dialogListSchema = z
@@ -955,11 +925,6 @@ export const dialogListSchema = z
   })
   .passthrough();
 export type DialogList = z.infer<typeof dialogListSchema>;
-export const legacyDialogListSchema = z
-  .object({ dialogs: z.array(legacyWindowInfoSchema) })
-  .passthrough();
-export type LegacyDialogList = z.infer<typeof legacyDialogListSchema>;
-
 /** One app-wide point-in-time snapshot of Desktop activity and modal state. */
 export const desktopStateSchema = z
   .object({
@@ -1009,20 +974,9 @@ export const invokeDialogActionRequestSchema = z
     action: dialogActionInvocationSchema,
   })
   .passthrough();
-export type NativeInvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
-export const legacyInvokeDialogActionRequestSchema = z
-  .object({ dialog: legacyDialogIdentitySchema, action: legacyDialogActionSchema })
-  .passthrough();
-export type LegacyInvokeDialogActionRequest = z.infer<typeof legacyInvokeDialogActionRequestSchema>;
-/** Accepts either the 0.2.22 native request or the pre-GA Qt-only request. */
-export type InvokeDialogActionRequest =
-  | NativeInvokeDialogActionRequest
-  | LegacyInvokeDialogActionRequest;
+export type InvokeDialogActionRequest = z.infer<typeof invokeDialogActionRequestSchema>;
 
-/**
- * Post-action dialog state. Only outcomes that confirm a click echo the selected
- * identity and action; `no-active-dialog` confirms that no action occurred.
- */
+/** Sanitized journal status for one exact-session request. */
 const dialogRequestStatusSchema = z
   .object({
     sessionId: z.string(),
@@ -1046,38 +1000,19 @@ const dialogRequestStatusSchema = z
 export type DialogRequestStatus = z.infer<typeof dialogRequestStatusSchema>;
 
 export const invokeDialogActionResultSchema = z.object({
-  outcome: z.string(),
+  outcome: z.enum([
+    'dispatched-pending',
+    'completed',
+    'canceled',
+    'failed',
+    'expired',
+    'indeterminate',
+  ]),
   dialog: dialogIdentitySchema,
   status: dialogRequestStatusSchema,
   dialogs: z.array(nativeWindowInfoSchema),
 });
-export type NativeInvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
-export const legacyInvokeDialogActionResultSchema = z.discriminatedUnion('outcome', [
-  z
-    .object({ outcome: z.literal('no-active-dialog'), dialogs: z.array(legacyWindowInfoSchema) })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('dismissed'),
-      dialog: legacyDialogIdentitySchema,
-      action: legacyDialogActionSchema,
-      dialogs: z.array(legacyWindowInfoSchema),
-    })
-    .passthrough(),
-  z
-    .object({
-      outcome: z.literal('action-invoked-dialog-remains'),
-      dialog: legacyDialogIdentitySchema,
-      action: legacyDialogActionSchema,
-      dialogs: z.array(legacyWindowInfoSchema),
-    })
-    .passthrough(),
-]);
-export type LegacyInvokeDialogActionResult = z.infer<typeof legacyInvokeDialogActionResultSchema>;
-export type InvokeDialogActionResult =
-  | NativeInvokeDialogActionResult
-  | LegacyInvokeDialogActionResult;
-export type AnyInvokeDialogActionResult = InvokeDialogActionResult;
+export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSchema>;
 
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,

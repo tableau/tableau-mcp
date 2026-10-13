@@ -71,9 +71,10 @@ escalation ladder:
    `title`, and `className`, but copy the identity and action from this fresh dialog result. If the
    task or explicit user intent makes the choice unambiguous, call `invoke-dialog-action` once.
    Never guess, never assume Cancel is safe, and never blindly retry the originating operation. An
-   **action-invoked-dialog-remains** result confirms a side effect, so do not retry the dialog
-   action or originating operation. Ask the user to handle the dialog if a required tool is missing
-   or version-gated, the identity or intent is ambiguous, or no action is clearly safe.
+   `status.state: completed` with `status.effect: dialog-remains` confirms a side effect, so do not
+   retry the dialog action or originating operation. For pending or indeterminate status, inspect
+   `recentActions`; never replay the request. Ask the user to handle the dialog if a required tool
+   is missing or version-gated, the identity or intent is ambiguous, or no action is clearly safe.
 
 3. **Verify with a new state snapshot.** After any dialog action, discard the old action context and
    call `get-desktop-state` again. Resume ordinary MCP calls only after it returns `IDLE`; otherwise

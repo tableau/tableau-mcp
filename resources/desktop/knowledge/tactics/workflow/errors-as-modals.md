@@ -47,20 +47,19 @@ and do not search for a synthetic Cancel/Escape command.
    preparing, suspended, and closing entries are still blockers. Copy its exact identity including
    `sessionId` and `revision`, then one exact returned capability. Its `input.fields` metadata names
    the accepted fields, types, requiredness, and enum options; it describes invocation syntax and is
-   never a selected value. When saving a file, `overwriteConfirmed` is required and is true only when
-   the final destination exists; `overwriteConfirmationRequired: false` does not waive that check.
-   Call `invoke-dialog-action` once only when the task or explicit user intent makes that action
-   unambiguous. Never guess, and never assume an action such as Cancel is
-   inherently safe.
+   never a selected value. When saving a file, `overwriteConfirmed` is required and is true only
+   when the final destination exists; `overwriteConfirmationRequired: false` does not waive that
+   check. Call `invoke-dialog-action` once only when the task or explicit user intent makes that
+   action unambiguous. Never guess, and never assume an action such as Cancel is inherently safe.
 5. If the action result is pending or indeterminate, inspect `recentActions` from
    `get-active-dialogs` once for its sanitized request status. Do not replay the request: an input
    path, printer destination, or color is never echoed and must not be reconstructed from logs.
-   After a terminal action result, call `get-desktop-state` again. Continue ordinary work only after it
-   returns `IDLE`; if it remains `BLOCKED`, reason from the new evidence and do not replay the old
-   action context.
+   After a terminal action result, call `get-desktop-state` again. Continue ordinary work only after
+   it returns `IDLE`; if it remains `BLOCKED`, reason from the new evidence and do not replay the
+   old action context.
 6. Do not retry the operation that opened the dialog until its cause is understood and corrected. If
-   `invoke-dialog-action` returns **action-invoked-dialog-remains**, the action was already invoked:
-   do not retry it or the originating operation.
+   `invoke-dialog-action` reports `status.state: completed` and `status.effect: dialog-remains`, the
+   action was already invoked: do not retry it or the originating operation.
 7. Ask the user to handle the dialog when a required dedicated tool is missing or version-gated, the
    returned identity or intended action is ambiguous, or no returned action is clearly safe. Follow
    the escalation ladder in `expertise://tableau/tactics/workflow/recovery` for diagnosis and human
@@ -97,7 +96,8 @@ either as landed enforcement on this branch.
    dialog is cleared. Correct the datasource, limit, action type, or sheet name before retrying.
 4. **Assuming Cancel is safe or retrying an action.** Action meaning depends on the dialog and task
    context. Never guess from its label or semantic kind, and never call `invoke-dialog-action` again
-   after **action-invoked-dialog-remains**.
+   when `status.state` is pending or completed, or `status.effect` is dialog-remains. Inspect
+   `recentActions` instead; never replay the request.
 5. **Treating every Qualified Name Parse Error as the CSV case.** `5F1F5407` is verified for the
    specific encoding/delimiter/filename combination above; other qualified-name failures can have
    different causes.

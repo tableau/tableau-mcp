@@ -7,6 +7,7 @@ import {
   EXTERNAL_API_ROUTES,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
+  invokeDialogActionRequestSchema,
   SHOW_ME_TYPES,
   type ShowMeOptionsResult,
 } from './types.js';
@@ -246,9 +247,6 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     ],
   },
 ];
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const readBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve) => {
@@ -522,132 +520,71 @@ export async function startMockExternalApiServer(
         return;
       }
 
-      const identity = isRecord(request) ? request.dialog : undefined;
-      const requestId = isRecord(request) ? request.requestId : undefined;
-      const action = isRecord(request) ? request.action : undefined;
-      if (
-        !isRecord(identity) ||
-        typeof identity.objectName !== 'string' ||
-        typeof identity.title !== 'string' ||
-        typeof identity.className !== 'string' ||
-        !isRecord(action)
-      ) {
+      const parsed = invokeDialogActionRequestSchema.safeParse(request);
+      if (!parsed.success) {
         sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
         return;
       }
-      const isNativeRequest = typeof requestId === 'string';
-      const isButtonAction =
-        action.kind === 'button' && typeof action.label === 'string' && action.label.length > 0;
-      const isCloseAction = action.kind === 'close' && !Object.hasOwn(action, 'label');
-      const isCancelAction = action.kind === 'cancel';
-      const isNativeAction =
-        isCancelAction ||
-        isButtonAction ||
-        isCloseAction ||
-        (action.kind === 'choose-file' && typeof action.path === 'string') ||
-        (action.kind === 'choose-files' && Array.isArray(action.paths)) ||
-        (action.kind === 'choose-directory' && typeof action.path === 'string') ||
-        (action.kind === 'save-file' &&
-          typeof action.path === 'string' &&
-          typeof action.filterId === 'string' &&
-          typeof action.overwriteConfirmed === 'boolean') ||
-        (action.kind === 'choose-color' &&
-          Number.isInteger(action.red) &&
-          Number.isInteger(action.green) &&
-          Number.isInteger(action.blue)) ||
-        (action.kind === 'submit-print' &&
-          typeof action.printerId === 'string' &&
-          typeof action.range === 'string' &&
-          typeof action.sheetScope === 'string' &&
-          Number.isInteger(action.firstPage) &&
-          Number.isInteger(action.lastPage) &&
-          Number.isInteger(action.copies) &&
-          typeof action.collate === 'boolean' &&
-          typeof action.exportSelection === 'boolean');
-      if (
-        (isNativeRequest &&
-          (!isNativeAction ||
-            typeof identity.sessionId !== 'string' ||
-            !Number.isInteger(identity.revision))) ||
-        (!isNativeRequest && !isButtonAction && !isCloseAction)
-      ) {
-        sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
-        return;
-      }
-
-      if (dialogs.length === 0) {
-        sendJson(res, 200, { outcome: 'no-active-dialog', dialogs: [] });
-        return;
-      }
-
-      const matches = dialogs.filter(
-        (dialog) =>
-          dialog.objectName === identity.objectName &&
-          dialog.title === identity.title &&
-          dialog.className === identity.className &&
-          (!isNativeRequest ||
-            (dialog.sessionId === identity.sessionId && dialog.revision === identity.revision)),
-      );
-      if (matches.length === 0) {
-        sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
-        return;
-      }
-      if (matches.length > 1) {
-        sendProblem(
-          res,
-          409,
-          'dialog-ambiguous',
-          'More than one active dialog matched the request.',
-        );
-        return;
-      }
-
-      const actionMatches = (matches[0].actions ?? []).filter(
-        (candidate) =>
-          candidate.kind === action.kind &&
-          (candidate.kind === 'close' || candidate.label === action.label),
-      );
-      if (actionMatches.length === 0) {
-        sendProblem(res, 409, 'dialog-action-not-found', 'No visible dialog action matched.');
-        return;
-      }
-      if (actionMatches.length > 1) {
-        sendProblem(res, 409, 'dialog-action-ambiguous', 'More than one visible action matched.');
-        return;
-      }
-
-      dialogs.splice(dialogs.indexOf(matches[0]), 1);
-      if (isNativeRequest) {
+      const { dialog: identity, requestId, action } = parsed.data;
+      const respond = (
+        state: 'completed' | 'canceled' | 'failed' | 'expired',
+        effect: 'none' | 'dialog-dismissed' | 'native-panel-closed',
+        code?: string,
+      ): void => {
         sendJson(res, 200, {
-          outcome: 'completed',
-          dialog: {
-            objectName: identity.objectName,
-            title: identity.title,
-            className: identity.className,
-            sessionId: identity.sessionId,
-            revision: identity.revision,
-          },
+          outcome: state,
+          dialog: identity,
           status: {
             sessionId: identity.sessionId,
             revision: identity.revision,
             requestId,
-            state: action.kind === 'cancel' ? 'canceled' : 'completed',
-            effect: action.kind === 'cancel' ? 'native-panel-closed' : 'dialog-dismissed',
+            state,
+            effect,
+            ...(code === undefined ? {} : { code }),
           },
           dialogs,
         });
+      };
+      const session = dialogs.find((dialog) => dialog.sessionId === identity.sessionId);
+      if (session === undefined) {
+        respond('failed', 'none', 'dialog-not-found');
         return;
       }
-      sendJson(res, 200, {
-        outcome: 'dismissed',
-        dialog: {
-          objectName: identity.objectName,
-          title: identity.title,
-          className: identity.className,
-        },
-        action,
-        dialogs,
-      });
+      if (
+        session.revision !== identity.revision ||
+        session.objectName !== identity.objectName ||
+        session.title !== identity.title ||
+        session.className !== identity.className
+      ) {
+        respond('failed', 'none', 'dialog-session-stale');
+        return;
+      }
+      if (session.status !== 'active') {
+        respond('failed', 'none', 'dialog-session-inactive');
+        return;
+      }
+      const actionMatches = (session.actions ?? []).filter(
+        (candidate) =>
+          candidate.kind === action.kind &&
+          (action.kind !== 'button' || candidate.label === action.label),
+      );
+      if (actionMatches.length === 0) {
+        respond('failed', 'none', 'dialog-action-unsupported');
+        return;
+      }
+      if (actionMatches.length > 1) {
+        respond('failed', 'none', 'dialog-action-ambiguous');
+        return;
+      }
+      if (actionMatches[0].enabled === false) {
+        respond('failed', 'none', 'dialog-action-disabled');
+        return;
+      }
+      dialogs.splice(dialogs.indexOf(session), 1);
+      respond(
+        action.kind === 'cancel' ? 'canceled' : 'completed',
+        action.kind === 'cancel' ? 'native-panel-closed' : 'dialog-dismissed',
+      );
       return;
     }
 

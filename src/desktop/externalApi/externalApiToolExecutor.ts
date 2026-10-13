@@ -24,7 +24,6 @@ import {
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
 import {
-  AnyInvokeDialogActionResult,
   ApiRoot,
   apiRootSchema,
   AppInfo,
@@ -56,11 +55,9 @@ import {
   ImageResult,
   imageResultSchema,
   InvokeDialogActionRequest,
+  invokeDialogActionRequestSchema,
+  InvokeDialogActionResult,
   invokeDialogActionResultSchema,
-  LegacyDialogList,
-  legacyDialogListSchema,
-  LegacyInvokeDialogActionRequest,
-  legacyInvokeDialogActionResultSchema,
   LogicalTableList,
   logicalTableListSchema,
   OperationEnvelope,
@@ -329,16 +326,13 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async getActiveDialogs(
-    signal: AbortSignal,
-  ): Promise<Result<DialogList | LegacyDialogList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(
-        EXTERNAL_API_ROUTES.appDialogs,
-        apiVersionAtLeast(http.apiVersion, '0.2.22') ? dialogListSchema : legacyDialogListSchema,
-        signal,
-      ),
-    );
+  async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
+    return this.readExternalApi((http) => {
+      if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+        return Promise.resolve(Err(dialogContractVersionError()));
+      }
+      return http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal);
+    });
   }
 
   async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {
@@ -348,60 +342,35 @@ export class ExternalApiToolExecutor {
   }
 
   async invokeDialogAction(
-    request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
+    request: InvokeDialogActionRequest,
     signal: AbortSignal,
-  ): Promise<Result<AnyInvokeDialogActionResult, ExecuteCommandError>> {
+  ): Promise<Result<InvokeDialogActionResult, ExecuteCommandError>> {
     const result = await this.withRescan(
       'command',
       (http) => {
-        const supportsNativeContract = apiVersionAtLeast(http.apiVersion, '0.2.22');
-        if (supportsNativeContract && !isNativeDialogActionRequest(request)) {
+        if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+          return Promise.resolve(Err(dialogContractVersionError()));
+        }
+        const parsed = invokeDialogActionRequestSchema.safeParse(request);
+        if (!parsed.success) {
           return Promise.resolve(
             Err({
               type: 'problem' as const,
               status: 400,
               code: 'invalid-request-body',
               detail:
-                'This Tableau Desktop version requires dialog.sessionId, dialog.revision, and requestId from a fresh get-active-dialogs result.',
-            }),
-          );
-        }
-        if (!supportsNativeContract && isNativeDialogActionRequest(request)) {
-          return Promise.resolve(
-            Err({
-              type: 'problem' as const,
-              status: 409,
-              code: 'dialog-session-stale',
-              detail:
-                'This Tableau Desktop version cannot safely apply a native dialog identity. Refresh dialogs against this Desktop instance; do not down-convert or retry the action.',
-            }),
-          );
-        }
-        if (
-          !supportsNativeContract &&
-          request.action.kind !== 'button' &&
-          request.action.kind !== 'close'
-        ) {
-          return Promise.resolve(
-            Err({
-              type: 'problem' as const,
-              status: 409,
-              code: 'dialog-action-not-found',
-              detail:
-                'This Tableau Desktop version supports only Qt button or close dialog actions. Update Desktop before acting on a native dialog.',
+                'Dialog actions require the exact observed sessionId and revision, a valid requestId, and an advertised action input.',
             }),
           );
         }
         return http.postJsonForDirectBody(
           EXTERNAL_API_ROUTES.appInvokeDialogAction,
-          supportsNativeContract ? request : toLegacyDialogActionRequest(request),
-          supportsNativeContract
-            ? invokeDialogActionResultSchema
-            : legacyInvokeDialogActionResultSchema,
+          parsed.data,
+          invokeDialogActionResultSchema,
           signal,
         );
       },
-      !isNativeDialogActionRequest(request),
+      false,
     );
     if (result.isErr()) {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
@@ -1073,30 +1042,14 @@ export class ExternalApiToolExecutor {
   }
 }
 
-/**
- * Desktop 0.2.13–0.2.21 only accepts Qt button/close actions and has no stable
- * session identity. Never down-convert a native action or identity: it would be a guess.
- */
-function toLegacyDialogActionRequest(
-  request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
-): LegacyInvokeDialogActionRequest {
-  const action = request.action;
-  // invokeDialogAction rejects other kinds before calling this helper.
-  if (action.kind !== 'button' && action.kind !== 'close') throw new Error('unreachable');
+function dialogContractVersionError(): ExternalApiError {
   return {
-    dialog: {
-      objectName: request.dialog.objectName,
-      title: request.dialog.title,
-      className: request.dialog.className,
-    },
-    action: action.kind === 'button' ? { kind: 'button', label: action.label } : { kind: 'close' },
+    type: 'problem',
+    status: 409,
+    code: 'dialog-session-stale',
+    detail:
+      'Dialog tools require External Client API 0.2.23 or later. Update Tableau Desktop and inspect dialogs again; do not retry or replay the action.',
   };
-}
-
-function isNativeDialogActionRequest(
-  request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
-): request is InvokeDialogActionRequest & { requestId: string } {
-  return 'requestId' in request && 'sessionId' in request.dialog && 'revision' in request.dialog;
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
@@ -1236,7 +1189,8 @@ function mapClientError(
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
             'unambiguous, copy the exact returned dialog identity and exact returned action ' +
             'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
-            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'invoke-dialog-action when status.state is pending or completed, or status.effect is ' +
+            'dialog-remains. Inspect recentActions instead; never replay the request. If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,

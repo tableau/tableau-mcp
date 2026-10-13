@@ -3,7 +3,6 @@ import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  AnyInvokeDialogActionResult,
   DIALOG_ACTION_KINDS,
   DIALOG_PRINT_RANGES,
   DIALOG_SHEET_SCOPES,
@@ -11,10 +10,7 @@ import {
   dialogActionInvocationSchema,
   InvokeDialogActionRequest,
   invokeDialogActionRequestSchema,
-  legacyDialogActionSchema,
-  LegacyInvokeDialogActionRequest,
-  legacyInvokeDialogActionRequestSchema,
-  NativeInvokeDialogActionRequest,
+  InvokeDialogActionResult,
 } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
@@ -35,8 +31,8 @@ const dialogSchema = z
     objectName: z.string(),
     title: z.string(),
     className: z.string(),
-    sessionId: z.string().optional(),
-    revision: z.number().optional(),
+    sessionId: z.string(),
+    revision: z.number().int().nonnegative(),
   })
   .passthrough();
 
@@ -63,22 +59,16 @@ function invokeDialogActionRouteMissingError(): McpToolError {
 
 type InvokeDialogActionToolArgs = {
   session: string | undefined;
-  dialog: {
-    objectName: string;
-    title: string;
-    className: string;
-    sessionId?: string;
-    revision?: number;
-  };
+  dialog: z.infer<typeof dialogSchema>;
   requestId: string | undefined;
   action: DialogActionInvocation;
 };
 
-function nativeRequest(
+function currentRequest(
   dialog: z.infer<typeof dialogSchema>,
   requestId: string,
   action: DialogActionInvocation,
-): NativeInvokeDialogActionRequest {
+): InvokeDialogActionRequest {
   if (dialog.sessionId === undefined || dialog.revision === undefined) {
     throw new McpToolError({
       type: 'invalid_request',
@@ -90,24 +80,6 @@ function nativeRequest(
     dialog: { ...dialog, sessionId: dialog.sessionId, revision: dialog.revision },
     requestId,
     action,
-  });
-}
-
-function legacyRequest(
-  dialog: z.infer<typeof dialogSchema>,
-  action: DialogActionInvocation,
-): LegacyInvokeDialogActionRequest {
-  const parsedAction = legacyDialogActionSchema.safeParse(action);
-  if (!parsedAction.success) {
-    throw new McpToolError({
-      type: 'invalid_request',
-      message: 'A native dialog action requires a fresh dialog session identity.',
-      statusCode: 400,
-    });
-  }
-  return legacyInvokeDialogActionRequestSchema.parse({
-    dialog: { objectName: dialog.objectName, title: dialog.title, className: dialog.className },
-    action: parsedAction.data,
   });
 }
 
@@ -179,7 +151,7 @@ export const getInvokeDialogActionTool = (
   const tool = new DesktopTool({
     server,
     name: 'invoke-dialog-action',
-    minApiVersion: '0.2.13',
+    minApiVersion: '0.2.23',
     title,
     description: 'get-active-dialogs context: exact action. Never guess or retry.',
     paramsSchema,
@@ -193,20 +165,21 @@ export const getInvokeDialogActionTool = (
       const parsedAction = dialogActionInvocationSchema.safeParse(action);
       const hasSessionId = dialog.sessionId !== undefined;
       const hasRevision = dialog.revision !== undefined;
-      const hasNativeIdentity = hasSessionId && hasRevision;
       const loggedArgs: InvokeDialogActionToolArgs = {
         session,
         dialog: {
           objectName: REDACTED_DIALOG_VALUE,
           title: REDACTED_DIALOG_VALUE,
           className: REDACTED_DIALOG_VALUE,
+          sessionId: REDACTED_DIALOG_VALUE,
+          revision: 0,
         },
-        requestId: hasNativeIdentity ? REDACTED_DIALOG_VALUE : undefined,
+        requestId: REDACTED_DIALOG_VALUE,
         action: parsedAction.success
           ? redactedAction(parsedAction.data)
           : { kind: DIALOG_ACTION_KINDS[1] },
       };
-      return await tool.logAndExecute<AnyInvokeDialogActionResult>({
+      return await tool.logAndExecute<InvokeDialogActionResult>({
         extra,
         args: loggedArgs,
         callback: async () =>
@@ -242,7 +215,7 @@ async function invokeDialogAction({
   parsedAction: ReturnType<typeof dialogActionInvocationSchema.safeParse>;
   hasSessionId: boolean;
   hasRevision: boolean;
-}): Promise<Result<AnyInvokeDialogActionResult, McpToolError>> {
+}): Promise<Result<InvokeDialogActionResult, McpToolError>> {
   if (!parsedAction.success) {
     throw new McpToolError({
       type: 'invalid_request',
@@ -257,11 +230,11 @@ async function invokeDialogAction({
       statusCode: 400,
     });
   }
-  if (hasSessionId !== hasRevision) {
+  if (!hasSessionId || !hasRevision) {
     throw new McpToolError({
       type: 'invalid_request',
       message:
-        'dialog.sessionId and dialog.revision must be supplied together from a fresh dialog inspection result.',
+        'dialog.sessionId and dialog.revision must both be supplied from a fresh dialog inspection result.',
       statusCode: 400,
     });
   }
@@ -274,7 +247,7 @@ async function invokeDialogAction({
   ) {
     throw new McpToolError({
       type: 'invalid_request',
-      message: 'The native dialog identity is invalid.',
+      message: 'The dialog session identity is invalid.',
       statusCode: 400,
     });
   }
@@ -285,22 +258,9 @@ async function invokeDialogAction({
       statusCode: 400,
     });
   }
-  if (!hasSessionId && requestId !== undefined) {
-    throw new McpToolError({
-      type: 'invalid_request',
-      message: 'requestId requires a native dialog identity.',
-      statusCode: 400,
-    });
-  }
-  const generatedNativeRequestId =
-    hasSessionId && requestId === undefined ? crypto.randomUUID() : undefined;
-  const request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest = hasSessionId
-    ? nativeRequest(
-        dialog,
-        requestId ?? generatedNativeRequestId ?? crypto.randomUUID(),
-        parsedAction.data,
-      )
-    : legacyRequest(dialog, parsedAction.data);
+  const effectiveRequestId = requestId ?? crypto.randomUUID();
+  const generatedNativeRequestId = requestId === undefined ? effectiveRequestId : undefined;
+  const request = currentRequest(dialog, effectiveRequestId, parsedAction.data);
   const result = await runExternalApiTool({
     session,
     extra,
