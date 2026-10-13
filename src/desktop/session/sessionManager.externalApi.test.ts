@@ -105,4 +105,17 @@ describe('SessionManager executor selection', () => {
       'No Desktop instance found with PID 12345. Session 12345 is stale: that Tableau Desktop process is no longer reachable or was restarted. Call list-instances and retry with the current session.',
     );
   });
+
+  it('throws typed errors: args-validation for a bad session id, service-unavailable for no API', async () => {
+    await expect(new SessionManager().getExecutor('not-a-pid')).rejects.toMatchObject({
+      type: 'args-validation',
+      statusCode: 400,
+    });
+
+    mocks.discoverInstances.mockReturnValue([]);
+    await expect(new SessionManager().getExecutor('12345')).rejects.toMatchObject({
+      type: 'service-unavailable',
+      statusCode: 503,
+    });
+  });
 });
