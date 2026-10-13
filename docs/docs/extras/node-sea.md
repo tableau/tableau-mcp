@@ -8,8 +8,8 @@ Node.js [Single Executable Applications](https://nodejs.org/api/single-executabl
 (SEA) are a way to package a Node.js application into a single executable file.
 
 This provides a simple method for administrators to deploy Tableau MCP to their users without having
-to install Node.js or any other dependencies. Tableau MCP is available as a SEA for both Windows and
-Linux.
+to install Node.js or any other dependencies. Tableau MCP is available as a SEA for Windows, Linux,
+and macOS (Apple silicon and Intel).
 
 ## Windows
 
@@ -57,17 +57,33 @@ iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/
 
 :::
 
-## Linux or Manual Windows Installation
+## Linux, macOS, or Manual Windows Installation
 
 1. Go to the latest [Tableau MCP release][releases] on GitHub
-2. Under Assets, download the `tableau-mcp.zip` (Windows) or `tableau-mcp.tar.gz` (Linux) archive
-   for your operating system.
-   - If no archives exist, the release is too old and you'll need to choose a newer release.
-3. Extract the archive
+2. Under Assets, download the archive for your operating system:
+   - Windows: `tableau-mcp.zip`
+   - Linux (x64): `tableau-mcp.tar.gz`
+   - macOS on Apple silicon: `tableau-mcp-macos-arm64.tar.gz`
+   - macOS on Intel: `tableau-mcp-macos-x64.tar.gz`
+   - If no archives exist, the release is too old and you'll need to choose a newer release. Older
+     releases may also lack the macOS archives and the Desktop executable.
+3. Extract the archive. Each archive contains two executables:
+   - `tableau-mcp` (`tableau-mcp.exe` on Windows): the standard Tableau MCP server. Run this one
+     unless you are setting up the Tableau Desktop server.
+   - `tableau-mcp-desktop` (`tableau-mcp-desktop.exe` on Windows): the Tableau Desktop server.
 4. Create a [.env](https://www.dotenv.org/docs/security/env.html) file with your Tableau MCP
    settings. See [Environment Variables](../configuration/mcp-config/env-vars.md) section for more
    details.
-5. Run the application
+5. Run the executable
+
+:::note
+
+The macOS executables are ad-hoc signed but not notarized by Apple. macOS quarantines downloaded
+files, so Gatekeeper may block the first run. Remove the quarantine attribute from the extracted
+files (`xattr -d com.apple.quarantine tableau-mcp tableau-mcp-desktop`) or allow them in System
+Settings > Privacy & Security.
+
+:::
 
 <hr />
 
