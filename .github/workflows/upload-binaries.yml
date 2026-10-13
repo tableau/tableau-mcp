@@ -1,9 +1,29 @@
 name: Generate NodeJS Single Executable Application
 
 on:
-  pull_request:
   release:
     types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/upload-binaries.yml
+      - package.json
+      - package-lock.json
+      - sea-config.json
+      - src/scripts/build*.ts
+      - src/scripts/sea*.ts
+      - src/utils/sea.ts
+      - src/utils/loadProviderModule.ts
+      - src/index*.ts
+      - src/scripts/variants.ts
+      - src/scripts/globalIdentifiers.ts
+      - features.json
+      - resources/desktop/**
+      - src/desktop/data/**
+      - src/web/apps/**
+      - tsconfig*.json
+      - src/desktop/cachePath*.ts
+      - src/tools/desktop/local/cache/**
 
 permissions:
   contents: read
