@@ -70,10 +70,12 @@ export function desktopCallTimeoutMessage({
   budgetMs,
   tool,
   session,
+  nativeDialogRequestId,
 }: {
   budgetMs: number;
   tool?: string;
   session?: string;
+  nativeDialogRequestId?: string;
 }): string {
   const scope = [tool ? `tool: ${tool}` : undefined, session ? `session: ${session}` : undefined]
     .filter(Boolean)
@@ -90,7 +92,12 @@ export function desktopCallTimeoutMessage({
       scope ? ` (${scope})` : ''
     }.`,
     guidance,
-  ].join(' ');
+    tool === 'invoke-dialog-action' && nativeDialogRequestId !== undefined
+      ? `Dialog requestId=${nativeDialogRequestId}. Inspect recentActions before any further action.`
+      : undefined,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(' ');
 }
 
 export type CallDeadline = {
@@ -105,6 +112,10 @@ export type CallDeadline = {
    * otherwise. Safe to leave un-raced: a rejection handler is attached at creation.
    */
   whenExpired: () => Promise<never>;
+  /** Records the generated opaque ID immediately before a native dialog POST. */
+  setNativeDialogRequestId: (requestId: string) => void;
+  /** Returns the recorded native-dialog status correlation, if dispatch started. */
+  nativeDialogRequestId: () => string | undefined;
   /** Clears the timer and detaches the client listener. Always call this when the tool returns. */
   dispose: () => void;
 };
@@ -118,6 +129,7 @@ export function createCallDeadline({
 }): CallDeadline {
   const controller = new AbortController();
   let timedOut = false;
+  let nativeDialogRequestId: string | undefined;
   let rejectExpiry: (error: unknown) => void = () => undefined;
 
   const expiry = new Promise<never>((_resolve, reject) => {
@@ -151,6 +163,10 @@ export function createCallDeadline({
     budgetMs,
     expired: () => timedOut,
     whenExpired: () => expiry,
+    setNativeDialogRequestId: (requestId: string) => {
+      nativeDialogRequestId ??= requestId;
+    },
+    nativeDialogRequestId: () => nativeDialogRequestId,
     dispose: () => {
       clearTimeout(timer);
       clientSignal?.removeEventListener('abort', onClientAbort);

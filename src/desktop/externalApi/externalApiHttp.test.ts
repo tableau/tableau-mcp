@@ -11,7 +11,7 @@ import {
   EXTERNAL_API_ROUTES,
   ExternalApiInstance,
   InvokeDialogActionRequest,
-  invokeDialogActionResultSchema,
+  legacyInvokeDialogActionResultSchema as invokeDialogActionResultSchema,
   logicalTableListSchema,
   sheetActionRoute,
   showMeOptionsResultSchema,

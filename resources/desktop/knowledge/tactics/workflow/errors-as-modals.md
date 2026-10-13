@@ -42,13 +42,20 @@ and do not search for a synthetic Cancel/Escape command.
      click, issue ordinary API calls, or retry the originating operation.
    - For `UI_UNRESPONSIVE`, retry only the state read after 1 second and then 2 seconds. If it
      remains unresponsive after those two rechecks, stop and hand off to the user.
-4. When `blockingWindows` reports a modal, call `get-active-dialogs` for fresh action context. A
-   window from the state read can be correlated by the same `objectName`, `title`, and `className`,
-   but only the fresh dialog result authorizes an action. Copy its exact identity and one exact
-   returned action. Call `invoke-dialog-action` once only when the task or explicit user intent
-   makes that action unambiguous. Never guess, and never assume an action such as Cancel is
+4. When `blockingWindows` reports a modal, or Desktop is blocked by a registered native panel, call
+   `get-active-dialogs` for fresh action context. Only an **active** dialog advertises actions;
+   preparing, suspended, and closing entries are still blockers. Copy its exact identity including
+   `sessionId` and `revision`, then one exact returned capability. Its `input.fields` metadata names
+   the accepted fields, types, requiredness, and enum options; it describes invocation syntax and is
+   never a selected value. When saving a file, `overwriteConfirmed` is required and is true only when
+   the final destination exists; `overwriteConfirmationRequired: false` does not waive that check.
+   Call `invoke-dialog-action` once only when the task or explicit user intent makes that action
+   unambiguous. Never guess, and never assume an action such as Cancel is
    inherently safe.
-5. After an action result, call `get-desktop-state` again. Continue ordinary work only after it
+5. If the action result is pending or indeterminate, inspect `recentActions` from
+   `get-active-dialogs` once for its sanitized request status. Do not replay the request: an input
+   path, printer destination, or color is never echoed and must not be reconstructed from logs.
+   After a terminal action result, call `get-desktop-state` again. Continue ordinary work only after it
    returns `IDLE`; if it remains `BLOCKED`, reason from the new evidence and do not replay the old
    action context.
 6. Do not retry the operation that opened the dialog until its cause is understood and corrected. If

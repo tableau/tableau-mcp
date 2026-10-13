@@ -2,12 +2,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { createCallDeadline } from '../../../desktop/callDeadline.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import {
+  DialogActionInvocation,
+  dialogActionInvocationSchema,
   ExternalApiInstance,
   InvokeDialogActionRequest,
   InvokeDialogActionResult,
@@ -16,6 +19,7 @@ import * as sessionResolution from '../../../desktop/session/sessionResolution.j
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import type { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getInvokeDialogActionTool } from './invokeDialogAction.js';
 
@@ -117,19 +121,38 @@ describe('invoke-dialog-action tool', () => {
     expect(
       schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'close', label: 'X' } })
         .success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'button' } }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       schema.safeParse({ dialog: defaultRequest.dialog, action: { kind: 'button', label: '' } })
         .success,
-    ).toBe(false);
+    ).toBe(true);
+    expect(dialogActionInvocationSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(
+      false,
+    );
+    expect(dialogActionInvocationSchema.safeParse({ kind: 'button' }).success).toBe(false);
+    expect(dialogActionInvocationSchema.safeParse({ kind: 'button', label: '' }).success).toBe(
+      false,
+    );
     expect(schema.safeParse({ action: defaultRequest.action }).success).toBe(false);
     expect(
       schema.safeParse({ dialog: { title: 'Save Changes' }, action: defaultRequest.action })
         .success,
     ).toBe(false);
+    expect(
+      schema.safeParse({
+        dialog: defaultRequest.dialog,
+        action: { kind: 'choose-color', red: 0, green: 0, blue: 256 },
+      }).success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({
+        dialog: defaultRequest.dialog,
+        action: { kind: 'submit-print', printerId: 'printer-1' },
+      }).success,
+    ).toBe(true);
   });
 
   it('redacts invocation logging while forwarding the exact sensitive request once', async () => {
@@ -163,6 +186,7 @@ describe('invoke-dialog-action tool', () => {
             title: '[redacted]',
             className: '[redacted]',
           },
+          requestId: undefined,
           action: { kind: 'button', label: '[redacted]' },
         },
       });
@@ -213,7 +237,50 @@ describe('invoke-dialog-action tool', () => {
     }
   });
 
-  it('does not forward unknown action properties accepted for contract compatibility', async () => {
+  it('rejects dialog identities with fields outside the fresh inspection result', async () => {
+    const harness = await startHarness();
+
+    try {
+      const dialog = { ...defaultRequest.dialog, unsupportedField: 'not copied from inspection' };
+      const result = await harness.callTool({
+        session: undefined,
+        dialog,
+        action: defaultRequest.action,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(dialogPosts(harness.server)).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('rejects malformed native action fields inside the normal execution funnel', async () => {
+    const malformedColor = {
+      session: undefined,
+      dialog: {
+        objectName: 'colorDialog',
+        title: 'Choose Color',
+        className: 'QColorDialog',
+        sessionId: 'native-session',
+        revision: 1,
+      },
+      requestId: 'request-1',
+      action: { kind: 'choose-color' as const, red: 0, green: 0, blue: 256 },
+    };
+    const harness = await startHarness('0.2.22');
+
+    try {
+      const result = await harness.callTool(malformedColor);
+
+      expect(result.isError).toBe(true);
+      expect(dialogPosts(harness.server)).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('rejects unknown action properties so selection payloads stay in the closed invocation contract', async () => {
     const requestWithUnknownActionProperty = {
       session: undefined,
       ...defaultRequest,
@@ -227,11 +294,29 @@ describe('invoke-dialog-action tool', () => {
     try {
       const result = await harness.callTool(requestWithUnknownActionProperty);
 
-      expect(result.isError).toBe(false);
+      expect(result.isError).toBe(true);
       const posts = dialogPosts(harness.server);
-      expect(posts).toHaveLength(1);
-      expect(posts[0].body).toBe(JSON.stringify(defaultRequest));
-      expect(posts[0].body).not.toContain('futureProperty');
+      expect(posts).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('does not down-convert a native Qt identity to an older Desktop tuple', async () => {
+    const harness = await startHarness('0.2.21');
+
+    try {
+      const result = await harness.callTool({
+        session: undefined,
+        dialog: { ...defaultRequest.dialog, sessionId: 'native-session', revision: 8 },
+        requestId: 'native-request',
+        action: defaultRequest.action,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('cannot safely apply a native dialog identity');
+      expect(dialogPosts(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
     }
@@ -250,6 +335,109 @@ describe('invoke-dialog-action tool', () => {
         dialogs: [],
       });
       expect(dialogPosts(harness.server)).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('uses the 0.2.22 native request shape, generates a request id, and does not log selection input', async () => {
+    const request = {
+      session: undefined,
+      dialog: {
+        objectName: 'native-file',
+        title: 'Locate data source',
+        className: 'QFileDialog',
+        sessionId: 'native-session',
+        revision: 7,
+      },
+      action: { kind: 'choose-file' as const, path: '/private/selected-source.tds' },
+    };
+    const response = {
+      outcome: 'completed',
+      dialog: request.dialog,
+      status: {
+        sessionId: 'native-session',
+        revision: 7,
+        requestId: 'generated',
+        state: 'completed',
+        effect: 'file-choice-returned',
+      },
+      dialogs: [],
+    };
+    const harness = await startHarness('0.2.22');
+    harness.server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(response),
+    });
+    const notifyInvocation = vi.spyOn(harness.tool, 'notifyInvocation');
+
+    try {
+      const result = await harness.callTool(request);
+      expect(result.isError).toBe(false);
+      const post = dialogPosts(harness.server).at(0);
+      expect(post?.body).toContain('choose-file');
+      expect(post?.body).toContain('/private/selected-source.tds');
+      expect(JSON.parse(post?.body ?? '{}').requestId).toMatch(/^[!-~]{1,128}$/);
+      expect(JSON.stringify(notifyInvocation.mock.calls[0][0])).not.toContain(
+        '/private/selected-source.tds',
+      );
+      expect(JSON.stringify(parseSuccess(result))).not.toContain('/private/selected-source.tds');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('surfaces the same generated request id from the dispatched native POST after the outer deadline wins', async () => {
+    const deadline = createCallDeadline({ budgetMs: 250 });
+    const harness = await startHarness('0.2.22', deadline);
+    harness.server.setOverride('POST /v0/app:invokeDialogAction', { status: 200, hang: true });
+
+    try {
+      const pending = harness.callTool({
+        session: undefined,
+        dialog: { ...defaultRequest.dialog, sessionId: 'native-session', revision: 8 },
+        action: { kind: 'choose-file', path: '/private/selected-source.tds' },
+      });
+      await vi.waitFor(() => expect(dialogPosts(harness.server)).toHaveLength(1));
+      const requestId = JSON.parse(dialogPosts(harness.server)[0].body ?? '{}').requestId;
+      const result = await pending;
+
+      expect(requestId).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`requestId=${requestId}`);
+      expect(result.content[0].text).toContain('outcome is indeterminate');
+      expect(result.content[0].text).not.toContain('/private/selected-source.tds');
+    } finally {
+      deadline.dispose();
+      await harness.close();
+    }
+  });
+
+  it('surfaces the generated request id after an indeterminate native response without replay or selection echo', async () => {
+    const harness = await startHarness('0.2.22');
+    harness.server.setOverride('POST /v0/app:invokeDialogAction', {
+      status: 200,
+      contentType: 'application/json',
+      body: '{}',
+    });
+
+    try {
+      const result = await harness.callTool({
+        session: undefined,
+        dialog: { ...defaultRequest.dialog, sessionId: 'native-session', revision: 7 },
+        action: { kind: 'choose-file', path: '/private/selected-source.tds' },
+      });
+      const posts = dialogPosts(harness.server);
+      expect(posts).toHaveLength(1);
+      const requestId = JSON.parse(posts[0].body ?? '{}').requestId;
+      expect(requestId).toMatch(/^[!-~]{1,128}$/);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`requestId=${requestId}`);
+      expect(result.content[0].text).toContain('recentActions');
+      expect(result.content[0].text).not.toContain('/private/selected-source.tds');
     } finally {
       await harness.close();
     }
@@ -359,20 +547,27 @@ function parseSuccess(result: CallToolResult): InvokeDialogActionResult {
   return JSON.parse(result.content[0].text) as InvokeDialogActionResult;
 }
 
-async function startHarness(): Promise<{
+async function startHarness(
+  apiVersion = '0.2.13',
+  deadline?: ReturnType<typeof createCallDeadline>,
+): Promise<{
   server: MockExternalApiServer;
   tool: ReturnType<typeof getInvokeDialogActionTool>;
-  extra: ReturnType<typeof getMockRequestHandlerExtra>;
+  extra: TableauDesktopRequestHandlerExtra;
   callTool: (args: InvokeDialogActionToolArgs) => Promise<CallToolResult>;
   close: () => Promise<void>;
 }> {
   const server = await startMockExternalApiServer();
-  const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+  const executor = new ExternalApiToolExecutor({
+    discover: () => [instanceFor(server, apiVersion)],
+  });
   await executor.start();
   const tool = getInvokeDialogActionTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  const extra = {
-    ...getMockRequestHandlerExtra(),
+  const baseExtra = getMockRequestHandlerExtra();
+  const extra: TableauDesktopRequestHandlerExtra = {
+    ...baseExtra,
+    ...(deadline === undefined ? {} : { signal: deadline.signal, deadline }),
     getExecutor: vi.fn().mockResolvedValue(executor),
   };
 
@@ -380,7 +575,7 @@ async function startHarness(): Promise<{
     server,
     tool,
     extra,
-    callTool: async (args) => await callback(args, extra),
+    callTool: async (args) => await callback({ ...args, requestId: args.requestId }, extra),
     close: async () => {
       executor.stop();
       await server.close();
@@ -388,16 +583,25 @@ async function startHarness(): Promise<{
   };
 }
 
-type InvokeDialogActionToolArgs = InvokeDialogActionRequest & {
+type InvokeDialogActionToolArgs = {
   session: string | undefined;
+  dialog: {
+    objectName: string;
+    title: string;
+    className: string;
+    sessionId?: string;
+    revision?: number;
+  };
+  requestId?: string;
+  action: DialogActionInvocation;
 };
 
-function instanceFor(server: MockExternalApiServer): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer, apiVersion = '0.2.13'): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',
     pid: 999,
     instanceId: 'inst-invoke-dialog-action',
-    apiVersion: '0.2.13',
+    apiVersion,
   };
 }

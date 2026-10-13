@@ -230,6 +230,10 @@ const DEFAULT_DIALOGS: DialogList['dialogs'] = [
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-save-changes',
+    revision: 1,
+    family: 'qt',
+    status: 'active',
     messageText: 'Do you want to save changes to Regional Sales?',
     informativeText: 'Unsaved changes will be lost if you discard them.',
     detailedText: 'Workbook: Regional Sales',
@@ -489,7 +493,7 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.appDialogs) {
-      sendJson(res, 200, { dialogs });
+      sendJson(res, 200, { dialogs, uiSnapshotAvailable: true, recentActions: [] });
       return;
     }
 
@@ -519,6 +523,7 @@ export async function startMockExternalApiServer(
       }
 
       const identity = isRecord(request) ? request.dialog : undefined;
+      const requestId = isRecord(request) ? request.requestId : undefined;
       const action = isRecord(request) ? request.action : undefined;
       if (
         !isRecord(identity) ||
@@ -530,10 +535,42 @@ export async function startMockExternalApiServer(
         sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
         return;
       }
+      const isNativeRequest = typeof requestId === 'string';
       const isButtonAction =
         action.kind === 'button' && typeof action.label === 'string' && action.label.length > 0;
       const isCloseAction = action.kind === 'close' && !Object.hasOwn(action, 'label');
-      if (!isButtonAction && !isCloseAction) {
+      const isCancelAction = action.kind === 'cancel';
+      const isNativeAction =
+        isCancelAction ||
+        isButtonAction ||
+        isCloseAction ||
+        (action.kind === 'choose-file' && typeof action.path === 'string') ||
+        (action.kind === 'choose-files' && Array.isArray(action.paths)) ||
+        (action.kind === 'choose-directory' && typeof action.path === 'string') ||
+        (action.kind === 'save-file' &&
+          typeof action.path === 'string' &&
+          typeof action.filterId === 'string' &&
+          typeof action.overwriteConfirmed === 'boolean') ||
+        (action.kind === 'choose-color' &&
+          Number.isInteger(action.red) &&
+          Number.isInteger(action.green) &&
+          Number.isInteger(action.blue)) ||
+        (action.kind === 'submit-print' &&
+          typeof action.printerId === 'string' &&
+          typeof action.range === 'string' &&
+          typeof action.sheetScope === 'string' &&
+          Number.isInteger(action.firstPage) &&
+          Number.isInteger(action.lastPage) &&
+          Number.isInteger(action.copies) &&
+          typeof action.collate === 'boolean' &&
+          typeof action.exportSelection === 'boolean');
+      if (
+        (isNativeRequest &&
+          (!isNativeAction ||
+            typeof identity.sessionId !== 'string' ||
+            !Number.isInteger(identity.revision))) ||
+        (!isNativeRequest && !isButtonAction && !isCloseAction)
+      ) {
         sendProblem(res, 400, 'invalid-request-body', 'Invalid invoke-dialog-action request body.');
         return;
       }
@@ -547,7 +584,9 @@ export async function startMockExternalApiServer(
         (dialog) =>
           dialog.objectName === identity.objectName &&
           dialog.title === identity.title &&
-          dialog.className === identity.className,
+          dialog.className === identity.className &&
+          (!isNativeRequest ||
+            (dialog.sessionId === identity.sessionId && dialog.revision === identity.revision)),
       );
       if (matches.length === 0) {
         sendProblem(res, 409, 'dialog-not-found', 'No active dialog matched the request.');
@@ -578,6 +617,27 @@ export async function startMockExternalApiServer(
       }
 
       dialogs.splice(dialogs.indexOf(matches[0]), 1);
+      if (isNativeRequest) {
+        sendJson(res, 200, {
+          outcome: 'completed',
+          dialog: {
+            objectName: identity.objectName,
+            title: identity.title,
+            className: identity.className,
+            sessionId: identity.sessionId,
+            revision: identity.revision,
+          },
+          status: {
+            sessionId: identity.sessionId,
+            revision: identity.revision,
+            requestId,
+            state: action.kind === 'cancel' ? 'canceled' : 'completed',
+            effect: action.kind === 'cancel' ? 'native-panel-closed' : 'dialog-dismissed',
+          },
+          dialogs,
+        });
+        return;
+      }
       sendJson(res, 200, {
         outcome: 'dismissed',
         dialog: {

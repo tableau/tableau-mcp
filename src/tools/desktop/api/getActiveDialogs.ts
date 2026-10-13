@@ -1,6 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { DialogList } from '../../../desktop/externalApi/types.js';
+import {
+  DIALOG_ACTION_INPUTS,
+  DialogList,
+  LegacyDialogList,
+} from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -21,7 +25,7 @@ export const getActiveDialogsTool = (
     minApiVersion: '0.2.13',
     title,
     description:
-      'List the current actionable Tableau Desktop dialogs, including their exact identity, visible message and diagnostic text, and invokable actions. Text buttons retain their exact labels; recognized unlabeled controls use semantic actions such as close. Returns an empty dialogs array when no dialog needs a decision.',
+      'List current dialog blockers and capabilities. Only active dialogs advertise actions. Copy the exact identity into invoke-dialog-action; send the chosen action kind and values required by its input.fields, honoring its constraints. recentActions reports bounded sanitized completion status. Older Qt-only builds return legacy button/close actions.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -30,11 +34,11 @@ export const getActiveDialogsTool = (
       openWorldHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {
-      return await tool.logAndExecute<DialogList>({
+      return await tool.logAndExecute<DialogList | LegacyDialogList>({
         extra,
         args: { session },
-        callback: async () =>
-          await runExternalApiTool({
+        callback: async () => {
+          const result = await runExternalApiTool({
             session,
             extra,
             callback: async (_executor, _signal, call) =>
@@ -43,10 +47,33 @@ export const getActiveDialogsTool = (
                 async (executor, signal) => await executor.getActiveDialogs(signal),
                 { stableNotFoundMeansRouteMissing: true },
               ),
-          }),
+          });
+          return result.map(withActionInputMetadata);
+        },
       });
     },
   });
 
   return tool;
 };
+
+function withActionInputMetadata(
+  result: DialogList | LegacyDialogList,
+): DialogList | LegacyDialogList {
+  if (!isNativeDialogList(result)) return result;
+
+  return {
+    ...result,
+    dialogs: result.dialogs.map((dialog) => ({
+      ...dialog,
+      actions: dialog.actions?.map((action) => ({
+        ...action,
+        input: DIALOG_ACTION_INPUTS[action.kind],
+      })),
+    })),
+  };
+}
+
+function isNativeDialogList(result: DialogList | LegacyDialogList): result is DialogList {
+  return 'uiSnapshotAvailable' in result && 'recentActions' in result;
+}

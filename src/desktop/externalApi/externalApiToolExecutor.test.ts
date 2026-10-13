@@ -1041,16 +1041,7 @@ describe('ExternalApiToolExecutor', () => {
 
   describe('dialog endpoints', () => {
     it('lists active dialogs with every optional field preserved under read telemetry', async () => {
-      const onRpc = vi.fn();
-      const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server)],
-        onRpc,
-      });
-      await executor.start();
-
-      const result = await executor.getActiveDialogs(signal);
-
-      expect(result.unwrap()).toEqual({
+      const expected = {
         dialogs: [
           {
             objectName: 'saveChangesDialog',
@@ -1068,7 +1059,22 @@ describe('ExternalApiToolExecutor', () => {
             ],
           },
         ],
+      };
+      server.setOverride('GET /v0/app/dialogs', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(expected),
       });
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        onRpc,
+      });
+      await executor.start();
+
+      const result = await executor.getActiveDialogs(signal);
+
+      expect(result.unwrap()).toEqual(expected);
       expect(server.requests.at(-1)?.path).toBe('/v0/app/dialogs');
       expect(onRpc).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1091,6 +1097,57 @@ describe('ExternalApiToolExecutor', () => {
       const result = await executor.getActiveDialogs(signal);
 
       expect(result.unwrap()).toEqual({ dialogs: [] });
+    });
+
+    it.each(['0.2.21', ''])(
+      'rejects a native identity on an older or unknown version without down-converting (%s)',
+      async (apiVersion) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+        });
+        await executor.start();
+
+        const result = await executor.invokeDialogAction(
+          {
+            dialog: {
+              ...invokeDialogActionRequest.dialog,
+              sessionId: 'native-session',
+              revision: 3,
+            },
+            requestId: 'native-request',
+            action: invokeDialogActionRequest.action,
+          },
+          signal,
+        );
+
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('dialog-session-stale');
+          expect(error.error?.message).toContain('do not down-convert or retry');
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it('retains the legacy tuple-only button fallback on a pre-native host', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.21')],
+      });
+      await executor.start();
+
+      const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
+
+      expect(result.isOk()).toBe(true);
+      const requests = server.requests.filter(
+        (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+      );
+      expect(requests).toHaveLength(1);
+      expect(requests[0].body).toBe(JSON.stringify(invokeDialogActionRequest));
     });
 
     it.each([
@@ -1170,6 +1227,37 @@ describe('ExternalApiToolExecutor', () => {
         expect(error.error?.recoverable).toBe(false);
         expect(error.error?.message).not.toContain('outcome is indeterminate');
       }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('does not replay a dialog action after an unauthorized response', async () => {
+      let discoveries = 0;
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [
+          instanceFor(server, discoveries++ === 0 ? 'stale-token' : 'valid-token', '0.2.22'),
+        ],
+      });
+      await executor.start();
+
+      const result = await executor.invokeDialogAction(
+        {
+          dialog: {
+            ...invokeDialogActionRequest.dialog,
+            sessionId: 'dialog-session-save-changes',
+            revision: 1,
+          },
+          requestId: 'native-request',
+          action: invokeDialogActionRequest.action,
+        },
+        signal,
+      );
+
+      expect(result.unwrapErr().type).toBe('unknown');
+      expect(discoveries).toBe(1);
       expect(
         server.requests.filter(
           (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',

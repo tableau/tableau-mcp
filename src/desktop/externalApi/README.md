@@ -22,9 +22,39 @@ per-instance `<pid>.json` files.
 2. `externalApiToolExecutor.ts` — add one endpoint method: route + schema through an
    `ExternalApiHttp` primitive (`getJson`, `getXml`, `postXmlEnvelope`, …).
 3. `mockExternalApiServer.ts` — add the route's handler branch.
-4. `externalApiContract.test.ts` — the captured `__fixtures__/externalClientApi-openapi.json`
-   must contain the route; recapture from a live build if it is new to the spec.
+4. `externalApiContract.test.ts` — keep the compatibility fixture for the historical route
+   surface and add a separate exact compiled capture when a newer producer contract is intentionally
+   narrower. Recapture the relevant fixture from the producer before release.
 
 To expose it as an MCP tool, add a tool file under `src/tools/desktop/` and register it
 in `toolName.ts` + `tools.ts` (and the default profile allowlist in `server.desktop.ts`
 if it should ship in the default surface).
+
+## OpenAPI fixture scopes
+
+`__fixtures__/externalClientApi-openapi.json` is the 0.2.15 compatibility snapshot. It retains the
+broader historical route inventory, including its Qt-only dialog shape, so compatibility tests can
+continue to detect regressions for older Desktop instances.
+
+`__fixtures__/nativeDialogs-openapi.json` is the exact compiled 0.2.22 producer capture for the
+current dialogs contract. It is authoritative for session/revision identity, capability descriptors,
+closed invocation variants, safe request status, and the existing dialog endpoints. It does not
+replace the compatibility snapshot: the current producer capture intentionally does not carry every
+historical route and component. The contract suite tests each fixture only for its stated scope.
+
+## Dialog capability compatibility
+
+`GET /v0/app/dialogs` and `POST /v0/app:invokeDialogAction` have a Qt-only legacy shape
+through API 0.2.21. API 0.2.22 adds native file, print, and color capabilities, a stable
+`sessionId`/`revision` identity, caller-generated `requestId`, and bounded sanitized request
+status. The POST always returns a direct 200 response; a pending native effect is reported in its
+typed status and checked only by a later dialogs read. Keep both paths behind the executor's
+version decision: never down-convert a native selection into a Qt click, never replay an
+invocation, and never log or echo a selected path, printer destination, or color value.
+
+The MCP dialogs tool adds invocation syntax as each capability's `input.fields`. This
+metadata comes from the consumer's closed action contract; it describes names, types, and
+required inputs, while the producer's capability supplies the current constraints. It is
+not a selected value or an additional field in the producer OpenAPI response. Both transport
+and tool deadline errors retain generated request IDs for status correlation without replay.
+Session identities are never discarded to invoke a legacy tuple-only action.

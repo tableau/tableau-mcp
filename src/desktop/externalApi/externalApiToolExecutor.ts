@@ -24,6 +24,7 @@ import {
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
 import {
+  AnyInvokeDialogActionResult,
   ApiRoot,
   apiRootSchema,
   AppInfo,
@@ -55,8 +56,11 @@ import {
   ImageResult,
   imageResultSchema,
   InvokeDialogActionRequest,
-  InvokeDialogActionResult,
   invokeDialogActionResultSchema,
+  LegacyDialogList,
+  legacyDialogListSchema,
+  LegacyInvokeDialogActionRequest,
+  legacyInvokeDialogActionResultSchema,
   LogicalTableList,
   logicalTableListSchema,
   OperationEnvelope,
@@ -325,9 +329,15 @@ export class ExternalApiToolExecutor {
     );
   }
 
-  async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
+  async getActiveDialogs(
+    signal: AbortSignal,
+  ): Promise<Result<DialogList | LegacyDialogList, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal),
+      http.getJson(
+        EXTERNAL_API_ROUTES.appDialogs,
+        apiVersionAtLeast(http.apiVersion, '0.2.22') ? dialogListSchema : legacyDialogListSchema,
+        signal,
+      ),
     );
   }
 
@@ -338,16 +348,60 @@ export class ExternalApiToolExecutor {
   }
 
   async invokeDialogAction(
-    request: InvokeDialogActionRequest,
+    request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
     signal: AbortSignal,
-  ): Promise<Result<InvokeDialogActionResult, ExecuteCommandError>> {
-    const result = await this.withRescan('command', (http) =>
-      http.postJsonForDirectBody(
-        EXTERNAL_API_ROUTES.appInvokeDialogAction,
-        request,
-        invokeDialogActionResultSchema,
-        signal,
-      ),
+  ): Promise<Result<AnyInvokeDialogActionResult, ExecuteCommandError>> {
+    const result = await this.withRescan(
+      'command',
+      (http) => {
+        const supportsNativeContract = apiVersionAtLeast(http.apiVersion, '0.2.22');
+        if (supportsNativeContract && !isNativeDialogActionRequest(request)) {
+          return Promise.resolve(
+            Err({
+              type: 'problem' as const,
+              status: 400,
+              code: 'invalid-request-body',
+              detail:
+                'This Tableau Desktop version requires dialog.sessionId, dialog.revision, and requestId from a fresh get-active-dialogs result.',
+            }),
+          );
+        }
+        if (!supportsNativeContract && isNativeDialogActionRequest(request)) {
+          return Promise.resolve(
+            Err({
+              type: 'problem' as const,
+              status: 409,
+              code: 'dialog-session-stale',
+              detail:
+                'This Tableau Desktop version cannot safely apply a native dialog identity. Refresh dialogs against this Desktop instance; do not down-convert or retry the action.',
+            }),
+          );
+        }
+        if (
+          !supportsNativeContract &&
+          request.action.kind !== 'button' &&
+          request.action.kind !== 'close'
+        ) {
+          return Promise.resolve(
+            Err({
+              type: 'problem' as const,
+              status: 409,
+              code: 'dialog-action-not-found',
+              detail:
+                'This Tableau Desktop version supports only Qt button or close dialog actions. Update Desktop before acting on a native dialog.',
+            }),
+          );
+        }
+        return http.postJsonForDirectBody(
+          EXTERNAL_API_ROUTES.appInvokeDialogAction,
+          supportsNativeContract ? request : toLegacyDialogActionRequest(request),
+          supportsNativeContract
+            ? invokeDialogActionResultSchema
+            : legacyInvokeDialogActionResultSchema,
+          signal,
+        );
+      },
+      !isNativeDialogActionRequest(request),
     );
     if (result.isErr()) {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
@@ -962,6 +1016,7 @@ export class ExternalApiToolExecutor {
   private async withRescan<T>(
     operation: DesktopRpcTelemetryEvent['operation'],
     op: (http: ExternalApiHttp) => Promise<Result<T, ExternalApiError | InstanceMismatch>>,
+    retryOnUnauthorized = true,
   ): Promise<Result<T, ExternalApiError | NoInstance | InstanceMismatch>> {
     const startedAt = performance.now();
     let rescanCount = 0;
@@ -974,7 +1029,7 @@ export class ExternalApiToolExecutor {
       }
 
       let result = await op(first.value);
-      if (result.isErr() && result.error.type === 'unauthorized') {
+      if (retryOnUnauthorized && result.isErr() && result.error.type === 'unauthorized') {
         rescanCount = 1;
         log({
           message: 'External Client API returned 401 — rescanning discovery once',
@@ -1016,6 +1071,32 @@ export class ExternalApiToolExecutor {
     }
     return Ok(result.value);
   }
+}
+
+/**
+ * Desktop 0.2.13–0.2.21 only accepts Qt button/close actions and has no stable
+ * session identity. Never down-convert a native action or identity: it would be a guess.
+ */
+function toLegacyDialogActionRequest(
+  request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
+): LegacyInvokeDialogActionRequest {
+  const action = request.action;
+  // invokeDialogAction rejects other kinds before calling this helper.
+  if (action.kind !== 'button' && action.kind !== 'close') throw new Error('unreachable');
+  return {
+    dialog: {
+      objectName: request.dialog.objectName,
+      title: request.dialog.title,
+      className: request.dialog.className,
+    },
+    action: action.kind === 'button' ? { kind: 'button', label: action.label } : { kind: 'close' },
+  };
+}
+
+function isNativeDialogActionRequest(
+  request: InvokeDialogActionRequest | LegacyInvokeDialogActionRequest,
+): request is InvokeDialogActionRequest & { requestId: string } {
+  return 'requestId' in request && 'sessionId' in request.dialog && 'revision' in request.dialog;
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
