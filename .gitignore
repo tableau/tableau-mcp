@@ -11,7 +11,7 @@ test-logs/
 config.json
 env.list
 *.env.list
-manifest.json
+/manifest.json
 sea-prep.blob
 tableau-mcp
 tableau-mcp.dxt

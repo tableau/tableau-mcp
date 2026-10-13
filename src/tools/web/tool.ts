@@ -1,8 +1,15 @@
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { McpToolError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import { recordToolCall } from '../../activityLog/init.js';
+import { getActivityLogObject } from '../../activityLog/objects.js';
+import {
+  ArgsValidationError,
+  McpToolError,
+  ZodiosValidationError,
+} from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
+import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
@@ -240,6 +247,27 @@ export class WebTool<
       };
       return toolResult;
     } catch (error) {
+      // A route-safety rejection (a `pathParam` schema, `assertLuid` / `buildRestPath` in a raw
+      // call, the Zodios path-param plugin or the axios URL interceptor) means an unsafe ID reached
+      // the SDK layer: surface it to the client as an args-validation error, not an unknown 500,
+      // and log it at warning level as a security signal. Every one of those throws
+      // `RouteSafetyError`, whose message names the parameter but never echoes the payload.
+      if (error instanceof RouteSafetyError) {
+        const argsError = new ArgsValidationError(error.message);
+        errorCode = getHttpStatus(argsError);
+        log(
+          {
+            message: `Tool ${this.name} rejected an unsafe REST route: ${error.message}`,
+            level: 'warning',
+            logger: 'tool',
+            tool_name: this.name,
+            request_id: requestId.toString(),
+          },
+          extra,
+        );
+        toolResult = { isError: true, content: [{ type: 'text', text: argsError.getErrorText() }] };
+        return toolResult;
+      }
       if (error instanceof Error) {
         errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
       }
@@ -273,6 +301,8 @@ export class WebTool<
         : getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      const sanitizedClientId = sanitizeClientIdForTelemetry(oauthClientId);
+      const clientName = getClientDisplayName(oauthClientId);
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
@@ -287,10 +317,23 @@ export class WebTool<
         // passthrough returns isError: false with the full API payload, so keying off isError
         // (not !success) keeps successful response data out of telemetry.
         error_message: toolResult?.isError ? extractToolErrorMessage(toolResult) : '',
-        oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
-        oauth_client_display_name:
-          getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        oauth_client_id: sanitizedClientId,
+        oauth_client_display_name: clientName ?? sanitizedClientId,
         auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
+      });
+      // Read after the callback because sign-in inside it sets the LUIDs. The ZodiosValidationError
+      // passthrough isn't a success for telemetry, but the client did get its data.
+      recordToolCall({
+        toolName: this.name,
+        siteLuid: extra.getSiteLuid(),
+        userLuid: extra.getUserLuid(),
+        success: success || toolResult?.isError === false,
+        errorCode,
+        oauthClientId: sanitizedClientId,
+        clientName,
+        userAgent: extra.requestInfo?.headers?.['user-agent'],
+        mcpRequestId: requestId.toString(),
+        object: getActivityLogObject(this.name, args),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();

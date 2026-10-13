@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { projectsApis } from '../apis/projectsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
@@ -16,7 +15,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class ProjectsMethods extends AuthenticatedMethods<typeof projectsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, projectsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, projectsApis, { axiosConfig }), creds);
   }
 
   /**

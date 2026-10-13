@@ -26,7 +26,8 @@ vi.mock('../../features/init.js', () => ({
 const mockGetConfig = vi.mocked(configModule.getConfig);
 
 // Authoring scopes are advertised (in addition to the authoring-tools flag) for every client except
-// Slack. Undefined client_id (stdio) and unknown/non-Slack clients are allowed.
+// Slack, which additionally requires authoring-with-slack. Undefined client_id (stdio) and
+// unknown/non-Slack clients are allowed.
 const chatGptClientId = 'https://chatgpt.com/connector';
 const claudeClientId = 'https://claude.ai/mcp';
 const slackClientId = 'https://mcp.slack.com/connector';
@@ -39,7 +40,10 @@ describe('scopes', () => {
   });
 
   describe('getSupportedMcpScopes', () => {
-    it('should include tableau:mcp:tasks:read when adminToolsEnabled is true', async () => {
+    it('should include tableau:mcp:tasks:read when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -57,7 +61,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:tasks:read');
     });
 
-    it('should include tableau:mcp:tasks:write when adminToolsEnabled is true', async () => {
+    it('should include tableau:mcp:tasks:write when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -75,7 +82,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:tasks:write');
     });
 
-    it('should include tableau:mcp:jobs:read when adminToolsEnabled is true', async () => {
+    it('should include tableau:mcp:jobs:read when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -93,7 +103,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
     });
 
-    it('should include tableau:mcp:users:write when adminToolsEnabled is true', async () => {
+    it('should include tableau:mcp:users:write when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -120,13 +133,45 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:content:delete');
     });
 
-    it('should include tableau:mcp:content:delete when adminToolsEnabled is true', async () => {
+    it('should include tableau:mcp:content:delete when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedMcpScopes();
       expect(scopes).toContain('tableau:mcp:content:delete');
+    });
+
+    it('should exclude admin MCP scopes when adminToolsEnabled is false even if admin-tools is on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:tasks:read');
+      expect(scopes).not.toContain('tableau:mcp:tasks:write');
+      expect(scopes).not.toContain('tableau:mcp:jobs:read');
+      expect(scopes).not.toContain('tableau:mcp:users:write');
+      expect(scopes).not.toContain('tableau:mcp:content:delete');
+    });
+
+    it('should exclude admin MCP scopes when adminToolsEnabled is true but admin-tools is off', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:tasks:read');
+      expect(scopes).not.toContain('tableau:mcp:tasks:write');
+      expect(scopes).not.toContain('tableau:mcp:jobs:read');
+      expect(scopes).not.toContain('tableau:mcp:users:write');
+      expect(scopes).not.toContain('tableau:mcp:content:delete');
     });
 
     it('should include tableau:mcp:flow:read when flowToolsEnabled and flow-tools are both on', async () => {
@@ -228,6 +273,18 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:workbook:create');
     });
 
+    it('should include tableau:mcp:workbook:create for Slack when authoring-tools and authoring-with-slack are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools' || featureName === 'authoring-with-slack';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes(slackClientId);
+      expect(scopes).toContain('tableau:mcp:workbook:create');
+    });
+
     it('should exclude tableau:mcp:workbook:create for a ChatGPT client when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -307,12 +364,20 @@ describe('scopes', () => {
       { enabled: true, authoring: true, clientId: undefined, expected: true },
       { enabled: true, authoring: false, clientId: claudeClientId, expected: false },
       { enabled: true, authoring: true, clientId: slackClientId, expected: false },
+      {
+        enabled: true,
+        authoring: true,
+        clientId: slackClientId,
+        authoringWithSlack: true,
+        expected: true,
+      },
     ])(
-      'advertises permissions scope only for enabled publishing: $enabled, $authoring, $clientId',
-      async ({ enabled, authoring, clientId, expected }) => {
+      'advertises permissions scope only for enabled publishing: $enabled, $authoring, $clientId, $authoringWithSlack',
+      async ({ enabled, authoring, clientId, authoringWithSlack, expected }) => {
         mockGetConfig.mockReturnValue({} as ReturnType<typeof configModule.getConfig>);
         mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
           if (flag === 'data-apps') return enabled;
+          if (flag === 'authoring-with-slack') return authoringWithSlack ?? false;
           return flag === 'authoring-tools' && authoring;
         });
 
@@ -359,13 +424,32 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:knowledge:write');
     });
 
-    it('should include tableau:tasks:read when adminToolsEnabled is true', async () => {
+    it('should include tableau:tasks:read when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:tasks:read');
+    });
+
+    it('should exclude admin API scopes when adminToolsEnabled is false even if admin-tools is on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:tasks:read');
+      expect(scopes).not.toContain('tableau:tasks:write');
+      expect(scopes).not.toContain('tableau:jobs:read');
+      expect(scopes).not.toContain('tableau:users:read');
+      expect(scopes).not.toContain('tableau:users:update');
     });
 
     it('should exclude tableau:tasks:read when adminToolsEnabled is false', async () => {
@@ -377,7 +461,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:tasks:read');
     });
 
-    it('should include tableau:tasks:write when adminToolsEnabled is true', async () => {
+    it('should include tableau:tasks:write when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -395,7 +482,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:tasks:write');
     });
 
-    it('should include tableau:jobs:read when adminToolsEnabled is true', async () => {
+    it('should include tableau:jobs:read when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -413,7 +503,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:jobs:read');
     });
 
-    it('should include tableau:users:read when adminToolsEnabled is true', async () => {
+    it('should include tableau:users:read when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -551,6 +644,18 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:workbooks:create');
     });
 
+    it('should include tableau:workbooks:create for Slack when authoring-tools and authoring-with-slack are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools' || featureName === 'authoring-with-slack';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes(slackClientId);
+      expect(scopes).toContain('tableau:workbooks:create');
+    });
+
     it('should exclude tableau:workbooks:create for a ChatGPT client when authoring-tools is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -594,9 +699,10 @@ describe('scopes', () => {
       ]);
     });
 
-    it('should require workbooks update plus resource access scopes for move-workbook', () => {
+    it('should require workbooks update, projects read, and resource access scopes for move-workbook', () => {
       expect(getRequiredApiScopesForTool('move-workbook')).toEqual([
         'tableau:workbooks:update',
+        'tableau:projects:read',
         'tableau:content:read',
         'tableau:mcp_site_settings:read',
       ]);
@@ -610,7 +716,10 @@ describe('scopes', () => {
       ]);
     });
 
-    it('should include tableau:users:update when adminToolsEnabled is true', async () => {
+    it('should include tableau:users:update when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -811,10 +920,31 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:users:write');
       expect(scopes).not.toContain('tableau:users:update');
     });
+    // No clientId: the path /.well-known/oauth-protected-resource uses for scopes_supported.
+    it('should not advertise admin scopes when adminToolsEnabled is false even if admin-tools is on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedScopes({ includeApiScopes: true });
+      expect(scopes).not.toContain('tableau:mcp:tasks:read');
+      expect(scopes).not.toContain('tableau:mcp:tasks:write');
+      expect(scopes).not.toContain('tableau:mcp:jobs:read');
+      expect(scopes).not.toContain('tableau:mcp:users:write');
+      expect(scopes).not.toContain('tableau:mcp:content:delete');
+      expect(scopes).not.toContain('tableau:tasks:read');
+      expect(scopes).not.toContain('tableau:users:update');
+    });
   });
 
   describe('isValidScope', () => {
-    it('should return true for valid MCP scopes when adminToolsEnabled is true', async () => {
+    it('should return true for valid MCP scopes when adminToolsEnabled and admin-tools are both on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
       } as any);
@@ -823,6 +953,18 @@ describe('scopes', () => {
       await expect(isValidScope('tableau:mcp:tasks:write')).resolves.toBe(true);
       await expect(isValidScope('tableau:mcp:jobs:read')).resolves.toBe(true);
       await expect(isValidScope('tableau:mcp:datasource:read')).resolves.toBe(true);
+    });
+
+    it('should return false for admin MCP scopes when adminToolsEnabled is false even if admin-tools is on', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'admin-tools',
+      );
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:tasks:read')).resolves.toBe(false);
+      await expect(isValidScope('tableau:mcp:content:delete')).resolves.toBe(false);
     });
 
     it('should return false for tableau:mcp:tasks:read when adminToolsEnabled is false', async () => {
@@ -899,6 +1041,17 @@ describe('scopes', () => {
       } as any);
 
       await expect(isValidScope('tableau:mcp:workbook:create', slackClientId)).resolves.toBe(false);
+    });
+
+    it('should return true for tableau:mcp:workbook:create for Slack when authoring-tools and authoring-with-slack are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+        return featureName === 'authoring-tools' || featureName === 'authoring-with-slack';
+      });
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      await expect(isValidScope('tableau:mcp:workbook:create', slackClientId)).resolves.toBe(true);
     });
 
     it('should return false for tableau:mcp:workbook:write when data-apps is disabled', async () => {

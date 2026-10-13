@@ -3,11 +3,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import {
@@ -29,12 +31,12 @@ export const getListExtractRefreshTasksTool = (
   const listExtractRefreshTasksTool = new WebTool({
     server,
     name: 'list-extract-refresh-tasks',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description: `
   Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a **data source** or **workbook** extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 
-  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag to be enabled.
+  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` environment variable to be enabled.
 
   Use this tool when you need to:
   - See which data sources or workbooks have extract refresh schedules

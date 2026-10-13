@@ -1,6 +1,6 @@
 import {
-  getDatasourceTagsByLuid,
-  getDatasourceTagsQuery,
+  getDatasourceNamesAndTagsByLuid,
+  getDatasourceNamesAndTagsQuery,
   getSearchContentLineageQuery,
   getViewLineageByLuid,
   getViewLineageQuery,
@@ -711,39 +711,44 @@ describe('lineageUtils', () => {
     });
   });
 
-  describe('getDatasourceTagsQuery', () => {
+  describe('getDatasourceNamesAndTagsQuery', () => {
     it('filters published data sources by the given LUIDs', () => {
-      const query = getDatasourceTagsQuery(['ds-1', 'ds-2']);
+      const query = getDatasourceNamesAndTagsQuery(['ds-1', 'ds-2']);
       expect(query).toContain(
         'publishedDatasourcesConnection(filter: { luidWithin: ["ds-1", "ds-2"] })',
       );
+      expect(query).toContain('name');
       expect(query).toContain('tags');
     });
   });
 
-  describe('getDatasourceTagsByLuid', () => {
-    it('maps each data source LUID to its tag names', () => {
-      const tags = getDatasourceTagsByLuid({
+  describe('getDatasourceNamesAndTagsByLuid', () => {
+    it('maps each data source LUID to its name and tag names', () => {
+      const datasources = getDatasourceNamesAndTagsByLuid({
         data: {
           publishedDatasourcesConnection: {
             nodes: [
-              { luid: 'ds-1', tags: [{ name: 'MCP Enabled' }, { name: 'certified' }] },
-              { luid: 'ds-2', tags: null },
+              {
+                luid: 'ds-1',
+                name: 'Superstore',
+                tags: [{ name: 'MCP Enabled' }, { name: 'certified' }],
+              },
+              { luid: 'ds-2', name: 'Finance', tags: null },
             ],
           },
         },
       });
 
-      expect(tags).toEqual(
+      expect(datasources).toEqual(
         new Map([
-          ['ds-1', ['MCP Enabled', 'certified']],
-          ['ds-2', []],
+          ['ds-1', { name: 'Superstore', tags: ['MCP Enabled', 'certified'] }],
+          ['ds-2', { name: 'Finance', tags: [] }],
         ]),
       );
     });
 
     it('throws when the response does not have the expected shape', () => {
-      expect(() => getDatasourceTagsByLuid({ data: {} })).toThrow();
+      expect(() => getDatasourceNamesAndTagsByLuid({ data: {} })).toThrow();
     });
   });
 });

@@ -6,8 +6,9 @@
  */
 
 import { getConfig } from '../../config.js';
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
+import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { getFeatureGate } from '../../features/init.js';
-import { isSlackClient } from '../../telemetry/clientDisplayName.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
@@ -63,11 +64,13 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
@@ -364,7 +367,11 @@ const toolScopeMap: Record<
   },
   'move-workbook': {
     mcp: ['tableau:mcp:workbook:write'],
-    api: new Set(['tableau:workbooks:update', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:workbooks:update',
+      'tableau:projects:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -485,16 +492,24 @@ const toolScopeMap: Record<
   // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
   // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
   // route through resourceAccessChecker.
+  // Workbook/datasource paths also query Admin Insights Site Content (VDS) for the staleness
+  // precondition (W-24311035). `action: "remove-pending-tags"` additionally needs the tag-delete
+  // scopes (W-24199845).
   'delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
+      'tableau:workbook_tags:delete',
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:datasource_tags:delete',
       'tableau:tasks:read',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -508,6 +523,9 @@ const toolScopeMap: Record<
       'tableau:datasource_tags:update',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -525,19 +543,18 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
-  const slackClient = isSlackClient(clientId);
-  // Authoring tools require the `authoring-tools` flag and are hidden only from Slack clients.
-  // Undefined `client_id` (stdio and generic discovery metadata) and unknown/non-Slack clients are
-  // allowed, mirroring the per-client `disabled` provider on the authoring tool registrations.
+  // Mirrors the per-client `disabled` provider on the authoring tool registrations.
   const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) && !slackClient;
+    (await featureGate.isFeatureEnabled('authoring-tools')) &&
+    (await isAuthoringAllowedForClient(clientId));
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
+  const adminToolsEnabled = await isAdminToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
-  if (!config.adminToolsEnabled) {
+  if (!adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');

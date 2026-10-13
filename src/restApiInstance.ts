@@ -14,6 +14,7 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/interceptors.js';
+import { RouteSafetyError } from './sdks/routeSafety/core.js';
 import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
@@ -40,12 +41,14 @@ type JwtScopes =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:workbooks:update'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
@@ -244,6 +247,10 @@ export const getRequestErrorInterceptor =
     ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
   ): ErrorInterceptor =>
   (error, baseUrl) => {
+    if (error instanceof RouteSafetyError) {
+      logRouteSafetyRejection(requestId, error, ctx);
+      return;
+    }
     if (!isAxiosError(error) || !error.request) {
       log(
         {
@@ -290,6 +297,12 @@ export const getResponseErrorInterceptor =
     ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
   ): ErrorInterceptor =>
   (error, baseUrl) => {
+    // The route-safety interceptor runs after RestApi's request interceptors, so its rejection
+    // lands here (axios hands a request-interceptor failure to the response error handlers).
+    if (error instanceof RouteSafetyError) {
+      logRouteSafetyRejection(requestId, error, ctx);
+      return;
+    }
     if (!isAxiosError(error) || !error.response) {
       log(
         {
@@ -319,6 +332,26 @@ export const getResponseErrorInterceptor =
       requestId,
     );
   };
+
+/**
+ * A route-safety rejection is an expected, client-caused outcome (an unsafe ID was refused before
+ * any request was sent), not a REST failure: log it at warning level, without the error object (it
+ * carries the request config) and without an error notification to the MCP client.
+ */
+function logRouteSafetyRejection(
+  requestId: RequestId,
+  error: RouteSafetyError,
+  ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+): void {
+  log(
+    {
+      message: `Request ${requestId} rejected by the REST route-safety guard: ${error.message}`,
+      level: 'warning',
+      logger: 'rest-api',
+    },
+    ctx,
+  );
+}
 
 function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();

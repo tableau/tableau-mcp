@@ -9,5 +9,8 @@
   "view-data-file-mode": false,
   "workbook-file-mode": true,
   "data-apps": false,
-  "skills-over-mcp": false
+  "skills-over-mcp": false,
+  "authoring-with-slack": false,
+  "activity-log": false,
+  "admin-tools": false
 }

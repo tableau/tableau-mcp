@@ -684,6 +684,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  PENDING_DELETION_MAX_AGE_DAYS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Pending deletion max batch age (days)',
+    description:
+      'Oldest cleanup batch (days) a delete-content confirm still accepts for a workbook or data source; older pending-deletion markers can no longer authorize a delete. Defaults to 30; range 1-90.',
+    required: false,
+    sensitive: false,
+  },
   STALE_CONTENT_MAX_ROWS: {
     includeInUserConfig: false,
     type: 'string',
