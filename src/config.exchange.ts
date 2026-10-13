@@ -72,7 +72,7 @@ export class ExchangeConfig extends BaseConfig {
       source,
       catalogTtlMs: integer('CATALOG_CACHE_TTL_SECONDS', 300, 1, 3_600) * 1_000,
       timeoutMs: integer('GALLERY_API_TIMEOUT_MS', 5_000, 1, 60_000),
-      pageSize: integer('PRODUCT_PAGE_SIZE', 100, 2, 1_000),
+      pageSize: integer('PRODUCT_PAGE_SIZE', 1_000, 2, 1_000),
       maxSearchResults: integer('MAX_SEARCH_RESULTS', 10, 1, 10),
       maxPagesPerType: integer('MAX_CATALOG_PAGES_PER_TYPE', 100, 1, 100),
       maxCatalogAssets: integer('MAX_CATALOG_ASSETS', 10_000, 1, 10_000),

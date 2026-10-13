@@ -46,6 +46,11 @@ export class CatalogCache {
       this.now() - this.lastAttemptAt < Math.min(this.options.catalogTtlMs, 5_000)
     )
       return this.snapshot();
+    return await this.reload();
+  }
+
+  /** Refreshes regardless of freshness, sharing any refresh already in flight. */
+  async reload(): Promise<CatalogSnapshot> {
     if (!this.refreshPromise) {
       this.refreshPromise = this.refresh().finally(() => {
         this.refreshPromise = undefined;

@@ -132,16 +132,31 @@ cardinality, bounded pages/assets and duplicate/no-progress guards. Catalog memb
 reads.
 
 Normalization, hard filters, stable weighted text scores, factual match reasons and caching reside
-in MCP. Results sort by score, downloads, normalized name and numeric ID. The process-memory catalog
-cache defaults to 300 seconds with one shared refresh at a time. Detail reads use a bounded cache.
-Failed refreshes may retain prior data with explicit stale/partial metadata; no persistent cache or
-timer is required.
+in MCP. Results sort by score, downloads, normalized name and numeric ID.
+
+Scoring keeps the design weights (exact name 120, name phrase 80, tag phrase 60, description phrase
+45, per-token name 20 / tag 15 / description 8, all tokens matched 15) with three adjustments:
+
+- Per-token points are scaled by a BM25-style IDF over the loaded catalog, normalized so a word on a
+  single listing weighs 1. Words on many listings, such as `data`, `salesforce` or `chart`, score
+  less, and their reasons are marked `(common term)`.
+- Publisher names score 5 per token only when the whole query is a phrase in the publisher name, so
+  first-party listings are not boosted by an incidental `tableau` or `salesforce`.
+- Word matching folds simple English plurals (`maps` matches `map`, `categories` matches
+  `category`).
+
+A result needs at least one name, tag or description match, or a publisher phrase match.
+
+The process-memory catalog loads when the server starts and refreshes in the background every
+`CATALOG_CACHE_TTL_SECONDS` (default 300), with one shared refresh at a time. Detail reads use a
+bounded cache. Failed refreshes may retain prior data with explicit stale/partial metadata; no
+persistent cache is required.
 
 | Setting                      | Default | Allowed range |
 | ---------------------------- | ------- | ------------- |
 | `CATALOG_CACHE_TTL_SECONDS`  | 300     | 1–3,600       |
 | `GALLERY_API_TIMEOUT_MS`     | 5,000   | 1–60,000      |
-| `PRODUCT_PAGE_SIZE`          | 100     | 2–1,000       |
+| `PRODUCT_PAGE_SIZE`          | 1,000   | 2–1,000       |
 | `MAX_SEARCH_RESULTS`         | 10      | 1–10          |
 | `MAX_CATALOG_PAGES_PER_TYPE` | 100     | 1–100         |
 | `MAX_CATALOG_ASSETS`         | 10,000  | 1–10,000      |
