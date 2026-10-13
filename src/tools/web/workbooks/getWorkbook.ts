@@ -16,6 +16,7 @@ import {
   mergeWorkbookLineage,
   Owner,
   PublishedParent,
+  stripOutOfBoundsPublishedParents,
   toEmbeddedLineageContents,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
@@ -151,14 +152,25 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
               // Pure transforms below, but wrapped so a throw degrades to the unenriched workbook
               // rather than failing the whole call (matching the enrichment fetches above).
               try {
-                const allowedIds = configWithOverrides.boundedContext.datasourceIds;
+                const {
+                  datasourceIds: allowedIds,
+                  workbookIds,
+                  projectIds,
+                  tags,
+                } = configWithOverrides.boundedContext;
                 const embedded = toEmbeddedLineageContents(connections, embeddedParents);
+                // Matches resourceAccessChecker: when a scope restricts workbooks, embedded
+                // datasources are admitted via their (already allowed) workbook, so
+                // INCLUDE_DATASOURCE_IDS only filters the published ones.
+                const isEmbeddedAdmittedViaWorkbook = !!(workbookIds || projectIds || tags);
                 // Filter each list against the bounded context BEFORE de-duping: a standalone
                 // published entry is dropped only when a *surviving* embedded stub still carries it
                 // as publishedParent, so an out-of-bounds stub can't suppress its in-bounds parent.
                 const merged = mergeWorkbookDatasources(
                   filterLineageContentsByAllowedIds(published, allowedIds),
-                  filterLineageContentsByAllowedIds(embedded, allowedIds),
+                  isEmbeddedAdmittedViaWorkbook
+                    ? stripOutOfBoundsPublishedParents(embedded, allowedIds)
+                    : filterLineageContentsByAllowedIds(embedded, allowedIds),
                 );
                 const mergedWorkbook = mergeWorkbookLineage(
                   [workbook],

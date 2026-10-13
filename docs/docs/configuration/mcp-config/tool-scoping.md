@@ -73,6 +73,8 @@ be included in the results of the tools. This variable is site and request overr
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
   scoping is disabled).
 - Has no impact on tools that return information about workbooks or views.
+- Embedded (workbook) data sources are not matched against this list. See
+  [Embedded data sources](#embedded-data-sources).
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
@@ -155,3 +157,18 @@ available on Tableau Enterprise and Tableau Plus and if
 [`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is not set. Therefore,
 if you are using project or tag based tool scoping, we recommend that your users have view access on
 the projects where they have view access to the content in those projects.
+
+## Embedded data sources
+
+Embedded (workbook) data sources have no tags or stable ID of their own, so when tool scoping is
+enabled they are scoped by the workbook they belong to. To query an embedded data source or get its
+metadata, a client must also pass the ID of that workbook as `workbookLuid`. The server confirms the
+data source belongs to the workbook, then applies the workbook's scoping:
+
+- [`INCLUDE_WORKBOOK_IDS`](#include_workbook_ids): the workbook must be in the list.
+- [`INCLUDE_PROJECT_IDS`](#include_project_ids): the workbook must be in an allowed project.
+- [`INCLUDE_TAGS`](#include_tags): the workbook must have an allowed tag.
+
+If none of these are set but [`INCLUDE_DATASOURCE_IDS`](#include_datasource_ids) is, embedded data
+sources cannot be queried. Without `workbookLuid`, an embedded data source cannot be queried when
+`INCLUDE_PROJECT_IDS` or `INCLUDE_TAGS` is set.

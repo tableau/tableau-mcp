@@ -47,6 +47,11 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
   query: querySchema,
   limit: z.number().int().min(1).optional(),
 };
@@ -85,11 +90,14 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, query, limit },
+      extra,
+    ): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, query },
+        args: { datasourceLuid, workbookLuid, query },
         callback: async () => {
           try {
             validateQuery({ datasourceLuid, query, rules });
@@ -99,6 +107,7 @@ export const getQueryDatasourceTool = (
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
             extra,
           });
 

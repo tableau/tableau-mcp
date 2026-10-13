@@ -11,6 +11,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { GraphQLResponse } from '../../../sdks/tableau/apis/metadataApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { isEmbeddedDatasource } from '../../../sdks/tableau/types/dataSource.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -93,6 +94,11 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
 };
 
 export type GetDatasourceMetadataError =
@@ -115,6 +121,7 @@ const getDatasourceMetadataToolDescription20263 = `
     This tool retrieves metadata for a datasource specified by its datasourceLuid, which may be a published or an embedded (workbook) data source. It takes the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType. The richer Metadata API context (descriptions, dataCategories, roles, etc.) is only available for published data sources and may be absent for embedded ones.
+    For an embedded data source, also pass workbookLuid: the LUID of the workbook it belongs to. The server configuration may restrict access to embedded data sources based on their workbook.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau data sources.
     `;
 
@@ -144,12 +151,12 @@ export const getGetDatasourceMetadataTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
+    callback: async ({ datasourceLuid, workbookLuid }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
-        args: { datasourceLuid },
+        args: { datasourceLuid, workbookLuid },
         callback: async () => {
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
@@ -158,6 +165,7 @@ export const getGetDatasourceMetadataTool = (
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
             extra,
           });
 
@@ -277,8 +285,7 @@ async function resolveDatasourceType(
     datasourceId: datasourceLuid,
   });
   if (restLookup.isOk()) {
-    const datasource = restLookup.value;
-    return datasource.parentType === 'Workbook' || !datasource.project ? 'embedded' : 'published';
+    return isEmbeddedDatasource(restLookup.value) ? 'embedded' : 'published';
   }
   if (restLookup.error === 'not-found') {
     return 'embedded';

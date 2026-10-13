@@ -268,6 +268,60 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    describe('when a scope restricts workbooks', () => {
+      // Embedded datasources are admitted via the (already allowed) workbook, so
+      // INCLUDE_DATASOURCE_IDS only filters the published ones.
+      beforeEach(() => {
+        vi.stubEnv('INCLUDE_WORKBOOK_IDS', workbookId);
+        mocks.mockGraphql.mockResolvedValue({
+          data: {
+            workbooksConnection: {
+              nodes: [
+                {
+                  luid: workbookId,
+                  upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  embeddedDatasources: [
+                    {
+                      name: 'Embedded DS',
+                      parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        mocks.mockQueryWorkbookConnections.mockResolvedValue([
+          { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+        ]);
+      });
+
+      it('keeps an embedded DS that is not in INCLUDE_DATASOURCE_IDS', async () => {
+        vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'pub-luid-1');
+
+        const response = await getResponseData({ workbookId });
+
+        expect(response.data.upstreamDatasources).toEqual([
+          {
+            luid: 'emb-luid-1',
+            name: 'Embedded DS',
+            datasourceType: 'embedded',
+            publishedParent: { luid: 'pub-luid-1', name: 'Published DS' },
+          },
+        ]);
+      });
+
+      it('still filters the published DS and its publishedParent pointer by INCLUDE_DATASOURCE_IDS', async () => {
+        vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-luid');
+
+        const response = await getResponseData({ workbookId });
+
+        expect(response.data.upstreamDatasources).toEqual([
+          { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
+        ]);
+      });
+    });
+
     it('omits the publishedParent when two connections share an embedded name across LUIDs', async () => {
       mocks.mockGraphql.mockResolvedValue({
         data: {

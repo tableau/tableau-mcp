@@ -628,15 +628,28 @@ export function filterLineageContentsByAllowedIds(
     return contents;
   }
 
-  // Also strip a publishedParent pointer whose luid is out of bounds: the same excluded datasource
-  // would be dropped as a standalone entry, so it must not leak via a parent pointer either.
-  return contents
-    .filter((content) => allowedIds.has(content.luid))
-    .map((content) =>
-      content.publishedParent && !allowedIds.has(content.publishedParent.luid)
-        ? { ...content, publishedParent: undefined }
-        : content,
-    );
+  return stripOutOfBoundsPublishedParents(
+    contents.filter((content) => allowedIds.has(content.luid)),
+    allowedIds,
+  );
+}
+
+// Strips a publishedParent pointer whose luid is out of bounds: the same excluded datasource would be
+// dropped as a standalone entry, so it must not leak via a parent pointer either. Used on its own for
+// embedded datasources, which are admitted via their workbook rather than by luid.
+export function stripOutOfBoundsPublishedParents(
+  contents: Array<LineageContent>,
+  allowedIds?: Set<string> | null,
+): Array<LineageContent> {
+  if (!allowedIds) {
+    return contents;
+  }
+
+  return contents.map((content) =>
+    content.publishedParent && !allowedIds.has(content.publishedParent.luid)
+      ? { ...content, publishedParent: undefined }
+      : content,
+  );
 }
 
 // Merges published (Metadata) and embedded (REST /connections) lists, dropping a standalone published
