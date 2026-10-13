@@ -10,7 +10,7 @@
 // The pure planners own the mutation shape; this file owns I/O and registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { worksheetFragmentSimpleId } from '../../../../desktop/metadata/sheets.js';
@@ -120,7 +120,8 @@ function appliedButUnconfirmed(
   reason: string,
   verification: ReadbackVerificationResult | undefined,
   confirmationStatus: 'failed' | 'skipped',
-): Ok<RefineWorksheetToolResult> {
+  readbackDiffers = false,
+): Err<IncompleteOperationError<Record<string, unknown>>> {
   const confirmationFinding: VerificationFinding = {
     severity: confirmationStatus === 'failed' ? 'error' : 'warning',
     source: 'readback',
@@ -134,15 +135,18 @@ function appliedButUnconfirmed(
     message: verification?.message ? `${verification.message} ${reason}` : reason,
     findings: [...(verification?.findings ?? []), confirmationFinding],
   };
-  return new Ok({
-    refined: false,
-    applied: true,
-    retrySafe: false,
+  return new IncompleteOperationError({
+    refined: false as const,
+    applied: true as const,
+    retrySafe: false as const,
+    stage: 'readback',
     operation,
     worksheetName,
-    reason: `${reason} The write already completed; do not automatically retry.`,
+    reason: readbackDiffers
+      ? `${reason} The write landed but the readback differs from what was asked; do not automatically retry.`
+      : `${reason} The write may have landed; do not automatically retry.`,
     verification: verificationReport,
-  });
+  }).toErr();
 }
 
 const paramsSchema = {
@@ -575,6 +579,7 @@ export const getRefineWorksheetTool = (
               mismatchReason,
               verification,
               'failed',
+              true,
             );
           }
 

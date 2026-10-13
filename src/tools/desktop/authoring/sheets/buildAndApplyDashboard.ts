@@ -18,7 +18,12 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { DesktopTool } from '../../tool.js';
-import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
+import {
+  buildDashboardXml,
+  computeZones,
+  layoutSpecSchema,
+  validateLayoutSpec,
+} from './dashboardZones.js';
 
 const paramsSchema = {
   session: z.string().optional(),
@@ -84,6 +89,9 @@ export const getBuildAndApplyDashboardTool = (
             (path) => new WorkbookNotFoundError(`Dashboard cache file not found: ${path}`),
           );
           if (checkedDashboard.isErr()) return checkedDashboard.error.toErr();
+
+          const layoutError = validateLayoutSpec(layoutSpec, titleText);
+          if (layoutError) return layoutError.toErr();
 
           // The direct and batched dashboard paths share one zone builder.
           const zones = computeZones(titleText, layoutSpec);

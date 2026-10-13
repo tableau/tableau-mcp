@@ -1034,7 +1034,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.refined).toBe(false);
@@ -1071,19 +1071,20 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
       refined: false,
       applied: true,
       retrySafe: false,
+      stage: 'readback',
       verification: { ok: false, status: 'failed' },
     });
     expect(JSON.stringify(payload.verification)).toContain(warningMessage);
     expect(payload.reason).toMatch(/direction is ASC/);
     expect(payload.reason).toMatch(/requested DESC/);
-    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).toMatch(/write landed but the readback differs.*do not.*retry/i);
     expect(payload.reason).not.toMatch(/fallback|standard path/i);
     expect(loadMock()).toHaveBeenCalledTimes(1);
   });
@@ -1149,7 +1150,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.refined).toBe(false);
@@ -1171,7 +1172,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1213,7 +1214,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1253,7 +1254,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1336,7 +1337,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
       markType: 'area',
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1388,7 +1389,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
       markType: 'area',
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1529,11 +1530,13 @@ describe('refineWorksheetTool — refusals and errors', () => {
     const result = await resultPromise;
     vi.useRealTimers();
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.reason).toMatch(/readback did not contain/);
     expect(parsed.reason).toMatch(/after 8 polls/);
+    expect(parsed.reason).toMatch(/The write may have landed; do not automatically retry/);
+    expect(parsed.reason).not.toMatch(/readback differs/);
     expect(loadMock()).toHaveBeenCalledTimes(1);
     // 1 fetch + 8 readback polls, all exhausted — never retries the apply.
     expect(getMock()).toHaveBeenCalledTimes(9);

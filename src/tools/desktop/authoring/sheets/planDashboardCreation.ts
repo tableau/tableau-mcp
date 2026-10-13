@@ -27,6 +27,7 @@ import {
   worksheetAggregationSchema,
 } from '../templates/buildWorksheetsFromTemplates.js';
 import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
+import { validateLayoutSpec } from './dashboardZones.js';
 
 type PlannerField = string | { query: string; datasource?: string };
 type PlannerFieldRequest = { query: string; datasource?: string };
@@ -126,6 +127,19 @@ export const getPlanDashboardCreationTool = (
               `KPI worksheet "${invalidKpi.name}" requires exactly one field; received ${invalidKpi.fields.length}. Create one KPI worksheet per measure.`,
             ).toErr();
           }
+
+          const layoutError = validateLayoutSpec(
+            {
+              kpis: worksheets.filter((ws) => ws.type === 'kpi').map((ws) => ws.name),
+              charts: worksheets.filter((ws) => ws.type === 'chart').map((ws) => ws.name),
+              layoutType: layout?.type ?? 'auto-grid',
+              gridColumns: layout?.gridColumns,
+              kpiStripHeight: layout?.kpiStripHeight,
+              customZones: layout?.zones,
+            },
+            title,
+          );
+          if (layoutError) return layoutError.toErr();
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {

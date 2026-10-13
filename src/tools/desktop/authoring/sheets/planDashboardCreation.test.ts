@@ -395,6 +395,35 @@ describe('planDashboardCreationTool', () => {
     expect(getWorkbookXml).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['gridColumns 0', { type: 'auto-grid', gridColumns: 0 }, /gridColumns/],
+    ['gridColumns 2.5', { type: 'auto-grid', gridColumns: 2.5 }, /gridColumns/],
+    ['kpiStripHeight 150', { type: 'auto-grid', kpiStripHeight: 150 }, /kpiStripHeight/],
+    ['title plus tall KPI strip', { type: 'rows', kpiStripHeight: 95 }, /leave no room/],
+    ['custom without zones', { type: 'custom' }, /requires customZones/],
+    [
+      'a chart without a zone',
+      { type: 'custom', zones: [{ worksheetName: 'Other', x: 0, y: 0, width: 1, height: 1 }] },
+      /no customZone for chart\(s\): "Chart A"/,
+    ],
+  ])('refuses %s before reading the workbook', async (_label, layout, pattern) => {
+    const result = await getResult({
+      session: SESSION,
+      dashboardName: 'My Dashboard',
+      layout,
+      title: 'Sales',
+      worksheets: [
+        { name: 'KPI A', type: 'kpi', fields: ['Sales'] },
+        { name: 'Chart A', type: 'chart', fields: ['Sales'] },
+      ],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(pattern);
+    expect(getWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('should recommend parallelization for 5+ worksheets', async () => {
     vi.mocked(resolveField).mockImplementation((_, query) => makeExactResolution(query));
 
