@@ -142,6 +142,12 @@ describe('self-referential-fixed-lod rule', () => {
     expect(rule.validate(`<calculation formula='${formula}'/>`)).toHaveLength(0);
   });
 
+  it('does not read two matching LODs inside a string literal', () => {
+    const xml =
+      '<calculation formula="IF [x]=1 THEN &quot;{FIXED [A]: SUM([S])} &gt;= {FIXED [A]: SUM([S])}&quot; END"/>';
+    expect(rule.validate(xml)).toHaveLength(0);
+  });
+
   it("still flags a real positive when a field name holds an apostrophe: [Cust's]", () => {
     const xml =
       '<calculation formula="IF [Cust\'s]=1 THEN 0 END + COUNTD(IF {FIXED [S]:SUM([P])} &gt;= {FIXED [S]:SUM([P])} THEN 1 END) + [Bob\'s]"/>';

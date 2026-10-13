@@ -881,7 +881,7 @@ function rewriteUnquotedFieldReferences(
   return `${rewritten}${formula.slice(cursor)}`;
 }
 
-// UNKNOWN pending a live probe: quote doubling is Tableau's documented form; no shipped fixture shows an embedded quote.
+// Tableau calc strings escape a double quote by doubling it.
 export function quoteCalcString(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }

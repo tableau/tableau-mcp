@@ -145,9 +145,10 @@ function selfReference(raw: string): string | undefined {
 export const selfReferentialFixedLodRule: ValidationRule = {
   id: 'self-referential-fixed-lod',
   description:
-    'Warns when a calc nests a FIXED LOD over the same non-empty dimension list inside a COUNT, COUNTD, RANK*, ' +
-    'PERCENTILE, WINDOW_* or INDEX call (this includes count-of-rows-above-the-group-average shapes), or compares two ' +
-    'same-dimension FIXED LODs that are direct operands of one comparison (> < >= <= =) and are either the same text ' +
+    'Warns when a FIXED LOD contains another FIXED LOD over the same non-empty dimension list and the outer LOD body ' +
+    'has a COUNT, COUNTD, RANK*, PERCENTILE, WINDOW_* or INDEX call anywhere (it need not wrap the inner LOD; this ' +
+    'includes count-of-rows-above-the-group-average shapes), or compares two ' +
+    'same-dimension FIXED LODs that are direct operands of one comparison (> < >= <= = ==) and are either the same text ' +
     '(ignoring case and spacing) or sit inside such a ranking or counting call. Such a calc can evaluate to a per-member ' +
     'constant and not partition or re-rank. Use the LOD membership tier calc pattern (see lod-membership-tier-calc). ' +
     'String literals, comments and field names are not read as code. It is a heuristic over formula text, so it only warns.',
