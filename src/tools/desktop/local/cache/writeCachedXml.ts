@@ -32,9 +32,9 @@ const paramsSchema = {
   session: sessionParam(),
   filePath: z.string(),
   xmlContent: z.string(),
-  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheetName: artifactNameParam('worksheet', { plainName: true }).optional(),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
-  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboardName: artifactNameParam('dashboard', { plainName: true }).optional(),
   dashboard: deprecatedArtifactAliasParam('dashboard'),
 };
 
@@ -167,7 +167,8 @@ export const getWriteCachedXmlTool = (
             const spliced = replaceElement(existing, selectorTag, selectorName, xmlContent);
             if (spliced === null) {
               return new ArgsValidationError(
-                `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written.`,
+                `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written. ` +
+                  `The selector is the plain ${selectorTag} name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-${selectorTag}s to get exact names.`,
               ).toErr();
             }
             contentToWrite = spliced;

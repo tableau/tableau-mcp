@@ -252,6 +252,8 @@ describe('writeCachedXmlTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Nope');
+      expect(result.content[0].text).toContain('plain worksheet name (A & B), not the XML-escaped');
+      expect(result.content[0].text).toContain('list-worksheets');
       expect(cachePathModule.writeContainedCacheTextFile).not.toHaveBeenCalled();
     });
 

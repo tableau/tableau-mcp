@@ -25,9 +25,9 @@ import {
 
 const paramsSchema = {
   filePath: z.string(),
-  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheetName: artifactNameParam('worksheet', { plainName: true }).optional(),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
-  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboardName: artifactNameParam('dashboard', { plainName: true }).optional(),
   dashboard: deprecatedArtifactAliasParam('dashboard'),
   startByte: z.number().int().min(0).optional(),
   endByte: z.number().int().min(0).optional(),
@@ -130,7 +130,8 @@ export const getReadCachedXmlTool = (
             const match = findElement(fileContent, 'worksheet', worksheetSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}.`,
+                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}. ` +
+                  'The selector is the plain worksheet name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-worksheets to get exact names.',
               ).toErr();
             }
             slice = match.text;
@@ -139,7 +140,8 @@ export const getReadCachedXmlTool = (
             const match = findElement(fileContent, 'dashboard', dashboardSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}.`,
+                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}. ` +
+                  'The selector is the plain dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-dashboards to get exact names.',
               ).toErr();
             }
             slice = match.text;

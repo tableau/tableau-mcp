@@ -1,4 +1,10 @@
-import { findElement, parseOuterElement, replaceElement, sliceBytes } from './xmlElement.js';
+import {
+  decodeXmlEntities,
+  findElement,
+  parseOuterElement,
+  replaceElement,
+  sliceBytes,
+} from './xmlElement.js';
 
 const WORKBOOK =
   '<workbook>' +
@@ -49,11 +55,28 @@ describe('xmlElement', () => {
       expect(match!.text).toBe('<worksheet name="Sales &amp; Profit"><a/></worksheet>');
     });
 
-    it('also accepts escaped selector input for older transcripts', () => {
+    it('does not decode the selector: `A &amp; B` no longer matches `A & B`', () => {
       const xml = '<workbook><worksheet name="Sales &amp; Profit"><a/></worksheet></workbook>';
-      const match = findElement(xml, 'worksheet', 'Sales &amp; Profit');
-      expect(match).not.toBeNull();
-      expect(match!.text).toBe('<worksheet name="Sales &amp; Profit"><a/></worksheet>');
+      expect(findElement(xml, 'worksheet', 'Sales &amp; Profit')).toBeNull();
+    });
+
+    it('matches a name that is literally `A &amp; B` only by its serialized form', () => {
+      const xml = '<workbook><worksheet name="A &amp;amp; B"><a/></worksheet></workbook>';
+      expect(findElement(xml, 'worksheet', 'A &amp; B')).not.toBeNull();
+      expect(findElement(xml, 'worksheet', 'A & B')).toBeNull();
+    });
+
+    it('does not match an attribute that merely ends in `name` (foo-name=)', () => {
+      const xml = '<workbook><worksheet data-name="Sales"><a/></worksheet></workbook>';
+      expect(findElement(xml, 'worksheet', 'Sales')).toBeNull();
+    });
+
+    it('does not throw on an out-of-range numeric reference; it stays literal text', () => {
+      const xml =
+        '<workbook><worksheet name="X &#x110000; &#99999999999; &#xD800;"><a/></worksheet></workbook>';
+      expect(findElement(xml, 'worksheet', 'X &#x110000; &#99999999999; &#xD800;')).not.toBeNull();
+      expect(findElement(xml, 'worksheet', 'nope')).toBeNull();
+      expect(decodeXmlEntities('&#x110000;&#xD800;&#65;')).toBe('&#x110000;&#xD800;A');
     });
 
     it('decodes <, >, and quote entities in the name attribute before matching', () => {
@@ -117,6 +140,13 @@ describe('xmlElement', () => {
     it('decodes entities in the outer name attribute', () => {
       const parsed = parseOuterElement('<worksheet name="Sales &amp; Profit"><a/></worksheet>');
       expect(parsed).toEqual({ tagName: 'worksheet', name: 'Sales & Profit' });
+    });
+
+    it('ignores a data-name attribute when reading the outer name', () => {
+      expect(parseOuterElement('<worksheet data-name="X" name="Y"><a/></worksheet>')?.name).toBe(
+        'Y',
+      );
+      expect(parseOuterElement('<worksheet data-name="X"><a/></worksheet>')?.name).toBeNull();
     });
 
     it('reports a null name when the outer element has no name attribute', () => {
