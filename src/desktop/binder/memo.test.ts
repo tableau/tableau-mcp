@@ -1,7 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import { loadRuntimeTemplateDescriptors } from '../templates/runtimeTemplateCatalog.js';
@@ -14,7 +10,6 @@ import {
 import type { Family, RuntimeTemplateDescriptor } from './manifest-types.js';
 import {
   createMemoizedBinder,
-  DEFAULT_SCHEMA_SIDECAR_PATH,
   hashManifests,
   hashSchemaSummary,
   normalizeAsk,
@@ -290,27 +285,6 @@ describe('memo/SchemaCache', () => {
     // Different raw bytes ⇒ its own key ⇒ a fresh compute (miss), never a stale hit.
     expect(c.getOrCompute(SUPERSTORE_XML_REFORMATTED).hit).toBe(false);
     expect(c.getOrCompute(KPI_XML).hit).toBe(false);
-  });
-
-  it('persists to and loads from an optional JSON sidecar', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'binder-schema-sidecar-'));
-    const sidecar = path.join(dir, 'schema-cache.json');
-    try {
-      const a = new SchemaCache({ sidecarPath: sidecar });
-      a.getOrCompute(SUPERSTORE_XML);
-      expect(fs.existsSync(sidecar)).toBe(true);
-      // A fresh instance pointed at the same sidecar warm-loads the entry ⇒ hit, no recompute.
-      const b = new SchemaCache({ sidecarPath: sidecar });
-      const loaded = b.getOrCompute(SUPERSTORE_XML);
-      expect(loaded.hit).toBe(true);
-      expect(loaded.summary).toEqual(summarizeSchema(SUPERSTORE_XML));
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('its default sidecar path lives under the gitignored cache/ directory', () => {
-    expect(DEFAULT_SCHEMA_SIDECAR_PATH.split(path.sep)).toContain('cache');
   });
 });
 

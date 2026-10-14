@@ -4,9 +4,8 @@
 // (never time-based):
 //
 //   1. SCHEMA CACHE — memoizes `summarizeSchema(workbookXml)` keyed by the
-//      sha256 of the raw workbook XML (the datasource-schema source). An optional
-//      JSON sidecar under the gitignored `cache/` directory survives process
-//      restarts. `summarizeSchema` is the single most expensive deterministic step
+//      sha256 of the raw workbook XML (the datasource-schema source), held in memory
+//      only. `summarizeSchema` is the single most expensive deterministic step
 //      on the bind hot-path (it parses XML via listAvailableFields), so caching it
 //      turns every repeat schema into an O(1) lookup.
 //
@@ -33,8 +32,6 @@
 // change a result: identical keys ⇒ identical inputs ⇒ identical output.
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 
 import {
   type BinderResult,
@@ -47,20 +44,6 @@ import {
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
 type TemplateManifest = RuntimeTemplateDescriptor;
-
-// PORT ADAPTATION (source ESM → tableau-mcp CommonJS): the source resolved this from
-// `fileURLToPath(import.meta.url)`, which is unavailable under the target's
-// `type: commonjs` + esbuild bundle (and would require a banned `@ts-expect-error`).
-// The sidecar is OPT-IN (default OFF — see getDefaultSchemaCache), so this constant is
-// never touched by the hermetic in-memory default; it resolves from `process.cwd()`
-// to match manifest.ts's DATA_DIR idiom if a caller ever enables persistence.
-/** Default (opt-in) sidecar path for the schema cache. `cache/` is gitignored. */
-export const DEFAULT_SCHEMA_SIDECAR_PATH = path.join(
-  process.cwd(),
-  'cache',
-  'binder',
-  'schema-cache.json',
-);
 
 /** Mirror of `bindTemplate`'s DEFAULT_MIN_CONFIDENCE (kept in sync; only affects key bucketing). */
 const DEFAULT_MIN_CONFIDENCE = 0.6;
@@ -135,25 +118,13 @@ export interface SchemaCacheStats {
   size: number;
 }
 
-interface SchemaSidecar {
-  version: 1;
-  entries: Record<string, SchemaSummary>;
-}
-
 /**
  * Content-addressed memo for `summarizeSchema`. Keyed by sha256(workbookXml) —
- * the raw schema source. Optional JSON sidecar (default off) persists entries
- * under the gitignored `cache/` directory so a warm schema survives restarts.
+ * the raw schema source. In-memory only; nothing is written to disk.
  */
 export class SchemaCache {
   private map = new Map<string, SchemaSummary>();
-  private sidecarPath?: string;
   readonly stats: SchemaCacheStats = { hits: 0, misses: 0, size: 0 };
-
-  constructor(opts: { sidecarPath?: string } = {}) {
-    this.sidecarPath = opts.sidecarPath;
-    if (this.sidecarPath) this.load();
-  }
 
   /** Peek without computing. */
   get(workbookXml: string): SchemaSummary | undefined {
@@ -176,37 +147,12 @@ export class SchemaCache {
     const summary = summarizeSchema(workbookXml);
     this.map.set(hash, summary);
     this.stats.size = this.map.size;
-    if (this.sidecarPath) this.persist();
     return { summary, hash, hit: false };
   }
 
   clear(): void {
     this.map.clear();
     this.stats.size = 0;
-  }
-
-  private load(): void {
-    try {
-      if (!this.sidecarPath || !fs.existsSync(this.sidecarPath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.sidecarPath, 'utf8')) as SchemaSidecar;
-      if (parsed && parsed.version === 1 && parsed.entries) {
-        for (const [k, v] of Object.entries(parsed.entries)) this.map.set(k, v);
-        this.stats.size = this.map.size;
-      }
-    } catch {
-      // A corrupt/unreadable sidecar is non-fatal — treat as a cold cache.
-    }
-  }
-
-  private persist(): void {
-    if (!this.sidecarPath) return;
-    try {
-      fs.mkdirSync(path.dirname(this.sidecarPath), { recursive: true });
-      const payload: SchemaSidecar = { version: 1, entries: Object.fromEntries(this.map) };
-      fs.writeFileSync(this.sidecarPath, JSON.stringify(payload));
-    } catch {
-      // Persistence is best-effort; the in-memory cache remains authoritative.
-    }
   }
 }
 
@@ -322,8 +268,7 @@ export function createMemoizedBinder(opts: MemoizedBinderOptions = {}): Memoized
 /**
  * Process-wide default schema cache. Shared by the default prewarm path so a
  * prewarmed datasource makes the first real ask a warm schema lookup. In-memory
- * only by default (no sidecar) to keep tests hermetic; a server can construct its
- * own `SchemaCache({ sidecarPath: DEFAULT_SCHEMA_SIDECAR_PATH })` to persist.
+ * only, which keeps tests hermetic.
  */
 let _defaultSchemaCache: SchemaCache | null = null;
 export function getDefaultSchemaCache(): SchemaCache {
