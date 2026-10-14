@@ -135,30 +135,8 @@ describe('searchWorkbookSchema', () => {
     expect(Buffer.byteLength(JSON.stringify(result, null, 2))).toBeLessThan(64 * 1024);
   });
 
-  it('keeps SCHEMA_REFERENCE_PATH as a deprecated alias for an XSD path', async () => {
-    vi.stubEnv('WORKBOOK_XSD_PATH', undefined);
-    vi.stubEnv(
-      'SCHEMA_REFERENCE_PATH',
-      path.join(process.cwd(), 'src/desktop/data/twb_2026.2.0.xsd'),
-    );
-    vi.resetModules();
-
-    const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
-    expect(isolatedSearch({ enumType: 'PrimitiveType-ST' }).source).toBe('twb_2026.2.0.xsd');
-  });
-
-  it('prefers WORKBOOK_XSD_PATH over the deprecated schema path alias', async () => {
-    vi.stubEnv('WORKBOOK_XSD_PATH', path.join(process.cwd(), 'src/desktop/data/twb_2026.2.0.xsd'));
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', path.join(process.cwd(), 'does-not-exist.json'));
-    vi.resetModules();
-
-    const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
-    expect(isolatedSearch({ enumType: 'PrimitiveType-ST' }).source).toBe('twb_2026.2.0.xsd');
-  });
-
   it('bounds override read errors without exposing an untrusted path', async () => {
     vi.stubEnv('WORKBOOK_XSD_PATH', `PRIVATE_MARKER_${'x'.repeat(70 * 1024)}`);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
@@ -175,18 +153,17 @@ describe('searchWorkbookSchema', () => {
     expect(message).not.toContain('PRIVATE_MARKER');
   });
 
-  it('fails clearly when the deprecated schema path points to flattened JSON', async () => {
+  it('rejects a JSON file given as WORKBOOK_XSD_PATH', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmcp-schema-'));
     const flattenedPath = path.join(tempDir, 'workbook-schema-reference.json');
     fs.writeFileSync(flattenedPath, '{"version":"old-flattened-schema"}');
-    vi.stubEnv('WORKBOOK_XSD_PATH', undefined);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', flattenedPath);
+    vi.stubEnv('WORKBOOK_XSD_PATH', flattenedPath);
     vi.resetModules();
 
     try {
       const { searchWorkbookSchema: isolatedSearch } = await import('./searchLibrary.js');
       expect(() => isolatedSearch({ enumType: 'PrimitiveType-ST' })).toThrow(
-        /SCHEMA_REFERENCE_PATH.*raw XSD.*flattened JSON/,
+        /Workbook XSD is not valid XML/,
       );
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -201,7 +178,6 @@ describe('searchWorkbookSchema', () => {
       '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name=broken/></xs:schema>',
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -223,7 +199,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name=${privateContent}/></xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -253,7 +228,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><${privateContent}></xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', malformedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -279,7 +253,6 @@ describe('searchWorkbookSchema', () => {
     const nonSchemaPath = path.join(tempDir, 'PRIVATE_MARKER non-schema.xsd');
     fs.writeFileSync(nonSchemaPath, '<not-schema/>');
     vi.stubEnv('WORKBOOK_XSD_PATH', nonSchemaPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -305,7 +278,6 @@ describe('searchWorkbookSchema', () => {
     const emptySchemaPath = path.join(tempDir, 'PRIVATE_MARKER empty.xsd');
     fs.writeFileSync(emptySchemaPath, '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>');
     vi.stubEnv('WORKBOOK_XSD_PATH', emptySchemaPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -335,7 +307,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="Oversized-ST"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -362,7 +333,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="${privateName}"><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -394,7 +364,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="Target-ST"><xs:annotation><xs:documentation>PRIVATE_PARENT_MARKER</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType>${references}</xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {
@@ -421,7 +390,6 @@ describe('searchWorkbookSchema', () => {
       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="First-ST"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType><xs:complexType name="Second-CT"><xs:annotation><xs:documentation>${privateContent}</xs:documentation></xs:annotation><xs:sequence/></xs:complexType></xs:schema>`,
     );
     vi.stubEnv('WORKBOOK_XSD_PATH', oversizedPath);
-    vi.stubEnv('SCHEMA_REFERENCE_PATH', undefined);
     vi.resetModules();
 
     try {

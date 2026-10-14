@@ -104,7 +104,6 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   TEMPLATES_DIR: string | undefined;
   TABLEAU_REPOSITORY_DIR: string | undefined;
   WORKBOOK_XSD_PATH: string | undefined;
-  SCHEMA_REFERENCE_PATH: string | undefined;
   TWB_INDEX_PATH: string | undefined;
   EXAMPLES_DIR: string | undefined;
   ENABLE_FILTER_GUARDRAIL: string | undefined;

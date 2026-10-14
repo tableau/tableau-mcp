@@ -100,7 +100,6 @@ export class Config extends BaseConfig {
 
   // Dev/test overrides for search assets; not user settings.
   workbookXsdPath: string | undefined;
-  schemaReferencePath: string | undefined;
   examplesDir: string | undefined;
   twbIndexPath: string | undefined;
 
@@ -172,13 +171,11 @@ export class Config extends BaseConfig {
     const {
       TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
       WORKBOOK_XSD_PATH: workbookXsdPath,
-      SCHEMA_REFERENCE_PATH: schemaReferencePath,
       EXAMPLES_DIR: examplesDir,
       TWB_INDEX_PATH: twbIndexPath,
     } = cleansedVars;
     this.knowledgeDir = knowledgeDir || undefined;
     this.workbookXsdPath = workbookXsdPath || undefined;
-    this.schemaReferencePath = schemaReferencePath || undefined;
     // An empty EXAMPLES_DIR still selects the directory route (an empty list), as before.
     this.examplesDir = examplesDir;
     this.twbIndexPath = twbIndexPath || undefined;

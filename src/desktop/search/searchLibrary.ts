@@ -348,9 +348,7 @@ function collectReferenceNames(node: XmlElement): string[] {
 function loadWorkbookSchema(): WorkbookSchemaIndex {
   if (_schemaCache) return _schemaCache;
 
-  const { workbookXsdPath: workbookOverridePath, schemaReferencePath: legacyOverridePath } =
-    getDesktopConfig();
-  const overridePath = workbookOverridePath || legacyOverridePath;
+  const { workbookXsdPath: overridePath } = getDesktopConfig();
   let raw: string | null;
   try {
     raw = overridePath ? fs.readFileSync(overridePath, 'utf8') : readDataAsset(WORKBOOK_XSD_ASSET);
@@ -359,16 +357,6 @@ function loadWorkbookSchema(): WorkbookSchemaIndex {
   }
   if (raw === null) {
     throw new Error(`Workbook XSD not available: ${WORKBOOK_XSD_ASSET}`);
-  }
-  const rawStart = raw.trimStart();
-  if (
-    !workbookOverridePath &&
-    legacyOverridePath &&
-    (rawStart.startsWith('{') || rawStart.startsWith('['))
-  ) {
-    throw new Error(
-      'SCHEMA_REFERENCE_PATH is deprecated and must point to raw XSD; flattened JSON is not supported.',
-    );
   }
 
   const parseErrors: string[] = [];
