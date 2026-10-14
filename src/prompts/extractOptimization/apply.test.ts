@@ -1,6 +1,14 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getExtractOptimizationApplyPrompt } from './apply.js';
 
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
+
 const textOf = async (args: Record<string, string> = {}): Promise<string> => {
   const prompt = getExtractOptimizationApplyPrompt(new WebMcpServer());
   const result = await prompt.callback(args);
@@ -19,11 +27,18 @@ describe('extract-optimization-apply prompt', () => {
     expect(prompt.name).toBe('extract-optimization-apply');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
-    const prompt = getExtractOptimizationApplyPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getExtractOptimizationApplyPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('orchestrates the four expected tools', async () => {
     const text = await textOf();

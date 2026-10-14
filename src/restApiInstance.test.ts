@@ -10,6 +10,7 @@ import {
   getResponseInterceptor,
   useRestApi,
 } from './restApiInstance.js';
+import { RouteSafetyError } from './sdks/routeSafety/core.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 
@@ -502,6 +503,67 @@ describe('restApiInstance', () => {
           notifier: 'rest-api',
           requestId: mockRequestId,
         }),
+      );
+    });
+
+    it.each([
+      ['request', getRequestErrorInterceptor],
+      ['response', getResponseErrorInterceptor],
+    ])(
+      'logs a RouteSafetyError from the %s error interceptor as a warning, without notifying',
+      (_kind, getInterceptor) => {
+        const server = new WebMcpServer();
+        const errorInterceptor = getInterceptor(server, mockRequestId);
+        const error = new RouteSafetyError(
+          "Path parameter 'viewId' must be a Tableau LUID (UUID format)",
+        );
+
+        errorInterceptor(error, mockHost);
+
+        expect(notifier.error).not.toHaveBeenCalled();
+        expect(notifier.info).not.toHaveBeenCalled();
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log).toHaveBeenCalledWith(
+          expect.objectContaining({ level: 'warning', logger: 'rest-api' }),
+          undefined,
+        );
+        expect(vi.mocked(log).mock.calls[0][0]).not.toHaveProperty('data');
+      },
+    );
+
+    it('rejects an unsafe raw URL before the RestApi request interceptor logs it', async () => {
+      const { RestApi: ActualRestApi } = await vi.importActual<
+        typeof import('./sdks/tableau/restApi.js')
+      >('./sdks/tableau/restApi.js');
+      ActualRestApi.host = mockHost;
+      const server = new WebMcpServer();
+      const restApi = new ActualRestApi({
+        maxRequestTimeoutMs: 1000,
+        requestInterceptor: [
+          getRequestInterceptor(server, mockRequestId),
+          getRequestErrorInterceptor(server, mockRequestId),
+        ],
+        responseInterceptor: [
+          getResponseInterceptor(server, mockRequestId),
+          getResponseErrorInterceptor(server, mockRequestId),
+        ],
+      });
+      // @ts-expect-error - setting private credentials instead of signing in
+      restApi._creds = { type: 'Bearer', token: 'test-token' };
+      // @ts-expect-error - reaching the protected Zodios client to issue a raw request
+      const axios = restApi.viewsMethods._apiClient.axios;
+      const adapter = vi.fn();
+      axios.defaults.adapter = adapter;
+
+      await expect(axios.get('/x/%2e%2e/y')).rejects.toBeInstanceOf(RouteSafetyError);
+
+      expect(adapter).not.toHaveBeenCalled();
+      expect(notifier.info).not.toHaveBeenCalled();
+      expect(notifier.error).not.toHaveBeenCalled();
+      expect(JSON.stringify(vi.mocked(log).mock.calls)).not.toContain('%2e%2e');
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({ level: 'warning', logger: 'rest-api' }),
+        undefined,
       );
     });
 

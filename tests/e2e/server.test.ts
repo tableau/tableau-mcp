@@ -2,7 +2,7 @@ import features from '../../features.json';
 import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
@@ -11,6 +11,7 @@ const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
+const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
@@ -91,8 +92,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !oauthOnlyTools.includes(name));
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
@@ -149,8 +150,8 @@ describe('server', () => {
     });
   });
 
-  // Instructions depend on ADMIN_TOOLS_ENABLED, which is fixed at process spawn, so the admin-on case
-  // needs its own client with the flag injected into its env (mirroring how admin-tool tests inject it).
+  // Admin instructions require ADMIN_TOOLS_ENABLED and the admin-tools feature flag, both fixed at
+  // process spawn, so the admin-on case needs its own client env (see getAdminToolsEnv).
   describe('default variant with admin tools enabled', () => {
     let client: McpClient;
 
@@ -158,7 +159,7 @@ describe('server', () => {
       await buildVariant('default');
       client = new McpClient({
         variant: 'default',
-        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+        env: getAdminToolsEnv(),
       });
       await client.connect();
     });
@@ -291,8 +292,8 @@ describe('server', () => {
         );
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );

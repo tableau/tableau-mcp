@@ -3,10 +3,10 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { isSlackClient } from '../../../telemetry/clientDisplayName.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import {
@@ -41,7 +41,7 @@ export const getRequestWorkbookUploadTool = (
     disabled: new Provider(
       async () =>
         !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        isSlackClient(server.clientId),
+        !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {
       return await tool.logAndExecute<RequestWorkbookUploadResult>({

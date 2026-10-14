@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import type { MockedFunction } from 'vitest';
 
+import { ContentNotStaleError } from '../../../errors/mcpToolError.js';
 import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -10,8 +11,13 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { auditRecordSchema } from './auditRecord.js';
 import { getConfirmDeleteContentTool } from './confirmDeleteContent.js';
 import { AppApprovalEvidence, TagEvidence } from './evidence.js';
+import { checkContentStillStale } from './stalenessCheck.js';
 
 vi.mock('../../../logging/logger.js');
+
+// The staleness precondition is unit-tested on its own; here it is a spy.
+vi.mock('./stalenessCheck.js', () => ({ checkContentStillStale: vi.fn() }));
+const mockCheckContentStillStale = vi.mocked(checkContentStillStale);
 
 vi.mock('../users/resolveOwnerEmail.js', () => ({
   resolveOwnerEmail: vi.fn().mockResolvedValue('owner@test.com'),
@@ -38,7 +44,8 @@ function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
 const validWorkbookId = 'workbook-luid-1234';
 const validDatasourceId = 'datasource-luid-5678';
 const validTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
-const testTag = 'test-deletion-tag';
+const testBatch = '2026-09-25';
+const testTag = `pending-deletion-${testBatch}`;
 
 const mocks = vi.hoisted(() => ({
   mockDeleteWorkbook: vi.fn(),
@@ -91,6 +98,7 @@ vi.mock('../adminGate.js', () => ({
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
+    pendingDeletionMaxAgeDays: 30,
     productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -99,7 +107,10 @@ vi.mock('../../../config.js', () => ({
 
 // Mirrors what the delete-content preview does for workbook/datasource: records both TagEvidence and
 // AppApprovalEvidence bound to the resource being deleted.
-async function establishWorkbookApproval(workbookId: string, tag: string = testTag): Promise<void> {
+async function establishWorkbookApproval(
+  workbookId: string,
+  cleanupDate: string = testBatch,
+): Promise<void> {
   const tagContext = {
     restApi: {
       workbooksMethods: { addTagsToWorkbook: mocks.mockAddTagsToWorkbook },
@@ -109,7 +120,7 @@ async function establishWorkbookApproval(workbookId: string, tag: string = testT
     tool: 'confirm-delete-content' as const,
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
   };
-  await new TagEvidence({ tag, kind: 'workbook' }).establish(tagContext);
+  await new TagEvidence({ cleanupDate, kind: 'workbook' }).establish(tagContext);
   await new AppApprovalEvidence('delete-content').establish({
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
@@ -121,7 +132,7 @@ async function establishWorkbookApproval(workbookId: string, tag: string = testT
 
 async function establishDatasourceApproval(
   datasourceId: string,
-  tag: string = testTag,
+  cleanupDate: string = testBatch,
 ): Promise<void> {
   const tagContext = {
     restApi: {
@@ -132,7 +143,7 @@ async function establishDatasourceApproval(
     tool: 'confirm-delete-content' as const,
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
   };
-  await new TagEvidence({ tag, kind: 'datasource' }).establish(tagContext);
+  await new TagEvidence({ cleanupDate, kind: 'datasource' }).establish(tagContext);
   await new AppApprovalEvidence('delete-content').establish({
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
@@ -153,8 +164,15 @@ async function establishExtractRefreshTaskApproval(taskId: string): Promise<void
 }
 
 describe('confirmDeleteContentTool', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${testBatch}T12:00:00Z`));
+    mockCheckContentStillStale.mockResolvedValue(Ok.EMPTY);
     delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
@@ -192,14 +210,44 @@ describe('confirmDeleteContentTool', () => {
     expect(tool.meta).toEqual({ ui: { visibility: ['app'] } });
     expect(tool.paramsSchema).toHaveProperty('resourceType');
     expect(tool.paramsSchema).toHaveProperty('resourceId');
-    expect(tool.paramsSchema).toHaveProperty('tag');
+    expect(tool.paramsSchema).toHaveProperty('cleanupDate');
+    expect(tool.paramsSchema).toHaveProperty('minAgeDays');
+    expect(tool.paramsSchema).not.toHaveProperty('tag');
   });
 
   it('is disabled when admin tools are not enabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'mcp-apps',
+    );
     const { getConfig } = await import('../../../config.js');
     vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled: false } as ReturnType<
       typeof getConfig
     >);
+    const tool = getConfirmDeleteContentTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled when ADMIN_TOOLS_ENABLED, admin-tools, and mcp-apps are all on', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'admin-tools' || featureName === 'mcp-apps',
+    );
+    const tool = getConfirmDeleteContentTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+  });
+
+  it('is disabled when ADMIN_TOOLS_ENABLED is off even if the admin-tools flag is on', async () => {
+    const { getConfig } = await import('../../../config.js');
+    vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled: false } as ReturnType<
+      typeof getConfig
+    >);
+    const tool = getConfirmDeleteContentTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is disabled when the admin-tools flag is OFF even if ADMIN_TOOLS_ENABLED is on', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'mcp-apps',
+    );
     const tool = getConfirmDeleteContentTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
@@ -217,7 +265,7 @@ describe('confirmDeleteContentTool', () => {
     const result = await getToolResult({
       resourceType: 'workbook',
       resourceId: validWorkbookId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -244,7 +292,7 @@ describe('confirmDeleteContentTool', () => {
     const result = await getToolResult({
       resourceType: 'workbook',
       resourceId: validWorkbookId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -262,7 +310,7 @@ describe('confirmDeleteContentTool', () => {
     const first = await getToolResult({
       resourceType: 'workbook',
       resourceId: validWorkbookId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(first.isError).toBe(false);
     expect(mocks.mockDeleteWorkbook).toHaveBeenCalledTimes(1);
@@ -271,7 +319,7 @@ describe('confirmDeleteContentTool', () => {
     const second = await getToolResult({
       resourceType: 'workbook',
       resourceId: validWorkbookId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(second.isError).toBe(true);
     expect(mocks.mockDeleteWorkbook).toHaveBeenCalledTimes(1);
@@ -285,7 +333,7 @@ describe('confirmDeleteContentTool', () => {
     const result = await getToolResult({
       resourceType: 'datasource',
       resourceId: validDatasourceId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -301,7 +349,7 @@ describe('confirmDeleteContentTool', () => {
     const result = await getToolResult({
       resourceType: 'datasource',
       resourceId: validDatasourceId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -367,6 +415,108 @@ describe('confirmDeleteContentTool', () => {
     expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
   });
 
+  // --- W-24311035: batch binding + staleness re-check on the panel confirm ---
+
+  it('re-checks staleness with the panel-supplied batch and threshold before deleting', async () => {
+    await establishWorkbookApproval(validWorkbookId);
+    const result = await getToolResult({
+      resourceType: 'workbook',
+      resourceId: validWorkbookId,
+      cleanupDate: testBatch,
+      minAgeDays: 120,
+    });
+    expect(result.isError).toBe(false);
+    expect(mockCheckContentStillStale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceType: 'workbook',
+        resourceId: validWorkbookId,
+        cleanupDate: testBatch,
+        minAgeDays: 120,
+      }),
+    );
+  });
+
+  it('does NOT delete when the content is no longer stale, even with a valid approval', async () => {
+    await establishDatasourceApproval(validDatasourceId);
+    mockCheckContentStillStale.mockResolvedValue(
+      new ContentNotStaleError('Deletion blocked: data source was accessed recently').toErr(),
+    );
+    const result = await getToolResult({
+      resourceType: 'datasource',
+      resourceId: validDatasourceId,
+      cleanupDate: testBatch,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('accessed recently');
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+    expect(getAuditRecord().denyReason).toBe('content-not-stale');
+  });
+
+  it('rejects when the item carries a marker from a different cleanup batch', async () => {
+    await establishWorkbookApproval(validWorkbookId);
+    mocks.mockGetWorkbook.mockResolvedValue({
+      id: validWorkbookId,
+      name: 'Test Workbook',
+      project: { name: 'Test Project' },
+      owner: { id: 'owner-123' },
+      tags: { tag: [{ label: 'pending-deletion-2026-09-01' }] },
+    });
+    const result = await getToolResult({
+      resourceType: 'workbook',
+      resourceId: validWorkbookId,
+      cleanupDate: testBatch,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('different cleanup batch');
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    expect(mockCheckContentStillStale).not.toHaveBeenCalled();
+  });
+
+  it('rejects a panel confirm for a batch past PENDING_DELETION_MAX_AGE_DAYS', async () => {
+    const expired = '2026-08-25'; // 31 days before testBatch; mocked limit is 30.
+    await establishWorkbookApproval(validWorkbookId, expired);
+    mocks.mockGetWorkbook.mockResolvedValue({
+      id: validWorkbookId,
+      name: 'Test Workbook',
+      project: { name: 'Test Project' },
+      owner: { id: 'owner-123' },
+      tags: { tag: [{ label: `pending-deletion-${expired}` }] },
+    });
+    const result = await getToolResult({
+      resourceType: 'workbook',
+      resourceId: validWorkbookId,
+      cleanupDate: expired,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('past the 30-day limit');
+    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    expect(mockCheckContentStillStale).not.toHaveBeenCalled();
+  });
+
+  it('does not apply the batch age limit to extract refresh tasks', async () => {
+    await establishExtractRefreshTaskApproval(validTaskId);
+    const result = await getToolResult({
+      resourceType: 'extract-refresh-task',
+      resourceId: validTaskId,
+      cleanupDate: '2026-01-01',
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledOnce();
+  });
+
+  it('defaults the batch to today (UTC) when cleanupDate is omitted', async () => {
+    await establishWorkbookApproval(validWorkbookId);
+    const result = await getToolResult({ resourceType: 'workbook', resourceId: validWorkbookId });
+    expect(result.isError).toBe(false);
+    expect(mockCheckContentStillStale).toHaveBeenCalledWith(
+      expect.objectContaining({ cleanupDate: testBatch, minAgeDays: 90 }),
+    );
+  });
+
   // --- Error path: Tableau-structured error surfaced (approval already consumed before the call) ---
 
   it('surfaces a Tableau 404 error when the deletion fails', async () => {
@@ -377,7 +527,7 @@ describe('confirmDeleteContentTool', () => {
     const result = await getToolResult({
       resourceType: 'workbook',
       resourceId: validWorkbookId,
-      tag: testTag,
+      cleanupDate: testBatch,
     });
     expect(result.isError).toBe(true);
     // An authorized-but-failed deletion records the terminal 'failed' outcome (the sole audit record
@@ -393,9 +543,13 @@ describe('confirmDeleteContentTool', () => {
 async function getToolResult(args: {
   resourceType: 'workbook' | 'datasource' | 'extract-refresh-task';
   resourceId: string;
-  tag?: string;
+  cleanupDate?: string;
+  minAgeDays?: number;
 }): Promise<CallToolResult> {
   const tool = getConfirmDeleteContentTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ tag: undefined, ...args }, getMockRequestHandlerExtra());
+  return await callback(
+    { cleanupDate: undefined, minAgeDays: undefined, ...args },
+    getMockRequestHandlerExtra(),
+  );
 }

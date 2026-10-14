@@ -8,6 +8,7 @@ Downloads workbook content from Tableau as either an unpackaged TWB XML file or 
 
 :::warning[Disabled by Default]
 This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+Slack clients additionally require the `authoring-with-slack` feature flag.
 :::
 
 ## Required permissions
