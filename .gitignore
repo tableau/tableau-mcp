@@ -50,3 +50,6 @@ src/templates/data-app-template.zip
 *.tsv
 stale-*.md
 /logs/
+
+# Local Exchange catalog snapshots (regenerate with docs/scripts/snapshot-exchange-catalog.mjs)
+scripts/fixtures/exchange-*-snapshot.json

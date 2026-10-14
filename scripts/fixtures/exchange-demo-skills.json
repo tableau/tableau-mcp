@@ -1,0 +1,380 @@
+{
+  "source": "declared-fixture",
+  "description": "Invented demo Skill listings layered over an Exchange catalog snapshot. Not published on Tableau Exchange.",
+  "products": [
+    {
+      "id": 900001,
+      "product_type": "skill",
+      "name": "Marketing Campaign Analyst",
+      "short_description": "Analyze email, ads and social campaign performance and suggest where to shift budget.",
+      "detailed_description": "<p>Builds campaign views from your marketing data: spend, impressions, clicks, conversions and ROI by channel.</p><p>Flags underperforming campaigns and explains which channel or audience is driving the change.</p><p>Works with Marketing Cloud, Google Ads, Facebook Ads and spreadsheet exports.</p>",
+      "publisher_id": 16,
+      "publisher_name": "Tableau",
+      "publish_date": "2026-09-02T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900101,
+          "name": "Analysis Support",
+          "canonicalName": "Analysis Support",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 900103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 12,
+          "name": "Built by Tableau + Salesforce",
+          "canonicalName": "Built by Tableau + Salesforce",
+          "type": "filter",
+          "applicableProductType": null
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 1840,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.2.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900002,
+      "product_type": "skill",
+      "name": "Flowchart Builder",
+      "short_description": "Turn process steps into a clean flowchart or process flow diagram in a Tableau dashboard.",
+      "detailed_description": "<p>Lays out nodes and connectors from a table of steps and transitions, with automatic spacing and branch handling.</p><p>Highlights bottlenecks by colouring steps by volume or duration.</p><p>Good for workflow, approval and customer-journey diagrams.</p>",
+      "publisher_id": 900001,
+      "publisher_name": "Northwind Analytics",
+      "publish_date": "2026-08-19T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 920,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "0.9.1",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900003,
+      "product_type": "skill",
+      "name": "Org Chart Generator",
+      "short_description": "Build an interactive org chart from an employee and manager hierarchy.",
+      "detailed_description": "<p>Reads employee and manager ID columns and draws the reporting hierarchy as a collapsible tree.</p><p>Supports headcount roll-ups and filtering by department or location.</p>",
+      "publisher_id": 900002,
+      "publisher_name": "Contoso Data Labs",
+      "publish_date": "2026-07-30T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 900100,
+          "name": "Data and Model",
+          "canonicalName": "Data and Model",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 610,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.0.3",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900004,
+      "product_type": "skill",
+      "name": "KPI Scorecard Designer",
+      "short_description": "Design an executive KPI scorecard with targets, trends and status indicators.",
+      "detailed_description": "<p>Suggests KPI cards (BANs), sparklines and target comparisons for the metrics you choose.</p><p>Applies consistent formatting and colour rules for on-track, at-risk and off-track status.</p>",
+      "publisher_id": 16,
+      "publisher_name": "Tableau",
+      "publish_date": "2026-06-11T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 900104,
+          "name": "Content Quality",
+          "canonicalName": "Content Quality",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 12,
+          "name": "Built by Tableau + Salesforce",
+          "canonicalName": "Built by Tableau + Salesforce",
+          "type": "filter",
+          "applicableProductType": null
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 2310,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "2.0.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900005,
+      "product_type": "skill",
+      "name": "LOD Calculation Helper",
+      "short_description": "Write and explain FIXED, INCLUDE and EXCLUDE level of detail calculations.",
+      "detailed_description": "<p>Describe the question in plain language and get a working LOD expression with an explanation of the grain.</p><p>Detects common mistakes such as filters that run after a FIXED calculation.</p>",
+      "publisher_id": 16,
+      "publisher_name": "Tableau",
+      "publish_date": "2026-05-21T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900102,
+          "name": "Calc Family",
+          "canonicalName": "Calc Family",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 12,
+          "name": "Built by Tableau + Salesforce",
+          "canonicalName": "Built by Tableau + Salesforce",
+          "type": "filter",
+          "applicableProductType": null
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 3105,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.4.2",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900006,
+      "product_type": "skill",
+      "name": "Data Model Advisor",
+      "short_description": "Recommend relationships, joins and data types for a new published data source.",
+      "detailed_description": "<p>Inspects your tables and proposes relationships and cardinality, then explains the trade-offs against joins.</p><p>Warns about fan-out, mismatched keys and fields with the wrong data type.</p>",
+      "publisher_id": 16,
+      "publisher_name": "Tableau",
+      "publish_date": "2026-04-15T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900100,
+          "name": "Data and Model",
+          "canonicalName": "Data and Model",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 12,
+          "name": "Built by Tableau + Salesforce",
+          "canonicalName": "Built by Tableau + Salesforce",
+          "type": "filter",
+          "applicableProductType": null
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 1475,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.1.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900007,
+      "product_type": "skill",
+      "name": "Dashboard Accessibility Checker",
+      "short_description": "Check a dashboard for colour contrast, alt text and keyboard navigation issues.",
+      "detailed_description": "<p>Reviews colour palettes for contrast, flags missing titles and captions, and checks tab order.</p><p>Produces a checklist of fixes ranked by impact.</p>",
+      "publisher_id": 900002,
+      "publisher_name": "Contoso Data Labs",
+      "publish_date": "2026-08-05T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900104,
+          "name": "Content Quality",
+          "canonicalName": "Content Quality",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 540,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "0.8.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900008,
+      "product_type": "skill",
+      "name": "Publish and Refresh Planner",
+      "short_description": "Plan publishing, permissions and extract refresh schedules for a workbook.",
+      "detailed_description": "<p>Recommends a project location, permission model and refresh cadence based on how the content is used.</p><p>Explains the impact of live versus extract connections on performance.</p>",
+      "publisher_id": 900001,
+      "publisher_name": "Northwind Analytics",
+      "publish_date": "2026-03-28T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900105,
+          "name": "Publish and Deploy",
+          "canonicalName": "Publish and Deploy",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 380,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.0.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900009,
+      "product_type": "skill",
+      "name": "Sankey Flow Builder",
+      "short_description": "Build a Sankey diagram showing how volume flows between stages or categories.",
+      "detailed_description": "<p>Reshapes source, target and value columns into the paths a Sankey needs, then builds the chart.</p><p>Useful for funnel, customer journey and budget flow analysis.</p>",
+      "publisher_id": 900001,
+      "publisher_name": "Northwind Analytics",
+      "publish_date": "2026-09-20T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 900101,
+          "name": "Analysis Support",
+          "canonicalName": "Analysis Support",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 1230,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "1.3.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    },
+    {
+      "id": 900010,
+      "product_type": "skill",
+      "name": "Skill Authoring Assistant",
+      "short_description": "Scaffold, test and document a new Tableau Skill before submitting it to Exchange.",
+      "detailed_description": "<p>Generates a Skill manifest, example prompts and a test checklist from a short description.</p><p>Checks the listing text for missing capabilities and permissions before submission.</p>",
+      "publisher_id": 16,
+      "publisher_name": "Tableau",
+      "publish_date": "2026-10-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 900106,
+          "name": "Meta",
+          "canonicalName": "Meta",
+          "type": "category",
+          "applicableProductType": "skill"
+        },
+        {
+          "id": 12,
+          "name": "Built by Tableau + Salesforce",
+          "canonicalName": "Built by Tableau + Salesforce",
+          "type": "filter",
+          "applicableProductType": null
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 260,
+      "minimum_tableau_version": "2025.1",
+      "details": {
+        "version_number": "0.5.0",
+        "installation_instructions": "<p>Open the Skills panel in Tableau, choose Add Skill, and select this listing. The Skill runs inside your Tableau session with your existing permissions.</p>"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "id": 900100,
+      "name": "Data and Model",
+      "canonicalName": "Data and Model",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900101,
+      "name": "Analysis Support",
+      "canonicalName": "Analysis Support",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900102,
+      "name": "Calc Family",
+      "canonicalName": "Calc Family",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900103,
+      "name": "Build and Design",
+      "canonicalName": "Build and Design",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900104,
+      "name": "Content Quality",
+      "canonicalName": "Content Quality",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900105,
+      "name": "Publish and Deploy",
+      "canonicalName": "Publish and Deploy",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 900106,
+      "name": "Meta",
+      "canonicalName": "Meta",
+      "type": "category",
+      "applicableProductType": "skill"
+    }
+  ]
+}

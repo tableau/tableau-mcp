@@ -123,6 +123,29 @@ The demo reads only `scripts/fixtures/exchange-products.json` and binds to loopb
 list responses use Gallery's `items` envelope and select the global type page before the community
 partition. The request history keeps only the last 1,000 requests. Stop the demo with Ctrl+C.
 
+### Catalog snapshot with seeded Skills
+
+To demo against real listings plus Skills that are not yet published, snapshot a live Gallery API
+and layer invented listings over it. The snapshot is git-ignored; regenerate it when needed:
+
+```bash
+node docs/scripts/snapshot-exchange-catalog.mjs https://development.galleryapi.tabint.net/ scripts/fixtures/exchange-dev-snapshot.json
+node docs/scripts/demo-exchange-gallery.mjs 3928 scripts/fixtures/exchange-dev-snapshot.json scripts/fixtures/exchange-demo-skills.json
+```
+
+Then launch the MCP with `GALLERY_API_BASE_URL=http://127.0.0.1:3928/`,
+`EXCHANGE_WEB_BASE_URL=http://127.0.0.1:3928/web/` and `EXCHANGE_CATALOG_SOURCE=declared-fixture`.
+
+- Later catalog files override earlier ones by product ID. `exchange-demo-skills.json` holds ten
+  invented Skills (IDs from 900000, Skill category tags from 900100) so they never collide with live
+  IDs.
+- Listing links resolve on the fixture server. Snapshot products redirect to the live listing
+  (`listingRedirectBase`, default `https://exchange.tableau.com/`; dev IDs match production); seeded
+  listings get a local page marked as a demo listing.
+- Catalog files are reread when they change on disk, so adding a listing to the seed file
+  "publishes" it at the next MCP catalog refresh (within `CATALOG_CACHE_TTL_SECONDS`).
+- Skill technical metadata stays `unavailable` by design until Gallery reports Skill details.
+
 ## Backend reuse, ranking and cache
 
 The MCP reuses the existing Gallery GET routes without new API endpoints or backend edits. It
@@ -145,10 +168,10 @@ Scoring keeps the design weights (exact name 120, name phrase 80, tag phrase 60,
 - Word matching folds simple English plurals (`maps` matches `map`, `categories` matches
   `category`).
 - A small curated map (`src/exchange/catalog/synonyms.ts`) adds related catalog words for common
-  phrasings, for example `flow chart` → `sankey`, `process`, `network`. Each related word scores
-  its best field (name 20, tag 15, description 8) times its IDF weight. The best related word
-  counts fully and each additional one at a quarter, since they usually describe the same concept;
-  the total is capped at 20 and never counts toward the all-tokens bonus. Reasons read
+  phrasings, for example `flow chart` → `sankey`, `process`, `network`. Each related word scores its
+  best field (name 20, tag 15, description 8) times its IDF weight. The best related word counts
+  fully and each additional one at a quarter, since they usually describe the same concept; the
+  total is capped at 20 and never counts toward the all-tokens bonus. Reasons read
   `Related term match: sankey (via "flow chart")`.
 
 A result needs at least one name, tag or description match, or a publisher phrase match.
