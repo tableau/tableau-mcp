@@ -1,0 +1,12 @@
+{
+  "id": "list-datasources",
+  "name": "List Datasources",
+  "description": "Smoke test for a real Tableau Cloud/Server connection. Claude Code should use the Tableau MCP server to list datasources on the configured site.",
+  "tags": ["smoke", "datasource", "real-server"],
+  "prompt": "Use the Tableau MCP server to list data sources available on the configured Tableau site. Return a concise summary with datasource names and IDs when available. Do not invent data if the server returns no results.",
+  "expected_tools": ["list-datasources"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}

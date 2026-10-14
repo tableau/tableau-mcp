@@ -1,0 +1,12 @@
+{
+  "id": "stale-content-search-path",
+  "name": "JTBD1 — Least-recently-used views via search-content",
+  "description": "Stale-content JTBD via the content-exploration path (not Admin Insights). Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model should use search-content scoped to views, ordering by usage (hitsTotal ascending) to surface the least-recently-used Superstore views. Read-only.",
+  "tags": ["admin", "search-content", "stale-content", "read-only", "jtbd1", "real-server"],
+  "prompt": "Find the least-recently-used Superstore views on this site. Use the search-content tool scoped to views, ordered by total usage ascending. Report the view names and LUIDs. Do not modify or delete anything.",
+  "expected_tools": ["search-content"],
+  "budget": {
+    "max_tool_calls": 6,
+    "max_wall_ms": 150000
+  }
+}

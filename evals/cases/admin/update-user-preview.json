@@ -1,0 +1,12 @@
+{
+  "id": "update-user-preview",
+  "name": "Update User — Preview Only (safe)",
+  "description": "SAFE: exercises the update-user PREVIEW phase only. With confirm omitted, the tool looks up the user, reports the proposed role change, and returns a single-use confirmation token WITHOUT applying anything. The prompt explicitly forbids confirming, so no user is mutated. Requires ADMIN_TOOLS_ENABLED=true, site-admin PAT, and EVAL_UPDATE_USER_LUID (a disposable test user).",
+  "tags": ["admin", "users", "mutation", "preview", "hitl", "real-server"],
+  "prompt": "Use the Tableau MCP server to PREVIEW changing user {{env.EVAL_UPDATE_USER_LUID}} to site role Explorer. Only run the preview — do NOT confirm or apply the change. Report the user's current role, the proposed role, and whether a confirmation token was returned. Do not call the tool a second time with confirm=true.",
+  "expected_tools": ["update-user"],
+  "budget": {
+    "max_tool_calls": 4,
+    "max_wall_ms": 120000
+  }
+}

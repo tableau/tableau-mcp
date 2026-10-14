@@ -1,0 +1,12 @@
+{
+  "id": "inactive-users-threshold-30d",
+  "name": "JTBD3 — Inactive users, tightened 30-day window",
+  "description": "Threshold-variation of the inactive-users JTBD. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Model tightens the inactivity window to 30 days; either query-admin-insights (ts-users, Days Since Last Login >= 30) or list-users (lastLogin:lt:<30d-ago>) is acceptable. Read-only.",
+  "tags": ["admin", "admin-insights", "users", "inactive-users", "read-only", "jtbd3", "threshold", "real-server"],
+  "prompt": "Tighten the inactivity window — which users are inactive past 30 days? Report them and state the threshold and field you filtered on. Do not modify anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}
