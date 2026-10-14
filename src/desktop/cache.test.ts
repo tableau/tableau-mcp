@@ -13,14 +13,8 @@ const ENV = 'TABLEAU_MCP_CACHE_DIR';
 
 describe('DesktopCache TABLEAU_MCP_CACHE_DIR override', () => {
   const temporaryPaths: string[] = [];
-  const originalValue = process.env[ENV];
 
   afterEach(() => {
-    if (originalValue === undefined) {
-      delete process.env[ENV];
-    } else {
-      process.env[ENV] = originalValue;
-    }
     for (const path of temporaryPaths.splice(0)) {
       rmSync(path, { recursive: true, force: true });
     }
@@ -33,13 +27,13 @@ describe('DesktopCache TABLEAU_MCP_CACHE_DIR override', () => {
   }
 
   function defaultCacheDir(): string {
-    delete process.env[ENV];
+    vi.stubEnv(ENV, undefined);
     return getCacheDir();
   }
 
   it('uses the env directory for cache file paths, creating it if missing', () => {
     const root = join(overrideRoot(), 'nested', 'session');
-    process.env[ENV] = root;
+    vi.stubEnv(ENV, root);
 
     const path = new DesktopCache('abc').getCacheFilePath({ prefix: 'p' });
 
@@ -49,15 +43,22 @@ describe('DesktopCache TABLEAU_MCP_CACHE_DIR override', () => {
 
   it.each(['', '   ', 'relative/cache'])('ignores %j and keeps the default directory', (value) => {
     const expected = defaultCacheDir();
-    process.env[ENV] = value;
+    vi.stubEnv(ENV, value);
 
     expect(getCacheDir()).toBe(expected);
+  });
+
+  it('trims whitespace around an absolute override', () => {
+    const root = overrideRoot();
+    vi.stubEnv(ENV, `  ${root}  `);
+
+    expect(getCacheDir()).toBe(resolve(root));
   });
 
   it('allows contained read/write under the override and rejects the default dir', () => {
     const defaultDir = defaultCacheDir();
     const root = overrideRoot();
-    process.env[ENV] = root;
+    vi.stubEnv(ENV, root);
 
     const inside = new DesktopCache('x').getCacheFilePath({ prefix: 'w' });
     expect(writeContainedCacheTextFile(inside, '<a/>')).toEqual({ ok: true, path: inside });
