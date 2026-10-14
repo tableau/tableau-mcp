@@ -1125,6 +1125,7 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
         name === 'knowledge-tools' ||
+        name === 'knowledge-write-tools' ||
         enforceRoleRequirements(name) ||
         enforceRegistrationConditions(name),
     );
@@ -1171,6 +1172,38 @@ describe('server', () => {
     await server.registerTools();
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
+  });
+
+  it('registers only Knowledge read tools when the write flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(2);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'query-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'inspect-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
   });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {

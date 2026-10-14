@@ -253,9 +253,10 @@ const toolScopeMap: Record<
     api: new Set(['tableau:knowledge:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
+  // The duplicate check on create and the existence check on delete read before writing.
   'manage-knowledge-context': {
     mcp: ['tableau:mcp:knowledge:write'],
-    api: new Set(['tableau:knowledge:write']),
+    api: new Set(['tableau:knowledge:write', 'tableau:knowledge:read']),
     conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
   },
   'list-users': {
@@ -550,6 +551,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
+  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
   const adminToolsEnabled = await isAdminToolsEnabled(config);
 
@@ -598,6 +600,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!knowledgeToolsEnabled) {
     enabledTools.delete('query-knowledge-context');
     enabledTools.delete('inspect-knowledge-context');
+  }
+  if (!knowledgeToolsEnabled || !knowledgeWriteToolsEnabled) {
     enabledTools.delete('manage-knowledge-context');
   }
 
