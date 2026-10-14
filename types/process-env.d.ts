@@ -114,6 +114,7 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   TABLEAU_USER_LUID: string | undefined;
   TABLEAU_CHAT_ID: string | undefined;
   TABLEAU_DESKTOP_SESSION_LUID: string | undefined;
+  TABLEAU_MCP_CACHE_DIR: string | undefined;
 }
 
 declare global {
