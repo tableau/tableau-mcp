@@ -28,6 +28,7 @@ describe('refresh token grant type', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await new Promise<void>((resolve) => {
       if (_server) {
         _server.close(() => {
