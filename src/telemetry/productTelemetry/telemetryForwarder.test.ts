@@ -1,3 +1,5 @@
+import os from 'os';
+
 import { log } from '../../logging/logger.js';
 import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetryEndpoint.js';
 import {
@@ -30,6 +32,7 @@ describe('DirectTelemetryForwarder', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   async function sentEvent(callIndex = 0): Promise<TableauTelemetryJsonEvent> {
@@ -126,6 +129,32 @@ describe('DirectTelemetryForwarder', () => {
     expect(event.properties.podname).toBe(server);
     expect(event.properties.is_hyperforce).toBe(true);
     expect(event.host_name).toBeDefined();
+  });
+
+  it('stamps host_name with os.hostname() by default (web)', async () => {
+    vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
+    getProductTelemetry().send('tool_call', { foo: 'bar' });
+
+    expect((await sentEvent()).host_name).toBe('sentinel-host');
+  });
+
+  it('omits host_name and never reads os.hostname() when includeHostName is false (desktop)', async () => {
+    const hostnameSpy = vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
+    getProductTelemetry().send('tool_call', { foo: 'bar' }, { includeHostName: false });
+
+    const request = mockFetch.mock.calls[0][0] as Request;
+    expect(await request.clone().text()).not.toContain('sentinel-host');
+    expect(hostnameSpy).not.toHaveBeenCalled();
+
+    const event = await sentEvent();
+    expect(event).not.toHaveProperty('host_name');
+    expect(event).toEqual({
+      type: 'tool_call',
+      service_name: 'tableau-mcp',
+      pod: server,
+      properties: { foo: 'bar', podname: server, is_hyperforce: false },
+      host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+    });
   });
 
   it('uses default service_name', async () => {

@@ -217,24 +217,28 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       });
       return toolResult;
     } finally {
-      productTelemetryForwarder.send('tool_call', {
-        tool_name: this.name,
-        request_id: requestId.toString(),
-        // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
-        session_id: extra.config.desktopSessionLuid ?? '',
-        site_luid: extra.config.siteLuid,
-        user_luid: extra.config.userLuid,
-        chat_id: extra.config.chatId,
-        success,
-        error_code: errorCode,
-        // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
-        // omitted to keep PII off the wire.
-        error_message: errorType,
-        auth_type: 'desktop',
-        // oauth is omitted due to using stdio for desktop
-        oauth_client_id: '',
-        oauth_client_display_name: '',
-      });
+      productTelemetryForwarder.send(
+        'tool_call',
+        {
+          tool_name: this.name,
+          request_id: requestId.toString(),
+          // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
+          session_id: extra.config.desktopSessionLuid ?? '',
+          site_luid: extra.config.siteLuid,
+          user_luid: extra.config.userLuid,
+          chat_id: extra.config.chatId,
+          success,
+          error_code: errorCode,
+          // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
+          // omitted to keep PII off the wire.
+          error_message: errorType,
+          auth_type: 'desktop',
+          // oauth is omitted due to using stdio for desktop
+          oauth_client_id: '',
+          oauth_client_display_name: '',
+        },
+        { includeHostName: false },
+      );
     }
   }
 }

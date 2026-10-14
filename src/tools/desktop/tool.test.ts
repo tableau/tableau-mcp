@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
+import os from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
@@ -399,20 +400,24 @@ describe('DesktopTool product telemetry', () => {
     });
 
     expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
-    expect(mockTelemetrySend).toHaveBeenCalledWith('tool_call', {
-      tool_name: 'ask-user',
-      request_id: '2',
-      session_id: guid,
-      site_luid: '',
-      user_luid: '',
-      chat_id: '',
-      success: true,
-      error_code: '',
-      error_message: '',
-      oauth_client_id: '',
-      oauth_client_display_name: '',
-      auth_type: 'desktop',
-    });
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      {
+        tool_name: 'ask-user',
+        request_id: '2',
+        session_id: guid,
+        site_luid: '',
+        user_luid: '',
+        chat_id: '',
+        success: true,
+        error_code: '',
+        error_message: '',
+        oauth_client_id: '',
+        oauth_client_display_name: '',
+        auth_type: 'desktop',
+      },
+      { includeHostName: false },
+    );
   });
 
   it('forwards the signed-in site and user LUID from config', async () => {
@@ -431,6 +436,7 @@ describe('DesktopTool product telemetry', () => {
         site_luid: '11111111-1111-1111-1111-111111111111',
         user_luid: '22222222-2222-2222-2222-222222222222',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -444,6 +450,7 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ chat_id: 'chat-abc-123' }),
+      { includeHostName: false },
     );
   });
 
@@ -472,6 +479,42 @@ describe('DesktopTool product telemetry', () => {
     expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true }) }]);
   });
 
+  it('sends no host_name on Desktop tool calls', async () => {
+    const { exportedForTesting } = await vi.importActual<
+      typeof import('../../telemetry/productTelemetry/telemetryForwarder.js')
+    >('../../telemetry/productTelemetry/telemetryForwarder.js');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const hostnameSpy = vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
+    mockGetProductTelemetry.mockReturnValueOnce(
+      new exportedForTesting.DirectTelemetryForwarder({
+        endpoint: 'https://telemetry.example.com',
+        enabled: true,
+        pod: '',
+        isHyperforce: false,
+      }),
+    );
+
+    try {
+      await makeTool().logAndExecute({
+        extra: extraWithConfig({}),
+        args: { session: 'S1' },
+        callback: async () => new Ok({ ok: true }),
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = await (fetchMock.mock.calls[0][0] as Request).clone().text();
+      expect(body).not.toContain('sentinel-host');
+      const [event] = JSON.parse(body) as Array<Record<string, unknown>>;
+      expect(event).not.toHaveProperty('host_name');
+      expect(event).toHaveProperty('type', 'tool_call');
+      expect(hostnameSpy).not.toHaveBeenCalled();
+    } finally {
+      hostnameSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('fetches the shared forwarder without passing any per-config telemetry args', async () => {
     // The forwarder resolves endpoint/enabled/pod/is_hyperforce from env itself, so the desktop
     // tool must not thread config into getProductTelemetry (that is what let the first caller's
@@ -495,6 +538,7 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ session_id: '', success: true }),
+      { includeHostName: false },
     );
   });
 
@@ -519,6 +563,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -542,6 +587,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -561,6 +607,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -585,6 +632,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -616,6 +664,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
+      { includeHostName: false },
     );
 
     expect(loggerModule.log).toHaveBeenCalledWith(

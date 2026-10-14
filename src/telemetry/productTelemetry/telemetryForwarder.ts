@@ -44,7 +44,7 @@ export function resolveTelemetryEnv(): TelemetryEnv {
 export type TableauTelemetryJsonEvent = {
   type: TelemetryEventType;
   host_timestamp: string;
-  host_name: string;
+  host_name?: string;
   service_name: string;
   pod?: string;
   properties: PropertiesType;
@@ -77,8 +77,13 @@ class DirectTelemetryForwarder {
    *
    * @param eventType - The event type/name
    * @param properties - Key-value properties for the event
+   * @param options.includeHostName - `false` omits host_name: Desktop runs on the user's machine.
    */
-  send(eventType: TelemetryEventType, properties: PropertiesType): void {
+  send(
+    eventType: TelemetryEventType,
+    properties: PropertiesType,
+    options?: { includeHostName?: boolean },
+  ): void {
     if (!this.enabled) {
       return;
     }
@@ -89,7 +94,7 @@ class DirectTelemetryForwarder {
         host_timestamp: formatHostTimestamp(new Date()),
         service_name: SERVICE_NAME,
         pod: this.pod,
-        host_name: getDefaultHostName(),
+        ...(options?.includeHostName === false ? {} : { host_name: getDefaultHostName() }),
         properties: {
           ...properties,
           podname: this.pod,
