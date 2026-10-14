@@ -6,12 +6,8 @@ sidebar_position: 3
 
 Creates, updates, and deletes customer-governed semantic context. It is available on Tableau+ sites.
 
-:::warning[Disabled by Default] This tool requires both `knowledge-tools` and
-`knowledge-write-tools` feature flags. Both default to `false` in `features.json`, so read access
-can be enabled without exposing mutations. For read-only rollout, enable `knowledge-tools` and leave
-`knowledge-write-tools` off in the active feature gate provider. File-based flags are loaded at
-startup; restart the server after changing `features.json`. The write flag is checked again on each
-invocation. See [Feature Flags](../../developers/feature-flags.md). :::
+Knowledge write access is disabled by default. Your MCP deployment must enable it before this tool
+is available. Read access alone does not enable writes.
 
 ## Required permissions
 
