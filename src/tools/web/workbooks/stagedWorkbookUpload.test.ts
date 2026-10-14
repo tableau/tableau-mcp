@@ -48,7 +48,7 @@ describe('requestStagedWorkbookUpload', () => {
     expect(result).toMatchObject({
       uploadUrl: 'https://s3.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
-      maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
+      maxSizeBytes: 100 * 1024 * 1024,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
     expect(result.workbookUploadId).toMatch(
@@ -111,6 +111,29 @@ describe('resolveStagedWorkbookUpload', () => {
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards request cancellation to the staged download', async () => {
+    const controller = new AbortController();
+    await resolveStagedWorkbookUpload({
+      workbookUploadId: uploadId,
+      config,
+      abortSignal: controller.signal,
+    });
+    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+  });
+
+  it('does not allow a caller to raise the shared publishing cap', async () => {
+    await resolveStagedWorkbookUpload({
+      workbookUploadId: uploadId,
+      config,
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES + 1,
+    });
+    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledWith(
+      expect.objectContaining({ maxBytes: 100 * 1024 * 1024 }),
+    );
   });
 
   it('falls back to the .twbx key when the .twb key does not exist', async () => {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as configModule from '../../config.js';
 import {
   getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
   getSupportedScopes,
@@ -37,6 +38,107 @@ describe('scopes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+  });
+
+  describe('datasource publishing scopes', () => {
+    it.each([
+      {
+        client: 'stdio',
+        clientId: undefined,
+        authoring: true,
+        slackAuthoring: false,
+        enabled: true,
+      },
+      {
+        client: 'ChatGPT',
+        clientId: chatGptClientId,
+        authoring: true,
+        slackAuthoring: false,
+        enabled: true,
+      },
+      {
+        client: 'Claude',
+        clientId: claudeClientId,
+        authoring: true,
+        slackAuthoring: false,
+        enabled: true,
+      },
+      {
+        client: 'unknown',
+        clientId: unknownClientId,
+        authoring: true,
+        slackAuthoring: false,
+        enabled: true,
+      },
+      {
+        client: 'ChatGPT',
+        clientId: chatGptClientId,
+        authoring: false,
+        slackAuthoring: false,
+        enabled: false,
+      },
+      {
+        client: 'Slack',
+        clientId: slackClientId,
+        authoring: true,
+        slackAuthoring: false,
+        enabled: false,
+      },
+      {
+        client: 'Slack',
+        clientId: slackClientId,
+        authoring: true,
+        slackAuthoring: true,
+        enabled: true,
+      },
+      {
+        client: 'Slack',
+        clientId: slackClientId,
+        authoring: false,
+        slackAuthoring: true,
+        enabled: false,
+      },
+    ])(
+      'advertises datasource scopes=$enabled for $client with authoring=$authoring and Slack authoring=$slackAuthoring',
+      async ({ clientId, authoring, slackAuthoring, enabled }) => {
+        mocks.mockIsFeatureEnabled.mockImplementation(async (featureName: string) => {
+          return (
+            (featureName === 'authoring-tools' && authoring) ||
+            (featureName === 'authoring-with-slack' && slackAuthoring)
+          );
+        });
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        const mcpScopes = await getSupportedMcpScopes(clientId);
+        const apiScopes = await getSupportedApiScopes(clientId);
+
+        expect(mcpScopes.includes('tableau:mcp:datasource:create')).toBe(enabled);
+        expect(apiScopes.includes('tableau:datasources:create')).toBe(enabled);
+        expect(apiScopes.includes('tableau:file_uploads:create')).toBe(enabled);
+        await expect(isValidScope('tableau:mcp:datasource:create', clientId)).resolves.toBe(
+          enabled,
+        );
+      },
+    );
+
+    it.each(['request-datasource-upload', 'publish-datasource'] as const)(
+      'requires the datasource create MCP permission for %s',
+      (toolName) => {
+        mockGetConfig.mockReturnValue({ oauth: { enforceScopes: true } } as any);
+        expect(getRequiredScopesForTool(toolName)).toEqual(['tableau:mcp:datasource:create']);
+      },
+    );
+
+    it('requires datasource and file upload API permissions when publishing', () => {
+      expect(getRequiredApiScopesForTool('publish-datasource')).toEqual([
+        'tableau:datasources:create',
+        'tableau:file_uploads:create',
+      ]);
+    });
+
+    it('requires no Tableau API permissions to request an S3 upload URL', () => {
+      expect(getRequiredApiScopesForTool('request-datasource-upload')).toEqual([]);
+    });
   });
 
   describe('getSupportedMcpScopes', () => {

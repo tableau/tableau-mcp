@@ -8,15 +8,16 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
 
 const mocks = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
+  mockReadPublishingFile: vi.fn(),
   mockPublishDatasource: vi.fn(),
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
 }));
 
-vi.mock('fs/promises', () => ({
-  readFile: mocks.mockReadFile,
+vi.mock('../utils/readPublishingFile.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/readPublishingFile.js')>()),
+  readPublishingFile: mocks.mockReadPublishingFile,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -71,9 +72,9 @@ describe('publishDatasourceTool', () => {
     mocks.mockPublishDatasource.mockReset();
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedDatasourceUpload.mockReset();
-    mocks.mockReadFile.mockReset();
+    mocks.mockReadPublishingFile.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
+    mocks.mockReadPublishingFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tds',
       bytes: Buffer.from('<datasource source="new" />'),
@@ -113,12 +114,23 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
+  it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'authoring-tools',
+    );
     const tool = getPublishDatasourceTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled for Slack when both authoring flags are enabled', async () => {
+    const tool = getPublishDatasourceTool(
+      new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+    );
+
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
@@ -142,6 +154,7 @@ describe('publishDatasourceTool', () => {
 
     expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith({
       datasourceUploadId: validArgs.datasourceUploadId,
+      abortSignal: expect.any(AbortSignal),
       config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
@@ -179,7 +192,7 @@ describe('publishDatasourceTool', () => {
   });
 
   it('uploads and publishes a local TDSX data source file path', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
+    mocks.mockReadPublishingFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
 
     const result = await getToolResult(
       { ...validLocalArgs, datasourceFilePath: '/tmp/source-superstore.tdsx' },
@@ -187,7 +200,9 @@ describe('publishDatasourceTool', () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.tdsx');
+    expect(mocks.mockReadPublishingFile).toHaveBeenCalledWith('/tmp/source-superstore.tdsx', {
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -203,7 +218,9 @@ describe('publishDatasourceTool', () => {
     const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.tds');
+    expect(mocks.mockReadPublishingFile).toHaveBeenCalledWith('/tmp/source-superstore.tds', {
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -211,6 +228,29 @@ describe('publishDatasourceTool', () => {
       content: Buffer.from('<datasource source="local" />'),
     });
   });
+
+  it('forwards the request signal to both local and staged resolution', async () => {
+    const controller = new AbortController();
+    await getToolResult(validLocalArgs, { bucketS3Enabled: false, abortSignal: controller.signal });
+    expect(mocks.mockReadPublishingFile).toHaveBeenCalledWith(validLocalArgs.datasourceFilePath, {
+      abortSignal: controller.signal,
+    });
+    await getToolResult(validArgs, { abortSignal: controller.signal });
+    expect(mocks.mockResolveStagedDatasourceUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+  });
+
+  it.each(['Publishing file exceeds the 104857600-byte limit.', 'Read aborted'])(
+    'stops publishing when bounded local resolution fails: %s',
+    async (message) => {
+      mocks.mockReadPublishingFile.mockRejectedValueOnce(new Error(message));
+      const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
+      expect(result.isError).toBe(true);
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+      expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+    },
+  );
 
   it('defaults overwrite to false when publishing', async () => {
     await getToolResult(validArgs);
@@ -251,7 +291,7 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'datasourceFilePath is only supported when staged S3 uploads are not configured',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockReadPublishingFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -270,12 +310,12 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'datasourceFilePath must point to a .tds or .tdsx file',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockReadPublishingFile).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
 
   it('returns an args-validation error when local data source file is empty', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
+    mocks.mockReadPublishingFile.mockResolvedValue(Buffer.from(''));
 
     const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
@@ -296,7 +336,7 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'Provide either datasourceFilePath or datasourceUploadId, not both',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockReadPublishingFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -307,7 +347,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Either datasourceFilePath or datasourceUploadId');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockReadPublishingFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -363,7 +403,11 @@ async function getToolResult(
     projectId: string;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
+  options: {
+    boundedProjectIds?: Set<string> | null;
+    bucketS3Enabled?: boolean;
+    abortSignal?: AbortSignal;
+  } = {},
 ): Promise<CallToolResult> {
   const tool = getPublishDatasourceTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -382,13 +426,16 @@ async function getToolResult(
 function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
+  abortSignal,
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
+  abortSignal?: AbortSignal;
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
     ...extra,
+    signal: abortSignal ?? extra.signal,
     getConfigWithOverrides: vi.fn().mockResolvedValue({
       boundedContext: {
         projectIds: boundedProjectIds,

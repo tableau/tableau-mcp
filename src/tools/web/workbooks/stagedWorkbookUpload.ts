@@ -7,9 +7,9 @@ import {
   downloadObjectFromS3IfExists,
   joinS3Prefix,
 } from '../s3Client.js';
+import { MAX_PUBLISH_FILE_BYTES } from '../utils/readPublishingFile.js';
 
-// Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
-export const MAX_STAGED_WORKBOOK_BYTES = 5 * 1000 * 1000 * 1000;
+export const MAX_STAGED_WORKBOOK_BYTES = MAX_PUBLISH_FILE_BYTES;
 export const WORKBOOK_UPLOAD_PREFIX_SEGMENT = 'workbook-uploads';
 
 export type WorkbookFileType = 'twb' | 'twbx';
@@ -37,6 +37,7 @@ type ResolveWorkbookUploadOptions = {
   workbookUploadId: string;
   config: BucketS3Config;
   maxBytes?: number;
+  abortSignal?: AbortSignal;
 };
 
 export async function requestStagedWorkbookUpload({
@@ -68,6 +69,7 @@ export async function resolveStagedWorkbookUpload({
   workbookUploadId,
   config,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
+  abortSignal,
 }: ResolveWorkbookUploadOptions): Promise<ResolvedWorkbook> {
   assertWorkbookUploadId(workbookUploadId);
 
@@ -76,7 +78,8 @@ export async function resolveStagedWorkbookUpload({
       key: buildWorkbookUploadS3Key(config.keyPrefix, workbookUploadId, fileType),
       bucket: config.bucket,
       region: config.region,
-      maxBytes,
+      maxBytes: Math.min(maxBytes, MAX_STAGED_WORKBOOK_BYTES),
+      ...(abortSignal ? { abortSignal } : {}),
     });
 
     if (bytes === undefined) {

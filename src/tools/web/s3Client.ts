@@ -206,26 +206,47 @@ export async function downloadObjectFromS3({
   bucket,
   region,
   maxBytes,
+  abortSignal,
 }: {
   key: string;
   bucket: string;
   region: string;
   maxBytes: number;
+  abortSignal?: AbortSignal;
 }): Promise<Buffer> {
+  abortSignal?.throwIfAborted();
   const { client, GetObjectCommand } = await getS3Bundle(region);
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  abortSignal?.throwIfAborted();
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+  const response = await (abortSignal
+    ? client.send(command, { abortSignal })
+    : client.send(command));
+  const destroyBody = (): void => {
+    if (hasDestroy(response.Body)) {
+      response.Body.destroy();
+    }
+  };
+  abortSignal?.addEventListener('abort', destroyBody, { once: true });
+  try {
+    abortSignal?.throwIfAborted();
+    if (response.ContentLength !== undefined) {
+      const contentLength = Number(response.ContentLength);
+      if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+        throw new Error('S3 object has an invalid byte length.');
+      }
+      if (contentLength > maxBytes) {
+        throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
+      }
+    }
 
-  if (response.ContentLength !== undefined) {
-    const contentLength = Number(response.ContentLength);
-    if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
-      throw new Error('S3 object has an invalid byte length.');
-    }
-    if (contentLength > maxBytes) {
-      throw new Error(`S3 object exceeds the ${maxBytes}-byte limit.`);
-    }
+    return await bodyToBufferBounded(response.Body, maxBytes, abortSignal);
+  } catch (error) {
+    abortSignal?.throwIfAborted();
+    throw error;
+  } finally {
+    abortSignal?.removeEventListener('abort', destroyBody);
+    destroyBody();
   }
-
-  return await bodyToBufferBounded(response.Body, maxBytes);
 }
 
 /**
@@ -240,14 +261,22 @@ export async function downloadObjectFromS3IfExists({
   bucket,
   region,
   maxBytes,
+  abortSignal,
 }: {
   key: string;
   bucket: string;
   region: string;
   maxBytes: number;
+  abortSignal?: AbortSignal;
 }): Promise<Buffer | undefined> {
   try {
-    return await downloadObjectFromS3({ key, bucket, region, maxBytes });
+    return await downloadObjectFromS3({
+      key,
+      bucket,
+      region,
+      maxBytes,
+      ...(abortSignal ? { abortSignal } : {}),
+    });
   } catch (error) {
     if (isS3NotFoundError(error)) {
       return undefined;
@@ -264,7 +293,11 @@ function isS3NotFoundError(error: unknown): boolean {
   return name === 'NoSuchKey' || $metadata?.httpStatusCode === 404;
 }
 
-async function bodyToBufferBounded(body: unknown, maxBytes: number): Promise<Buffer> {
+async function bodyToBufferBounded(
+  body: unknown,
+  maxBytes: number,
+  abortSignal?: AbortSignal,
+): Promise<Buffer> {
   if (!body) {
     throw new Error('S3 object did not return a body.');
   }
@@ -275,11 +308,15 @@ async function bodyToBufferBounded(body: unknown, maxBytes: number): Promise<Buf
   }
 
   if (isAsyncIterable(body)) {
-    return await streamToBufferBounded(body, maxBytes);
+    return await streamToBufferBounded(body, maxBytes, abortSignal);
   }
 
+  // Keep the SDK's non-Node body adapter compatible. Node GetObject responses use
+  // the bounded async-iterable path above; this adapter buffers internally.
   if (hasTransformToByteArray(body)) {
-    return assertBufferWithinLimit(Buffer.from(await body.transformToByteArray()), maxBytes);
+    const bytes = await body.transformToByteArray();
+    abortSignal?.throwIfAborted();
+    return assertBufferWithinLimit(Buffer.from(bytes), maxBytes);
   }
 
   throw new Error('S3 object body type is not supported.');
@@ -302,11 +339,13 @@ function staticBodyToBuffer(body: unknown): Buffer | undefined {
 async function streamToBufferBounded(
   body: AsyncIterable<Buffer | Uint8Array | string>,
   maxBytes: number,
+  abortSignal?: AbortSignal,
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
   for await (const chunk of body) {
+    abortSignal?.throwIfAborted();
     const buffer = staticBodyToBuffer(chunk);
     if (!buffer) {
       throw new Error('S3 object stream returned an unsupported chunk type.');
@@ -319,6 +358,7 @@ async function streamToBufferBounded(
     chunks.push(buffer);
   }
 
+  abortSignal?.throwIfAborted();
   return Buffer.concat(chunks, totalBytes);
 }
 
@@ -337,6 +377,15 @@ function hasTransformToByteArray(
     body !== null &&
     'transformToByteArray' in body &&
     typeof body.transformToByteArray === 'function'
+  );
+}
+
+function hasDestroy(body: unknown): body is { destroy: () => void } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'destroy' in body &&
+    typeof body.destroy === 'function'
   );
 }
 

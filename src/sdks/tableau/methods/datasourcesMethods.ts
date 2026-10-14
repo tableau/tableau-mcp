@@ -2,7 +2,7 @@ import { isErrorFromAlias } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
-import { RouteSafetyError } from '../../routeSafety/core.js';
+import { buildRestPath, RouteSafetyError } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
 import { buildMultipartMixedBody } from '../multipart.js';
@@ -248,7 +248,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     ]);
 
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/datasources`,
+      buildRestPath('sites', siteId, 'datasources'),
       body,
       {
         params: {
