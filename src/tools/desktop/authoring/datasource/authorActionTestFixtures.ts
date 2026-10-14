@@ -94,7 +94,7 @@ export function withActions(baseXml: string, actionXml: string): string {
 
 export type AuthorActionArgs = {
   session?: string;
-  mode?: 'parameter' | 'set' | 'url' | 'filter';
+  mode?: 'parameter' | 'set' | 'url' | 'filter' | 'highlight';
   caption: string;
   sourceWorksheet: string;
   sourceField?: string;
@@ -102,6 +102,8 @@ export type AuthorActionArgs = {
   targetSet?: string;
   targetSheet?: string;
   filterFields?: string[];
+  highlightFields?: string[];
+  highlightBy?: 'all-fields' | 'dates-and-times';
   datasource?: string;
   setMembership?: 'assign' | 'add' | 'remove';
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
@@ -168,6 +170,8 @@ export async function getToolResult({
       targetSet: args.targetSet,
       targetSheet: args.targetSheet,
       filterFields: args.filterFields,
+      highlightFields: args.highlightFields,
+      highlightBy: args.highlightBy,
       datasource: args.datasource,
       singleSelect: args.singleSelect,
       activation: args.activation ?? 'on-select',

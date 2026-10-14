@@ -1942,7 +1942,9 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('excludeTargetSheets is only allowed in filter mode');
+    expect(result.content[0].text).toContain(
+      'excludeTargetSheets is only allowed in filter or highlight mode',
+    );
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

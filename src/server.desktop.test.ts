@@ -225,6 +225,18 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Aggregate tools/list size is no longer a product contract: TAS discovers tools through search.
 // Keep the selected profile and its instruction text pinned, plus per-tool caps below.
 describe('desktop tools/list serialized surface', () => {
+  it('registers highlight authoring on the existing author-action tool', async () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const tool = tools.find((candidate) => candidate.name === 'author-action');
+    expect(tool).toBeDefined();
+    const surface = JSON.parse(await serializeDesktopToolSurface(tool!));
+    expect(surface.inputSchema.properties.mode.enum).toContain('highlight');
+    expect(surface.inputSchema.properties.highlightFields.type).toBe('array');
+    expect(surface.inputSchema.properties.highlightBy.enum).toEqual([
+      'all-fields',
+      'dates-and-times',
+    ]);
+  });
   it('serves the selected dynamic authoring profile with pinned instructions', () => {
     const server = new DesktopMcpServer();
     const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
