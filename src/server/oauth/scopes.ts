@@ -550,6 +550,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
+  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
   const adminToolsEnabled = await isAdminToolsEnabled(config);
 
@@ -598,6 +599,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!knowledgeToolsEnabled) {
     enabledTools.delete('query-knowledge-context');
     enabledTools.delete('inspect-knowledge-context');
+  }
+  if (!knowledgeToolsEnabled || !knowledgeWriteToolsEnabled) {
     enabledTools.delete('manage-knowledge-context');
   }
 

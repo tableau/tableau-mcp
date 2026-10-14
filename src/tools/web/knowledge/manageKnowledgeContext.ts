@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, FeatureDisabledError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -104,9 +104,13 @@ export const getManageKnowledgeContextTool = (
   const tool = new WebTool({
     server,
     name: 'manage-knowledge-context',
-    disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('knowledge-tools')),
-    ),
+    disabled: new Provider(async () => {
+      const gate = getFeatureGate();
+      return (
+        !(await gate.isFeatureEnabled('knowledge-tools')) ||
+        !(await gate.isFeatureEnabled('knowledge-write-tools'))
+      );
+    }),
     minRequiredRole: SiteRole.CREATOR,
     registrationConditions: ['RequiresKnowledge'],
     description: `
@@ -130,6 +134,10 @@ complete, confirmed change with exact identifiers.
         extra,
         args,
         callback: async () => {
+          if (await Provider.from(tool.disabled)) {
+            return new FeatureDisabledError('Knowledge write tools are disabled.').toErr();
+          }
+
           // Surfaced from inside logAndExecute (not a pre-callback early return) so the invocation
           // is still logged and telemetry-emitted even when the args are rejected.
           const validationError = validateArgs(args);

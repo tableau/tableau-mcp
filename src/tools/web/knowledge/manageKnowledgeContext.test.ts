@@ -56,11 +56,36 @@ describe('manageKnowledgeContextTool', () => {
     mocks.deleteSemanticStatements.mockResolvedValue(undefined);
   });
 
-  it('is disabled when the knowledge-tools feature flag is off', async () => {
-    mocks.isFeatureEnabled.mockResolvedValue(false);
+  it.each([
+    [false, false, true],
+    [false, true, true],
+    [true, false, true],
+    [true, true, false],
+  ])('requires both Knowledge flags (read=%s, write=%s)', async (read, write, disabled) => {
+    mocks.isFeatureEnabled.mockImplementation(async (name: string) =>
+      name === 'knowledge-tools' ? read : name === 'knowledge-write-tools' && write,
+    );
 
-    expect(await Provider.from(getTool().disabled)).toBe(true);
-    expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
+    expect(await Provider.from(getTool().disabled)).toBe(disabled);
+  });
+
+  it.each([
+    { action: 'create', statements: [{ statement: 'AOV = revenue / orders' }], isGlobal: true },
+    { action: 'update', contextId: 'ctx-1', statements: [{ statement: 'Updated definition' }] },
+    { action: 'delete', contextId: 'ctx-1' },
+  ])('blocks $action after the write flag is turned off', async (args) => {
+    const tool = getTool();
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    mocks.isFeatureEnabled.mockImplementation(async (name: string) => name === 'knowledge-tools');
+
+    const result = await (
+      await Provider.from(tool.callback)
+    )(args as never, getMockRequestHandlerExtra());
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Knowledge write tools are disabled.');
+    expect(useRestApi).not.toHaveBeenCalled();
   });
 
   it('advertises a non-empty inputSchema carrying the action enum', async () => {
