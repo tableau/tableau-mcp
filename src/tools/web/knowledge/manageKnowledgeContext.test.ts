@@ -16,6 +16,8 @@ import { getManageKnowledgeContextTool, validateArgs } from './manageKnowledgeCo
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
+  listSemanticStatements: vi.fn(),
+  getKnowledgeNode: vi.fn(),
   createSemanticStatements: vi.fn(),
   updateSemanticStatements: vi.fn(),
   deleteSemanticStatements: vi.fn(),
@@ -51,6 +53,8 @@ describe('manageKnowledgeContextTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isFeatureEnabled.mockResolvedValue(true);
+    mocks.listSemanticStatements.mockResolvedValue([]);
+    mocks.getKnowledgeNode.mockResolvedValue({ id: 'ctx-1', type: 'SEMANTIC_CONTEXT' });
     mocks.createSemanticStatements.mockResolvedValue(context());
     mocks.updateSemanticStatements.mockResolvedValue(context(['Updated definition']));
     mocks.deleteSemanticStatements.mockResolvedValue(undefined);
@@ -110,7 +114,7 @@ describe('manageKnowledgeContextTool', () => {
     ).toBeNull();
   });
 
-  it('uses mutation annotations and requires only the Knowledge write scope', async () => {
+  it('uses mutation annotations and requires the Knowledge write and read scopes', async () => {
     const tool = getTool();
 
     expect(tool.name).toBe('manage-knowledge-context');
@@ -130,7 +134,7 @@ describe('manageKnowledgeContextTool', () => {
     });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({
-        jwtScopes: ['tableau:knowledge:write'],
+        jwtScopes: ['tableau:knowledge:write', 'tableau:knowledge:read'],
       }),
     );
   });
@@ -176,6 +180,68 @@ describe('manageKnowledgeContextTool', () => {
     expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
   });
 
+  it('does not create a statement that already exists in the same scope', async () => {
+    mocks.listSemanticStatements.mockResolvedValue([context()]);
+
+    const out = payload(
+      await getResult({
+        action: 'create',
+        isGlobal: true,
+        statements: [{ statement: '  aov = revenue / orders ' }],
+      }),
+    );
+
+    expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ created: false, reason: 'DUPLICATE', existingContextId: 'ctx-1' });
+  });
+
+  it('creates the rule when only a read-only external context has the same statement', async () => {
+    mocks.listSemanticStatements.mockResolvedValue([
+      { ...context(), id: 'ext-1', type: 'SEMANTIC_CONTEXT_EXTERNAL' },
+    ]);
+
+    const out = payload(
+      await getResult({
+        action: 'create',
+        isGlobal: true,
+        statements: [{ statement: 'AOV = revenue / orders' }],
+      }),
+    );
+
+    expect(mocks.createSemanticStatements).toHaveBeenCalled();
+    expect(out.context.id).toBe('ctx-1');
+  });
+
+  it('reports NOT_FOUND instead of deleting an unknown contextId', async () => {
+    mocks.getKnowledgeNode.mockRejectedValue({ isAxiosError: true, response: { status: 404 } });
+    const out = payload(
+      await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'missing' }),
+    );
+
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ deleted: false, reason: 'NOT_FOUND', contextId: 'missing' });
+  });
+
+  it('reports NOT_FOUND instead of deleting an id that is not a semantic context', async () => {
+    mocks.getKnowledgeNode.mockResolvedValue({ id: 'field-1', type: 'FIELD' });
+
+    const out = payload(
+      await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'field-1' }),
+    );
+
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ deleted: false, reason: 'NOT_FOUND', contextId: 'field-1' });
+  });
+
+  it('does not report NOT_FOUND when the lookup fails for another reason', async () => {
+    mocks.getKnowledgeNode.mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+
+    const result = await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'ctx-1' });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
+  });
+
   it('deletes a context by exact contextId without overstating the result', async () => {
     const out = payload(
       await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'ctx-1' }),
@@ -188,7 +254,7 @@ describe('manageKnowledgeContextTool', () => {
     expect(out).toEqual({
       action: 'delete',
       contextId: 'ctx-1',
-      requestCompleted: true,
+      deleted: true,
     });
   });
 

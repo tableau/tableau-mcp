@@ -796,6 +796,7 @@ describe('scopes', () => {
     ]);
     expect(getRequiredApiScopesForTool('manage-knowledge-context')).toEqual([
       'tableau:knowledge:write',
+      'tableau:knowledge:read',
     ]);
   });
 
