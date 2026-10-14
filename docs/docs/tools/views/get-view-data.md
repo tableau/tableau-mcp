@@ -72,11 +72,11 @@ they do not return partial results or fall back to the legacy CSV endpoint.
 The tool uses Query View Data and returns CSV for the requested worksheet, or the first worksheet
 when the requested view is a dashboard. It returns one of two result shapes:
 
-- **`MCP_S3_BUCKET` unset (default):** returns the CSV as a single JSON-encoded text string
-  (`JSON.stringify(csv)`), with newlines escaped as `\n`.
-- **`MCP_S3_BUCKET` set with `view-data-file-mode` enabled:** returns a `resource_link` with a
-  short-lived presigned URL to the CSV file in S3, instead of inlining the data. If the feature is
-  disabled or the upload fails, the tool returns the CSV inline.
+- **Blob storage not configured/enabled (default):** returns the CSV as a single JSON-encoded text
+  string (`JSON.stringify(csv)`), with newlines escaped as `\n`.
+- **Blob storage configured and `view-data-file-mode` enabled:** returns a `resource_link` with a
+  URL to the CSV file in blob storage, instead of inlining the data. If the feature is disabled or
+  the upload fails, the tool returns the CSV inline.
 
 ## Example legacy result (default)
 
@@ -84,7 +84,7 @@ when the requested view is a dashboard. It returns one of two result shapes:
 "Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)\nCanada,Alberta,19.5%,53.41,-114.42\nCanada,British Columbia,4.2%,54.9464,-125.1024\nCanada,Manitoba,8.2%,55.0085,-97.1771\n"
 ```
 
-## Example legacy result (S3 mode)
+## Example legacy result (blob storage mode)
 
 ```json
 {
@@ -92,7 +92,7 @@ when the requested view is a dashboard. It returns one of two result shapes:
   "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
   "name": "view-data.csv",
   "mimeType": "text/csv",
-  "description": "View data (CSV) stored in S3. This is a short-lived presigned URL."
+  "description": "View data (CSV) stored in blob storage."
 }
 ```
 

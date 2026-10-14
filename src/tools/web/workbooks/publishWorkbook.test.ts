@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   mockGetPersonalSpace: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
+  mockIsBlobStorageEnabled: vi.fn(),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -69,6 +70,10 @@ vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
+vi.mock('../../../blobStorage/init.js', () => ({
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+}));
+
 const validArgs = {
   workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Workbook',
@@ -98,6 +103,8 @@ describe('publishWorkbookTool', () => {
     mocks.mockGetPersonalSpace.mockReset();
     mocks.useRestApiCalls.length = 0;
     mocks.sessionEvents.length = 0;
+    mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
@@ -332,7 +339,6 @@ describe('publishWorkbookTool', () => {
     });
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
-      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -494,7 +500,6 @@ describe('publishWorkbookTool', () => {
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
-      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -531,7 +536,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'workbookFilePath is only supported when staged S3 uploads are not configured',
+      'workbookFilePath is only supported when staged uploads are not configured',
     );
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
@@ -1271,6 +1276,9 @@ async function getToolResult(
   },
   options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
 ): Promise<CallToolResult> {
+  if (options.bucketS3Enabled !== undefined) {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(options.bucketS3Enabled);
+  }
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -1288,7 +1296,6 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
-  bucketS3Enabled = true,
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
@@ -1305,15 +1312,5 @@ function getMockExtra({
         tags: null,
       },
     }),
-    config: {
-      ...extra.config,
-      bucketS3: {
-        enabled: bucketS3Enabled,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
-    },
   };
 }

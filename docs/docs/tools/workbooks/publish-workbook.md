@@ -76,14 +76,16 @@ Exactly one of these must be provided — providing both, or neither, returns an
 ### `workbookUploadId`
 
 The staged workbook upload id returned by [Request Workbook Upload](request-workbook-upload.md). Use
-this for hosted clients that cannot pass a local path. Requires `MCP_S3_BUCKET` to be configured.
+this for hosted clients that cannot pass a local path. Requires a
+[blob storage provider](../../configuration/mcp-config/env-vars.md#blob_storage_provider) to be
+configured.
 
 Example: `123e4567-e89b-42d3-a456-426614174000`
 
 ### `workbookFilePath`
 
 Path to a local TWB or TWBX workbook file on the MCP server's filesystem. Only supported when staged
-S3 uploads are not configured (i.e. `MCP_S3_BUCKET` is unset).
+uploads are not configured (i.e. no blob storage provider is configured).
 
 Example: `/path/to/Superstore.twbx`
 
