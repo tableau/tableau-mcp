@@ -101,6 +101,8 @@ for more details.
   it the only accepted method: every request must carry a token in the `X-Tableau-Auth` header or the
   `workgroup_session_id` cookie, and requests without one are rejected with `401 invalid_token`.
 - Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
+- Requires [`TRANSPORT`](../env-vars.md#transport) to be `http`; the server refuses to start with
+  `stdio`.
 - Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the token is
   absent.
 - Does not require `OAUTH_ISSUER` or `DANGEROUSLY_DISABLE_OAUTH`; a configured `OAUTH_ISSUER` does
