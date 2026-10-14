@@ -333,13 +333,24 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:read');
     });
 
-    it('should advertise Knowledge scopes before availability is resolved at registration', async () => {
+    it('should advertise the Knowledge read scope when only read tools are enabled', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (featureName: string) => featureName === 'knowledge-tools',
       );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:knowledge:read');
+      expect(scopes).not.toContain('tableau:mcp:knowledge:write');
+    });
+
+    it('should advertise both Knowledge scopes when write tools are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          featureName === 'knowledge-tools' || featureName === 'knowledge-write-tools',
+      );
 
       const scopes = await getSupportedMcpScopes();
       expect(scopes).toContain('tableau:mcp:knowledge:read');
@@ -401,13 +412,24 @@ describe('scopes', () => {
       },
     );
 
-    it('should advertise both Knowledge API scopes', async () => {
+    it('should advertise only the Knowledge read API scope when write tools are off', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
         async (featureName: string) => featureName === 'knowledge-tools',
       );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
       } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:knowledge:read');
+      expect(scopes).not.toContain('tableau:knowledge:write');
+    });
+
+    it('should advertise both Knowledge API scopes when write tools are enabled', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          featureName === 'knowledge-tools' || featureName === 'knowledge-write-tools',
+      );
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:knowledge:read');
