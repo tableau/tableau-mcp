@@ -1841,11 +1841,18 @@ function resolveHighlightFields(
   const captions: string[] = [];
   for (const raw of requested) {
     const token = normalizeReferenceToken(raw).normalize('NFC');
-    const matches = fields.filter(
-      (field) =>
-        field.name.normalize('NFC') === token ||
-        bareName(field.columnName).normalize('NFC') === token,
+    const exactCaptions = fields.filter(
+      (field) => field.name.normalize('NFC') === raw.trim().normalize('NFC'),
     );
+    // Captions take precedence over internal names, including before stripping brackets.
+    const captionMatches =
+      exactCaptions.length > 0
+        ? exactCaptions
+        : fields.filter((field) => field.name.normalize('NFC') === token);
+    const matches =
+      captionMatches.length > 0
+        ? captionMatches
+        : fields.filter((field) => bareName(field.columnName).normalize('NFC') === token);
     const names = [...new Set(matches.map((field) => field.name))];
     if (names.length !== 1) {
       return new ArgsValidationError(
@@ -1899,7 +1906,8 @@ function renderHighlightAction(
   } else {
     params.push(`<param name='special-fields' value='${action.specialFields}' />`);
   }
-  params.push(`<param name='target' value='${escapeXml(renderActionList([action.target]))}' />`);
+  // ScriptDescription::SetList/GetList special-case target as a single raw name.
+  params.push(`<param name='target' value='${escapeXml(action.target)}' />`);
   return (
     `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
     renderActivation(action.activation, action.autoClear) +
@@ -1937,7 +1945,7 @@ function hasHighlightAction(xml: string, expected: HighlightAction, caption?: st
       getAttr(activation, 'type') ===
         (expected.activation === 'on-menu' ? undefined : expected.activation) &&
       (getAttr(activation, 'auto-clear') === 'true') === expected.autoClear &&
-      isSameSheetSet(parseActionList(params.get('target')), [expected.target]) &&
+      params.get('target') === expected.target &&
       isSameSheetSet(parseActionList(params.get('exclude')), expected.targetExcludeSheets) &&
       params.get('special-fields') === expected.specialFields &&
       (expected.specialFields === undefined

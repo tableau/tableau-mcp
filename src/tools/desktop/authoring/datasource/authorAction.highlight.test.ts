@@ -147,23 +147,106 @@ describe('author-action highlight mode', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(action);
   });
 
-  it('escapes commas and backslashes inside captions and target names', async () => {
-    const workbook = WORKBOOK.replace(/Details/g, 'Details, West').replace(
+  it.each([
+    ['Details, West', 'Details, West'],
+    ['Details\\West', 'Details\\West'],
+    ['Details, A\\B & C', 'Details, A\\B &amp; C'],
+  ])('keeps target %j raw while list-encoding field captions', async (target, targetXml) => {
+    const workbook = WORKBOOK.replace(/Details/g, targetXml).replace(
       "caption='Category'",
       "caption='Category, A\\B &amp; C'",
     );
     const action = ALL_FIELDS.replace(
       "name='special-fields' value='all'",
       "name='field-captions' value='Category\\, A\\\\B &amp; C'",
-    ).replace("value='Details'", "value='Details\\, West'");
+    ).replace("value='Details'", `value='${targetXml}'`);
     const { result, applyWorkbookDocument } = await getToolResult({
-      args: { ...ARGS, targetSheet: 'Details, West', highlightFields: ['Category'] },
+      args: { ...ARGS, targetSheet: target, highlightFields: ['Category'] },
       initialXml: workbook,
       readbackXml: withActions(workbook, action),
     });
     expect(result.isError).toBe(false);
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(action);
+    expect(receipt(result).targetSheet).toBe(target);
     expect(receipt(result).highlightFields).toEqual(['Category, A\\B & C']);
+  });
+
+  it.each([
+    ['Details, West', 'Details\\, West'],
+    ['Details\\West', 'Details\\\\West'],
+  ])('rejects a list-escaped target %j on readback', async (target, escapedTarget) => {
+    const workbook = WORKBOOK.replace(/Details/g, target);
+    const { result } = await getToolResult({
+      args: { ...ARGS, targetSheet: target },
+      initialXml: workbook,
+      readbackXml: withActions(
+        workbook,
+        ALL_FIELDS.replace("value='Details'", `value='${escapedTarget}'`),
+      ),
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('requested highlight semantics');
+  });
+
+  it.each(['Details, West', 'Details\\West'])(
+    'rejects an identical native action targeting %j before apply',
+    async (target) => {
+      const workbook = WORKBOOK.replace(/Details/g, target);
+      const action = ALL_FIELDS.replace("value='Details'", `value='${target}'`);
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { ...ARGS, caption: 'Another caption', targetSheet: target },
+        initialXml: withActions(workbook, action),
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('identical highlight action');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, 'Sample - Superstore'])(
+    'prefers an exact caption over another field internal name with datasource %s',
+    async (datasource) => {
+      const workbook = WORKBOOK.replace(
+        "caption='Category' datatype='string' name='[Category]'",
+        "caption='Category' datatype='string' name='[Calculation_1]'",
+      ).replace(
+        "caption='Sub-Category' datatype='string' name='[Sub-Category]'",
+        "caption='Location' datatype='string' name='[Category]'",
+      );
+      const action = ALL_FIELDS.replace(
+        "name='special-fields' value='all'",
+        "name='field-captions' value='Category'",
+      );
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { ...ARGS, datasource, highlightFields: ['Category'] },
+        initialXml: workbook,
+        readbackXml: withActions(workbook, action),
+      });
+      expect(result.isError).toBe(false);
+      expect(appliedDocumentXml(applyWorkbookDocument)).toContain(action);
+      expect(receipt(result).highlightFields).toEqual(['Category']);
+    },
+  );
+
+  it('prefers a literal bracketed caption before interpreting a field reference', async () => {
+    const workbook = WORKBOOK.replace(
+      "caption='Category' datatype='string' name='[Category]'",
+      "caption='[Category]' datatype='string' name='[Calculation_1]'",
+    ).replace(
+      "caption='Sub-Category' datatype='string' name='[Sub-Category]'",
+      "caption='Location' datatype='string' name='[Category]'",
+    );
+    const action = ALL_FIELDS.replace(
+      "name='special-fields' value='all'",
+      "name='field-captions' value='[Category]'",
+    );
+    const { result } = await getToolResult({
+      args: { ...ARGS, highlightFields: ['[Category]'] },
+      initialXml: workbook,
+      readbackXml: withActions(workbook, action),
+    });
+    expect(result.isError).toBe(false);
+    expect(receipt(result).highlightFields).toEqual(['[Category]']);
   });
 
   it('keeps source and target dashboard exclusions independent', async () => {
@@ -307,7 +390,7 @@ describe('author-action highlight mode', () => {
   });
 
   it('rejects ambiguous field names and supports explicit datasource recovery', async () => {
-    const workbook = WORKBOOK.replace(
+    const workbook = WORKBOOK.replace("caption='Category'", "caption='Primary category'").replace(
       '</datasources>',
       "<datasource caption='Other data' name='other'><column caption='Other category' name='[Category]' datatype='string' role='dimension' type='nominal' /></datasource></datasources>",
     );
@@ -318,7 +401,7 @@ describe('author-action highlight mode', () => {
     expect(rejected.applyWorkbookDocument).not.toHaveBeenCalled();
     const action = ALL_FIELDS.replace(
       "name='special-fields' value='all'",
-      "name='field-captions' value='Category'",
+      "name='field-captions' value='Primary category'",
     );
     const accepted = await getToolResult({
       args: { ...args, datasource: 'Sample - Superstore' },
@@ -326,6 +409,7 @@ describe('author-action highlight mode', () => {
       readbackXml: withActions(workbook, action),
     });
     expect(accepted.result.isError).toBe(false);
+    expect(receipt(accepted.result).highlightFields).toEqual(['Primary category']);
   });
 
   it('allows distinct activation on the same source, target, and fields', async () => {
