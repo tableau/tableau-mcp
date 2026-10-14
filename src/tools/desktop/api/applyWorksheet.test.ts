@@ -22,6 +22,7 @@ import {
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError, FileReadError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -46,6 +47,10 @@ vi.mock('fs', async (importOriginal) => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('applyWorksheetTool', () => {
   const resultSchema = z.object({
@@ -1717,6 +1722,14 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(true);
     expect(store.reserve('artifact-1', '12345').ok).toBe(true);
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        level: 'error',
+        logger: 'tool',
+        data: expect.objectContaining({ message: 'Desktop unavailable' }),
+      }),
+    );
   });
 
   it('allows only one concurrent apply for an artifact', async () => {

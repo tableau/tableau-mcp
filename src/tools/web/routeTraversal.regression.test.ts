@@ -9,6 +9,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import * as loggerModule from '../../logging/logger.js';
 import ViewsMethods from '../../sdks/tableau/methods/viewsMethods.js';
 import WorkbooksMethods from '../../sdks/tableau/methods/workbooksMethods.js';
 import { WebMcpServer } from '../../server.web.js';
@@ -59,6 +60,10 @@ const tools = [
     getTool: () => getDownloadWorkbookTool(new WebMcpServer()),
   },
 ] as const;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('W-24452700 route traversal regression', () => {
   beforeEach(() => {

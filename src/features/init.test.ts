@@ -16,10 +16,15 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
+import * as loggerModule from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
 import { _setSeaApiForTest } from '../utils/sea.js';
 import { getFeatureGate, initializeFeatureGate, resetFeatureGate } from './init.js';
 import { featureGateProviderSchema, isFeatureGateProvider } from './types.js';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('FeatureGate', () => {
   beforeEach(() => {

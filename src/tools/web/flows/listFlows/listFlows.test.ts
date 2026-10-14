@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../../utils/getCombinationsOfBoundedContextInputs.js';
@@ -37,6 +38,10 @@ vi.mock('../../../../config.js', () => ({
     server: 'https://test.tableau.com',
   })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listFlowsTool', () => {
   beforeEach(() => {

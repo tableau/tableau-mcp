@@ -1,6 +1,7 @@
 import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
 
+import * as loggerModule from '../../logging/logger.js';
 import { OverridableConfig } from '../../overridableConfig.js';
 import { TableauRestError } from '../../sdks/tableau/tableauRestError.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
@@ -48,6 +49,10 @@ vi.mock('../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('ResourceAccessChecker', () => {
   const extra = getMockRequestHandlerExtra();

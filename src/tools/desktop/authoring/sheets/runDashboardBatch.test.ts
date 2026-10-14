@@ -13,6 +13,7 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -29,6 +30,10 @@ const BATCH = {
 };
 
 const WORKBOOK_XML = renderedWorkbook(['Existing', 'Existing A', 'Existing B']);
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('runDashboardBatchTool', () => {
   beforeEach(() => {

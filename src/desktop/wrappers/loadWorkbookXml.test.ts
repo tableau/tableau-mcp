@@ -53,6 +53,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
   });
 

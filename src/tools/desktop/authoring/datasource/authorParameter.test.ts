@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -104,6 +105,7 @@ const XML_TWO_CAPTIONED_DATASOURCES = [
 ].join('');
 
 beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
   vi.clearAllMocks();
   vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', undefined);
 });

@@ -776,6 +776,7 @@ const badSortFieldEscalateResult: BinderResult = {
 };
 
 beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
   sessionRouteState.clear();
   vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReset();
   vi.mocked(binderModule.bindTemplate).mockReset();
@@ -3341,6 +3342,14 @@ describe('bindTemplateTool bind recovery gate', () => {
       getExecutor,
     });
 
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        level: 'error',
+        logger: 'tool',
+        data: expect.objectContaining({ message: 'desktop unavailable' }),
+      }),
+    );
     expect(failed.isError).toBe(true);
     expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');

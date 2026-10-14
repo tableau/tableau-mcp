@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'crypto';
 import express from 'express';
 
+import * as loggerModule from '../../logging/logger.js';
 import { SessionStore } from '../../sessionStore/sessionStore.js';
 import {
   closeLoopbackServer,
@@ -56,6 +57,10 @@ class FakeSessionStore<V> implements SessionStore<V> {
     return Promise.resolve(value);
   }
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('refresh_token rotation write ordering', () => {
   const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

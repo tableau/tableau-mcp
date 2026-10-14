@@ -1,6 +1,7 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -12,6 +13,10 @@ const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
 const MOCK_JWE_TOKEN = 'eyJhbGciOiJSU0EtT0FFUC0yNTYifQ.encrypted-key.iv.ciphertext.tag';
 const MOCK_SERVER = 'https://my-tableau-server.com';
 const MOCK_CLIENT_ID = 'https://client.dev/oauth/metadata.json';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('revokeAccessTokenTool', () => {
   let mockFetch: ReturnType<typeof vi.fn>;

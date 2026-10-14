@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -14,6 +15,10 @@ vi.mock('../../../../logging/fileLogger.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../logging/fileLogger.js')>()),
   getFileLogger: () => ({ log: fileLogSpy }),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('inspect-custom-theme', () => {
   beforeEach(() => {

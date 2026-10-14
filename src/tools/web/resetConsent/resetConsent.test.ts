@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -9,6 +10,10 @@ import { getResetConsentTool } from './resetConsent.js';
 const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
 const MOCK_SERVER = 'https://my-tableau-server.com';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('resetConsentTool', () => {
   let mockFetch: ReturnType<typeof vi.fn>;

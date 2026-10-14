@@ -1,6 +1,7 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
@@ -42,6 +43,10 @@ const modes = [
   { requireExistingSheet: true, verifyReadback: true },
   { requireExistingSheet: false, verifyReadback: true },
 ];
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('non-waivable dashboard worksheet-zone crash guard', () => {
   it.each(

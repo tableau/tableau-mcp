@@ -42,6 +42,10 @@ vi.mock('../../activityLog/init.js', () => ({
   recordToolCall: mockRecordToolCall,
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 

@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 
 import { createCallDeadline } from '../../desktop/callDeadline.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
+import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
@@ -66,6 +67,10 @@ afterEach(() => {
   resetEpisodeEventsForTests();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   vi.useRealTimers();
+});
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
 describe('DesktopTool per-call deadline', () => {

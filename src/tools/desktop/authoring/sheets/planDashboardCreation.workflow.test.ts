@@ -10,6 +10,7 @@ import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.
 import { extractDashboardXml, listDashboardRefs } from '../../../../desktop/metadata/dashboards.js';
 import { extractSheetXml, listWorksheetRefs } from '../../../../desktop/metadata/sheets.js';
 import { TemplateArtifactStore } from '../../../../desktop/templates/templateArtifactStore.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -38,6 +39,10 @@ function payload(result: CallToolResult): any {
   invariant(result.content[0].type === 'text');
   return JSON.parse(result.content[0].text);
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('planned dashboard creation through live dashboard apply', () => {
   beforeEach(() => {

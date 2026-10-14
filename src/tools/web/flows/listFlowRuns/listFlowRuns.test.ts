@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRun } from '../../../../sdks/tableau/types/flow.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -89,6 +90,10 @@ const NO_BOUNDED_CONTEXT = {
 } as const;
 
 const FLOW_WEBPAGE_URL = 'https://my.tableau.example.com/#/site/mysite/flows/96151';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listFlowRunsTool', () => {
   beforeEach(() => {

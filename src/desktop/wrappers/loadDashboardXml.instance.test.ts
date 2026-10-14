@@ -1,5 +1,6 @@
 import { Err, Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import { ExternalApiHttp } from '../externalApi/externalApiHttp.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { EXTERNAL_API_ROUTES, ExternalApiInstance } from '../externalApi/types.js';
@@ -16,6 +17,10 @@ const scenarios: { kind: 'dashboard' | 'storyboard'; populated: boolean; phase: 
     { kind: 'storyboard' as const, populated: false, phase },
   ]),
 ];
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('surgical dashboard apply instance identity', () => {
   it.each(

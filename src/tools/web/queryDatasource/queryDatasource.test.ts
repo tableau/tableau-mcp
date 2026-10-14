@@ -3,6 +3,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
@@ -70,6 +71,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('queryDatasourceTool', () => {
   const originalVersionIsAtLeast = RestApi.versionIsAtLeast;

@@ -10,6 +10,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -21,6 +22,10 @@ vi.mock('../../../desktop/session/sessionResolution.js');
 const DASHBOARD_ID = 'dash-exec';
 const DASHBOARD_NAME = 'Executive Dashboard';
 const ROUTE = `/v0/workbook/dashboards/${DASHBOARD_ID}:refreshNow`;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('refresh-dashboard-auto-updates', () => {
   beforeEach(() => {

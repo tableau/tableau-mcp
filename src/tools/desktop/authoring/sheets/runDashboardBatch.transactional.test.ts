@@ -13,6 +13,7 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -40,6 +41,10 @@ const BASELINE = `<?xml version="1.0"?>
     <window class="dashboard" name="Keep"><viewpoints><viewpoint name="Existing"/></viewpoints></window>
   </windows>
 </workbook>`;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('run-dashboard-batch transactional apply', () => {
   beforeEach(() => {

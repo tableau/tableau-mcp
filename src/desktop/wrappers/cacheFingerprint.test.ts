@@ -23,6 +23,7 @@ vi.mock('../cache.js', () => ({
 }));
 
 beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
   state.cacheDir = mkdtempSync(join(tmpdir(), 'tableau-cache-fingerprint-'));
   dirs.push(state.cacheDir);
 });

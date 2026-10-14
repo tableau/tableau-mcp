@@ -55,6 +55,10 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('DesktopTool episode telemetry', () => {
   it('emits tool_start and successful tool_end from the execution wrapper', async () => {
     const dir = tmpDir();
@@ -611,6 +615,14 @@ describe('DesktopTool product telemetry', () => {
         success: false,
         error_code: '',
         error_message: '',
+      }),
+    );
+
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution exceeded the Desktop call deadline',
+        level: 'error',
+        logger: 'tool',
       }),
     );
   });

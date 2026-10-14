@@ -1,5 +1,6 @@
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { buildInjectedWorkbookXml } from '../templates/injectTemplateCore.js';
@@ -9,6 +10,10 @@ import { loadWorkbookXml } from './loadWorkbookXml.js';
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('loadWorkbookXml validation preflight', () => {
   it.each(
     [false, true].flatMap((cachedLiveRelative) =>

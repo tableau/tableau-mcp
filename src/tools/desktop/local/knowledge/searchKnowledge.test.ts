@@ -9,6 +9,7 @@ import { getSearchKnowledgeTool } from './searchKnowledge.js';
 vi.mock('../../../../desktop/knowledge/index.js');
 
 import { searchKnowledgeWithFallback } from '../../../../desktop/knowledge/index.js';
+import * as loggerModule from '../../../../logging/logger.js';
 
 const TOP_HIT = {
   uri: 'expertise://tableau/strategy/viz-design/chart-selection',
@@ -20,6 +21,10 @@ const TOP_HIT = {
   mustReadUri: 'expertise://tableau/strategy/viz-design/chart-selection',
   instruction: 'snippet is not the module — read this URI before authoring',
 };
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('searchKnowledgeTool', () => {
   beforeEach(() => {

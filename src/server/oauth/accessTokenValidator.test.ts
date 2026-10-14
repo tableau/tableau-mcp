@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'crypto';
 import { CompactEncrypt } from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import {
   EmbeddedAccessTokenValidator,
@@ -35,6 +36,10 @@ function basePayload(overrides: Record<string, unknown> = {}): Record<string, un
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('TableauAccessTokenValidator', () => {
   let validator: TableauAccessTokenValidator;

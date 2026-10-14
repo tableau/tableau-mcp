@@ -44,6 +44,10 @@ vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);

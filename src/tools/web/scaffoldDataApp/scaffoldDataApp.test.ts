@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { z } from 'zod';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { buildTemplateZip } from '../../../scripts/buildTemplateZip.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -43,6 +44,10 @@ function makeTool(
 ): ReturnType<typeof getScaffoldDataAppTool> {
   return getScaffoldDataAppTool(new WebMcpServer(), productVersion);
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getScaffoldDataAppTool', () => {
   beforeEach(() => {
