@@ -181,7 +181,7 @@ describe('DesktopMcpServer', () => {
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
         type: 'tool_schemas_registered',
         surface: 'desktop',
-        profile: 'unknown',
+        profile: 'dynamic-authoring',
         tool_count: listedTools.length,
         schemas_json_chars: JSON.stringify(listedTools).length,
         instructions_chars: instructions.length,
@@ -381,7 +381,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   });
 });
 
-describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)', () => {
+describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   const allTools = (): Array<DesktopTool<any>> =>
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
@@ -432,7 +432,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(new Set(selected.map((t) => t.name))).toEqual(DEMO_TOOL_PROFILE);
     expect(selected.map((tool) => tool.name)).toContain('run-dashboard-batch');
     expect(selected.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
-    // The escalation-fallback chain the preamble-hunt requires must survive the slim.
+    // The fallback chain used when the fast path cannot finish must survive in the demo set.
     for (const fallback of [
       'bind-template',
       'get-workbook-xml',
@@ -691,7 +691,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ).toHaveLength(1);
   });
 
-  it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
+  it('unset ("") profile returns the default dynamic-authoring set', () => {
     const selected = selectToolsForProfile(allTools(), '');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
   });
@@ -718,13 +718,31 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selectToolsForProfile(tools, 'combined-lean')).toBe(tools);
   });
 
-  it('an unknown profile value falls back to the full set and logs a warning', () => {
-    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
-    const tools = allTools();
-    const selected = selectToolsForProfile(tools, 'bogus');
-    expect(selected).toBe(tools);
-    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
-  });
+  it.each(['bogus', 'lean-tools'])(
+    'an unknown profile value "%s" falls back to the default set and logs a warning',
+    (raw) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+      const tools = allTools();
+      const selected = selectToolsForProfile(tools, raw);
+      expect(selected).not.toBe(tools);
+      expect(selected.map((tool) => tool.name).sort()).toEqual(
+        tools
+          .filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name))
+          .map((tool) => tool.name)
+          .sort(),
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(`"${raw}"`),
+        }),
+      );
+      const message = String(logSpy.mock.calls.at(-1)?.[0].message);
+      for (const valid of ['dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean']) {
+        expect(message).toContain(valid);
+      }
+    },
+  );
 });
 
 describe('API-version tool gate (interim minApiVersion floor)', () => {

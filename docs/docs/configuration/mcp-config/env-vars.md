@@ -218,20 +218,22 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 ## `TOOL_PROFILE`
 
 Selects which tools the Desktop authoring server registers, and whether the combined Web and Desktop
-server loads its Web tools lazily. The value is trimmed and lowercased.
+server loads its Web tools lazily. The value is trimmed and lowercased. The standalone Web
+server ignores `TOOL_PROFILE`. On the combined server, only `combined-lean` changes the Web half.
 
 - Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
 - `full`: every Desktop tool.
-- `demo`: the demo subset.
-- `spec-loop`: the spec-loop subset.
+- `demo`: the demo subset. Experimental; it may change or be removed in a minor release.
+- `spec-loop`: the spec-loop subset. Experimental; it may change or be removed in a minor release.
 - `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
-- Any other value registers every Desktop tool and logs a warning.
+- Any other value logs a warning and uses the default (`dynamic-authoring`) set.
 
-`combined-lean` only takes effect on the combined server, which runs over stdio with one identity per
-process. There, only the `load-web-tools` tool is listed for the Web half at startup. A client calls
+Lazy Web loading for `combined-lean` happens only on the combined server, which runs over stdio with
+one identity per process. On the standalone Desktop server, `combined-lean` acts like `full`. On the
+combined server, only the `load-web-tools` tool is listed for the Web half at startup. A client calls
 it with a tool group name (or `all`), the server registers that group's tools, and it sends a
 `tools/list_changed` notification. The tool's description lists every group and its tools. Standalone
-Web servers ignore `combined-lean` and register every Web tool.
+Web servers register every Web tool.
 
 The `load-web-tools` result is JSON `{ status, toolNames, warnings?, notes? }`:
 
