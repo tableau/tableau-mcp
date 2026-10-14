@@ -192,11 +192,12 @@ happened.
                     return { action: args.action, context };
                   }
                   case 'delete': {
-                    // The service answers 204 for ids that don't exist; a node lookup covers attached
-                    // contexts too, which the graph-wide list does not.
+                    // The service answers 204 for ids that don't exist or aren't a customer-managed
+                    // context; a node lookup covers attached contexts too, which the graph-wide list
+                    // does not.
                     const exists = await methods
                       .getKnowledgeNode({ graphId: args.graphId, nodeId: args.contextId! })
-                      .then(() => true)
+                      .then((node) => node.type === 'SEMANTIC_CONTEXT')
                       .catch((error) => {
                         if (getHttpStatus(error as Error) === '404') return false;
                         throw error;
@@ -208,7 +209,8 @@ happened.
                         deleted: false,
                         reason: 'NOT_FOUND',
                         message:
-                          'No context with this id exists in the graph, so nothing was deleted. ' +
+                          'No customer-managed context with this id exists in the graph, so nothing ' +
+                          'was deleted. ' +
                           'Use inspect-knowledge-context action="list" to find the right contextId.',
                       };
                     }
@@ -235,7 +237,10 @@ function normalizeStatement(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-/** An existing context in the same scope (same node, or graph-wide) that already holds every new statement. */
+/**
+ * An existing customer-managed context in the same scope (same node, or graph-wide) that already
+ * holds every new statement. Read-only external contexts can't be updated, so they never count.
+ */
 function findDuplicate(
   existing: SemanticContextNode[],
   statements: Array<{ statement: string }>,
@@ -243,6 +248,7 @@ function findDuplicate(
 ): SemanticContextNode | undefined {
   const wanted = statements.map(({ statement }) => normalizeStatement(statement));
   return existing.find((context) => {
+    if (context.type !== 'SEMANTIC_CONTEXT') return false;
     if ((context.target_node_id ?? undefined) !== targetNodeId) return false;
     const stored = new Set(
       context.properties.statements.map((s) => normalizeStatement(s.statement)),
