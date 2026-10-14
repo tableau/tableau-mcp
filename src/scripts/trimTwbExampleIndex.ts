@@ -10,7 +10,7 @@
  *     `name` substring (+3), and — only when nothing else matched — a literal
  *     substring hit in a snippet's `xml` (+1);
  *   - returns at most TWB_RESULTS_LIMIT (15) entries.
- * It never reads `snippets[*].json` (a mechanical parse of `xml`, i.e. redundant).
+ * Each snippet carries only its `xml` fragment.
  *
  * RETRIEVAL-QUALITY GUARANTEE (oracle seeding): a naive per-feature quota trim
  * silently dropped the source top-15 for name-sensitive and XML-fallback queries
@@ -23,13 +23,13 @@
  *
  * INPUT (kept OUT of Desktop builds and executables):
  *   src/desktop/data-source/twb-example-index.source.json.gz
- *   — a gzip of the untrimmed original (the 10 MB uncompressed twin is not
+ *   — a gzip of the untrimmed original (the 3.5 MB uncompressed twin is not
  *   committed). It is not under `src/desktop/data`, so `build.ts` never copies it,
  *   and the SEA builder never embeds it. `.gz` inputs are gunzipped in-memory.
  * OUTPUT (the committed Desktop asset): src/desktop/data/twb-example-index.json
  *
  * Re-generate with:  npx tsx src/scripts/trimTwbExampleIndex.ts
- * Tune with flags:   --max-per-feature <N>  --keep-json  --in <path>  --out <path>  --pretty
+ * Tune with flags:   --max-per-feature <N>  --in <path>  --out <path>  --pretty
  *
  * The transform is deterministic (stable sorts, no randomness): same input +
  * same flags => byte-identical output.
@@ -44,7 +44,6 @@ import { gunzipSync } from 'zlib';
 
 interface Snippet {
   xml?: string;
-  json?: unknown;
   [k: string]: unknown;
 }
 interface Entry {
@@ -58,7 +57,6 @@ interface Options {
   inPath: string;
   outPath: string;
   maxPerFeature: number;
-  keepJson: boolean;
   pretty: boolean;
 }
 
@@ -236,13 +234,11 @@ function parseArgs(argv: string[]): Options {
     inPath: process.env.TWB_SOURCE_PATH ?? DEFAULT_IN,
     outPath: process.env.TWB_INDEX_OUT_PATH ?? DEFAULT_OUT,
     maxPerFeature: 80,
-    keepJson: false,
     pretty: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--max-per-feature') opts.maxPerFeature = Number(argv[++i]);
-    else if (arg === '--keep-json') opts.keepJson = true;
     else if (arg === '--pretty') opts.pretty = true;
     else if (arg === '--in') opts.inPath = argv[++i];
     else if (arg === '--out') opts.outPath = argv[++i];
@@ -268,15 +264,6 @@ function snippetKey(entry: Entry): string {
   return JSON.stringify(canonical);
 }
 
-function stripJson(entry: Entry): Entry {
-  const snippets: Record<string, Snippet> = {};
-  for (const [feature, snippet] of Object.entries(entry.snippets)) {
-    const { json: _json, ...rest } = snippet;
-    snippets[feature] = rest;
-  }
-  return { ...entry, snippets };
-}
-
 function featureCounts(entries: Entry[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const e of entries) {
@@ -294,19 +281,15 @@ function main(): void {
   const inSnippets = input.reduce((n, e) => n + Object.keys(e.snippets).length, 0);
   const inFeatures = featureCounts(input);
 
-  // Rule 1: drop the redundant `json` snippet field (unless --keep-json).
-  const projected = opts.keepJson ? input : input.map(stripJson);
-
-  // Rule 2 (oracle seeding): compute the SOURCE top-15 for the whole query suite
-  // and pin those entries. Scoring uses only features/name/xml, which projection
-  // preserves, so pins computed on `projected` match production retrieval.
-  const suite = buildQuerySuite(projected);
+  // Oracle seeding: compute the SOURCE top-15 for the whole query suite and pin
+  // those entries, so pins match production retrieval over the source.
+  const suite = buildQuerySuite(input);
   const pinnedIds = new Set<string>();
   for (const query of suite) {
-    for (const entry of topKForQuery(projected, query)) pinnedIds.add(entry.id);
+    for (const entry of topKForQuery(input, query)) pinnedIds.add(entry.id);
   }
 
-  const byId = [...projected].sort(byIdOrder);
+  const byId = [...input].sort(byIdOrder);
 
   const kept: Entry[] = [];
   const seen = new Set<string>();
@@ -369,9 +352,7 @@ function main(): void {
   console.log('--- trimTwbExampleIndex ---');
   console.log(`in : ${opts.inPath}`);
   console.log(`out: ${opts.outPath}`);
-  console.log(
-    `options: maxPerFeature=${opts.maxPerFeature} keepJson=${opts.keepJson} pretty=${opts.pretty}`,
-  );
+  console.log(`options: maxPerFeature=${opts.maxPerFeature} pretty=${opts.pretty}`);
   console.log('');
   console.log(`entries : ${input.length} -> ${kept.length} (${pct(kept.length, input.length)})`);
   console.log(`snippets: ${inSnippets} -> ${outSnippets} (${pct(outSnippets, inSnippets)})`);
@@ -380,7 +361,7 @@ function main(): void {
   console.log('');
   console.log(`oracle  : suite=${suite.length} queries, pinned=${pinnedCount} entries`);
   for (const query of SMOKE_QUERIES) {
-    const src = topKForQuery(projected, query).map((e) => e.id);
+    const src = topKForQuery(input, query).map((e) => e.id);
     const trim = new Set(topKForQuery(kept, query).map((e) => e.id));
     const overlap = src.filter((id) => trim.has(id)).length;
     console.log(`  "${query}": source top-${src.length}, trimmed overlap ${overlap}/${src.length}`);

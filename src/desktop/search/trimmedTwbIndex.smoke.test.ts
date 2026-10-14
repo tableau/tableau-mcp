@@ -44,8 +44,8 @@ function assertUsableEntries(entries: TwbEntry[]): void {
     const snippets = Object.values(e.snippets);
     expect(snippets.length).toBeGreaterThan(0);
     for (const s of snippets) {
-      // The trim keeps the authoritative XML fragment and drops the redundant
-      // parsed `json` tree, so every returned snippet must still carry xml.
+      // Snippets carry only the XML fragment (no parsed `json` tree), so every
+      // returned snippet must still carry xml.
       expect(typeof s.xml).toBe('string');
       expect((s.xml as string).length).toBeGreaterThan(0);
       expect(s.json).toBeUndefined();
