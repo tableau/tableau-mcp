@@ -100,6 +100,7 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   TABLEAU_DESKTOP_CALL_TIMEOUT_MS: string | undefined;
   TABLEAU_EXTERNAL_API_DISCOVERY_DIR: string | undefined;
   TABLEAU_COMMANDS_REGISTRY_DIR: string | undefined;
+  TABLEAU_USER_AGENT_PREFIX: string | undefined;
   TABLEAU_KNOWLEDGE_DIR: string | undefined;
   TEMPLATES_DIR: string | undefined;
   TABLEAU_REPOSITORY_DIR: string | undefined;

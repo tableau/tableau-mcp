@@ -13,6 +13,7 @@ import {
   problemResponseSchema,
   WindowInfo,
 } from './types.js';
+import { buildDesktopUserAgent } from './userAgent.js';
 
 export type ExternalApiHttpOptions = {
   /** Injectable fetch — defaults to the global. Tests pass real HTTP to a mock server. */
@@ -21,6 +22,7 @@ export type ExternalApiHttpOptions = {
   timeoutMs?: number;
   /** Overall wall-clock ceiling for a 202→poll loop, separate from the per-fetch timeout. */
   pollDeadlineMs?: number;
+  userAgent?: string;
 };
 
 export type ExternalApiRequestOptions = {
@@ -91,12 +93,14 @@ export class ExternalApiHttp {
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number | undefined;
   private readonly pollDeadlineMs: number;
+  private readonly userAgent: string;
 
   constructor(instance: ExternalApiInstance, options: ExternalApiHttpOptions = {}) {
     this.instance = instance;
     this.fetchFn = options.fetchFn ?? fetch;
     this.timeoutMs = options.timeoutMs;
     this.pollDeadlineMs = options.pollDeadlineMs ?? DEFAULT_POLL_DEADLINE_MS;
+    this.userAgent = options.userAgent ?? buildDesktopUserAgent();
   }
 
   get baseUrl(): string {
@@ -468,6 +472,7 @@ export class ExternalApiHttp {
   ): Promise<Result<Response, ExternalApiError>> {
     const headers: Record<string, string> = {
       authorization: `Bearer ${this.instance.token}`,
+      'user-agent': this.userAgent,
     };
     if (options.contentType) {
       headers['content-type'] = options.contentType;

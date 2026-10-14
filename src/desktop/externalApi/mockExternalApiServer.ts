@@ -22,6 +22,7 @@ export type RecordedRequest = {
   path: string;
   searchParams: Record<string, string>;
   authorization: string | undefined;
+  userAgent: string | undefined;
   contentType: string | undefined;
   body: string;
 };
@@ -366,9 +367,10 @@ export async function startMockExternalApiServer(
     const path = url.pathname;
     const searchParams = Object.fromEntries(url.searchParams.entries());
     const authorization = req.headers['authorization'];
+    const userAgent = req.headers['user-agent'];
     const contentType = req.headers['content-type'];
     const body = await readBody(req);
-    requests.push({ method, path, searchParams, authorization, contentType, body });
+    requests.push({ method, path, searchParams, authorization, userAgent, contentType, body });
 
     // Bearer auth: a mismatched/absent token models a stale discovery file → 401.
     if (authorization !== `Bearer ${token}`) {

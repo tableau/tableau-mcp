@@ -340,6 +340,7 @@ function formatLiteral(literal: string): string {
 const PREFIXED_TOKEN_RE = /(?<![\w-])tableau[-_][a-z][\w-]*/g;
 const DESKTOP_ROOT = join(REPO_ROOT, 'src/desktop');
 const PREFIXED_ALLOWED_TOKENS = new Set([
+  'tableau-desktop-mcp',
   'tableau-error-code',
   'tableau-operation-id',
   'tableau-application-version',
