@@ -14,6 +14,7 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -274,6 +275,7 @@ describe('cache-file arguments are contained in the Desktop cache directory', ()
   const OUTSIDE_BYTES = '<workbook name="precious outside file"/>';
 
   beforeEach(() => {
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     root = mkdtempSync(join(tmpdir(), 'cache-file-guard-'));
     state.cacheDir = join(root, 'cache');
     mkdirSync(state.cacheDir);
@@ -332,7 +334,7 @@ describe('cache-file arguments are contained in the Desktop cache directory', ()
     expect(factory).toBeDefined();
     const tool = factory!(server);
     const callback = await Provider.from(tool.callback);
-    const apply = vi.fn();
+    const apply = vi.fn(async () => Ok({}));
     const getExecutor = vi.fn(() => {
       if (options.stubDatasourceDesktop) {
         return {
@@ -432,9 +434,27 @@ describe('cache-file arguments are contained in the Desktop cache directory', ()
         expect(run.getExecutor).toHaveBeenCalled();
       } else if (testCase.reached === 'apply') {
         expect(run.apply).toHaveBeenCalled();
+        expect(run.result.isError).toBeFalsy();
       } else {
         expect(text(run.result)).toMatch(testCase.reached);
       }
     },
   );
+
+  it('logs the executor failure that proves a real cache file got past containment', async () => {
+    const testCase = CACHE_FILE_CASES.find((c) => c.tool === 'apply-workbook')!;
+
+    await invoke(testCase, inside);
+
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        level: 'error',
+        logger: 'tool',
+        data: expect.objectContaining({
+          message: 'Desktop must not be reached for an outside cache-file argument',
+        }),
+      }),
+    );
+  });
 });
