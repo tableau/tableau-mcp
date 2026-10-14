@@ -1,5 +1,6 @@
 export type ApiVersionFloor = `${number}.${number}.${number}`;
 
+export const START_PAGE_MIN_API_VERSION: ApiVersionFloor = '0.2.11';
 export const WORKBOOK_DIAGNOSTICS_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
 export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
 export const DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION: ApiVersionFloor = '0.2.22';

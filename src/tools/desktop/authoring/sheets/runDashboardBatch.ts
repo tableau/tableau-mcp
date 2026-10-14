@@ -38,6 +38,7 @@ import {
 } from '../../../../desktop/validation/registry.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
+import { hideStartPage } from '../../../../desktop/wrappers/applyFocus.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   describeLoadWorkbookXmlError,
@@ -624,6 +625,7 @@ export const getRunDashboardBatchTool = (
 
             const emptyWorksheetNames = findBlankWorksheetNames(polled.value, worksheetNames);
 
+            await hideStartPage({ executor, signal: extra.signal });
             await activateSheetWithValidatedGoto({
               sheetName: dashboardName,
               executor,

@@ -1,4 +1,5 @@
 import { log } from '../../logging/logger.js';
+import { apiVersionAtLeast, START_PAGE_MIN_API_VERSION } from '../externalApi/apiVersion.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow, ParsedWorkbook } from '../metadata/types.js';
@@ -64,6 +65,26 @@ function logFocusEvent(
   }
 }
 
+export async function hideStartPage({
+  executor,
+  signal,
+}: WithExecutorAndAbortSignal): Promise<void> {
+  if (!apiVersionAtLeast(executor.desktopApiVersion, START_PAGE_MIN_API_VERSION)) {
+    return;
+  }
+
+  try {
+    const result = await executor.setStartPageVisibility(false, signal);
+    if (result.isErr()) {
+      logFocusEvent('', 'Start Page hide failed; the apply itself remains successful', {
+        error: result.error,
+      });
+    }
+  } catch (error) {
+    logFocusEvent('', 'Start Page hide threw; the apply itself remains successful', { error });
+  }
+}
+
 /**
  * Move the view after a completed whole-document write. Best-effort by construction: the
  * apply already landed, so nothing here can fail the caller's result. The name is validated
@@ -79,6 +100,11 @@ export async function dispatchApplyFocus({
   focus: ApplyFocus;
   postedXml: string;
 } & WithExecutorAndAbortSignal): Promise<void> {
+  if (focus.navigate !== 'none') {
+    // The Start Page stays over the document after a POST and goto-sheet does not lift it.
+    await hideStartPage({ executor, signal });
+  }
+
   const target = focusTarget(focus, postedXml);
   if (target === undefined) {
     if (focus.navigate === 'restore') {

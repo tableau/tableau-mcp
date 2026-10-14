@@ -111,6 +111,23 @@ describe('run-dashboard-batch transactional apply', () => {
     });
   });
 
+  it('hides the Start Page before activating the built dashboard', async () => {
+    const harness = statefulExecutor({ desktopApiVersion: '0.2.11' });
+
+    const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({ applied: true });
+    const hide = vi.mocked(harness.executor.setStartPageVisibility);
+    const goto = vi.mocked(harness.executor.executeCommand);
+    expect(hide).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal));
+    const gotoIndex = goto.mock.calls.findIndex(
+      ([params]) => params.command === 'goto-sheet' && params.args?.Sheet === 'Executive Overview',
+    );
+    expect(gotoIndex).toBeGreaterThanOrEqual(0);
+    expect(hide.mock.invocationCallOrder[0]).toBeLessThan(goto.mock.invocationCallOrder[gotoIndex]);
+  });
+
   it('waits past a stale same-name dashboard before accepting a compose-only replacement', async () => {
     vi.useFakeTimers();
     const store = artifactStore([]);
@@ -283,12 +300,14 @@ function statefulExecutor({
   readbackTransform,
   staleReadbackCount = 0,
   afterApplyDispatch,
+  desktopApiVersion,
 }: {
   guardedReadXml?: string;
   failAfterDispatch?: boolean;
   readbackTransform?: (xml: string) => string;
   staleReadbackCount?: number;
   afterApplyDispatch?: () => void;
+  desktopApiVersion?: string;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
@@ -330,6 +349,10 @@ function statefulExecutor({
     ),
     executeCommand: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
+    ),
+    desktopApiVersion,
+    setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean) =>
+      Ok({ isStartPageVisible }),
     ),
   } as unknown as ExternalApiToolExecutor;
   return { executor, posts, current: () => current, getCalls: () => getCalls };
