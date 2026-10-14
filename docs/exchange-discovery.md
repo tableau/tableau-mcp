@@ -144,6 +144,12 @@ Scoring keeps the design weights (exact name 120, name phrase 80, tag phrase 60,
   first-party listings are not boosted by an incidental `tableau` or `salesforce`.
 - Word matching folds simple English plurals (`maps` matches `map`, `categories` matches
   `category`).
+- A small curated map (`src/exchange/catalog/synonyms.ts`) adds related catalog words for common
+  phrasings, for example `flow chart` → `sankey`, `process`, `network`. Each related word scores
+  its best field (name 20, tag 15, description 8) times its IDF weight. The best related word
+  counts fully and each additional one at a quarter, since they usually describe the same concept;
+  the total is capped at 20 and never counts toward the all-tokens bonus. Reasons read
+  `Related term match: sankey (via "flow chart")`.
 
 A result needs at least one name, tag or description match, or a publisher phrase match.
 

@@ -9,9 +9,15 @@ import {
   stemmedTokens,
   stemToken,
 } from './searchText.js';
+import { RelatedTerm, relatedTerms } from './synonyms.js';
 
 // Below this IDF weight a token match is labelled as a common term in its reason.
 const COMMON_TERM_WEIGHT = 0.5;
+// Related terms score only their best field. Several related terms usually evidence the same
+// concept, so each one after the best counts at a quarter, and the total is capped at one
+// name-token match so a listing matching the user's own words keeps ranking above it.
+const RELATED_TERMS_MAX = 20;
+const ADDITIONAL_RELATED_TERM_FACTOR = 0.25;
 const searchTermsCache = new WeakMap<ExchangeAsset, Set<string>>();
 
 const MATCHED_FIELD_ORDER: Array<AssetSearchResult['matchedFields'][number]> = [
@@ -46,10 +52,13 @@ export class SearchEngine {
     }
 
     const filtered = assets.filter((asset) => matchesFilters(asset, input, requestedTags));
-    const weights = hasQuery ? tokenWeights(assets, queryTokens) : new Map<string, number>();
+    const related = hasQuery ? relatedTerms(normalizedQuery, queryTokens) : [];
+    const weights = hasQuery
+      ? tokenWeights(assets, [...queryTokens, ...related.map(({ term }) => term)])
+      : new Map<string, number>();
     const ranked = hasQuery
       ? filtered.flatMap((asset) => {
-          const result = scoreAsset(asset, normalizedQuery, queryTokens, weights);
+          const result = scoreAsset(asset, normalizedQuery, queryTokens, related, weights);
           return result.score > 0 ? [result] : [];
         })
       : filtered.map((asset) => ({ asset, score: 0, reasons: [], matchedFields: [] }));
@@ -141,6 +150,7 @@ function scoreAsset(
   asset: ExchangeAsset,
   normalizedQuery: string,
   queryTokens: string[],
+  related: RelatedTerm[],
   weights: Map<string, number>,
 ): AssetSearchResult {
   const reasons: string[] = [];
@@ -205,6 +215,30 @@ function scoreAsset(
     }
     everyTokenMatched &&= tokenMatched;
   }
+  const relatedPoints: number[] = [];
+  for (const { term, via } of related) {
+    const field: [AssetSearchResult['matchedFields'][number], number] | undefined = hasToken(
+      asset.name,
+      term,
+    )
+      ? ['name', 20]
+      : tags.some((tag) => hasToken(tag, term))
+        ? ['tag', 15]
+        : hasToken(description, term)
+          ? ['description', 8]
+          : undefined;
+    if (!field) continue;
+    relatedPoints.push(field[1] * (weights.get(term) ?? 1));
+    matched.add(field[0]);
+    reasons.push(`Related term match: ${term} (via "${via}")`);
+  }
+  relatedPoints.sort((left, right) => right - left);
+  const relatedScore = relatedPoints.reduce(
+    (sum, points, index) => sum + (index === 0 ? points : points * ADDITIONAL_RELATED_TERM_FACTOR),
+    0,
+  );
+  score += Math.min(relatedScore, RELATED_TERMS_MAX);
+
   if (queryTokens.length > 0 && everyTokenMatched) {
     const meanWeight =
       queryTokens.reduce((sum, token) => sum + (weights.get(token) ?? 1), 0) / queryTokens.length;
