@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, readdirSync, rmdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
+import { getDirname } from '../utils/getDirname.js';
 import { DesktopCache } from './cache.js';
 import {
   getCacheDir,
@@ -13,6 +14,19 @@ const ENV = 'TABLEAU_MCP_CACHE_DIR';
 
 describe('DesktopCache TABLEAU_MCP_CACHE_DIR override', () => {
   const temporaryPaths: string[] = [];
+  const defaultDir = join(getDirname(), '..', 'cache');
+  let defaultDirExisted = true;
+
+  beforeAll(() => {
+    defaultDirExisted = existsSync(defaultDir);
+  });
+
+  // The unset and ignored-value cases create the default dir; leave no empty one behind.
+  afterAll(() => {
+    if (!defaultDirExisted && existsSync(defaultDir) && readdirSync(defaultDir).length === 0) {
+      rmdirSync(defaultDir);
+    }
+  });
 
   afterEach(() => {
     for (const path of temporaryPaths.splice(0)) {
