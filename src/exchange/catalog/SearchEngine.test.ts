@@ -154,6 +154,74 @@ describe('SearchEngine', () => {
     expect(engine.search([maps], { query: 'pros class' }, 10).results).toHaveLength(1);
   });
 
+  describe('related terms', () => {
+    const listing = (
+      id: number,
+      name: string,
+      shortDescription = '',
+      downloads = 1,
+    ): ExchangeAsset => ({
+      ...asset,
+      id,
+      name,
+      shortDescription,
+      publisher: { id: 1, name: 'Vendor' },
+      tags: [],
+      downloads,
+    });
+    const genericCharts = Array.from({ length: 10 }, (_, index) =>
+      listing(100 + index, `Chart ${index}`, 'A chart', 1_000),
+    );
+
+    it('ranks listings matching related terms above listings matching only a common query word', () => {
+      const catalog = [
+        listing(1, 'Sankey Diagram'),
+        listing(2, 'Process Analysis'),
+        listing(3, 'Network Analysis'),
+        ...genericCharts,
+      ];
+      const results = engine.search(catalog, { query: 'flow chart' }, 10).results;
+      expect(results.slice(0, 3).map((result) => result.asset.id)).toEqual(
+        expect.arrayContaining([1, 2, 3]),
+      );
+      expect(results.find((result) => result.asset.id === 1)?.reasons).toContain(
+        'Related term match: sankey (via "flow chart")',
+      );
+    });
+
+    it('finds listings for a query whose own words appear nowhere in the catalog', () => {
+      const results = engine.search([listing(1, 'Sankey Diagram')], { query: 'flowchart' }, 10);
+      expect(results.results.map((result) => result.asset.id)).toEqual([1]);
+      expect(results.results[0].matchedFields).toEqual(['name']);
+    });
+
+    it('keeps a direct name match above a related-term-only match', () => {
+      const catalog = [listing(1, 'Flowchart Builder'), listing(2, 'Sankey Process Network')];
+      const results = engine.search(catalog, { query: 'flowchart' }, 10).results;
+      expect(results.map((result) => result.asset.id)).toEqual([1, 2]);
+    });
+
+    it('does not award the all-tokens bonus for related terms alone', () => {
+      const result = engine.search([listing(1, 'Sankey')], { query: 'flowchart' }, 10).results[0];
+      expect(result.reasons).not.toContain('All query tokens matched');
+    });
+
+    it('counts the best related term fully and each additional one at a quarter', () => {
+      const catalog = [listing(1, 'One', 'sankey'), listing(2, 'Two', 'process network workflow')];
+      const scores = engine
+        .search(catalog, { query: 'flowchart' }, 10)
+        .results.map((result) => [result.asset.id, result.score]);
+      expect(scores).toEqual([
+        [2, 12], // 8 + 8/4 + 8/4
+        [1, 8],
+      ]);
+    });
+
+    it('leaves scores unchanged for queries without related terms', () => {
+      expect(engine.search([asset], { query: 'export' }, 10).results[0].score).toBe(368);
+    });
+  });
+
   it.each([['!!!'], ['Export', '!!!'], ['—'], ['Export', '…']])(
     'rejects every tag that normalizes to empty: %j',
     (...tags) => {
