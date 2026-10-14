@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { paginationSchema } from '../types/pagination.js';
 import { userSchema } from '../types/user.js';
 
@@ -37,11 +38,7 @@ const listUsersEndpoint = makeEndpoint({
   alias: 'listUsers',
   description: 'Returns a list of users on the site.',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'pageSize',
       type: 'Query',
@@ -56,6 +53,17 @@ const listUsersEndpoint = makeEndpoint({
       name: 'includeSSOInfo',
       type: 'Query',
       schema: z.boolean().optional(),
+    },
+    {
+      // Comma-separated list of user attributes to return, e.g.
+      // `id,name,fullName,siteRole,email,lastLogin`. Callers should name every
+      // field explicitly rather than relying on Tableau's default set, which on
+      // some sites silently omits lastLogin. Also accepts the special value
+      // `_all_`, though that pulls the more expensive SSO/authSetting path.
+      // @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_fields.htm
+      name: 'fields',
+      type: 'Query',
+      schema: z.string().optional(),
     },
     {
       name: 'includeUserCount',
@@ -82,10 +90,7 @@ const getUserOnSiteEndpoint = makeEndpoint({
   path: '/sites/:siteId/users/:userId',
   alias: 'getUserOnSite',
   description: 'Returns information about the specified user',
-  parameters: [
-    { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'userId', type: 'Path', schema: z.string() },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('userId')],
   response: z.object({ user: userSchema }),
 });
 
@@ -102,8 +107,8 @@ const updateUserEndpoint = makeEndpoint({
   alias: 'updateUser',
   description: 'Modifies information about the specified user',
   parameters: [
-    { name: 'siteId', type: 'Path', schema: z.string() },
-    { name: 'userId', type: 'Path', schema: z.string() },
+    pathParam('siteId', 'segment'),
+    pathParam('userId'),
     { name: 'body', type: 'Body', schema: z.object({ user: z.object({ siteRole: z.string() }) }) },
   ],
   response: z.object({ user: userSchema.partial() }),

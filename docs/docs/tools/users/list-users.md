@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # List Users
 
-Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, last login time, and authentication settings.
+Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.
 
 :::warning[Admin Only]
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
@@ -47,11 +47,19 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `filter` | string | No | Client-side filter string with format `field:operator:value`. Multiple filters are comma-separated (AND logic). |
-| `pageSize` | number | No | Number of results per page (client-side pagination after filtering) |
-| `limit` | number | No | Maximum total results to return (client-side limit after filtering) |
+| `pageSize` | number | No | Number of users to fetch from the API per page (default 100, max 1000) |
+| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. **If omitted, a default limit of `100` is applied** (see the note below) and the result is flagged `truncated: true` with `truncationReason: "default-limit"`. A single call returns at most `1000` users: a larger `limit` is clamped to `1000` and the result is flagged `truncated: true` with `truncationReason: "max-limit"`. To see more, add a `filter` to target specific users or pass a higher `limit` (up to `1000`). The `1000` per-call ceiling is a hard cap with no page offset, so neither a bigger `limit` nor repeated calls advance past it — to reach matches beyond it you must narrow the `filter`. |
 
 :::note[API Limitation]
 The Tableau REST API does not support server-side filtering or pagination for users. All users are fetched and filtering is performed client-side by this tool.
+:::
+
+:::warning[Default limit on unbounded calls]
+An unbounded `list-users` call (no `limit`, no `filter`) on a large site can return tens of thousands of users — a multi-megabyte payload that exceeds the MCP response-size limit and is silently truncated in transit, which can cause a model to report fabricated site-wide totals from a payload it never fully received. To prevent this, when the caller passes no `limit` the tool applies a default cap of `100`, returns that bounded page, and flags the result `truncated: true` with `truncationReason: "default-limit"` and a `summary` explaining it is partial. Pass a `filter` to target specific users, or an explicit higher `limit` (up to the `1000` per-call maximum) to return more in one call.
+:::
+
+:::note[Never-logged-in users]
+Tableau emits no `lastLogin` value for users who were provisioned but have never signed in. Because these users are the most inactive, a `lastLogin:lt:<date>` or `lastLogin:lte:<date>` (inactivity) filter **includes** them, while `lastLogin:gt:`/`gte:`/`eq:` filters exclude them. This makes never-logged-in users discoverable as license-reclamation candidates.
 :::
 
 ## Filterable Fields
@@ -64,9 +72,8 @@ The Tableau REST API does not support server-side filtering or pagination for us
 | `email` | string | `eq`, `in` | `email:eq:user@example.com` |
 | `fullName` | string | `eq`, `in` | `fullName:eq:John Smith` |
 | `lastLogin` | string (ISO 8601) | `eq`, `gt`, `gte`, `lt`, `lte` | `lastLogin:lt:2025-01-01T00:00:00Z` |
-| `authSetting` | string | `eq`, `in` | `authSetting:eq:SAML` |
-| `locale` | string | `eq`, `in` | `locale:eq:en_US` |
-| `language` | string | `eq`, `in` | `language:eq:en` |
+
+Only the fields above are filterable — they match the attributes this tool requests from Tableau. Filtering on any other field (e.g. `authSetting`, `locale`, `language`) is rejected with a validation error.
 
 ### Site Roles
 
@@ -81,13 +88,6 @@ Common values for `siteRole`:
 - `Unlicensed` - No active license
 - `Guest` - Guest user (limited access)
 
-### Authentication Settings
-
-Common values for `authSetting`:
-- `ServerDefault` - Uses server's default authentication
-- `SAML` - SAML-based SSO
-- `OpenID` - OpenID Connect authentication
-
 ### Filter Examples
 
 - Find all Creators: `siteRole:eq:Creator`
@@ -95,12 +95,13 @@ Common values for `authSetting`:
 - Inactive users (no login in 6 months): `lastLogin:lt:2025-12-01T00:00:00Z`
 - Unlicensed users: `siteRole:eq:Unlicensed`
 - Combined filter for license reclamation: `siteRole:eq:Unlicensed,lastLogin:lt:2025-01-01T00:00:00Z`
-- Users with SAML auth: `authSetting:eq:SAML`
 - Find specific user by email: `email:eq:john.smith@example.com`
 
 ## Response structure
 
-Each user includes:
+Returns a JSON object `{ users: [...], mcp: { resultInfo: {...} } }`.
+
+Each user in `users` includes:
 
 - `id` – user ID (LUID)
 - `name` – username (login name)
@@ -108,49 +109,65 @@ Each user includes:
 - `email` – user email address
 - `fullName` – user's full display name
 - `lastLogin` – timestamp of last login (ISO 8601 format)
-- `authSetting` – authentication method
-- `locale` – user's locale setting (e.g., `en_US`, `en_GB`)
-- `language` – user's language preference (e.g., `en`, `fr`, `de`)
-- `externalAuthUserId` – ID from external authentication provider (if applicable)
+
+`mcp.resultInfo` is present on every non-empty result and reports the completeness of the (filtered) list (a filter matching zero users returns a plain message instead of this object):
+
+- `returnedCount` – number of users in `users`.
+- `truncated` – `false` means `users` is the **complete** set matching the filter; `true` means more matching users exist server-side than were returned.
+- `truncationReason` (present only when `truncated` is `true`):
+  - `"requested-limit"` – the `limit` you passed cut the result short. Call again with a higher `limit` to get more.
+  - `"admin-cap"` – a site-administrator per-call cap (`MAX_RESULT_LIMIT[S]`) cut the result short. `limit` cannot raise it, so either narrow the `filter` so the matching set fits, or ask an administrator to raise the cap.
+  - `"default-limit"` – you passed no `limit`, so the tool applied its default cap of `100`. This is a **partial** page, **not** site-wide totals; add a `filter` to target specific users or pass a higher `limit` (up to `1000`) to return more.
+  - `"max-limit"` – your `limit` exceeded the per-call maximum of `1000` and was clamped to it. A single call cannot return more, and there is no page offset — neither a higher `limit` nor repeated calls advance past the ceiling; narrow the `filter` so fewer users match.
+- `summary` – a plain-language sentence (always present) stating whether the list is complete or partial and, if partial, how to retrieve more. Relay it to the user; never report a `truncated` list as complete or as site-wide totals.
+
+:::note[`limit` bounds matches, not fetched rows]
+Because filtering is client-side, `limit` bounds the number of users that **match the filter**, not the number of raw rows fetched from the API. The tool keeps paging until it has collected `limit` matching users (or the site is exhausted). A limit-truncated filtered list is reported via `mcp.resultInfo.truncated: true` rather than silently appearing complete.
+:::
+
+:::note[Output fields]
+This tool returns a lean, fixed field set: `id`, `name`, `fullName`, `siteRole`, `email`, and `lastLogin`. Tableau's REST API may return additional attributes (such as `authSetting`, `locale`, `language`), but the tool strips them from its output; only the six fields above appear.
+:::
 
 ## Example result
 
 ```json
-[
-  {
-    "id": "user-abc123",
-    "name": "jsmith",
-    "siteRole": "Creator",
-    "email": "john.smith@example.com",
-    "fullName": "John Smith",
-    "lastLogin": "2026-05-20T10:30:00Z",
-    "authSetting": "SAML",
-    "locale": "en_US",
-    "language": "en"
-  },
-  {
-    "id": "user-def456",
-    "name": "asmith",
-    "siteRole": "Viewer",
-    "email": "alice.smith@example.com",
-    "fullName": "Alice Smith",
-    "lastLogin": "2026-05-15T08:00:00Z",
-    "authSetting": "ServerDefault",
-    "locale": "en_GB",
-    "language": "en"
-  },
-  {
-    "id": "user-ghi789",
-    "name": "bjones",
-    "siteRole": "Unlicensed",
-    "email": "bob.jones@example.com",
-    "fullName": "Bob Jones",
-    "lastLogin": "2024-12-01T12:00:00Z",
-    "authSetting": "SAML",
-    "locale": "en_US",
-    "language": "en"
+{
+  "users": [
+    {
+      "id": "user-abc123",
+      "name": "jsmith",
+      "siteRole": "Creator",
+      "email": "john.smith@example.com",
+      "fullName": "John Smith",
+      "lastLogin": "2026-05-20T10:30:00Z"
+    },
+    {
+      "id": "user-def456",
+      "name": "asmith",
+      "siteRole": "Viewer",
+      "email": "alice.smith@example.com",
+      "fullName": "Alice Smith",
+      "lastLogin": "2026-05-15T08:00:00Z"
+    },
+    {
+      "id": "user-ghi789",
+      "name": "bjones",
+      "siteRole": "Unlicensed",
+      "email": "bob.jones@example.com",
+      "fullName": "Bob Jones",
+      "lastLogin": "2024-12-01T12:00:00Z"
+    }
+  ],
+  "mcp": {
+    "resultInfo": {
+      "returnedCount": 3,
+      "truncated": true,
+      "truncationReason": "requested-limit",
+      "summary": "Partial list — showing the first 3 matching users; your \"limit\" cut it short and more match. Call again with a higher \"limit\" to get more."
+    }
   }
-]
+}
 ```
 
 ## Empty result
@@ -163,7 +180,11 @@ No users were found. Either none exist or you do not have permission to view the
 
 ## Use Case: License Reclamation
 
-This tool is particularly useful for identifying candidates for license reclamation (JTBD #3 from the Admin Tools roadmap):
+:::tip[Prefer the reclamation prompts for this job]
+For "which licensed users are inactive / can we reclaim licenses" workflows, prefer the purpose-built `user-license-reclamation-inform` / `user-license-reclamation-apply` prompts (they add reclamation-specific analysis and human-in-the-loop safety) or `query-admin-insights` with `kind=ts-users`. Note that `list-users`' `lastLogin` reflects web sign-ins only and is blind to Tableau Desktop/Prep activity, so it can over-report a user as inactive. Use `list-users` to enumerate or inspect specific users; use the prompts to drive a reclamation decision.
+:::
+
+This tool can still help identify candidates for license reclamation (JTBD #3 from the Admin Tools roadmap):
 
 ```javascript
 // Find unlicensed users who haven't logged in for 6+ months

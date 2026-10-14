@@ -33,6 +33,10 @@ describe('WebToolName', () => {
     }
   });
 
+  it('should group get-view-data with the view tools', () => {
+    expect(webToolGroups.view).toContain('get-view-data');
+  });
+
   it('should not allow a tool group to have the same name as a tool', () => {
     for (const group of webToolGroupNames) {
       expect(isWebToolName(group), `Group ${group} is the same as a tool name`).toBe(false);

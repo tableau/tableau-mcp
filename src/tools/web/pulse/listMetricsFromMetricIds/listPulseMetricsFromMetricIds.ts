@@ -2,12 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
-  metricIds: z.array(z.string().length(36)),
+  metricIds: z.array(luidSchema),
 };
 
 export const getListPulseMetricsFromMetricIdsTool = (
@@ -16,6 +18,8 @@ export const getListPulseMetricsFromMetricIdsTool = (
   const listPulseMetricsFromMetricIdsTool = new WebTool({
     server,
     name: 'list-pulse-metrics-from-metric-ids',
+    minRequiredRole: SiteRole.VIEWER,
+    registrationConditions: ['RequiresPulse'],
     description: `
 Retrieves a list of published Pulse Metrics from a list of metric IDs using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a list of metric IDs on the current site.
 

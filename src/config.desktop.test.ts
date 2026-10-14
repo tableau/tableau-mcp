@@ -73,6 +73,41 @@ describe('DesktopConfig', () => {
     expect(config.imageExportTimeoutMs).toBe(30_000);
   });
 
+  it.each([
+    ['IMAGE_EXPORT_TIMEOUT_MS', 'imageExportTimeoutMs'],
+    ['TABLEAU_DESKTOP_CALL_TIMEOUT_MS', 'desktopCallTimeoutMs'],
+  ] as const)('clamps %s above the Node timer limit instead of falling back', (name, field) => {
+    vi.stubEnv(name, '99999999999');
+
+    expect(new Config()[field]).toBe(2_147_483_647);
+  });
+
+  describe('knowledge and search overrides', () => {
+    it('leaves them undefined by default', () => {
+      const config = new Config();
+      expect(config.knowledgeDir).toBeUndefined();
+      expect(config.workbookXsdPath).toBeUndefined();
+      expect(config.schemaReferencePath).toBeUndefined();
+      expect(config.examplesDir).toBeUndefined();
+      expect(config.twbIndexPath).toBeUndefined();
+    });
+
+    it('reads them from the environment', () => {
+      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', '/a:/b');
+      vi.stubEnv('WORKBOOK_XSD_PATH', '/x.xsd');
+      vi.stubEnv('SCHEMA_REFERENCE_PATH', '/s.xsd');
+      vi.stubEnv('EXAMPLES_DIR', '/ex');
+      vi.stubEnv('TWB_INDEX_PATH', '/i.json');
+
+      const config = new Config();
+      expect(config.knowledgeDir).toBe('/a:/b');
+      expect(config.workbookXsdPath).toBe('/x.xsd');
+      expect(config.schemaReferencePath).toBe('/s.xsd');
+      expect(config.examplesDir).toBe('/ex');
+      expect(config.twbIndexPath).toBe('/i.json');
+    });
+  });
+
   describe('External Client API discovery', () => {
     it('should expose an optional discovery-dir override', () => {
       vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', '/custom/discovery');
@@ -80,8 +115,21 @@ describe('DesktopConfig', () => {
     });
 
     it('should leave the discovery-dir override undefined by default', () => {
-      delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+      vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', undefined);
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
+    });
+  });
+
+  describe('commands registry dir', () => {
+    it('should expose a trimmed TABLEAU_COMMANDS_REGISTRY_DIR', () => {
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '  /registry  ');
+      expect(new Config().commandsRegistryDir).toBe('/registry');
+    });
+
+    it('should be undefined when unset or an unresolved bundle placeholder', () => {
+      expect(new Config().commandsRegistryDir).toBeUndefined();
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '${user_config.registry}');
+      expect(new Config().commandsRegistryDir).toBeUndefined();
     });
   });
 
@@ -103,6 +151,63 @@ describe('DesktopConfig', () => {
     it('should ignore a non-numeric value', () => {
       vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', 'not-a-pid');
       expect(new Config().desktopSessionId).toBeUndefined();
+    });
+  });
+
+  describe('Desktop session LUID', () => {
+    const guid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+    it('should be undefined by default', () => {
+      expect(new Config().desktopSessionLuid).toBeUndefined();
+    });
+
+    it('should read a GUID from TABLEAU_DESKTOP_SESSION_LUID', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', guid);
+      expect(new Config().desktopSessionLuid).toBe(guid);
+    });
+
+    it('should store the normalized GUID when the value is whitespace-padded', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', `  ${guid}\n`);
+      expect(new Config().desktopSessionLuid).toBe(guid);
+    });
+
+    it('should ignore a blank value', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', '');
+      expect(new Config().desktopSessionLuid).toBeUndefined();
+    });
+
+    it('should ignore a non-GUID value', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_LUID', 'not-a-guid');
+      expect(new Config().desktopSessionLuid).toBeUndefined();
+    });
+  });
+
+  describe('connected site and user LUID', () => {
+    it('should default to empty strings', () => {
+      const config = new Config();
+      expect(config.siteLuid).toBe('');
+      expect(config.userLuid).toBe('');
+    });
+
+    it('should read site and user LUID from their env vars', () => {
+      vi.stubEnv('TABLEAU_SITE_LUID', '11111111-1111-1111-1111-111111111111');
+      vi.stubEnv('TABLEAU_USER_LUID', '22222222-2222-2222-2222-222222222222');
+      const config = new Config();
+      expect(config.siteLuid).toBe('11111111-1111-1111-1111-111111111111');
+      expect(config.userLuid).toBe('22222222-2222-2222-2222-222222222222');
+    });
+  });
+
+  describe('agent chat id', () => {
+    it('should default to an empty string', () => {
+      const config = new Config();
+      expect(config.chatId).toBe('');
+    });
+
+    it('should read the chat id from TABLEAU_CHAT_ID', () => {
+      vi.stubEnv('TABLEAU_CHAT_ID', 'chat-abc-123');
+      const config = new Config();
+      expect(config.chatId).toBe('chat-abc-123');
     });
   });
 });

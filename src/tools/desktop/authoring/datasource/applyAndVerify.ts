@@ -2,10 +2,8 @@ import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/exec
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import {
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 export type ApplyAndVerifyOutcome =

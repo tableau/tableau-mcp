@@ -23,8 +23,8 @@ describe('list-workbooks', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const workbooks = await client.callTool('list-workbooks', {
-      schema: z.array(workbookSchema),
+    const { data: workbooks } = await client.callTool('list-workbooks', {
+      schema: z.object({ data: z.array(workbookSchema), totalAvailable: z.number() }),
     });
 
     expect(workbooks.length).greaterThan(0);
@@ -41,8 +41,8 @@ describe('list-workbooks', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const workbooks = await client.callTool('list-workbooks', {
-      schema: z.array(workbookSchema),
+    const { data: workbooks } = await client.callTool('list-workbooks', {
+      schema: z.object({ data: z.array(workbookSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'name:eq:Superstore' },
     });
 

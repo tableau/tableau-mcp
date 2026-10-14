@@ -1,8 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkCacheFileArg, readCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import {
   removeFieldFromCols,
   removeFieldFromEncoding,
@@ -10,17 +11,17 @@ import {
 } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import {
   ArgsValidationError,
-  FileReadError,
+  FileNotFoundError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
-import { jsonToolResult, prefillNextAction, withNextAction } from '../../structuredContent.js';
+import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { FieldRemovalPlacement, removeFieldResult } from './removeFieldResult.js';
 import { resolveWorksheetEditFile } from './worksheetEditBuffer.js';
 
 /** Encoding channels a field can be removed from. */
@@ -39,17 +40,14 @@ const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheetName: z
-    .string()
+  worksheetName: z.string().optional().describe('Sheet to edit; or supply worksheetFile.'),
+  worksheetFile: z.string().optional().describe('Cached path; omit to continue edits by name.'),
+  target: z.enum(FIELD_TARGETS).describe('Confirmed shelf.'),
+  columnRef: z.string().describe('Exact placed reference.'),
+  encodingType: z
+    .enum(ENCODING_TYPES)
     .optional()
-    .describe('Sheet to edit; name-only calls continue the open edit buffer.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe('Cached sheet path to force an edit target; omit to continue the open edit buffer.'),
-  target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
-  columnRef: z.string().describe('Field to remove.'),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
+    .describe('Required for encoding; detail=lod; first pane.'),
 };
 
 const title = 'Removing field';
@@ -58,7 +56,9 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     server,
     name: 'remove-field',
     title,
-    description: 'Remove a field from a shelf (rows/cols/encoding); counterpart to add-field.',
+    description:
+      'Remove a field, without moving it. Inspect current placements first. ' +
+      'Reuse the same cached file for pending edits; live reads reset them.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -74,6 +74,15 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: { session, worksheetName, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
+          if (worksheetFile?.trim()) {
+            const checked = checkCacheFileArg(
+              'worksheetFile',
+              worksheetFile,
+              (path) => new FileNotFoundError(path),
+            );
+            if (checked.isErr()) return checked.error.toErr();
+          }
+
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
@@ -99,15 +108,17 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             ).toErr();
           }
 
-          let worksheetXml: string;
-          try {
-            worksheetXml = readFileSync(worksheetFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const worksheetRead = readCacheFileArg(
+            'worksheetFile',
+            worksheetFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (worksheetRead.isErr()) return worksheetRead.error.toErr();
+          const worksheetXml = worksheetRead.value.text;
 
           let modifiedXml: string;
-          let placement: string;
+          let placement: FieldRemovalPlacement;
+          let removalResult: ReturnType<typeof removeFieldResult>;
           try {
             switch (target) {
               case 'rows':
@@ -120,13 +131,15 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
                 break;
               case 'encoding':
                 modifiedXml = removeFieldFromEncoding(worksheetXml, encodingType!, columnRef);
-                placement = `${encodingType} encoding`;
+                placement = `${encodingType!} encoding`;
                 break;
               default: {
                 const _exhaustive: never = target;
                 throw new Error(`Unknown target: ${String(_exhaustive)}`);
               }
             }
+            // Build the receipt before writing so a snapshot failure cannot leave a changed draft.
+            removalResult = removeFieldResult(placement, worksheetFile, columnRef, modifiedXml);
           } catch (error) {
             return new XmlModificationError(
               error instanceof Error ? error.message : String(error),
@@ -139,22 +152,10 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             return new XmlValidationError(errors).toErr();
           }
 
-          try {
-            writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            restampSidecarAfterEdit(worksheetFile, resolvedSession);
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const written = writeRedactedXmlCacheFileArg('worksheetFile', worksheetFile, modifiedXml);
+          if (written.isErr()) return written.error.toErr();
 
-          return new Ok(
-            withNextAction(
-              {
-                message: `Successfully removed field from ${placement}. Updated file: ${worksheetFile}. Use apply-worksheet with this file to apply changes.`,
-                file: worksheetFile,
-              },
-              prefillNextAction('Apply worksheet edits'),
-            ),
-          );
+          return new Ok(removalResult);
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

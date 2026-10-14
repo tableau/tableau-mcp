@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import { showError } from '../shared/showError.js';
 import {
   isDeleteDatasourceConfirmResult,
@@ -20,6 +21,29 @@ import {
 } from './updateCloudExtractRefreshTaskConfirmClient.js';
 
 /**
+ * True for a `delete-content` `remove-pending-tags` result (`{ removedCount, items }`). The tool
+ * shares the delete panel's app resource, so a host may render this result into the iframe; it carries
+ * no confirm panel and must not surface the error UI.
+ */
+function isRemovePendingTagsResult(result: CallToolResult): boolean {
+  const first = result.content?.[0];
+  if (!first || first.type !== 'text') {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(first.text);
+    return (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { removedCount?: unknown }).removedCount === 'number' &&
+      Array.isArray((parsed as { items?: unknown }).items)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Handles a tool result from a delete/update preview tool and renders the in-iframe MCP-Apps HITL
  * confirm panel. A preview returns a confirm-panel payload keyed by result shape; branch on that
  * shape and render the matching panel. Anything that doesn't match a known confirm shape (including
@@ -29,7 +53,8 @@ import {
  */
 export function handleConfirmResult(app: App, result: CallToolResult): void {
   if (!result || result.isError) {
-    showError('TOOL_ERROR');
+    const cause = result ? extractToolErrorMessage(result) : undefined;
+    showError('TOOL_ERROR', cause, app);
     return;
   }
 
@@ -50,6 +75,10 @@ export function handleConfirmResult(app: App, result: CallToolResult): void {
     return;
   }
 
+  if (isRemovePendingTagsResult(result)) {
+    return;
+  }
+
   // No known confirm-panel shape matched — surface the error UI rather than silently doing nothing.
-  showError('TOOL_ERROR');
+  showError('TOOL_ERROR', undefined, app);
 }

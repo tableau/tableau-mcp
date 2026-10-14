@@ -1,9 +1,9 @@
-import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { escapeXml } from '../binder/escape.js';
 import {
+  ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
   ExecuteCommandResult,
   ExecuteCommandWarning,
@@ -11,9 +11,11 @@ import {
 } from '../externalApi/executorTypes.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { isRouteMissing, resolveItemByNameOrId } from '../externalApi/toolUtils.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
+import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
 import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
-import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual, parseOuterElement } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { sourceSha256 } from './cacheFingerprint.js';
 
@@ -35,6 +37,8 @@ export type PerSheetApplyOutcome =
       fragmentXml: string;
       // Empty on a clean apply; every entry is a node Tableau dropped, never a benign notice.
       documentWarnings: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
+      diagnosticsInvalid?: boolean;
     }
   | { type: 'dashboard-member-blank-transition'; dashboards: string[] }
   | 'sheet-absent'
@@ -48,21 +52,25 @@ const ITEM_LABEL: Record<PerSheetKind, string> = {
   storyboard: 'Storyboard',
 };
 
-/**
- * Apply one edited sheet fragment in place via its dedicated per-sheet `/document` POST route.
- *
- * Resolves the sheet name to its live id first; a name that does not resolve, or a build that lacks the
- * route, returns a non-`applied` outcome and the caller decides whether to surface it or fall back
- * to the whole-workbook apply. On a successful POST it dispatches the requested focus (best-effort,
- * never fails the landed apply).
- */
-export async function tryApplyViaPerSheetRoute({
+export type PreparedSheetApply = {
+  status: 'prepared';
+  expectedInstanceId?: string;
+  liveDocumentXml?: string;
+  id: string;
+  name: string;
+  fragmentXml: string;
+};
+
+type UnappliedSheetOutcome = Exclude<PerSheetApplyOutcome, { status: 'applied' }>;
+
+/** Resolve identity, source fingerprint and validation before choosing a write route. */
+export async function preparePerSheetApply({
   kind,
   sheetName,
   fragmentXml,
   expectedSourceHash,
+  expectedInstanceId,
   validationContext,
-  focus,
   executor,
   signal,
 }: {
@@ -72,18 +80,23 @@ export async function tryApplyViaPerSheetRoute({
   expectedSourceHash?: string;
   validationContext?: ValidationContext;
   focus: ApplyFocus;
-} & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  expectedInstanceId?: string;
+} & WithExecutorAndAbortSignal): Promise<
+  Result<PreparedSheetApply | UnappliedSheetOutcome, ExecuteCommandError>
+> {
   const client = executor as ExternalApiToolExecutor;
 
   const listResult = await listSheetsOfKind(kind, client, signal);
   if (listResult.isErr()) {
-    // A missing list route means the per-sheet POST route is missing too (they ship together) —
-    // let the caller take the whole-workbook path instead of surfacing a route error.
+    // A missing list route means the per-sheet POST route is missing too (they ship together).
     if (isRouteMissing(listResult.error)) {
       return Ok('route-missing');
     }
     return Err(listResult.error);
   }
+  // Preserve the caller's snapshot pin, or pin the instance that resolved the target.
+  // Later document reads and POST rescans must not silently select a replacement instance.
+  const preparedInstanceId = expectedInstanceId ?? client.desktopInstanceId;
 
   const resolved = resolveItemByNameOrId(ITEM_LABEL[kind], sheetName, listResult.value);
   if (resolved.isErr()) {
@@ -133,15 +146,52 @@ export async function tryApplyViaPerSheetRoute({
     return retitledFragment;
   }
 
+  return Ok({
+    status: 'prepared',
+    expectedInstanceId: preparedInstanceId,
+    liveDocumentXml,
+    id: resolved.value.id,
+    name: resolved.value.name,
+    fragmentXml: retitledFragment.value,
+  });
+}
+
+/** Check and apply one edited fragment through its dedicated per-sheet document route. */
+export async function tryApplyViaPerSheetRoute(
+  args: Parameters<typeof preparePerSheetApply>[0],
+): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  const prepared = await preparePerSheetApply(args);
+  if (prepared.isErr()) return prepared;
+  if (typeof prepared.value !== 'object' || !('status' in prepared.value))
+    return Ok(prepared.value);
+  return applyPreparedSheet({ ...args, prepared: prepared.value });
+}
+
+/** Dispatch a checked fragment while the caller still holds the apply lock. */
+export async function applyPreparedSheet({
+  kind,
+  prepared,
+  focus,
+  executor,
+  signal,
+  expectedInstanceId,
+}: {
+  kind: PerSheetKind;
+  prepared: PreparedSheetApply;
+  focus: ApplyFocus;
+  expectedInstanceId?: string;
+} & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
+  const client = executor as ExternalApiToolExecutor;
   // The route is addressed by stable id, but Desktop still requires the fragment's root name to
   // match the sheet's current display name. Reconcile a stale cached name before POST; otherwise a
   // rename between read and apply opens a blocking "Requested worksheet(s) not found" dialog.
   const applyResult = await applyDocumentForKind(
     kind,
-    resolved.value.id,
-    retitledFragment.value,
+    prepared.id,
+    prepared.fragmentXml,
     client,
     signal,
+    expectedInstanceId ?? prepared.expectedInstanceId,
   );
   if (applyResult.isErr()) {
     // A build with the list route but not the POST route (unlikely) still falls back cleanly.
@@ -155,85 +205,29 @@ export async function tryApplyViaPerSheetRoute({
     level: 'info',
     message: `per-sheet ${kind} document apply completed`,
     logger: 'workbookCommands',
-    data: { sheetName, id: resolved.value.id },
+    data: { sheetName: prepared.name, id: prepared.id },
   });
 
   // The POST moves the view whether we ask or not, so state where it belongs. Never fails the
   // apply that already landed.
   const resolvedFocus: ApplyFocus =
-    focus.navigate === 'artifact' ? { ...focus, sheetName: resolved.value.name } : focus;
+    focus.navigate === 'artifact' ? { ...focus, sheetName: prepared.name } : focus;
   await dispatchApplyFocus({
     focus: resolvedFocus,
-    postedXml: retitledFragment.value,
+    postedXml: prepared.fragmentXml,
     executor,
     signal,
   });
 
   return Ok({
     status: 'applied',
-    id: resolved.value.id,
-    name: resolved.value.name,
-    fragmentXml: retitledFragment.value,
+    id: prepared.id,
+    name: prepared.name,
+    fragmentXml: prepared.fragmentXml,
     documentWarnings: applyResult.value.warnings ?? [],
+    ...(applyResult.value.diagnostics ? { diagnostics: applyResult.value.diagnostics } : {}),
+    ...(applyResult.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
   });
-}
-
-function worksheetDocumentState(xml: string): 'blank' | 'populated' | 'unknown' {
-  const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(xml.trim(), 'text/xml');
-  const worksheet = doc.documentElement;
-  if (!worksheet || worksheet.tagName !== 'worksheet') return 'unknown';
-  const table = directChild(worksheet, 'table');
-  if (!table) return 'unknown';
-
-  const rows = directChild(table, 'rows')?.textContent?.trim() ?? '';
-  const cols = directChild(table, 'cols')?.textContent?.trim() ?? '';
-  return rows === '' && cols === '' && !hasPlacedFieldReference(table) ? 'blank' : 'populated';
-}
-
-function hasPlacedFieldReference(table: XmlElement): boolean {
-  const stack = [table];
-  while (stack.length > 0) {
-    const element = stack.pop()!;
-    // Datasource declarations can survive clearing a sheet; they do not prove chart content.
-    if (
-      element.tagName === 'datasources' ||
-      element.tagName === 'datasource-dependencies' ||
-      element.tagName === 'style'
-    ) {
-      continue;
-    }
-
-    for (let index = 0; index < element.attributes.length; index++) {
-      const attribute = element.attributes.item(index);
-      if (
-        attribute &&
-        (attribute.value.includes('].[') ||
-          ((attribute.name === 'column' || attribute.name.endsWith('field')) &&
-            attribute.value.includes('[')))
-      ) {
-        return true;
-      }
-    }
-    for (let index = 0; index < element.childNodes.length; index++) {
-      const child = element.childNodes.item(index);
-      if (child?.nodeType === 1) {
-        stack.push(child as XmlElement);
-      } else if (child?.nodeValue?.includes('].[')) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function directChild(parent: XmlElement, tagName: string): XmlElement | undefined {
-  for (let index = 0; index < parent.childNodes.length; index++) {
-    const child = parent.childNodes.item(index);
-    if (child?.nodeType === 1 && (child as XmlElement).tagName === tagName) {
-      return child as XmlElement;
-    }
-  }
-  return undefined;
 }
 
 function retitleFragment(
@@ -250,7 +244,7 @@ function retitleFragment(
         error: new Error(`The ${kind} fragment has no root name.`),
       });
     }
-    if (xmlNamesEqual(outer.name, currentName)) {
+    if (parsedXmlNamesEqual(outer.name, currentName)) {
       return Ok(fragmentXml);
     }
 
@@ -317,13 +311,22 @@ async function applyDocumentForKind(
   documentXml: string,
   client: ExternalApiToolExecutor,
   signal: AbortSignal,
+  expectedInstanceId?: string,
 ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
   switch (kind) {
     case 'worksheet':
-      return client.applyWorksheetDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyWorksheetDocument(id, documentXml, signal, {
+            expectedInstanceId,
+          } satisfies ApplyWorkbookDocumentOptions)
+        : client.applyWorksheetDocument(id, documentXml, signal);
     case 'dashboard':
-      return client.applyDashboardDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyDashboardDocument(id, documentXml, signal, { expectedInstanceId })
+        : client.applyDashboardDocument(id, documentXml, signal);
     case 'storyboard':
-      return client.applyStoryboardDocument(id, documentXml, signal);
+      return expectedInstanceId
+        ? client.applyStoryboardDocument(id, documentXml, signal, { expectedInstanceId })
+        : client.applyStoryboardDocument(id, documentXml, signal);
   }
 }

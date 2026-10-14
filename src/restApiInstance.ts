@@ -14,21 +14,25 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/interceptors.js';
+import { RouteSafetyError } from './sdks/routeSafety/core.js';
 import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { assertSignedInSiteMatchesToken } from './server/oauth/siteBinding.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:content:read'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:insight_brief:create'
@@ -37,20 +41,36 @@ type JwtScopes =
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
+  | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
+  | 'tableau:workbooks:update'
+  | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
+  | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update'
   | 'tableau:flows:read'
+  | 'tableau:flows:download'
+  | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
-  | 'tableau:flow_runs:read';
+  | 'tableau:flow_runs:read'
+  | 'tableau:flow_runs:update'
+  | 'tableau:flow_tasks:run'
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write'
+  | 'tableau:permissions:read'
+  | 'tableau:packages:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
   'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
+  Partial<Pick<TableauWebRequestHandlerExtra, 'getSiteLuid' | 'getUserLuid'>> &
   (
     | {
         requestId: RequestId;
@@ -75,6 +95,8 @@ const getNewRestApiInstanceAsync = async (
     disableLogging,
     setSiteLuid,
     setUserLuid,
+    getSiteLuid,
+    getUserLuid,
   } = args;
 
   if (!disableLogging) {
@@ -106,13 +128,13 @@ const getNewRestApiInstanceAsync = async (
       ? undefined
       : [
           getRequestInterceptor(server, args.requestId),
-          getRequestErrorInterceptor(server, args.requestId),
+          getRequestErrorInterceptor(server, args.requestId, { getSiteLuid, getUserLuid }),
         ],
     responseInterceptor: disableLogging
       ? undefined
       : [
           getResponseInterceptor(server, args.requestId),
-          getResponseErrorInterceptor(server, args.requestId),
+          getResponseErrorInterceptor(server, args.requestId, { getSiteLuid, getUserLuid }),
         ],
   });
 
@@ -128,6 +150,13 @@ const getNewRestApiInstanceAsync = async (
     const authConfig = buildAuthConfig({ config, tableauAuthInfo, scopes: jwtScopes });
     if (authConfig) {
       await restApi.signIn(authConfig);
+      try {
+        assertSignedInSiteMatchesToken({ signedInSiteId: restApi.siteId, tableauAuthInfo });
+      } catch (error) {
+        await restApi.signOut().catch(() => undefined);
+        throw error;
+      }
+
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
     } else {
@@ -163,6 +192,7 @@ export const useRestApi = async <T>(
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
   });
+  const logCtx = { getSiteLuid: args.getSiteLuid, getUserLuid: args.getUserLuid };
   try {
     return await callback(restApi);
   } finally {
@@ -179,14 +209,24 @@ export const useRestApi = async <T>(
       // session expires on its own regardless.
       try {
         await restApi.signOut();
-        log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
+        log(
+          {
+            message: 'Signed out of Tableau REST API',
+            level: 'debug',
+            logger: 'auth',
+          },
+          logCtx,
+        );
       } catch (error) {
-        log({
-          message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
-          level: 'warning',
-          logger: 'auth',
-          data: error,
-        });
+        log(
+          {
+            message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
+            level: 'warning',
+            logger: 'auth',
+            data: error,
+          },
+          logCtx,
+        );
       }
     }
   }
@@ -201,15 +241,26 @@ export const getRequestInterceptor =
   };
 
 export const getRequestErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (
+    server: Server,
+    requestId: RequestId,
+    ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+  ): ErrorInterceptor =>
   (error, baseUrl) => {
+    if (error instanceof RouteSafetyError) {
+      logRouteSafetyRejection(requestId, error, ctx);
+      return;
+    }
     if (!isAxiosError(error) || !error.request) {
-      log({
-        message: `Request ${requestId} failed`,
-        level: 'error',
-        logger: 'rest-api',
-        data: error,
-      });
+      log(
+        {
+          message: `Request ${requestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: error,
+        },
+        ctx,
+      );
       notifier.error(
         server.mcpServer,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
@@ -240,15 +291,28 @@ export const getResponseInterceptor =
   };
 
 export const getResponseErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (
+    server: Server,
+    requestId: RequestId,
+    ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+  ): ErrorInterceptor =>
   (error, baseUrl) => {
+    // The route-safety interceptor runs after RestApi's request interceptors, so its rejection
+    // lands here (axios hands a request-interceptor failure to the response error handlers).
+    if (error instanceof RouteSafetyError) {
+      logRouteSafetyRejection(requestId, error, ctx);
+      return;
+    }
     if (!isAxiosError(error) || !error.response) {
-      log({
-        message: `Response from request ${requestId} failed`,
-        level: 'error',
-        logger: 'rest-api',
-        data: error,
-      });
+      log(
+        {
+          message: `Response from request ${requestId} failed`,
+          level: 'error',
+          logger: 'rest-api',
+          data: error,
+        },
+        ctx,
+      );
       notifier.error(
         server.mcpServer,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
@@ -268,6 +332,26 @@ export const getResponseErrorInterceptor =
       requestId,
     );
   };
+
+/**
+ * A route-safety rejection is an expected, client-caused outcome (an unsafe ID was refused before
+ * any request was sent), not a REST failure: log it at warning level, without the error object (it
+ * carries the request config) and without an error notification to the MCP client.
+ */
+function logRouteSafetyRejection(
+  requestId: RequestId,
+  error: RouteSafetyError,
+  ctx?: { getSiteLuid?: () => string; getUserLuid?: () => string },
+): void {
+  log(
+    {
+      message: `Request ${requestId} rejected by the REST route-safety guard: ${error.message}`,
+      level: 'warning',
+      logger: 'rest-api',
+    },
+    ctx,
+  );
+}
 
 function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();

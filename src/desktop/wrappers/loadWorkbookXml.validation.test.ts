@@ -1,5 +1,6 @@
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { buildInjectedWorkbookXml } from '../templates/injectTemplateCore.js';
@@ -9,7 +10,91 @@ import { loadWorkbookXml } from './loadWorkbookXml.js';
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('loadWorkbookXml validation preflight', () => {
+  it.each(
+    [false, true].flatMap((cachedLiveRelative) =>
+      [false, true].flatMap((skipValidation) =>
+        [false, true].map((repair) => ({ cachedLiveRelative, skipValidation, repair })),
+      ),
+    ),
+  )(
+    'cannot waive a baseline crash hazard, but permits its removal: %j',
+    async ({ cachedLiveRelative, skipValidation, repair }) => {
+      const baselineXml =
+        '<workbook><worksheets><worksheet name="A"><table><rows>[Superstore].[sum:Sales:qk]</rows></table></worksheet></worksheets><dashboards><dashboard name="D"><zones><zone id="1" name="A" type-v2="worksheet"/></zones></dashboard></dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>';
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: baselineXml })),
+        applyWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+      });
+      const result = await loadWorkbookXml({
+        xml: repair ? baselineXml.replace(' type-v2="worksheet"', '') : baselineXml,
+        baselineXml,
+        cachedLiveRelative,
+        skipValidation,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+      if (repair) {
+        expect(result.isErr() ? result.error : undefined).toBeUndefined();
+        expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      } else {
+        expect(result).toMatchObject({
+          error: {
+            type: 'load-workbook-xml-error',
+            error: {
+              type: 'validation-failed',
+              issues: [expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type' })],
+            },
+          },
+        });
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+        expect(executor.executeCommand).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'Rejects an introduced worksheet zone type before workbook apply (cachedLiveRelative=%s)',
+    async (cachedLiveRelative) => {
+      const baselineXml = `<workbook>
+        <worksheets><worksheet name="Pipeline Trend"><table><rows>[ds].[none:Region:nk]</rows></table></worksheet></worksheets>
+        <dashboards><dashboard name="Pipeline"><zones><zone name="Pipeline Trend" /></zones></dashboard></dashboards>
+      </workbook>`;
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ xml: baselineXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          ),
+      });
+
+      const result = await loadWorkbookXml({
+        xml: baselineXml.replace('<zone name=', '<zone type-v2="worksheet" name='),
+        baselineXml,
+        cachedLiveRelative,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type', severity: 'error' }),
+      ]);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+    },
+  );
+
   it('Miller World Cup repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
 <workbook>
@@ -230,6 +315,49 @@ describe('loadWorkbookXml validation preflight', () => {
       '</zone></zones></dashboard></dashboards>';
     const baselineXml = `<?xml version='1.0'?><workbook>${brokenDashboard}</workbook>`;
     const candidateXml = `<?xml version='1.0'?><workbook>${brokenDashboard}<windows /></workbook>`;
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('allows adding an aggregate calc to one datasource without blocking another datasource field', async () => {
+    const workbook = (datasourceACalculation: string): string => `<?xml version='1.0'?>
+<workbook>
+  <datasources>
+    <datasource name='A'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      ${datasourceACalculation}
+    </datasource>
+    <datasource name='B'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Shared]' role='measure' type='quantitative' datatype='real'>
+        <calculation formula='[Sales] * 2' />
+      </column>
+    </datasource>
+  </datasources>
+  <worksheets><worksheet name='Sheet 1'><table><view>
+    <datasource-dependencies datasource='B'>
+      <column-instance name='[none:Shared:qk]' column='[Shared]' derivation='None' pivot='key' type='quantitative' />
+    </datasource-dependencies>
+  </view></table></worksheet></worksheets>
+  <windows><window class='worksheet' name='Sheet 1' /></windows>
+</workbook>`;
+    const baselineXml = workbook('');
+    const candidateXml = workbook(
+      "<column name='[Shared]' role='measure' type='quantitative' datatype='real'><calculation formula='SUM([Sales])' /></column>",
+    );
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));

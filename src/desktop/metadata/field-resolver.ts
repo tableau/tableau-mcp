@@ -2,8 +2,8 @@
  * Multi-datasource field resolver.
  *
  * Today the codebase silently picks the first match for a user-friendly field
- * name across `findField` (single-datasource), `coordination.ts` (ad hoc
- * exact + agg-prefix logic), and `field-builder.ts` (`listAvailableFields`).
+ * name across `coordination.ts` (ad hoc exact + agg-prefix logic) and
+ * `field-builder.ts` (`listAvailableFields`).
  * The agent then learns to "trust" the first guess. When the workbook has
  * two datasources both with a "Profit" column — or one with "Profit Ratio"
  * and another with "Profit (USD)" — that silent guess produces XML that
@@ -531,23 +531,8 @@ export function resolveField(
       const base = baseCandidates[0];
       const rewrites = ['parsed-aggregation-prefix'];
       const note = nearDuplicateNote(allFields, base);
-      // If the base is already aggregated (calc field with SUM(...) etc.),
-      // ignore the requested aggregation — using the base column_ref avoids
-      // double-aggregation. This mirrors coordination.ts's existing behavior
-      // but surfaces it as a rewrite.
       if (base.isAggregated) {
-        rewrites.push('ignored-redundant-aggregation');
-        return {
-          kind: 'rewritten',
-          query,
-          column_ref: base.column_ref,
-          datasource: base.datasource,
-          reason: `field "${baseName}" is already aggregated (formula: ${
-            base.formula ?? '?'
-          }); ignored requested "${reqAgg}".`,
-          rewrites,
-          ...(note ? { notes: [note] } : {}),
-        };
+        return ignoredRedundantAggregation(query, base, baseName, reqAgg, note);
       }
       const mapped = mapAggregationToken(reqAgg);
       if (mapped === undefined) {
@@ -572,10 +557,20 @@ export function resolveField(
       const ranked = disambiguateRanked(baseCandidates, baseName, allFields);
       if (ranked?.column_ref) {
         const base = allFields.find((field) => field.column_ref === ranked.column_ref);
+        if (base?.isAggregated) {
+          return ignoredRedundantAggregation(
+            query,
+            base,
+            baseName,
+            reqAgg,
+            nearDuplicateNote(allFields, base),
+          );
+        }
         const mapped = mapAggregationToken(reqAgg);
         if (base && mapped !== undefined) {
           return {
             ...ranked,
+            query,
             kind: 'rewritten',
             column_ref: buildAggregatedRef(base, mapped),
             reason: `applied aggregation "${reqAgg}" to base field "${baseName}"`,
@@ -614,10 +609,30 @@ export function resolveField(
   };
 }
 
+// An already-aggregated calc (SUM(...) etc.) keeps its own ref: wrapping it again would double-aggregate.
+function ignoredRedundantAggregation(
+  query: string,
+  base: FieldReference & { column_ref: string },
+  baseName: string,
+  reqAgg: string,
+  note: string | undefined,
+): FieldResolution {
+  return {
+    kind: 'rewritten',
+    query,
+    column_ref: base.column_ref,
+    datasource: base.datasource,
+    reason: `field "${baseName}" is already aggregated (formula: ${
+      base.formula ?? '?'
+    }); ignored requested "${reqAgg}".`,
+    rewrites: ['parsed-aggregation-prefix', 'ignored-redundant-aggregation'],
+    ...(note ? { notes: [note] } : {}),
+  };
+}
+
 /**
- * Map a parsed aggregation token to the `AggregationType` enum used by
- * `findAndBuildColumnRef`. Unsupported aggregations (median, stdev, var, ...)
- * return undefined so the caller can fall back to the resolver's "exact"
+ * Map a parsed aggregation token to the `AggregationType` enum. Unsupported aggregations
+ * (median, stdev, var, ...) return undefined so the caller can fall back to the resolver's "exact"
  * path or surface a clearer error.
  */
 function mapAggregationToken(token: string): AggregationType | undefined {
@@ -640,10 +655,8 @@ function mapAggregationToken(token: string): AggregationType | undefined {
     case 'countdistinct':
       return AggregationType.CountDistinct;
     default:
-      // median / stdev / stdevp / var / varp are not in the supported
-      // AggregationType enum yet; leaving undefined causes
-      // `findAndBuildColumnRef` to apply a default, which is worse than
-      // explicit "not_found". The resolver catches that below.
+      // median / stdev / stdevp / var / varp are not in AggregationType yet; undefined lets the
+      // resolver report "not_found" instead of silently defaulting.
       return undefined;
   }
 }

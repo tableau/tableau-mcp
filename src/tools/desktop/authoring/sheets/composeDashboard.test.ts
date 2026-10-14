@@ -20,11 +20,14 @@ vi.mock('../../../../desktop/externalApi/discovery.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
+// `<rows>` text (any non-empty text, here just the field name) is enough for
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
+// blank; see composeDashboardCore.test.ts's PRISTINE fixture for the same pattern.
 const LIVE_WORKBOOK = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
-    <worksheet name="Sales"><table/></worksheet>
-    <worksheet name="Profit"><table/></worksheet>
+    <worksheet name="Sales"><table><rows>Sales</rows></table></worksheet>
+    <worksheet name="Profit"><table><rows>Profit</rows></table></worksheet>
   </worksheets>
   <dashboards>
     <dashboard name="Keep"><zones><zone name="Sales"/></zones></dashboard>
@@ -80,6 +83,26 @@ describe('composeDashboardTool', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Missing');
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('adds a live empty worksheet and returns an advisory warning', async () => {
+    const pristineXml = LIVE_WORKBOOK.replace(
+      '</worksheets>',
+      '<worksheet name="Empty"><table><rows/><cols/></table></worksheet></worksheets>',
+    ).replace('</windows>', '<window class="worksheet" name="Empty"/></windows>');
+    const harness = setupHarness({ pristineXml });
+
+    const result = await getToolResult({
+      dashboardName: 'Dashboard with Empty Tile',
+      worksheetNames: ['Sales', 'Empty'],
+      getExecutor: harness.getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({
+      warnings: ['Worksheet "Empty" is empty and will display as an empty tile on the dashboard.'],
+    });
+    expect(harness.postedXml).toContain('name="Empty"');
   });
 
   it('rejects duplicate worksheet input before dispatch', async () => {
@@ -274,7 +297,7 @@ describe('composeDashboardTool', () => {
 });
 
 function setupHarness({
-  applyResult = Ok({ validationWarnings: [] }),
+  applyResult = Ok({ validationWarnings: [], documentWarnings: [] }),
   readbackXml,
   pristineXml = LIVE_WORKBOOK,
 }: {

@@ -1,5 +1,3 @@
-// src/binder/calc-derivation.ts
-//
 // Pure derivation of first-class CALC SLOTS from template XML (H3 flagship).
 //
 // A template's calculated fields ride along as opaque XML: a

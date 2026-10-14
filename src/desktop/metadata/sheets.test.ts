@@ -3,16 +3,18 @@ import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { parseXML } from './parser.js';
 import {
   addSheet,
-  deleteSheet,
   extractSheetXml,
   extractWorksheetWindowXml,
-  listSheets,
   listWorksheetRefs,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
   upsertWorksheetAndWindowIntoWorkbook,
   worksheetFragmentSimpleId,
 } from './sheets.js';
+
+function worksheetNames(xml: string): string[] {
+  return [...xml.matchAll(/<worksheet\s[^>]*?\bname=["']([^"']+)["']/g)].map((m) => m[1]);
+}
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
 // filter carries a user:-prefixed attribute (confirmed pattern, see refineWorksheet.test.ts).
@@ -99,14 +101,14 @@ describe('upsertSheetIntoWorkbook', () => {
     expect(doc).not.toContain('<old');
     expect(doc).toContain('name="Sheet 2"');
     expect(doc).toContain('name="Dashboard 1"');
-    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2']);
+    expect(worksheetNames(doc)).toEqual(['Sheet 1', 'Sheet 2']);
   });
 
   it('appends a brand-new sheet, keeping the existing ones', () => {
     const edited = "<worksheet name='Sheet 3'><table /></worksheet>";
     const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 3', edited);
 
-    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
+    expect(worksheetNames(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
     expect(doc).toContain('name="Dashboard 1"');
     expect(doc).toContain('<window class="worksheet" name="Sheet 3">');
     expect(runValidation(doc, 'workbook').issues).not.toEqual(
@@ -207,12 +209,6 @@ describe('worksheet plus window artifacts', () => {
   });
 });
 
-describe('listSheets', () => {
-  it('lists worksheet names', () => {
-    expect(listSheets(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Sales by Region']);
-  });
-});
-
 describe('listWorksheetRefs', () => {
   const WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
 <workbook>
@@ -274,11 +270,9 @@ describe('worksheetFragmentSimpleId', () => {
   });
 });
 
-describe('addSheet / deleteSheet', () => {
-  it('round-trips add then delete', () => {
+describe('addSheet', () => {
+  it('adds the sheet to the worksheet list', () => {
     const added = addSheet(WORKBOOK_WITH_USER_NAMESPACE, 'New Sheet');
-    expect(listSheets(added)).toContain('New Sheet');
-    const deleted = deleteSheet(added, 'New Sheet');
-    expect(listSheets(deleted)).not.toContain('New Sheet');
+    expect(worksheetNames(added)).toContain('New Sheet');
   });
 });

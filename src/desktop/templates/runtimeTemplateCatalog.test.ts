@@ -107,9 +107,8 @@ describe('loadRuntimeTemplateCatalogSnapshots', () => {
 
   it('pins descriptor and applied XML to the same TBM bytes when the source changes later', () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-template-'));
-    const previous = process.env['TEMPLATES_DIR'];
     try {
-      process.env['TEMPLATES_DIR'] = root;
+      vi.stubEnv('TEMPLATES_DIR', root);
       const path = join(root, 'ranking-ordered-bar.tbm');
       writeFileSync(path, BOOKMARK);
       const expected = createTemplateRuntimeSnapshot('ranking-ordered-bar', BOOKMARK);
@@ -121,8 +120,6 @@ describe('loadRuntimeTemplateCatalogSnapshots', () => {
       expect(pinned?.snapshot.xml).toBe(expected.xml);
       expect(pinned?.descriptor.slots).toEqual(expected.descriptor.slots);
     } finally {
-      if (previous === undefined) delete process.env['TEMPLATES_DIR'];
-      else process.env['TEMPLATES_DIR'] = previous;
       rmSync(root, { recursive: true, force: true });
     }
   });

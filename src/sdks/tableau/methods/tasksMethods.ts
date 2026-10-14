@@ -1,15 +1,22 @@
-import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { parseListExtractRefreshTasksResponse, tasksApis } from '../apis/tasksApi.js';
+import { RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
+import {
+  parseGetFlowRunTasksResponse,
+  parseListExtractRefreshTasksResponse,
+  tasksApis,
+} from '../apis/tasksApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { parseTableauApiError } from '../tableauApiError.js';
 import {
   ExtractRefreshTask,
   UpdateCloudExtractRefreshSchedule,
 } from '../types/extractRefreshTask.js';
+import { FlowRunTask } from '../types/flowRunTask.js';
+import { RunFlowJob } from '../types/job.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -32,7 +39,7 @@ export type UpdateCloudExtractRefreshTaskError =
  */
 export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, tasksApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, tasksApis, { axiosConfig }), creds);
   }
 
   /**
@@ -121,11 +128,63 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
         schedule: response.schedule ?? response.extractRefresh?.schedule,
       });
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       const parsed = parseTableauApiError(error);
       if (parsed) {
         return new Err({ type: 'tableau-api', ...parsed });
       }
       return new Err({ type: 'unknown', message: getExceptionMessage(error) });
     }
+  };
+
+  /**
+   * Returns the list of scheduled flow run tasks for the site.
+   * Each task describes the schedule for a flow (frequency, next run time) plus
+   * the flow it targets.
+   *
+   * Required scopes (Tableau Cloud): `tableau:flow_tasks:read`
+   *
+   * Permissions: non-administrators see only the scheduled flow run tasks for
+   * flows they own; administrators see all flow run tasks on the site.
+   *
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_tasks
+   */
+  getFlowRunTasks = async ({ siteId }: { siteId: string }): Promise<FlowRunTask[]> => {
+    const raw = await this._apiClient.getFlowRunTasks({
+      params: { siteId },
+      ...this.authHeader,
+    });
+    const response = parseGetFlowRunTasksResponse(raw);
+    return response.tasks.task.map((t) => t.flowRun);
+  };
+
+  getFlowRunTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<FlowRunTask> => {
+    const raw = await this._apiClient.getFlowRunTask({
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.task.flowRun;
+  };
+
+  runFlowTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<RunFlowJob> => {
+    const raw = await this._apiClient.runFlowTask(undefined, {
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.job;
   };
 }

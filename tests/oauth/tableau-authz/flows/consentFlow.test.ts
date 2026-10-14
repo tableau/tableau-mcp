@@ -29,8 +29,15 @@ test('clicks Allow when the consent page has several submit buttons', async ({ p
     >Allow</button>
   `);
 
-  const authorizationPending = new Promise(() => undefined);
-  await new ConsentFlow(page).grantConsentIfNecessary(authorizationPending);
+  await new ConsentFlow(page).grantConsentIfNecessary();
 
   await expect(page.locator('body')).toHaveAttribute('data-action', 'allow');
+});
+
+test('returns when authorization completes without showing consent', async ({ page }) => {
+  await page.setContent('<main>No consent page</main>');
+
+  await new ConsentFlow(page).grantConsentIfNecessary(Promise.resolve());
+
+  await expect(page.locator('#allow-button')).toHaveCount(0);
 });

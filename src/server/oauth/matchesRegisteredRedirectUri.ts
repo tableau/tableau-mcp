@@ -1,5 +1,4 @@
-// Node's URL parser keeps IPv6 hostnames bracketed (e.g. '[::1]').
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost']);
+import { LOOPBACK_HOSTS } from './loopbackHosts.js';
 
 /**
  * Returns true iff `requestUri` should be considered equal to `registeredUri`

@@ -22,6 +22,15 @@ describe('createCallDeadline', () => {
     expect(DEFAULT_DESKTOP_CALL_TIMEOUT_MS).toBeLessThan(212_388);
   });
 
+  it('clamps an oversized budget so it does not fire after 1 ms', async () => {
+    const deadline = createCallDeadline({ budgetMs: 99_999_999_999 });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(deadline.expired()).toBe(false);
+    deadline.dispose();
+  });
+
   it('aborts its signal and rejects whenExpired once the budget elapses', async () => {
     const deadline = createCallDeadline({ budgetMs: 60_000 });
     const expiry = deadline.whenExpired();

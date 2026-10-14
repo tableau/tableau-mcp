@@ -1,7 +1,7 @@
 import { listAvailableFields } from './field-builder.js';
 import { parseCanonicalColumnRef } from './field-resolver.js';
-import { parseShelfValue } from './fields.js';
 import { normalizeArray, parseXML } from './parser.js';
+import { parseShelfValue } from './shelfTree.js';
 import type { ParsedWorksheet } from './types.js';
 
 export type SearchWorkbookFieldMatchAttribute =

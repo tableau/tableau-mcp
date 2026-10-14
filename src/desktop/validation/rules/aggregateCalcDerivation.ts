@@ -1,76 +1,16 @@
 import * as xpath from 'xpath';
 
+import { createCalculationAggregationResolver } from '../../formulaAggregation.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 import { parseXml } from './parseXml.js';
 
-const AGG_FUNCS = [
-  'SUM',
-  'AVG',
-  'COUNTD',
-  'COUNT',
-  'MEDIAN',
-  'MIN',
-  'MAX',
-  'STDEVP',
-  'STDEV',
-  'VARP',
-  'VAR',
-  'ATTR',
-  'CORR',
-  'COVARP',
-  'COVAR',
-  'PERCENTILE',
-];
+type DatasourceScopeKind = 'datasource' | 'datasource-dependencies';
 
-const TABLE_CALC_FUNCS = [
-  'INDEX',
-  'SIZE',
-  'FIRST',
-  'LAST',
-  'RANK_DENSE',
-  'RANK_MODIFIED',
-  'RANK_PERCENTILE',
-  'RANK_UNIQUE',
-  'RANK',
-  'LOOKUP',
-  'TOTAL',
-  'PREVIOUS_VALUE',
-  'RUNNING_SUM',
-  'RUNNING_AVG',
-  'RUNNING_MIN',
-  'RUNNING_MAX',
-  'RUNNING_COUNT',
-  'WINDOW_SUM',
-  'WINDOW_AVG',
-  'WINDOW_MIN',
-  'WINDOW_MAX',
-  'WINDOW_COUNT',
-  'WINDOW_MEDIAN',
-  'WINDOW_STDEV',
-  'WINDOW_STDEVP',
-  'WINDOW_VARP',
-  'WINDOW_VAR',
-  'WINDOW_PERCENTILE',
-  'WINDOW_CORR',
-  'WINDOW_COVAR',
-];
-
-const AGG_RE = new RegExp(`\\b(${AGG_FUNCS.join('|')})\\s*\\(`, 'i');
-const TABLE_CALC_RE = new RegExp(`\\b(${TABLE_CALC_FUNCS.join('|')})\\s*\\(`, 'i');
-
-function stripLodBlocks(formula: string): string {
-  let prev: string;
-  let out = formula;
-  do {
-    prev = out;
-    out = out.replace(/\{[^{}]*\}/g, ' ');
-  } while (out !== prev);
-  return out;
-}
-
-function isAggregateOrTableCalc(formula: string): boolean {
-  if (TABLE_CALC_RE.test(formula)) return true;
-  return AGG_RE.test(stripLodBlocks(formula));
+interface DatasourceScope {
+  element: Element;
+  kind: DatasourceScopeKind;
+  ownerName: string;
+  formulas: ReadonlyMap<string, string>;
 }
 
 function isNoneDerivation(ci: Element): boolean {
@@ -80,6 +20,89 @@ function isNoneDerivation(ci: Element): boolean {
     return /\[?none:/i.test(ci.getAttribute('name') ?? '');
   }
   return false;
+}
+
+function xpathLiteral(value: string): string {
+  if (!value.includes('"')) return `"${value}"`;
+  if (!value.includes("'")) return `'${value}'`;
+  return `concat(${value
+    .split('"')
+    .map((part) => `"${part}"`)
+    .join(", '\"', ")})`;
+}
+
+function directColumns(element: Element): Element[] {
+  return xpath.select('./column', element as unknown as Node) as Element[];
+}
+
+function columnFormula(column: Element): string | undefined {
+  const calculations = xpath.select('./calculation', column as unknown as Node) as Element[];
+  if (calculations.length === 0) return undefined;
+  return calculations.map((calculation) => calculation.getAttribute('formula') ?? '').join(' ');
+}
+
+function formulasFor(element: Element): Map<string, string> {
+  const formulas = new Map<string, string>();
+  for (const column of directColumns(element)) {
+    const name = column.getAttribute('name');
+    const formula = columnFormula(column);
+    if (name && formula !== undefined) formulas.set(name, formula);
+  }
+  return formulas;
+}
+
+function formulasWithLocalOverrides(
+  inherited: ReadonlyMap<string, string> | undefined,
+  localElement: Element,
+): Map<string, string> {
+  const formulas = new Map(inherited ?? []);
+  for (const column of directColumns(localElement)) {
+    const name = column.getAttribute('name');
+    if (!name) continue;
+    const formula = columnFormula(column);
+    if (formula === undefined) formulas.delete(name);
+    else formulas.set(name, formula);
+  }
+  return formulas;
+}
+
+function datasourceScopes(doc: Document): DatasourceScope[] {
+  const scopes: DatasourceScope[] = [];
+  const definitions = new Map<string, ReadonlyMap<string, string>>();
+  const datasources = xpath.select(
+    '/workbook/datasources/datasource | /datasource',
+    doc as unknown as Node,
+  ) as Element[];
+
+  for (const datasource of datasources) {
+    const ownerName = datasource.getAttribute('name');
+    if (!ownerName) continue;
+    const formulas = formulasFor(datasource);
+    definitions.set(ownerName, formulas);
+    scopes.push({ element: datasource, kind: 'datasource', ownerName, formulas });
+  }
+
+  const dependencies = xpath.select(
+    '//datasource-dependencies',
+    doc as unknown as Node,
+  ) as Element[];
+  for (const dependency of dependencies) {
+    const ownerName = dependency.getAttribute('datasource');
+    if (!ownerName) continue;
+    scopes.push({
+      element: dependency,
+      kind: 'datasource-dependencies',
+      ownerName,
+      formulas: formulasWithLocalOverrides(definitions.get(ownerName), dependency),
+    });
+  }
+
+  return scopes;
+}
+
+function columnInstanceXPath(scope: DatasourceScope, columnName: string): string {
+  const ownerAttribute = scope.kind === 'datasource' ? 'name' : 'datasource';
+  return `//${scope.kind}[@${ownerAttribute}=${xpathLiteral(scope.ownerName)}]//column-instance[@column=${xpathLiteral(columnName)}]`;
 }
 
 export const aggregateCalcDerivationRule: ValidationRule = {
@@ -93,44 +116,40 @@ export const aggregateCalcDerivationRule: ValidationRule = {
     const doc = parseXml(xml);
     if (!doc) return [];
 
-    const aggregateCalcNames = new Set<string>();
-    const calcColumns = xpath.select('//column[calculation]', doc as unknown as Node) as Element[];
-    for (const col of calcColumns) {
-      const name = col.getAttribute('name');
-      if (!name) continue;
-      const calcNodes = xpath.select('calculation', col as unknown as Node) as Element[];
-      const formula = calcNodes.map((c) => c.getAttribute('formula') ?? '').join(' ');
-      if (isAggregateOrTableCalc(formula)) aggregateCalcNames.add(name);
-    }
-    if (aggregateCalcNames.size === 0) return [];
-
     const issuesByInstance = new Map<string, ValidationIssue>();
-    const cis = xpath.select('//column-instance[@column]', doc as unknown as Node) as Element[];
-    for (const ci of cis) {
-      const colRef = ci.getAttribute('column') ?? '';
-      if (!aggregateCalcNames.has(colRef) || !isNoneDerivation(ci)) continue;
+    for (const scope of datasourceScopes(doc)) {
+      const requiresUserDerivation = createCalculationAggregationResolver(scope.formulas);
+      const cis = xpath.select(
+        './column-instance[@column]',
+        scope.element as unknown as Node,
+      ) as Element[];
+      for (const ci of cis) {
+        const colRef = ci.getAttribute('column') ?? '';
+        if (!requiresUserDerivation(colRef) || !isNoneDerivation(ci)) continue;
 
-      const ciName = ci.getAttribute('name') ?? '';
-      const existing = issuesByInstance.get(ciName);
-      if (existing) {
-        existing.occurrenceCount = (existing.occurrenceCount ?? 1) + 1;
-        continue;
+        const ciName = ci.getAttribute('name') ?? '';
+        const issueKey = JSON.stringify([scope.ownerName, ciName]);
+        const existing = issuesByInstance.get(issueKey);
+        if (existing) {
+          existing.occurrenceCount = (existing.occurrenceCount ?? 1) + 1;
+          continue;
+        }
+
+        issuesByInstance.set(issueKey, {
+          ruleId: 'aggregate-calc-derivation',
+          severity: 'error',
+          occurrenceCount: 1,
+          message:
+            `Aggregate/table-calc calculated field ${colRef} in datasource ${JSON.stringify(scope.ownerName)} is referenced by a ` +
+            `none:/derivation="None" column-instance (${ciName || '(unnamed)'}). An aggregate or table-calc calc must use ` +
+            'derivation="User" with the usr: prefix; with none: the viz renders blank (Tableau accepts the XML but produces no marks). ' +
+            `Change the column-instance to derivation="User" and name it [usr:${colRef.replace(/^\[|\]$/g, '')}:qk].`,
+          xpath: columnInstanceXPath(scope, colRef),
+          suggestion:
+            'Set derivation="User" and use the usr: prefix on the column-instance (e.g. ' +
+            `[usr:${colRef.replace(/^\[|\]$/g, '')}:qk]) for this aggregate/table-calc field.`,
+        });
       }
-
-      issuesByInstance.set(ciName, {
-        ruleId: 'aggregate-calc-derivation',
-        severity: 'error',
-        occurrenceCount: 1,
-        message:
-          `Aggregate/table-calc calculated field ${colRef} is referenced by a none:/derivation="None" ` +
-          `column-instance (${ciName || '(unnamed)'}). An aggregate or table-calc calc must use derivation="User" ` +
-          'with the usr: prefix; with none: the viz renders blank (Tableau accepts the XML but produces no marks). ' +
-          `Change the column-instance to derivation="User" and name it [usr:${colRef.replace(/^\[|\]$/g, '')}:qk].`,
-        xpath: `//column-instance[@column="${colRef}"]`,
-        suggestion:
-          'Set derivation="User" and use the usr: prefix on the column-instance (e.g. ' +
-          `[usr:${colRef.replace(/^\[|\]$/g, '')}:qk]) for this aggregate/table-calc field.`,
-      });
     }
 
     return [...issuesByInstance.values()];

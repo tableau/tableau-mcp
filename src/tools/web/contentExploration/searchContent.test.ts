@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -97,6 +98,10 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('searchContentTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,7 +110,9 @@ describe('searchContentTool', () => {
   it('should create a tool instance with correct properties', () => {
     const searchContentTool = getSearchContentTool(new WebMcpServer());
     expect(searchContentTool.name).toBe('search-content');
-    expect(searchContentTool.description).toContain('searches across all supported content types');
+    expect(searchContentTool.description).toContain(
+      'searches and ranks Tableau content across many content types',
+    );
     expect(searchContentTool.paramsSchema).toMatchObject({
       terms: expect.any(Object),
       limit: expect.any(Object),

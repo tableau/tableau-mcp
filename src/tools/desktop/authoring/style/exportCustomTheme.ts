@@ -3,7 +3,8 @@ import { Ok } from 'ts-results-es';
 
 import type { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { DesktopCommandExecutionError, McpToolError } from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult } from '../../structuredContent.js';

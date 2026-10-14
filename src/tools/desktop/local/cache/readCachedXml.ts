@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -17,13 +16,18 @@ import {
   resolveArtifactNameArg,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
-import { getCacheDir, isWithinCacheDir } from './cachePath.js';
+import {
+  CONTAINED_CACHE_READ_ISSUE,
+  getCacheDir,
+  isWithinCacheDir,
+  readContainedCacheTextFile,
+} from './cachePath.js';
 
 const paramsSchema = {
   filePath: z.string(),
-  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheetName: artifactNameParam('worksheet', { plainName: true }).optional(),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
-  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboardName: artifactNameParam('dashboard', { plainName: true }).optional(),
   dashboard: deprecatedArtifactAliasParam('dashboard'),
   startByte: z.number().int().min(0).optional(),
   endByte: z.number().int().min(0).optional(),
@@ -100,16 +104,24 @@ export const getReadCachedXmlTool = (
             ).toErr();
           }
 
-          if (!existsSync(absolutePath)) {
+          const containedRead = readContainedCacheTextFile(absolutePath);
+          if (!containedRead.ok && containedRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
             return new FileNotFoundError(filePath).toErr();
           }
-
-          let fileContent: string;
-          try {
-            fileContent = readFileSync(absolutePath, 'utf-8');
-          } catch (err) {
-            return new FileReadError(err).toErr();
+          if (
+            !containedRead.ok &&
+            (containedRead.issue === CONTAINED_CACHE_READ_ISSUE.outsideCache ||
+              containedRead.issue === CONTAINED_CACHE_READ_ISSUE.unsafeFile)
+          ) {
+            return new ArgsValidationError(
+              `Security error: file path must resolve to a regular file within the cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
           }
+          if (!containedRead.ok) {
+            return new FileReadError(containedRead.error).toErr();
+          }
+
+          const fileContent = containedRead.text;
 
           // Optional slice selectors keep large cached files out of context.
           let slice = fileContent;
@@ -118,7 +130,8 @@ export const getReadCachedXmlTool = (
             const match = findElement(fileContent, 'worksheet', worksheetSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}.`,
+                `No <worksheet name="${worksheetSelector}"> element found in ${filePath}. ` +
+                  'The selector is the plain worksheet name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-worksheets to get exact names.',
               ).toErr();
             }
             slice = match.text;
@@ -127,7 +140,8 @@ export const getReadCachedXmlTool = (
             const match = findElement(fileContent, 'dashboard', dashboardSelector);
             if (!match) {
               return new ArgsValidationError(
-                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}.`,
+                `No <dashboard name="${dashboardSelector}"> element found in ${filePath}. ` +
+                  'The selector is the plain dashboard name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-dashboards to get exact names.',
               ).toErr();
             }
             slice = match.text;

@@ -249,3 +249,30 @@ describe('buildAuthConfig', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('buildAuthConfig uat outer-token username', () => {
+  it('derives the UAT subject only from the authenticated principal and never crosses to config.siteName implicitly', () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.config.auth = 'uat';
+    extra.config.siteName = 'site-b';
+    extra.config.jwtUsername = '{OAUTH_USERNAME}';
+
+    const result = buildAuthConfig({
+      config: extra.config,
+      tableauAuthInfo: {
+        type: 'X-Tableau-Auth',
+        username: 'viewer-a@example.com',
+        server: 'https://10ay.online.tableau.com',
+        siteName: 'site-b',
+        siteId: 'luid-site-a',
+      },
+      scopes: new Set(),
+    });
+
+    expect(result).toMatchObject({
+      type: 'uat',
+      siteName: 'site-b',
+      username: 'viewer-a@example.com',
+    });
+  });
+});

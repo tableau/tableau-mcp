@@ -8,6 +8,10 @@ import type {
 
 const allRules: ValidationRule[] = validationRules;
 
+// Known crash-producing XML must be repaired before any write, even when the same
+// defect exists in the live baseline or a deterministic caller skips ordinary checks.
+const alwaysBlockingRuleIds = new Set(['dashboard-worksheet-zone-type']);
+
 type ContextAwareValidationRule = ValidationRule & {
   validate(xml: string, context?: ValidationContext): ValidationIssue[];
 };
@@ -17,6 +21,24 @@ export function blockingValidationIssues(issues: ValidationIssue[]): ValidationI
   return issues.filter((issue) => issue.severity === 'error');
 }
 
+export function alwaysBlockingValidationIssues(issues: ValidationIssue[]): ValidationIssue[] {
+  return blockingValidationIssues(issues).filter((issue) =>
+    alwaysBlockingRuleIds.has(issue.ruleId),
+  );
+}
+
+export function runAlwaysBlockingValidation(
+  xml: string,
+  context: ValidationContext,
+): ValidationResult {
+  return runValidation(
+    xml,
+    context,
+    allRules.filter((rule) => alwaysBlockingRuleIds.has(rule.id)),
+  );
+}
+
+/** Baseline comparison never waives the known crash hazards selected above. */
 export function introducedBlockingValidationIssues(
   baselineIssues: ValidationIssue[],
   candidateIssues: ValidationIssue[],
@@ -28,6 +50,7 @@ export function introducedBlockingValidationIssues(
   }
 
   return blockingValidationIssues(candidateIssues).filter((issue) => {
+    if (alwaysBlockingRuleIds.has(issue.ruleId)) return true;
     const key = validationIssueKey(issue);
     const remaining = baselineCounts.get(key) ?? 0;
     const candidateCount = issue.occurrenceCount ?? 1;

@@ -31,7 +31,7 @@ ship in the default surface).
 
 ## OpenAPI fixture scopes
 
-`__fixtures__/externalClientApi-openapi.json` is the 0.2.15 compatibility snapshot. It retains the
+`__fixtures__/externalClientApi-openapi.json` is the 0.2.20 compatibility snapshot. It retains the
 broader historical route inventory, including an archival Qt-only dialog shape. Runtime dialog
 schemas are tested only against the current producer capture; other compatibility tests retain the
 historical fixture.

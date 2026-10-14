@@ -9,7 +9,7 @@ sidebar_position: 4
 A guided, **destructive** Tableau Cloud admin workflow that joins the extract refresh inventory with Admin Insights job performance, recommends a `keep` / `downgrade` / `delete` action per task, and — only after explicit human approval — applies those changes.
 
 :::warning[Admin Only · Destructive]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag. It drives the destructive [`update-cloud-extract-refresh-task`](../tools/tasks/update-cloud-extract-refresh-task.md) and [`delete-content`](../tools/content/delete-content.md) tools. The inventory, performance, and recommendation steps are **read-only**: no task is updated or deleted until the user approves a specific task set at the required human-in-the-loop confirmation break.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable. It drives the destructive [`update-cloud-extract-refresh-task`](../tools/tasks/update-cloud-extract-refresh-task.md) and [`delete-content`](../tools/content/delete-content.md) tools. The inventory, performance, and recommendation steps are **read-only**: no task is updated or deleted until the user approves a specific task set at the required human-in-the-loop confirmation break.
 :::
 
 ## Workflow
@@ -20,8 +20,9 @@ The prompt sequences existing deterministic tools — it performs no calculation
 2. **Performance signals (read-only)** — calls [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "job-performance"` once with a pre-baked filter on the four extract-refresh job types (`RefreshExtracts`, `IncrementExtracts`, `RefreshExtractsViaBridge`, `IncrementExtractsViaBridge`). Rows are used verbatim — no recomputation.
 3. **Recommend (read-only)** — joins inventory (step 1) and performance rows (step 2) per task and produces a Markdown table with a `keep` / `downgrade` / `delete` recommendation per row. `delete` is only proposed when the task has zero successful runs in the lookback window AND a non-zero failure count, or is otherwise demonstrably abandoned.
 4. **Human confirmation break** — presents the recommendation table and requires explicit approval (`yes` or a list of Task IDs) before any update or delete. A previous approval does not carry forward. In a dry run (the default) the workflow stops here, having written nothing.
-5. **Apply (only after Step 4 approval)** — for each approved task, in order: `downgrade` rows call [`update-cloud-extract-refresh-task`](../tools/tasks/update-cloud-extract-refresh-task.md) with the proposed schedule; `delete` rows call [`delete-content`](../tools/content/delete-content.md) with `resourceType: "extract-refresh-task"` (**irreversible**). Calls are sequential, not parallel; the first error stops the run.
-6. **Final report** — prints a "Changes applied" section listing every task touched and the outcome, a "Skipped" section for `keep` rows or operator-excluded rows, and (when `taskIds` was supplied) a "Missing tasks" section.
+5. **Preview (per approved task, read-only)** — for each approved task, in order: `downgrade` rows call [`update-cloud-extract-refresh-task`](../tools/tasks/update-cloud-extract-refresh-task.md) with the proposed schedule and `confirm` omitted; `delete` rows call [`delete-content`](../tools/content/delete-content.md) with `resourceType: "extract-refresh-task"` and `confirm` omitted. Each call validates the change and returns a per-task `confirmationToken` without applying anything. Calls are sequential, not parallel.
+6. **Apply (confirmed)** — for each previewed task, calls the same tool again with `confirm: true` and the `confirmationToken` from step 5. `delete-content` calls are **irreversible**. Calls are sequential, not parallel; the first error stops the run.
+7. **Final report** — prints a "Changes applied" section listing every task touched and the outcome, a "Skipped" section for `keep` rows or operator-excluded rows, and (when `taskIds` was supplied) a "Missing tasks" section.
 
 ## Arguments
 
@@ -35,7 +36,7 @@ The prompt sequences existing deterministic tools — it performs no calculation
 
 - No task is updated or deleted until the user approves a specific task set at the Step 4 break.
 - The workflow only acts on tasks the user explicitly approved; tasks the user did not approve are never touched.
-- `delete-extract-refresh-task` is irreversible; `update-cloud-extract-refresh-task` is reversible by re-applying the prior schedule.
+- `delete-content` is irreversible; `update-cloud-extract-refresh-task` is reversible by re-applying the prior schedule.
 - Apply calls run sequentially, not in parallel; the first error stops the run so the operator can review partial state.
 
 ## Configuration

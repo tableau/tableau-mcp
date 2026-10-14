@@ -194,38 +194,6 @@ const DEFAULT_LOGICAL_TABLES = [
   { id: 'lt-orders', caption: 'Orders' },
   { id: 'lt-returns', caption: 'Returns' },
 ];
-const DEFAULT_SITE_DATASOURCES = [
-  {
-    id: 'ds-superstore',
-    luid: 'luid-superstore',
-    name: 'Sample - Superstore',
-    caption: 'Sample - Superstore',
-    project: 'Samples',
-    contentUrl: 'sample-superstore',
-  },
-  {
-    id: 'ds-quota',
-    luid: 'luid-quota',
-    name: 'Quota Targets',
-    caption: 'Quota Targets',
-    project: 'Sales',
-    contentUrl: 'quota-targets',
-  },
-];
-const DEFAULT_SITE_WORKBOOKS = [
-  {
-    id: 'wb-regional-sales',
-    luid: 'luid-regional-sales',
-    name: 'Regional Sales Analysis',
-    project: 'Sales',
-  },
-  {
-    id: 'wb-ops-scorecard',
-    luid: 'luid-ops-scorecard',
-    name: 'Ops Scorecard',
-    project: 'Operations',
-  },
-];
 const DEFAULT_DIALOGS: DialogList['dialogs'] = [
   {
     objectName: 'saveChangesDialog',
@@ -467,7 +435,6 @@ export async function startMockExternalApiServer(
           'app-dialogs': '/v0/app/dialogs',
           'app-state': '/v0/app/state',
           workbook: '/v0/workbook',
-          site: '/v0/site',
         },
       });
       return;
@@ -711,6 +678,33 @@ export async function startMockExternalApiServer(
       }
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDiagnostics) {
+      sendJson(res, 200, {
+        worksheets: DEFAULT_WORKSHEETS.map((worksheet) => ({
+          worksheetId: worksheet.id,
+          status: 'complete',
+          invalidFields: [],
+        })),
+      });
+      return;
+    }
+
+    const worksheetDiagnosticsMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+)\/diagnostics$/,
+    );
+    if (method === 'GET' && worksheetDiagnosticsMatch) {
+      const worksheetId = decodeURIComponent(worksheetDiagnosticsMatch[1]);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (!known) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }],
+      });
+      return;
+    }
+
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
     if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);
@@ -849,24 +843,6 @@ export async function startMockExternalApiServer(
         return;
       }
       sendImageExport(res, searchParams, 1600, 900);
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
-      sendJson(res, 200, {
-        siteId: 'site-sales',
-        authenticatedUserId: 'user-author',
-      });
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteDatasources) {
-      sendJson(res, 200, { datasources: DEFAULT_SITE_DATASOURCES });
-      return;
-    }
-
-    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteWorkbooks) {
-      sendJson(res, 200, { workbooks: DEFAULT_SITE_WORKBOOKS });
       return;
     }
 
@@ -1105,6 +1081,55 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardRefreshNowMatch = path.match(
+      /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
+    );
+    if (method === 'POST' && storyboardRefreshNowMatch) {
+      const storyboardId = decodeURIComponent(storyboardRefreshNowMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        id: 'op-refresh-storyboard-now-1',
+        kind: 'storyboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [{ worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' }],
+          failed: [],
+        },
+      });
+      return;
+    }
+
+    const dashboardRefreshNowMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+):refreshNow$/);
+    if (method === 'POST' && dashboardRefreshNowMatch) {
+      const dashboardId = decodeURIComponent(dashboardRefreshNowMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'dashboard-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendJson(res, 200, {
+        id: 'op-refresh-dashboard-now-1',
+        kind: 'dashboard.refreshNow',
+        state: 'succeeded',
+        createdAt: '2026-09-23T10:00:00Z',
+        completedAt: '2026-09-23T10:00:01Z',
+        result: {
+          outcome: 'COMPLETE',
+          refreshed: [
+            { worksheetId: 'sheet-sales', worksheetName: 'Sales by Region' },
+            { worksheetId: 'sheet-profit', worksheetName: 'Profit by Category' },
+          ],
+          failed: [],
+        },
+      });
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.appOpenFile) {
       let parsed: { filePath?: unknown };
       try {
@@ -1196,11 +1221,6 @@ export async function startMockExternalApiServer(
         return;
       }
       sendOperation(res, 'export-workbook-as');
-      return;
-    }
-
-    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookPublish) {
-      sendOperation(res, 'publish-workbook');
       return;
     }
 

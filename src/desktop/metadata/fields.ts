@@ -5,6 +5,10 @@
 
 import { resolveDerivation } from '../derivations.js';
 import {
+  createCalculationAggregationResolver,
+  getCalculationDependencyReferences,
+} from '../formulaAggregation.js';
+import {
   forEachRelationColumn,
   inferFieldTypeFromType,
   inferRoleFromType,
@@ -12,6 +16,14 @@ import {
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
+import {
+  insertShelfLeaf,
+  parseShelfValue,
+  removeShelfLeaf,
+  serializeShelfTree,
+  shelfLeaves,
+  shelfTreeFromValue,
+} from './shelfTree.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
 
 /**
@@ -165,7 +177,9 @@ export function addFieldToEncoding(
 
     // Check if mark-labels-show rule already exists
     const hasLabelRule = styleRules.some(
-      (rule: any) => rule['@_element'] === 'mark' && rule.format?.['@_attr'] === 'mark-labels-show',
+      (rule: any) =>
+        rule['@_element'] === 'mark' &&
+        normalizeArray(rule.format).some((f: any) => f?.['@_attr'] === 'mark-labels-show'),
     );
 
     // Add the rule if it doesn't exist
@@ -192,7 +206,7 @@ export function addFieldToEncoding(
   // This must be done to ensure the changes are reflected in the parsed structure
   worksheet.table.panes.pane = panes.length === 1 ? panes[0] : panes;
 
-  // Debug: Verify the encoding was added before serializing
+  // Verify the encoding was added before serializing
   const verifyPanes = normalizeArray(worksheet.table.panes.pane);
   const verifyPane = verifyPanes[0];
   const verifyEncodings = normalizeArray(verifyPane?.encodings?.[encodingType]);
@@ -202,15 +216,6 @@ export function addFieldToEncoding(
   const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === correctedColumnRef);
 
   if (!encodingAdded) {
-    // Log detailed debug info
-    console.error('Encoding verification failed:', {
-      panesCount: verifyPanes.length,
-      hasEncodings: !!verifyPane?.encodings,
-      encodingType,
-      verifyEncodingsCount: verifyEncodings.length,
-      verifyEncodings: verifyEncodings,
-      expectedColumnRef: correctedColumnRef,
-    });
     throw new Error(
       `Failed to add encoding: encoding not found in structure after modification. Expected: ${correctedColumnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
     );
@@ -235,25 +240,31 @@ export function removeFieldFromEncoding(
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
-  if (!worksheet?.table?.panes) {
-    throw new Error('No panes found in worksheet');
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+  if (!worksheet.table?.panes) {
+    throw fieldRemovalError(worksheet, 'No panes found in worksheet');
   }
 
   const panes = normalizeArray(worksheet.table.panes.pane);
   if (panes.length === 0) {
-    throw new Error('No panes found');
+    throw fieldRemovalError(worksheet, 'No panes found');
   }
 
   const firstPane = panes[0];
   if (!firstPane.encodings?.[encodingType]) {
-    throw new Error(`No ${encodingType} encodings found`);
+    throw fieldRemovalError(worksheet, `No ${encodingType} encodings found`);
   }
 
   const encodings = normalizeArray(firstPane.encodings[encodingType]);
   const filtered = encodings.filter((enc) => enc['@_column'] !== columnRef);
 
   if (filtered.length === encodings.length) {
-    throw new Error(`Encoding ${encodingType} with column ${columnRef} not found`);
+    throw fieldRemovalError(
+      worksheet,
+      `Encoding ${encodingType} with column ${columnRef} not found`,
+    );
   }
 
   if (filtered.length === 0) {
@@ -263,59 +274,6 @@ export function removeFieldFromEncoding(
   } else {
     firstPane.encodings[encodingType] = filtered;
   }
-
-  return serializeXML(parsed);
-}
-
-/**
- * Move a field to a new position within an encoding type
- * @param worksheetXml - The worksheet XML as a string
- * @param encodingType - Type of encoding
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInEncoding(
-  worksheetXml: string,
-  encodingType: EncodingType,
-  columnRef: string,
-  newIndex: number,
-): string {
-  encodingType = canonicalEncodingType(encodingType);
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table?.panes) {
-    throw new Error('No panes found in worksheet');
-  }
-
-  const panes = normalizeArray(worksheet.table.panes.pane);
-  if (panes.length === 0) {
-    throw new Error('No panes found');
-  }
-
-  const firstPane = panes[0];
-  if (!firstPane.encodings?.[encodingType]) {
-    throw new Error(`No ${encodingType} encodings found`);
-  }
-
-  const encodings = normalizeArray(firstPane.encodings[encodingType]);
-  const currentIndex = encodings.findIndex((enc) => enc['@_column'] === columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Encoding ${encodingType} with column ${columnRef} not found`);
-  }
-
-  if (newIndex < 0 || newIndex >= encodings.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${encodings.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = encodings.splice(currentIndex, 1);
-  encodings.splice(newIndex, 0, moved);
-
-  // Update encodings
-  firstPane.encodings[encodingType] = encodings.length === 1 ? encodings[0] : encodings;
 
   return serializeXML(parsed);
 }
@@ -375,94 +333,6 @@ export function removeFieldFromCols(worksheetXml: string, columnRef: string): st
 }
 
 /**
- * Move a field to a new position in rows
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInRows(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'rows', columnRef, newIndex);
-}
-
-/**
- * Move a field to a new position in cols
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInCols(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'cols', columnRef, newIndex);
-}
-
-/**
- * Parse a shelf value into pill refs. Shelf text uses "/" between pills, while field
- * names can also contain "/" inside bracketed column-instance refs.
- */
-export function parseShelfValue(value: string | string[] | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-  if (typeof value === 'string') {
-    return splitShelfString(value);
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((v) => splitShelfString(typeof v === 'string' ? v : String(v)));
-  }
-  return [];
-}
-
-function splitShelfString(value: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let inBracketedName = false;
-
-  const pushCurrent = (): void => {
-    const trimmed = current.trim();
-    if (trimmed) {
-      parts.push(trimmed);
-    }
-    current = '';
-  };
-
-  for (let i = 0; i < value.length; i++) {
-    const char = value[i];
-    if (char === '[' && !inBracketedName) {
-      inBracketedName = true;
-      current += char;
-      continue;
-    }
-    if (char === ']' && inBracketedName) {
-      if (value[i + 1] === ']') {
-        current += ']]';
-        i++;
-        continue;
-      }
-      inBracketedName = false;
-      current += char;
-      continue;
-    }
-    if (char === '/' && !inBracketedName) {
-      pushCurrent();
-      continue;
-    }
-    current += char;
-  }
-
-  pushCurrent();
-  return parts;
-}
-
-/**
- * Internal helper to serialize shelf array to string
- */
-function serializeShelfValue(fields: string[]): string {
-  // Join with '/' separator (custom language format)
-  return fields.join(' / ');
-}
-
-/**
  * Map a lowercase derivation abbreviation to its canonical derivation name.
  * Column-instance names use lowercase (e.g. [ctd:Field:qk]); derivation attributes
  * use the canonical long form (CountD). Resolution lives in one table — see
@@ -488,6 +358,8 @@ const DATE_PART_DERIVATIONS = new Set<string>([
   'Week-Trunc',
   'Day-Trunc',
 ]);
+
+const COUNT_DERIVATIONS = new Set<string>(['Count', 'CountD', 'CountDistinct']);
 
 // Map a column-instance pivot suffix (qk/ok/nk) to its Tableau type; null when unknown.
 function typeFromPivotSuffix(columnInstanceName: string): string | null {
@@ -693,6 +565,69 @@ function getColumnFromWorkbook(
   }
 }
 
+function createDatasourceCalculationAggregationResolver(
+  workbookXml: string | undefined,
+  datasourceName: string,
+  datasourceDependency: any,
+): (columnName: string) => boolean {
+  const formulas = new Map<string, string>();
+
+  if (workbookXml) {
+    try {
+      const workbook = parseXML(workbookXml).workbook;
+      const datasource = normalizeArray(workbook?.datasources?.datasource).find(
+        (candidate: any) => candidate['@_name'] === datasourceName,
+      );
+      for (const column of normalizeArray(datasource?.column)) {
+        const name = column['@_name'];
+        const formula = column.calculation?.['@_formula'];
+        if (typeof name === 'string' && typeof formula === 'string') {
+          formulas.set(name, formula);
+        }
+      }
+    } catch {
+      // Workbook parse failures retain the existing worksheet-only behavior.
+    }
+  }
+
+  for (const column of normalizeArray(datasourceDependency.column)) {
+    const name = column['@_name'];
+    if (typeof name !== 'string') continue;
+    const formula = column.calculation?.['@_formula'];
+    if (typeof formula === 'string') formulas.set(name, formula);
+    else formulas.delete(name);
+  }
+
+  return createCalculationAggregationResolver(formulas);
+}
+
+function copyWorkbookColumnWithDependencies(
+  columns: any[],
+  workbookXml: string | undefined,
+  datasourceName: string,
+  workbookColumn: any,
+): void {
+  const columnName = workbookColumn?.['@_name'];
+  if (
+    typeof columnName !== 'string' ||
+    columns.some((column: any) => column['@_name'] === columnName)
+  ) {
+    return;
+  }
+
+  columns.push({ ...workbookColumn });
+  const formula = workbookColumn.calculation?.['@_formula'];
+  if (typeof formula !== 'string') return;
+
+  for (const dependencyName of getCalculationDependencyReferences(formula)) {
+    if (columns.some((column: any) => column['@_name'] === dependencyName)) continue;
+    const dependency = getColumnFromWorkbook(workbookXml, datasourceName, dependencyName);
+    if (dependency) {
+      copyWorkbookColumnWithDependencies(columns, workbookXml, datasourceName, dependency);
+    }
+  }
+}
+
 /**
  * Ensure column-instance exists in datasource-dependencies
  * If it doesn't exist, adds both column and column-instance entries
@@ -769,32 +704,17 @@ function ensureColumnInstanceInDependencies(
   // Check if base column exists to determine if it's a calculated field
   const columnsArray = normalizeArray(datasourceDep.column);
   const existingBaseColumn = columnsArray.find((col: any) => col['@_name'] === parsed.column);
+  const calculationRequiresUserDerivation = createDatasourceCalculationAggregationResolver(
+    workbookXml,
+    datasource,
+    datasourceDep,
+  );
   let correctedInstanceName = columnInstanceName;
 
   // If it's a calculated field with aggregation, we need to use usr prefix
   if (existingBaseColumn?.calculation?.['@_formula']) {
-    const formula = existingBaseColumn.calculation['@_formula'];
-    const aggFunctions = [
-      'SUM(',
-      'AVG(',
-      'MIN(',
-      'MAX(',
-      'COUNT(',
-      'COUNTD(',
-      'STDEV(',
-      'STDEVP(',
-      'VAR(',
-      'VARP(',
-      'MEDIAN(',
-      'PERCENTILE(',
-    ];
-    const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
-
-    if (hasAggregation && parsed.derivation !== 'User') {
+    if (calculationRequiresUserDerivation(parsed.column) && parsed.derivation !== 'User') {
       correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
-      console.error(
-        `[DEBUG] Correcting column reference for calculated field with aggregation: ${columnInstanceName} -> ${correctedInstanceName}`,
-      );
       emitFieldRewrite({
         requested: columnInstanceName,
         applied: correctedInstanceName,
@@ -806,15 +726,24 @@ function ensureColumnInstanceInDependencies(
     }
   }
 
-  if (!exists) {
-    // Parse the CORRECTED instance name to get base column and derivation
-    const parsedCorrected = parseColumnInstanceName(correctedInstanceName);
-    if (!parsedCorrected) {
-      throw new Error(
-        `Invalid column-instance name format: ${correctedInstanceName}. Expected format: [derivation:ColumnName:type]`,
-      );
-    }
+  const parsedCorrected = parseColumnInstanceName(correctedInstanceName);
+  if (!parsedCorrected) {
+    throw new Error(
+      `Invalid column-instance name format: ${correctedInstanceName}. Expected format: [derivation:ColumnName:type]`,
+    );
+  }
 
+  if (exists && COUNT_DERIVATIONS.has(parsedCorrected.derivation)) {
+    const pivotType = typeFromPivotSuffix(correctedInstanceName);
+    const existingInstance = columnInstances.find(
+      (ci: any) => ci['@_name'] === correctedInstanceName,
+    );
+    if (pivotType && existingInstance) {
+      existingInstance['@_type'] = pivotType;
+    }
+  }
+
+  if (!exists) {
     // Check if base column exists, if not create it
     const columns = [...columnsArray];
     const columnExists = columns.some((col: any) => col['@_name'] === parsedCorrected.column);
@@ -823,48 +752,8 @@ function ensureColumnInstanceInDependencies(
       // Try to get full column definition from workbook (includes calculations, etc.)
       const workbookColumn = getColumnFromWorkbook(workbookXml, datasource, parsedCorrected.column);
 
-      // Debug logging
-      if (!workbookColumn) {
-        if (workbookXml) {
-          console.error(
-            `[DEBUG] Failed to find column in workbook. Datasource: ${datasource}, Column: ${parsedCorrected.column}, Parsed derivation: ${parsedCorrected.derivation}`,
-          );
-        } else {
-          console.warn(
-            `[DEBUG] No workbook XML provided. Cannot look up column definition for: ${parsedCorrected.column}, Using derivation: ${parsedCorrected.derivation}`,
-          );
-        }
-      }
-
       if (workbookColumn) {
-        // Copy the full column definition from workbook, including any calculation elements
-        // Make a shallow copy to avoid reference issues
-        const newColumn = { ...workbookColumn };
-        columns.push(newColumn);
-
-        // If this is a calculated field, also ensure dependent columns exist
-        if (workbookColumn.calculation) {
-          // Parse the formula to extract dependent column names (simplified approach)
-          const formula =
-            workbookColumn.calculation['@_formula'] || workbookColumn.calculation['@_class'];
-          if (formula && typeof formula === 'string') {
-            // Extract column names in brackets from formula (e.g., [Profit], [Sales])
-            const dependentColumns = formula.match(/\[([^\]]+)\]/g);
-            if (dependentColumns) {
-              for (const depCol of dependentColumns) {
-                // Check if this dependent column already exists
-                const depExists = columns.some((col: any) => col['@_name'] === depCol);
-                if (!depExists) {
-                  // Try to get it from workbook
-                  const depWorkbookColumn = getColumnFromWorkbook(workbookXml, datasource, depCol);
-                  if (depWorkbookColumn) {
-                    columns.push({ ...depWorkbookColumn });
-                  }
-                }
-              }
-            }
-          }
-        }
+        copyWorkbookColumnWithDependencies(columns, workbookXml, datasource, workbookColumn);
       } else if (!workbookXml) {
         throw new Error(
           `Cannot resolve column ${parsedCorrected.column} without workbook context. ` +
@@ -919,32 +808,14 @@ function ensureColumnInstanceInDependencies(
     let actualDerivation = parsedCorrected.derivation;
     let actualColumnInstanceName = correctedInstanceName;
     if (baseColumn?.calculation?.['@_formula']) {
-      const formula = baseColumn.calculation['@_formula'];
-      const aggFunctions = [
-        'SUM(',
-        'AVG(',
-        'MIN(',
-        'MAX(',
-        'COUNT(',
-        'COUNTD(',
-        'STDEV(',
-        'STDEVP(',
-        'VAR(',
-        'VARP(',
-        'MEDIAN(',
-        'PERCENTILE(',
-      ];
-      const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
-
-      if (hasAggregation && parsedCorrected.derivation !== 'User') {
+      if (
+        calculationRequiresUserDerivation(parsedCorrected.column) &&
+        parsedCorrected.derivation !== 'User'
+      ) {
         // This calculated field already has aggregation - use User derivation to prevent double aggregation
-        console.error(
-          `[DEBUG] Calculated field "${parsedCorrected.column}" has aggregation in formula, correcting from "${parsedCorrected.derivation}" to "User"`,
-        );
         actualDerivation = 'User';
         // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix.
         actualColumnInstanceName = `[usr:${parsedCorrected.localFieldName}:${parsedCorrected.pivot}]`;
-        console.error(`[DEBUG] Corrected column-instance name: ${actualColumnInstanceName}`);
         if (actualColumnInstanceName !== correctedInstanceName) {
           emitFieldRewrite({
             requested: correctedInstanceName,
@@ -960,9 +831,7 @@ function ensureColumnInstanceInDependencies(
       }
     }
 
-    // For date-part derivations the instance type must follow the ref's pivot
-    // suffix, not the base date column's type, or Tableau coerces it back.
-    if (DATE_PART_DERIVATIONS.has(actualDerivation)) {
+    if (DATE_PART_DERIVATIONS.has(actualDerivation) || COUNT_DERIVATIONS.has(actualDerivation)) {
       const pivotType = typeFromPivotSuffix(actualColumnInstanceName);
       if (pivotType) {
         instanceType = pivotType;
@@ -1031,21 +900,59 @@ function addFieldToShelf(
   const correctedColumnRef = `[${parsedRef.datasource}].${correctedColumnInstanceName}`;
 
   // Get current shelf value and parse to array
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
 
   // Note: Tableau allows duplicate fields on the same shelf, so we don't check for existing entries
-
-  // Add at specified index or end (using corrected column ref)
-  if (index !== undefined && index >= 0 && index <= currentArray.length) {
-    currentArray.splice(index, 0, correctedColumnRef);
-  } else {
-    currentArray.push(correctedColumnRef);
-  }
-
-  // Serialize back to string
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(insertShelfLeaf(tree, index, correctedColumnRef));
 
   return serializeXML(parsed);
+}
+
+export type WorksheetFieldPlacements = {
+  rows: string[];
+  cols: string[];
+  encodings: Record<string, string[]>;
+};
+
+/** Snapshot the selected worksheet's shelves and first-pane encodings without a live read. */
+export function getWorksheetFieldPlacements(worksheetXml: string): WorksheetFieldPlacements {
+  const worksheet = getWorksheet(parseXML(worksheetXml));
+  if (!worksheet) throw new Error('No worksheet found in XML');
+  return worksheetFieldPlacements(worksheet);
+}
+
+function worksheetFieldPlacements(worksheet: ParsedWorksheet): WorksheetFieldPlacements {
+  const firstPane = normalizeArray(worksheet.table?.panes?.pane)[0];
+  const encodings = Object.fromEntries(
+    Object.entries(firstPane?.encodings ?? {})
+      .map(
+        ([channel, entries]) =>
+          [
+            channel,
+            normalizeArray(entries)
+              .map((encoding) => encoding['@_column'])
+              .filter((column) => typeof column === 'string' && column.length > 0),
+          ] as const,
+      )
+      .filter(([, columns]) => columns.length > 0),
+  );
+  return {
+    rows: parseShelfValue(worksheet.table?.rows),
+    cols: parseShelfValue(worksheet.table?.cols),
+    encodings,
+  };
+}
+
+/** Report the same worksheet and pane the removal checked, preserving pending edits. */
+function fieldRemovalError(worksheet: ParsedWorksheet, reason: string): Error {
+  return new Error(
+    `${reason}. No worksheet XML was changed.\n` +
+      `Current placements in the selected worksheet XML (encodings are for the first pane): ${JSON.stringify(worksheetFieldPlacements(worksheet))}\n` +
+      'Use read-cached-xml with filePath set to the same worksheetFile to confirm the exact columnRef, target, and encodingType before retrying. ' +
+      'For the latest live state, use get-worksheet-xml with mode="file", inspect its returned file with read-cached-xml, and pass that file to remove-field. ' +
+      'A live re-read resets the edit buffer; finish pending edits first. ' +
+      'Do not retry removal if the field is absent.',
+  );
 }
 
 /**
@@ -1059,54 +966,19 @@ function removeFieldFromShelf(
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
-  if (!worksheet?.table) {
-    throw new Error(`No ${shelf} shelf found in worksheet`);
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+  if (!worksheet.table) {
+    throw fieldRemovalError(worksheet, `No ${shelf} shelf found in worksheet`);
   }
 
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const filtered = currentArray.filter((col) => col !== columnRef);
-
-  if (filtered.length === currentArray.length) {
-    throw new Error(`Column ${columnRef} not found in ${shelf}`);
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
+  if (!shelfLeaves(tree).includes(columnRef)) {
+    throw fieldRemovalError(worksheet, `Column ${columnRef} not found in ${shelf}`);
   }
 
-  worksheet.table[shelf] = filtered.length > 0 ? serializeShelfValue(filtered) : '';
-
-  return serializeXML(parsed);
-}
-
-/**
- * Internal helper to move field in rows or cols shelf
- */
-function moveFieldInShelf(
-  worksheetXml: string,
-  shelf: 'rows' | 'cols',
-  columnRef: string,
-  newIndex: number,
-): string {
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table) {
-    throw new Error(`No ${shelf} shelf found in worksheet`);
-  }
-
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const currentIndex = currentArray.indexOf(columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Column ${columnRef} not found in ${shelf}`);
-  }
-
-  if (newIndex < 0 || newIndex >= currentArray.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${currentArray.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = currentArray.splice(currentIndex, 1);
-  currentArray.splice(newIndex, 0, moved);
-
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(tree && removeShelfLeaf(tree, columnRef));
 
   return serializeXML(parsed);
 }

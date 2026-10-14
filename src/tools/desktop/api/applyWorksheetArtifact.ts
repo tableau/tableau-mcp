@@ -9,9 +9,9 @@ import type { ReadbackVerificationResult } from '../../../desktop/validation/rea
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   DesktopCommandExecutionError,
-  McpToolError,
   WorksheetXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 
 export interface ApplyWorksheetArtifactArgs {
   store: TemplateArtifactStore;
@@ -39,6 +39,9 @@ export type WorksheetArtifactOutcome =
   | { state: 'applied'; retrySafe: false; receipt: ArtifactApplyReceipt }
   | { state: 'failed'; retrySafe: true; error: McpToolError }
   | { state: 'unknown'; retrySafe: false; error: McpToolError };
+
+const DISPATCHED_ARTIFACT_GUIDANCE =
+  'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.';
 
 export async function applyWorksheetArtifact({
   store,
@@ -139,12 +142,13 @@ function toMcpToolError(
   if (error.type === 'execute-command-error') {
     return new DesktopCommandExecutionError(
       error.error,
-      dispatchAttempted
-        ? 'The artifact may have reached Desktop and was consumed. Do not retry it; build a fresh artifact after inspecting the workbook.'
-        : undefined,
+      dispatchAttempted ? DISPATCHED_ARTIFACT_GUIDANCE : undefined,
     );
   }
-  return new WorksheetXmlLoadFailedError(error.error);
+  return new WorksheetXmlLoadFailedError(
+    error.error,
+    dispatchAttempted ? DISPATCHED_ARTIFACT_GUIDANCE : undefined,
+  );
 }
 
 export function templateArtifactUnavailableError(

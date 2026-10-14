@@ -74,10 +74,9 @@ describe('prewarm/prewarmForDatasource', () => {
   });
 
   it('rediscovers external runtime templates on every call', () => {
-    const priorTemplatesDir = process.env['TEMPLATES_DIR'];
     const root = mkdtempSync(join(tmpdir(), 'prewarm-runtime-'));
     try {
-      process.env['TEMPLATES_DIR'] = root;
+      vi.stubEnv('TEMPLATES_DIR', root);
       writeFileSync(join(root, 'runtime-first.tbm'), RUNTIME_BOOKMARK);
       const first = prewarmForDatasource(SUPERSTORE_XML);
       writeFileSync(join(root, 'runtime-second.tbm'), RUNTIME_BOOKMARK);
@@ -93,25 +92,21 @@ describe('prewarm/prewarmForDatasource', () => {
       expect(firstTemplates).not.toContain('runtime-second');
       expect(secondTemplates).toContain('runtime-second');
     } finally {
-      if (priorTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-      else process.env['TEMPLATES_DIR'] = priorTemplatesDir;
       rmSync(root, { recursive: true, force: true });
     }
   });
 
   it('refreshes repository templates without reloading protected descriptors', () => {
-    const priorRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
-    const priorTemplatesDir = process.env['TEMPLATES_DIR'];
     const root = mkdtempSync(join(tmpdir(), 'prewarm-repository-'));
     const custom = join(root, 'Tableau Agent', 'templates');
     mkdirSync(join(custom, '.vendored', 'overridable'), { recursive: true });
     const loader = vi.mocked(loadRuntimeTemplateDescriptors);
     try {
-      delete process.env['TABLEAU_REPOSITORY_DIR'];
-      delete process.env['TEMPLATES_DIR'];
+      vi.stubEnv('TABLEAU_REPOSITORY_DIR', undefined);
+      vi.stubEnv('TEMPLATES_DIR', undefined);
       prewarmForDatasource(SUPERSTORE_XML);
       loader.mockClear();
-      process.env['TABLEAU_REPOSITORY_DIR'] = root;
+      vi.stubEnv('TABLEAU_REPOSITORY_DIR', root);
       writeFileSync(join(custom, 'repository-first.tbm'), RUNTIME_BOOKMARK);
       const first = prewarmForDatasource(SUPERSTORE_XML);
       writeFileSync(join(custom, 'repository-second.tbm'), RUNTIME_BOOKMARK);
@@ -139,10 +134,6 @@ describe('prewarm/prewarmForDatasource', () => {
         [{ automaticOnly: true, includeProtected: false }],
       ]);
     } finally {
-      if (priorRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];
-      else process.env['TABLEAU_REPOSITORY_DIR'] = priorRepositoryDir;
-      if (priorTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-      else process.env['TEMPLATES_DIR'] = priorTemplatesDir;
       rmSync(root, { recursive: true, force: true });
     }
   });

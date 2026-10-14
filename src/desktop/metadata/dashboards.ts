@@ -100,6 +100,15 @@ export function addDashboard(workbookXml: string, dashboardName: string): string
         '@_w': '100000',
         '@_x': '0',
         '@_y': '0',
+        zone: {
+          '@_h': '100000',
+          '@_id': '1',
+          '@_param': 'vert',
+          '@_type-v2': 'layout-flow',
+          '@_w': '100000',
+          '@_x': '0',
+          '@_y': '0',
+        },
       },
     },
     'simple-id': { '@_uuid': generateUUID() },
@@ -221,36 +230,4 @@ export function extractDashboardXml(workbookXml: string, dashboardName: string):
   }
   carryNamespaceDeclarations(workbook.workbook, dashboard);
   return serializeXML({ dashboard });
-}
-
-// The External Client API's whole-workbook POST route treats the posted document as authoritative
-// and replaces the open workbook with it. So the doc must carry the ENTIRE live workbook (worksheets
-// included — the dashboard's zones reference them by name) with only this dashboard swapped in;
-// anything omitted would be pruned. Upsert by name: replace the matching dashboard, or append it if
-// absent. Windows are left intact. This is the create path; the per-sheet route is replace-only.
-export function upsertDashboardIntoWorkbook(
-  workbookXml: string,
-  dashboardName: string,
-  editedDashboardXml: string,
-): string {
-  const workbook = parseXML(workbookXml);
-  const editedParsed = parseXML(editedDashboardXml);
-  const editedDashboard = normalizeArray(editedParsed.dashboard as ParsedDashboard | undefined)[0];
-  if (!editedDashboard || editedDashboard['@_name'] !== dashboardName) {
-    throw new Error(`Edited XML does not contain a <dashboard name="${dashboardName}">`);
-  }
-
-  if (!workbook.workbook) workbook.workbook = {};
-  if (!workbook.workbook.dashboards) workbook.workbook.dashboards = {};
-
-  const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
-  const index = dashboards.findIndex((db) => db['@_name'] === dashboardName);
-  if (index === -1) {
-    dashboards.push(editedDashboard);
-  } else {
-    dashboards[index] = editedDashboard;
-  }
-  workbook.workbook.dashboards.dashboard = dashboards.length === 1 ? dashboards[0] : dashboards;
-
-  return serializeXML(workbook);
 }

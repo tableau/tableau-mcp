@@ -5,6 +5,7 @@ import { Err, Ok } from 'ts-results-es';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import type { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { sidecarPath, sourceSha256 } from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loggerModule from '../../../logging/logger.js';
@@ -158,8 +159,8 @@ describe('getGetDatasourceXmlTool', () => {
     expect(result.isError).toBe(false);
     const body = resultBody(result);
     expect(body.datasourceXml).toBe(
-      '<datasource name="Sales"><connection oauth-access-token="" url="" ' +
-        'connection-string="" odbc-connect-string=""/>' +
+      `<datasource name="Sales"><connection oauth-access-token="${REDACTED_CREDENTIAL_SENTINEL}" url="${REDACTED_CREDENTIAL_SENTINEL}" ` +
+        `connection-string="${REDACTED_CREDENTIAL_SENTINEL}" odbc-connect-string="${REDACTED_CREDENTIAL_SENTINEL}"/>` +
         '<column name="[Sales]"/></datasource>',
     );
     expect(resultText(result)).not.toContain('inline-secret');
@@ -167,6 +168,15 @@ describe('getGetDatasourceXmlTool', () => {
     expect(resultText(result)).not.toContain('whitespace-inline-secret');
     expect(resultText(result)).not.toContain('pwd-inline-secret');
     expect(body.message).toContain('returned inline');
+  });
+
+  it('returns calc formulas and captions that look like credential pairs intact', async () => {
+    const xml =
+      "<datasource name='Sales'><column caption='pwd=1' name='[Token]'>" +
+      "<calculation class='tableau' formula='[Token]=1'/></column></datasource>";
+    const { result } = await invoke({ datasourceName: 'Sales', mode: 'inline', xml });
+
+    expect(resultBody(result).datasourceXml).toBe(xml);
   });
 
   it('redacts credentials before writing the document and fingerprint sidecar', async () => {
@@ -179,8 +189,8 @@ describe('getGetDatasourceXmlTool', () => {
       '</datasource>';
     const redactedXml =
       '<datasource name="federated.sales" caption="Sales">' +
-      '<connection password="" oauth-refresh-token="" connection-string="" ' +
-      'odbc-connect-string=""/>' +
+      `<connection password="${REDACTED_CREDENTIAL_SENTINEL}" oauth-refresh-token="${REDACTED_CREDENTIAL_SENTINEL}" ` +
+      `connection-string="${REDACTED_CREDENTIAL_SENTINEL}" odbc-connect-string="${REDACTED_CREDENTIAL_SENTINEL}"/>` +
       '<column/><relation/>' +
       '</datasource>';
     const { result } = await invoke({ datasourceName: 'Sales', mode: 'file', xml });

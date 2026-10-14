@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
+import * as episodeEvents from '../../../desktop/episode-events.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -230,6 +231,8 @@ describe('export-image tools', () => {
   });
 
   it('surfaces a neither-bytes-nor-path envelope as an error (no inline block, no file)', async () => {
+    const eventSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent');
+    const errorSpy = vi.spyOn(episodeEvents, 'emitToolErrorEvent');
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
@@ -244,7 +247,24 @@ describe('export-image tools', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('neither image bytes nor a file path');
       expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: 'export-worksheet-image',
+          error: 'Tool returned an error result.',
+        }),
+      );
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          type: 'tool_end',
+          tool: 'export-worksheet-image',
+          success: false,
+          outcome: 'failed',
+        }),
+      );
     } finally {
+      errorSpy.mockRestore();
+      eventSpy.mockRestore();
       await harness.close();
     }
   });

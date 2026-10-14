@@ -555,9 +555,8 @@ describe('two-artifact packaging boundary', () => {
       await writeFile(join(mountedDir, entry.name), entry.bytes);
     }
 
-    const previousTemplatesDir = process.env['TEMPLATES_DIR'];
     try {
-      process.env['TEMPLATES_DIR'] = mountedDir;
+      vi.stubEnv('TEMPLATES_DIR', mountedDir);
       expect(listTemplateNames()).toEqual(['ranking-ordered-bar']);
       expect(readTemplate('ranking-ordered-bar')).toContain('<worksheet');
 
@@ -589,8 +588,6 @@ describe('two-artifact packaging boundary', () => {
         expect(result.args.template_name).toBe('ranking-ordered-bar');
       }
     } finally {
-      if (previousTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-      else process.env['TEMPLATES_DIR'] = previousTemplatesDir;
       await rm(mountedDir, { recursive: true, force: true });
     }
   });

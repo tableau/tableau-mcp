@@ -16,10 +16,15 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
+import * as loggerModule from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
 import { _setSeaApiForTest } from '../utils/sea.js';
 import { getFeatureGate, initializeFeatureGate, resetFeatureGate } from './init.js';
 import { featureGateProviderSchema, isFeatureGateProvider } from './types.js';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('FeatureGate', () => {
   beforeEach(() => {
@@ -71,11 +76,7 @@ describe('FeatureGate', () => {
 
       expect(getDirname).toHaveBeenCalled();
       expect(readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('/mock/module/directory'),
-        'utf-8',
-      );
-      expect(readFileSync).toHaveBeenCalledWith(
-        expect.stringMatching(/\/mock\/module\/directory.*features\.json$/),
+        expect.stringMatching(/[\\/]mock[\\/]module[\\/]directory[\\/]features\.json$/),
         'utf-8',
       );
     });

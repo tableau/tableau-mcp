@@ -1,4 +1,4 @@
-import { BaseToolCallback } from '@modelcontextprotocol/sdk/experimental';
+import { BaseToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {

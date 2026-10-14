@@ -20,7 +20,7 @@ export const getWorkbookInventoryTool = (
     name: 'get-workbook-inventory',
     title,
     description:
-      'Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. Not needed before template discovery or building; use for exploration or non-template authoring.',
+      "Orienting read: title, unsaved changes, and worksheet/dashboard/storyboard inventory. A worksheet's datasource list contains its references; an empty list does not mean the workbook has no connected datasource. Use list-workbook-datasources only when connection inventory matters. Not needed before template discovery or building; use for exploration or non-template authoring.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

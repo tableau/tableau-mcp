@@ -1,8 +1,8 @@
 /**
  * Cache-file instance fingerprinting — the cross-instance bleed guard (W9).
  *
- * Cache file names are deterministic and sessionless (workbook-for-parallel-build.xml,
- * worksheet-<name>.xml), so with two Desktops running, instance A's cached XML can be
+ * Cache file names are deterministic (worksheet-<name>.xml, and per-dashboard
+ * for-parallel-build workbook files), so with two Desktops running, instance A's cached XML can be
  * applied to instance B. Cache-writing tools write a `<file>.meta.json` sidecar recording
  * which Desktop instance produced the cache; apply tools that consume a cache file refuse
  * a mismatched fingerprint and tell the agent to re-read in the current session. There is
@@ -12,9 +12,14 @@
  * blocks blind.
  */
 import { createHash } from 'crypto';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
 
+import { getDesktopConfig } from '../../config.desktop.js';
 import { log } from '../../logging/logger.js';
+import {
+  CONTAINED_CACHE_READ_ISSUE,
+  readContainedCacheTextFile,
+  writeContainedCacheTextFile,
+} from '../cachePath.js';
 import { discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiInstance } from '../externalApi/types.js';
 import { parseSessionPid } from '../session/parseSessionPid.js';
@@ -76,7 +81,9 @@ export function fingerprintFromInstance(instance: ExternalApiInstance): Instance
 export function defaultFingerprintResolver(sessionId: string): InstanceFingerprint | undefined {
   const pid = parseSessionPid(sessionId);
   if (pid === undefined) return undefined;
-  const instance = discoverInstances().find((candidate) => candidate.pid === pid);
+  const instance = discoverInstances({
+    discoveryDir: getDesktopConfig().externalApiDiscoveryDir,
+  }).find((candidate) => candidate.pid === pid);
   return instance ? fingerprintFromInstance(instance) : undefined;
 }
 
@@ -131,25 +138,18 @@ export function writeSidecar(
     ...(sourceHash === undefined ? {} : { source_sha256: sourceHash }),
   };
 
-  try {
-    writeFileSync(sidecarPath(cacheFile), JSON.stringify(meta, null, 2), 'utf-8');
-  } catch (error) {
+  const written = writeContainedCacheTextFile(
+    sidecarPath(cacheFile),
+    JSON.stringify(meta, null, 2),
+  );
+  if (!written.ok) {
     log({
       message: 'cache sidecar write failed',
       level: 'warning',
       logger: 'cacheFingerprint',
-      data: { file: cacheFile, error: String(error) },
+      data: { file: cacheFile, issue: written.issue, error: String(written.error) },
     });
   }
-}
-
-/** Preserve the live-source provenance that existed before an in-place cache edit. */
-export function restampSidecarAfterEdit(
-  _cacheFile: string,
-  _sessionId: string,
-  _resolve: FingerprintResolver = defaultFingerprintResolver,
-): void {
-  // The existing sidecar already identifies the live source and instance that produced the cache.
 }
 
 export function checkSidecar(
@@ -158,16 +158,17 @@ export function checkSidecar(
   kind: CacheArtifactKind,
   resolve: FingerprintResolver = defaultFingerprintResolver,
 ): CheckSidecarResult {
-  const metaFile = sidecarPath(cacheFile);
-  if (!existsSync(metaFile)) {
-    return checkSidecarInput(cacheFile, sessionId, kind, { type: 'missing' }, resolve);
-  }
-
+  const sidecarRead = readContainedCacheTextFile(sidecarPath(cacheFile));
   let input: CacheSidecarInput;
-  try {
-    input = { type: 'read', text: readFileSync(metaFile, 'utf-8') };
-  } catch (error) {
-    input = { type: 'unreadable', error };
+  if (sidecarRead.ok) {
+    input = { type: 'read', text: sidecarRead.text };
+  } else if (sidecarRead.issue === CONTAINED_CACHE_READ_ISSUE.missing) {
+    input = { type: 'missing' };
+  } else {
+    input = {
+      type: 'unreadable',
+      error: sidecarRead.error ?? new Error(`Secure sidecar read rejected: ${sidecarRead.issue}`),
+    };
   }
   return checkSidecarInput(cacheFile, sessionId, kind, input, resolve);
 }

@@ -1,14 +1,17 @@
-import { writeFileSync } from 'fs';
+import { createHash } from 'crypto';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { DesktopCache } from '../../../../desktop/cache.js';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
+import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml, isRouteMissing } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
   McpToolError,
   UnknownError,
   WorksheetNotFoundError,
@@ -18,6 +21,16 @@ import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 /** Sanitize an id or name into a filesystem-safe cache-key segment (shared with {@link worksheetEditBuffer.ts}). */
 export function safeWorksheetCacheId(value: string): string {
   return value.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+/**
+ * Cache id for a sheet or workbook name: the sanitized name plus a short hash of the raw name,
+ * so "Sales 2024" and "Sales-2024" (or two non-ASCII names) never share a file, plus the
+ * session so two Desktop instances never share one.
+ */
+export function distinctCacheId(rawName: string, session: string): string {
+  const hash = createHash('sha256').update(rawName).digest('hex').slice(0, 8);
+  return `${safeWorksheetCacheId(rawName).slice(0, 80)}-${hash}-${safeWorksheetCacheId(session)}`;
 }
 
 /**
@@ -126,7 +139,7 @@ export async function fetchAndCacheWorksheet({
   const cacheFile = new DesktopCache().getCacheFilePath({
     prefix: `worksheet-${safeWorksheetCacheId(fetched.value.name)}`,
   });
-  writeFileSync(cacheFile, fetched.value.xml, 'utf-8');
+  writeRedactedXmlCacheFile(cacheFile, fetched.value.xml);
   writeSidecar(cacheFile, resolvedSession, sourceSha256(fetched.value.xml));
   return Ok(cacheFile);
 }

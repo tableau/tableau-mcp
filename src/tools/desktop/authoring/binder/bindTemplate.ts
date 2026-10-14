@@ -26,17 +26,25 @@ import {
   parseExactFilterIntent,
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
+import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
-import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  type ExecuteCommandWarning,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
-import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import {
+  parseCanonicalColumnRef,
+  resolveUniqueDatasourceName,
+} from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
   extractSheetXml,
   resolveWorksheetRef,
   upsertSheetIntoWorkbook,
+  worksheetFragmentSimpleId,
 } from '../../../../desktop/metadata/sheets.js';
 import type { ParsedWorkbook, ParsedWorksheet } from '../../../../desktop/metadata/types.js';
 import {
@@ -65,6 +73,7 @@ import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templat
 import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import {
   classifyWorksheetPromiseOutcome,
+  formatDesktopWarnings,
   formatWorksheetPromiseCheck,
 } from '../../../../desktop/validation/promise-check.js';
 import {
@@ -81,22 +90,24 @@ import {
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   type PostApplyWorksheetReadbackVerification,
-  publicReadbackVerificationResult,
+  verifyAppliedWorksheetFields,
   verifyPostApplyWorksheetReadback,
 } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { desktopWarningNextAction } from '../../api/applyPreamble.js';
 import {
   fetchWorksheetSummaryData,
   type SummaryDataRead,
+  type SummaryDataReadScope,
   type SummaryRowOrder,
 } from '../../api/summaryDataCore.js';
 import {
@@ -124,7 +135,7 @@ import {
 // confidence-required + title-max-80 tightening) lives in proposalSchema.ts.
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { proposalSchema } from './proposalSchema.js';
-import { proposalSignature } from './proposalSignature.js';
+import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
@@ -207,6 +218,8 @@ type AppliedFastPathResult = {
   applied: true;
   authored_calcs?: string[];
   warnings?: string[];
+  /** Desktop's own apply warnings; present only when Desktop returned any. */
+  desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
@@ -214,6 +227,7 @@ type AppliedFastPathResult = {
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
   summary_rows_order?: SummaryRowOrder;
+  summary_rows_scope?: SummaryDataReadScope;
   summary_rows_error?: string;
   truncated?: true;
   /**
@@ -321,6 +335,9 @@ const EMPTY_SUMMARY_ROWS_GUIDANCE =
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
+const SUMMARY_ROWS_TIMEOUT_ERROR = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
+const SUMMARY_ROWS_TIMEOUT_GUIDANCE =
+  'Summary readback did not finish; verify the existing sheet with get-summary-data. Do NOT call bind-template again or replay apply just to retry summary readback.';
 const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
 const UNIT_HETEROGENEITY_DIMENSION_RE =
   /^(currency([ _-]?code)?|curr|fx([ _-]?rate)?|unit([ _-]?of[ _-]?measure)?)$/i;
@@ -397,13 +414,14 @@ function currencyHeterogeneityCaveat(
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
-  'summary_rows' | 'summary_rows_order' | 'summary_rows_error' | 'truncated'
+  'summary_rows' | 'summary_rows_order' | 'summary_rows_scope' | 'summary_rows_error' | 'truncated'
 >;
 
 function capSummaryRows(
   columns: unknown[],
   rows: unknown[][],
   rowOrder: SummaryRowOrder,
+  readScope: SummaryDataReadScope,
 ): SummaryRowsEnrichment {
   if (rows.length === 0) {
     return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
@@ -411,6 +429,7 @@ function capSummaryRows(
 
   const cappedColumns = [...columns];
   let cellTruncated = false;
+  let byteTruncated = false;
   const candidateRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS).map((row) =>
     row.map((cell) => {
       if (typeof cell !== 'string' || cell.length <= SUMMARY_ROWS_MAX_CELL_CHARS) {
@@ -430,20 +449,37 @@ function capSummaryRows(
     const nextRowBytes =
       Buffer.byteLength(serializedRow, 'utf8') + (cappedRows.length === 0 ? 0 : 1);
     if (payloadBytes + nextRowBytes > SUMMARY_ROWS_MAX_BYTES) {
+      byteTruncated = true;
       break;
     }
     cappedRows.push(row);
     payloadBytes += nextRowBytes;
   }
 
-  if (cappedRows.length === 0) {
-    return { summary_rows_error: 'oversize readback' };
+  const omissionReasons = [
+    ...(rows.length > SUMMARY_ROWS_MAX_ROWS
+      ? [`more than the ${SUMMARY_ROWS_MAX_ROWS}-row preview limit`]
+      : []),
+    ...(cellTruncated
+      ? [`a cell exceeded the ${SUMMARY_ROWS_MAX_CELL_CHARS}-character preview limit`]
+      : []),
+    ...(byteTruncated
+      ? [`the payload exceeded the ${SUMMARY_ROWS_MAX_BYTES}-byte preview limit`]
+      : []),
+  ];
+  if (omissionReasons.length > 0) {
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        `summary rows omitted because ${omissionReasons.join('; ')}`,
+      ),
+      truncated: true,
+    };
   }
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
     summary_rows_order: rowOrder,
-    ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
+    summary_rows_scope: readScope,
   };
 }
 
@@ -471,15 +507,18 @@ async function readAppliedSummaryRows({
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let deadlineFired = false;
   const timeoutFailure = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
-      const reason = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
-      timeoutController.abort(new Error(reason));
-      reject(new Error(reason));
+      deadlineFired = true;
+      timeoutController.abort(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
+      reject(new Error(SUMMARY_ROWS_TIMEOUT_ERROR));
     }, SUMMARY_ROWS_TIMEOUT_MS);
   });
   const read: SummaryDataRead = async (_endpoint, readEndpoint) => {
+    timeoutController.signal.throwIfAborted();
     const result = await readEndpoint(executor, timeoutController.signal);
+    timeoutController.signal.throwIfAborted();
     return result.isErr() ? new DesktopCommandExecutionError(result.error).toErr() : result;
   };
 
@@ -489,6 +528,7 @@ async function readAppliedSummaryRows({
         read,
         worksheet: worksheetName,
         maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
+        materializeEmpty: true,
       }),
       timeoutFailure,
     ]);
@@ -497,9 +537,18 @@ async function readAppliedSummaryRows({
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
     }
-    return capSummaryRows(result.value.columns, result.value.rows, result.value.rowOrder);
+    return capSummaryRows(
+      result.value.columns,
+      result.value.rows,
+      result.value.rowOrder,
+      result.value.readScope,
+    );
   } catch (error) {
-    return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
+    return {
+      summary_rows_error: boundedSummaryRowsError(
+        deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
+      ),
+    };
   } finally {
     if (timeout !== undefined) {
       clearTimeout(timeout);
@@ -542,6 +591,19 @@ function correctionFallbackResult(): StructuredBindTemplateToolResult {
     'Blocked: the single structured bind correction did not bind and apply. Stop calling bind-template. Use list-templates, list-available-fields, build-worksheets-from-templates, then apply-worksheet.',
     'Use template artifact fallback',
   );
+}
+
+type Call2ContractSlot = Call2Contract['proposal_choices'][number]['slots'][number];
+
+function declaredFieldNames(
+  slot: Call2ContractSlot,
+  derivation?: BindingProposal['bindings'][number]['derivation'],
+): string[] {
+  const ordinary = slot.compatible_field_names;
+  const conditional = slot.conditional_field_options?.map((field) => field.name) ?? [];
+  const prioritized = derivation === 'cnt' || derivation === 'ctd' ? conditional : ordinary;
+  const remaining = prioritized === conditional ? ordinary : conditional;
+  return [...new Set([...prioritized, ...remaining])];
 }
 
 function proposalContractMismatches(
@@ -597,14 +659,15 @@ function proposalContractMismatches(
       }
       continue;
     }
-    if (!slot.compatible_field_names.includes(binding.field)) {
+    const declaredFields = declaredFieldNames(slot, binding.derivation);
+    if (!declaredFields.includes(binding.field)) {
       if (
         addMismatch({
           code: 'field-not-compatible',
           template: proposal.template,
           slot_id: binding.slot_id,
           field: binding.field,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFields.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -618,7 +681,7 @@ function proposalContractMismatches(
           code: 'required-slot-missing',
           template: proposal.template,
           slot_id: slot.slot_id,
-          choices: slot.compatible_field_names.slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
+          choices: declaredFieldNames(slot).slice(0, MAX_PROPOSAL_MISMATCH_CHOICES),
         })
       ) {
         return mismatches;
@@ -933,19 +996,28 @@ function proposalContractMismatchResult({
       mismatch.code === 'required_filter_fields_mismatch' &&
       mismatch.required_filter_values !== undefined,
   );
+  const templateMismatch = mismatches.some((mismatch) => mismatch.code === 'template-not-offered');
   const bindingMismatch = mismatches.some(
-    (mismatch) => mismatch.code !== 'required_filter_fields_mismatch',
+    (mismatch) =>
+      mismatch.code !== 'required_filter_fields_mismatch' &&
+      mismatch.code !== 'template-not-offered',
   );
   const correctionGuidance = correctionAvailable
-    ? filterSetMismatch && bindingMismatch
+    ? filterSetMismatch && templateMismatch
       ? filterValueMismatch
-        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
-        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
-      : filterSetMismatch
+        ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and replace proposal.template with one exact template-not-offered value from mismatches[].choices.'
+        : 'One corrected proposal may proceed: use exactly required_filter_fields once each and replace proposal.template with one exact template-not-offered value from mismatches[].choices. Values and context may vary.'
+      : filterSetMismatch && bindingMismatch
         ? filterValueMismatch
-          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
-          : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
-        : 'One changed corrected proposal may proceed.'
+          ? 'One corrected proposal may proceed: use exactly required_filter_fields once each with the exact required_filter_values, and repair only the invalid bindings to exact listed choices.'
+          : 'One corrected proposal may proceed: use exactly required_filter_fields once each and repair only the invalid bindings to exact listed choices.'
+        : filterSetMismatch
+          ? filterValueMismatch
+            ? 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order, with the exact required_filter_values. Context may vary.'
+            : 'One corrected proposal may proceed: use exactly required_filter_fields once each, in any order. Values and context may vary.'
+          : templateMismatch
+            ? 'One corrected proposal may proceed: replace only proposal.template with one exact template-not-offered value from mismatches[].choices.'
+            : 'One changed corrected proposal may proceed.'
     : hasFilters
       ? 'The correction allowance is exhausted. Stop and use ask-user: the artifact fallback cannot preserve proposal.filters. Do not guess with raw XML.'
       : 'The correction allowance is exhausted; stop calling bind-template and ask the user or use the artifact fallback.';
@@ -958,15 +1030,25 @@ function proposalContractMismatchResult({
       rejected_proposal: proposal,
       guidance:
         `Blocked before Desktop work: the proposal violates the retained call_2_contract. ${correctionGuidance} ` +
-        (filterSetMismatch && bindingMismatch
-          ? 'Preserve every other proposal field unchanged.'
-          : filterSetMismatch
-            ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
-            : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
+        (templateMismatch
+          ? correctionAvailable
+            ? filterSetMismatch
+              ? 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+              : 'Reuse call_2_contract.arguments unchanged. Preserve title, bindings, filters, sort, top_n, bin_size, template_parameters, and confidence unchanged.'
+            : 'Do not submit another correction.'
+          : filterSetMismatch && bindingMismatch
+            ? 'Preserve every other proposal field unchanged.'
+            : filterSetMismatch
+              ? 'Preserve template, title, bindings, sort, and top_n unchanged.'
+              : 'Change only the invalid bindings to one exact listed choice; preserve filters, sort, and top_n unchanged. Do not guess a measure.'),
     },
     prefillNextAction(
       correctionAvailable
-        ? 'Correct invalid bindings'
+        ? templateMismatch
+          ? filterSetMismatch
+            ? 'Correct required filters and template ID'
+            : 'Replace invalid template ID'
+          : 'Correct invalid bindings'
         : hasFilters
           ? 'Ask user to resolve proposal'
           : 'Use fallback or ask user',
@@ -1389,6 +1471,7 @@ function buildCall2Contract({
   session,
   ask,
   targetWorksheet,
+  datasource,
   requiredFilterFields,
   requiredFilterValues,
 }: {
@@ -1396,6 +1479,7 @@ function buildCall2Contract({
   session: string;
   ask: string;
   targetWorksheet?: string;
+  datasource?: string;
   requiredFilterFields?: string[];
   requiredFilterValues?: ExactFilterValueConstraint[];
 }): Call2Contract {
@@ -1405,6 +1489,7 @@ function buildCall2Contract({
       session,
       ask,
       ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
+      ...(datasource !== undefined ? { datasource } : {}),
       auto_apply: true,
     },
     ...(llmInput.recommended ? { recommended: llmInput.recommended } : {}),
@@ -1417,11 +1502,24 @@ function buildCall2Contract({
         const labeledOptions = compatibleFields.flatMap((field) =>
           field.label ? [{ name: field.name, label: field.label }] : [],
         );
+        const conditionalFieldOptions =
+          slot.kind === 'quantitative'
+            ? llmInput.fields
+                .filter((field) => field.role === 'dimension')
+                .map((field) => ({
+                  name: field.name,
+                  ...(field.label ? { label: field.label } : {}),
+                  requires_derivation: ['cnt', 'ctd'] as Array<'cnt' | 'ctd'>,
+                }))
+            : [];
         return {
           slot_id: slot.slot_id,
           required: slot.required,
           compatible_field_names: compatibleFields.map((field) => field.name),
           ...(labeledOptions.length > 0 ? { compatible_field_options: labeledOptions } : {}),
+          ...(conditionalFieldOptions.length > 0
+            ? { conditional_field_options: conditionalFieldOptions }
+            : {}),
         };
       }),
     })),
@@ -1429,8 +1527,8 @@ function buildCall2Contract({
       title: 'Choose a worksheet title.',
       confidence: 'Set a confidence from 0 to 1.',
       field_selection: llmInput.fields.some((field) => field.label)
-        ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
-        : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+        ? 'Use labels to compare table grain. Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.'
+        : 'Choose an exact compatible_field_names value, or a conditional_field_options name with its required derivation; do not rename fields.',
     },
     ...(requiredFilterFields !== undefined ? { required_filter_fields: requiredFilterFields } : {}),
     ...(requiredFilterValues !== undefined && requiredFilterValues.length > 0
@@ -1622,7 +1720,6 @@ function collisionFreeWorksheetTitle(
 }
 
 const IDEMPOTENCY_ATTRIBUTE = '@_user:tableau-agent-idempotency-key';
-const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
 
 function worksheetTitleForIdempotencyKey(workbookXml: string, key: string): string | undefined {
   let workbook: ParsedWorkbook;
@@ -1726,8 +1823,8 @@ function stampWorksheetIdempotencyKey(
   const escapedKey = escapeXmlAttribute(idempotencyKey);
   const existing = new RegExp(`\\s${attributeName}=(['"])[^'"]*\\1`);
   const stampedWorksheet = existing.test(worksheetXml)
-    ? worksheetXml.replace(existing, ` ${attributeName}='${escapedKey}'`)
-    : worksheetXml.replace(/<worksheet\b/, `<worksheet ${attributeName}='${escapedKey}'`);
+    ? worksheetXml.replace(existing, () => ` ${attributeName}='${escapedKey}'`)
+    : worksheetXml.replace(/<worksheet\b/, () => `<worksheet ${attributeName}='${escapedKey}'`);
   return ensureUserNamespace(
     upsertSheetIntoWorkbook(workbookXml, worksheetTitle, stampedWorksheet),
   );
@@ -1960,18 +2057,21 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
   let out = xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${filterXml}`);
   const sliceEntry = `<column>${sliceColumn}</column>`;
   if (/<slices\b[^>]*\/>/.test(out)) {
-    out = out.replace(/<slices\b[^>]*\/>/, `<slices>${sliceEntry}</slices>`);
+    out = out.replace(/<slices\b[^>]*\/>/, () => `<slices>${sliceEntry}</slices>`);
   } else if (/<slices>[\s\S]*?<\/slices>/.test(out)) {
     // Guard against duplicates by the exact slice ENTRY, not the bare CI ref: the CI ref also
     // appears in the filter node just inserted, so `includes(sliceColumn)` would wrongly skip
     // a legitimate second slice (e.g. planTopN already added the product CI to <slices>).
     if (!out.includes(sliceEntry)) {
-      out = out.replace(/<\/slices>/, `${sliceEntry}</slices>`);
+      out = out.replace(/<\/slices>/, () => `${sliceEntry}</slices>`);
     }
   } else if (/<aggregation\b/.test(out)) {
-    out = out.replace(/(\s*)(<aggregation\b)/, `$1<slices>${sliceEntry}</slices>$1$2`);
+    out = out.replace(
+      /(\s*)(<aggregation\b)/,
+      (_m, ws: string, agg: string) => `${ws}<slices>${sliceEntry}</slices>${ws}${agg}`,
+    );
   } else {
-    out = out.replace(filterXml, `${filterXml}\n      <slices>${sliceEntry}</slices>`);
+    out = out.replace(filterXml, () => `${filterXml}\n      <slices>${sliceEntry}</slices>`);
   }
   return out;
 }
@@ -1979,10 +2079,11 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
 /** Splice a filter card into ONE worksheet-window body, creating the cards scaffold if absent. */
 function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string): string {
   // Already carries a filter card for this CI — leave it.
-  if (
-    inner.includes(`param='${escapeXmlAttribute(columnRef)}'`) &&
-    /type=['"]filter['"]/.test(inner)
-  ) {
+  const paramAttr = `param='${escapeXmlAttribute(columnRef)}'`;
+  const hasFilterCard = (inner.match(/<card\b[^>]*>/g) ?? []).some(
+    (tag) => tag.includes(paramAttr) && /type=['"]filter['"]/.test(tag),
+  );
+  if (hasFilterCard) {
     return inner;
   }
   const leftStripRe =
@@ -2005,7 +2106,7 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
   if (emptyCardsRe.test(inner)) {
     return inner.replace(
       emptyCardsRe,
-      `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
+      () => `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
     );
   }
   // No cards node — create the scaffold as the FIRST child (worksheet window content model:
@@ -2056,7 +2157,7 @@ function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
 function applyProposalSplices({
   xml,
   args,
-  schemaSummary,
+  schemaSummary: fullSchemaSummary,
   literalTitle,
 }: {
   xml: string;
@@ -2070,6 +2171,14 @@ function applyProposalSplices({
   if (!args.sort && args.top_n === undefined && (!args.filters || args.filters.length === 0)) {
     return { ok: true, xml, warnings: [], appliedFilterCount: 0 };
   }
+  const boundDatasource = args.template_parameters['DATASOURCE'];
+  const schemaSummary =
+    boundDatasource === undefined
+      ? fullSchemaSummary
+      : narrowSummaryToDatasource(
+          fullSchemaSummary,
+          (ds) => ds === decodeXmlEntities(boundDatasource),
+        );
   const originalWorksheetXml = worksheetXmlByTitle(xml, literalTitle);
   if (originalWorksheetXml === null) {
     return { ok: false, reason: `proposal splice target worksheet "${literalTitle}" not found` };
@@ -2149,7 +2258,7 @@ function applyProposalSplices({
       appliedFilterCount += 1;
     }
   }
-  let workbookXml = xml.replace(originalWorksheetXml, out);
+  let workbookXml = xml.replace(originalWorksheetXml, () => out);
   for (const columnRef of shownFilterColumns) {
     // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
     // context filter with no control is invisible. Best-effort (no-op if the window is absent).
@@ -2252,13 +2361,14 @@ async function verifyTrustedWorkbookReadback({
     }
 
     const findings = verifyWorksheetReadback(intendedWorksheetXml, fragment);
+    const worksheetId = worksheetFragmentSimpleId(fragment) ?? undefined;
     if (findings.some((finding) => finding.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
+      return { ok: false, status: 'failed', findings, worksheetId };
     }
     if (findings.some((finding) => finding.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
+      return { ok: true, status: 'warning', findings, worksheetId };
     }
-    return { ok: true, status: 'passed', findings: [] };
+    return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
     return {
       ok: true,
@@ -2452,6 +2562,7 @@ async function performAutoApply({
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   await reportProgress(2, 'Applying workbook changes');
   const applyStart = Date.now();
+  const expectedInstanceId = executor.desktopInstanceId;
   const applyBaselineXml = hostBaselineWorkbookXml ?? workbookXml;
   const applyResult = await loadWorkbookXml({
     xml: appliedWorkbookXml,
@@ -2461,6 +2572,7 @@ async function performAutoApply({
     executor,
     signal,
     skipValidation,
+    applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applyResult.isErr()) {
     const failureDisposition = applyFailureDisposition(applyResult.error);
@@ -2475,6 +2587,7 @@ async function performAutoApply({
     };
   }
   const applyMs = Date.now() - applyStart;
+  const documentWarnings = applyResult.value.documentWarnings;
 
   // ── Host verification receipt on the HOT path (W-23447506) ────────
   // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
@@ -2515,9 +2628,27 @@ async function performAutoApply({
         }
       : undefined;
   const readbackMs = Date.now() - readbackStart;
+  const verificationReport = await verifyAppliedWorksheetFields({
+    structural: verification ?? {
+      ok: true,
+      status: 'skipped',
+      findings: [],
+      message: `Applied worksheet "${literalTitle}" could not be extracted for verification.`,
+    },
+    worksheetId:
+      verification?.worksheetId ??
+      (intendedWorksheetXml
+        ? (worksheetFragmentSimpleId(intendedWorksheetXml) ?? undefined)
+        : undefined),
+    expectedInstanceId,
+    executor,
+    signal,
+    diagnostics: applyResult.value.diagnostics,
+    diagnosticsInvalid: applyResult.value.diagnosticsInvalid,
+  });
   const receiptInput = {
     validationWarnings: applyResult.value.validationWarnings,
-    readback: verification ? publicReadbackVerificationResult(verification) : undefined,
+    readback: verificationReport,
     readbackFindings: verification?.findings ?? [],
   };
   const promiseOutcome = classifyWorksheetPromiseOutcome(receiptInput);
@@ -2539,14 +2670,24 @@ async function performAutoApply({
   const promiseCheck = readbackRan ? formatWorksheetPromiseCheck(receiptInput) : '';
   const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
   const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
-  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
+  const invalidUsedFields = verificationReport.findings?.filter(
+    (finding) => finding.source === 'used-field-validity' && finding.severity === 'error',
+  );
+  const nativeFieldEvidence = invalidUsedFields?.length
+    ? `\n\nField verification failed after apply: ${invalidUsedFields
+        .map(
+          (finding) =>
+            `${finding.fieldCaption ?? finding.fieldName ?? 'field'}: ${finding.reason ?? finding.message}`,
+        )
+        .join('; ')}. Diagnose the listed fields. Do NOT call bind-template again or replay apply.`
+    : '';
+  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}${nativeFieldEvidence}`;
 
   if (
     trustedDeterministicApply &&
     verification &&
     (verification.status === 'failed' || verification.status === 'skipped')
   ) {
-    const publicVerification = publicReadbackVerificationResult(verification);
     const failed = applyFallback(
       {
         ...base,
@@ -2563,7 +2704,7 @@ async function performAutoApply({
         sheet_name: literalTitle,
         may_have_applied: true,
         retry_safe: false,
-        verification: publicVerification,
+        verification: verificationReport,
         phase_ms: {
           bind: bindMs,
           inject: injectMs,
@@ -2616,6 +2757,7 @@ async function performAutoApply({
     : {};
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
+  const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2624,10 +2766,22 @@ async function performAutoApply({
     unfilledEncodings !== undefined ||
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed';
+  const usedFieldValidityUnknown = receiptInput.readback.findings?.find(
+    (finding) =>
+      finding.source === 'used-field-validity' && receiptInput.readback?.status === 'skipped',
+  );
+  const postApplyUncertain =
+    !readbackRan ||
+    (usedFieldValidityUnknown !== undefined &&
+      usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
   const needsFollowUp =
-    incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback || !readbackRan;
+    incomplete ||
+    (injected.warnings?.length ?? 0) > 0 ||
+    emptySummaryReadback ||
+    summaryReadbackTimedOut ||
+    postApplyUncertain;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2644,24 +2798,27 @@ async function performAutoApply({
     : '';
   const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
   const guidance = `${
-    unfilledEncodings
-      ? appendUnfilledEncodingGuidance(
-          receiptText,
-          literalTitle,
-          unfilledEncodings,
-          ask,
-          schemaSummary,
-        )
-      : needsFollowUp
-        ? `${appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)}${
-            !readbackRan ? ` ${POST_APPLY_UNCERTAINTY_GUIDANCE}` : ''
-          }`
-        : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+    promiseOutcome === 'failed' || postApplyUncertain
+      ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
+      : unfilledEncodings
+        ? appendUnfilledEncodingGuidance(
+            receiptText,
+            literalTitle,
+            unfilledEncodings,
+            ask,
+            schemaSummary,
+          )
+        : needsFollowUp
+          ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+          : documentWarnings.length > 0
+            ? receiptText
+            : `${receiptText} ${terminalGuidance}`
+  }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
+    ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
     guidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
@@ -2676,13 +2833,22 @@ async function performAutoApply({
           total: bindMs + injectMs + applyMs + readbackMs + summaryMs,
         }
       : { bind: bindMs, inject: injectMs, apply: applyMs },
-    ...(trustedDeterministicApply && receiptInput.readback
-      ? { verification: receiptInput.readback }
-      : {}),
+    verification: receiptInput.readback,
     ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
-  if (unfilledEncodings) {
+  if (documentWarnings.length > 0) {
+    return {
+      ...(needsFollowUp || unfilledEncodings ? { incomplete: true as const } : {}),
+      result: withNextAction(
+        applied,
+        unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain
+          ? prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings))
+          : desktopWarningNextAction(),
+      ),
+    };
+  }
+  if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
     return {
       incomplete: true,
       result: withNextAction(
@@ -2716,10 +2882,10 @@ async function performAutoApply({
                   : []),
                 ...(readbackRan
                   ? [
-                      'whether the sheet renders any marks — structural readback compared XML but did not inspect rendered output',
+                      'whether query execution or rendering succeeds — these checks do not prove successful query execution or rendering',
                     ]
                   : [
-                      'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
+                      'whether the applied sheet retained its intended structure, or query execution or rendering succeeds — structural readback did not run',
                     ]),
               ],
             }),
@@ -2727,6 +2893,9 @@ async function performAutoApply({
         ),
       };
 }
+
+const DESKTOP_WARNINGS_GUIDANCE =
+  'Desktop reported warnings while applying this sheet. Read them below and tell the user what Desktop dropped or changed before you continue.';
 
 function renderAuthoredCalcPrefix(
   captions: string[] | undefined,
@@ -3018,6 +3187,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
           const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
+          const retainedDatasource = retainedCall2Contract?.arguments.datasource;
+          const requestedDatasource = datasource ?? retainedDatasource;
           const isStructuredCorrectionCall =
             currentProposalSignature !== undefined &&
             priorRecovery?.attempts.some(
@@ -3067,20 +3239,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
-            bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
-              resolvedSession,
-              askKey,
-              {
-                ...(currentProposalSignature !== undefined
-                  ? { proposalSignature: currentProposalSignature }
-                  : {}),
-              },
-            );
+            if (requestedDatasource === undefined) {
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            }
           } catch {
             /* fail-open */
           }
 
-          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
           if (proposal !== undefined && retainedCall2Contract !== undefined) {
             const mismatches = proposalContractMismatches(
               proposal as BindingProposal,
@@ -3124,10 +3297,53 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           let workbookXml = xmlResult.value;
           const hostBaselineWorkbookXml = workbookXml;
+          const effectiveDatasource =
+            requestedDatasource === undefined
+              ? undefined
+              : resolveUniqueDatasourceName(workbookXml, requestedDatasource);
+          if (effectiveDatasource === null) {
+            return new ArgsValidationError(
+              `datasource "${requestedDatasource}" not found or ambiguous in the workbook; use an internal datasource name or unique caption`,
+            ).toErr();
+          }
+          if (retainedDatasource !== undefined && effectiveDatasource !== retainedDatasource) {
+            return new ArgsValidationError(
+              `datasource must match the retained bind-template datasource "${retainedDatasource}"`,
+            ).toErr();
+          }
+          if (requestedDatasource !== undefined) {
+            try {
+              // The workbook read can overlap another call; reject its reservation before mutation.
+              const currentRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+              if (currentRecovery !== priorRecovery) {
+                const blocked = recoveryGateBlock(
+                  currentRecovery,
+                  currentProposalSignature,
+                  resolvedSession,
+                  askKey,
+                  target_worksheet,
+                );
+                if (blocked) {
+                  return new IncompleteOperationError(blocked).toErr();
+                }
+              }
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            } catch {
+              /* fail-open */
+            }
+          }
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
-            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineSchemaSummary = summarizeSchema(workbookXml, effectiveDatasource);
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
@@ -3162,7 +3378,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const prepared = prepareCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 resolveLooseReferences: true,
               });
               if (prepared.isErr()) {
@@ -3174,7 +3390,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const authored = await authorCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 executor,
                 signal: extra.signal,
                 resolveLooseReferences: true,
@@ -3256,6 +3472,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ask,
               workbookXml,
               manifests,
+              datasource: effectiveDatasource,
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
@@ -3271,6 +3488,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ask,
                 workbookXml,
                 manifests,
+                datasource: effectiveDatasource,
                 proposal: proposalFromRecommendation(ask, recommended),
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
@@ -3293,6 +3511,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ask,
                   workbookXml,
                   manifests,
+                  datasource: effectiveDatasource,
                   ...(minConfidence !== undefined ? { minConfidence } : {}),
                 });
                 const recommended =
@@ -3324,7 +3543,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          schemaSummary ??= summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
 
           // ── One structured correction boundary ─────────────────────────
@@ -3336,6 +3555,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   session: resolvedSession,
                   ask,
                   targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                  datasource: effectiveDatasource,
                   requiredFilterFields,
                   requiredFilterValues,
                 })
@@ -3497,16 +3717,23 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               proposal?.bindings.map((binding) => binding.field) ?? [],
             );
             if (existingTitle !== undefined) {
-              return new Ok(
-                reusedSheetResult(
-                  {
-                    sheetName: existingTitle,
-                    template: res.args.template_name,
-                    ts: new Date().toISOString(),
-                  },
-                  authoredCalcCaptions,
-                ),
-              );
+              if (atomicCalcs.length === 0) {
+                return new Ok(
+                  reusedSheetResult(
+                    {
+                      sheetName: existingTitle,
+                      template: res.args.template_name,
+                      ts: new Date().toISOString(),
+                    },
+                    authoredCalcCaptions,
+                  ),
+                );
+              }
+              if (classifyWorksheetReplaceTarget(workbookXml, existingTitle) === 'in-dashboard') {
+                return new ArgsValidationError(
+                  `deterministic worksheet "${existingTitle}" is a dashboard member sheet with pending calculations — missing calculations prevent safe reuse, and the dashboard member cannot be rebuilt in place`,
+                ).toErr();
+              }
             }
           }
 

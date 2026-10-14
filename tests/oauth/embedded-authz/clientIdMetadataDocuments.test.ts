@@ -1,11 +1,11 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
 import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { axios } from '../../../src/utils/axios.js';
 import { milliseconds } from '../../../src/utils/milliseconds.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -578,5 +578,30 @@ describe('clientIdMetadataDocuments', () => {
       error: 'invalid_request',
       error_description: 'Unable to fetch client metadata',
     });
+  });
+
+  it('should allow remote https for CIMD clients with matching redirect_uris', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['https://example.com/cb'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'https://example.com/cb',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(302);
   });
 });

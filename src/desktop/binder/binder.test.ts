@@ -1103,6 +1103,38 @@ describe('binder/bindTemplate — two-call protocol', () => {
     });
   });
 
+  it.each(['cnt', 'ctd'] as const)(
+    'rejects a %s dimension when waterfall calculations require a raw measure',
+    async (derivation) => {
+      const result = await bindTemplate({
+        ask: `waterfall of ${derivation === 'ctd' ? 'distinct count' : 'count'} of Order ID by Sub-Category`,
+        workbookXml: WORKBOOK_XML,
+        manifests: descriptors,
+        proposal: {
+          template: 'part-to-whole-waterfall',
+          title: 'Orders waterfall',
+          bindings: [
+            { slot_id: 'field_base_1_sum', field: 'Order ID', derivation },
+            { slot_id: 'field_base_2', field: 'Sub-Category' },
+            { slot_id: 'field_base_1_none', field: 'Order ID', derivation },
+          ],
+          confidence: 0.9,
+        },
+      });
+
+      expect(result.status).toBe('escalate');
+      if (result.status !== 'escalate') return;
+      expect(result.reason).toBe('aggregation-level-mismatch');
+      expect(result.blockers).toContainEqual({
+        code: 'aggregation-level-mismatch',
+        slot_id: 'field_base_1_none',
+        detail: expect.stringContaining(
+          `requested count override '${derivation}' would change mapped shelf instances`,
+        ),
+      });
+    },
+  );
+
   it('rejects an unordered waterfall when more than one sequence field exists', async () => {
     const workbookXml = WORKBOOK_XML.replace(
       '</datasource>',
@@ -1182,8 +1214,8 @@ describe('binder/bindTemplate — two-call protocol', () => {
 
   it.each([
     {
-      label: 'ambiguous across datasources',
-      field: 'Region',
+      label: 'ambiguous within the bound datasource',
+      field: 'Territory',
       reason: 'ambiguous-field',
       detail: 'matches 2 fields',
     },
@@ -1203,6 +1235,9 @@ describe('binder/bindTemplate — two-call protocol', () => {
     const workbookXml = WORKBOOK_XML.replace(
       '</datasources>',
       "<datasource name='Returns'><column name='[Region]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+    ).replace(
+      "<column name='[Category]'",
+      "<column name='[Terr A]' caption='Territory' role='dimension' type='nominal' datatype='string' /><column name='[Terr B]' caption='Territory' role='dimension' type='nominal' datatype='string' /><column name='[Category]'",
     );
     const result = await bindTemplate({
       ask: `bar chart of Sales by Category filtered by ${field}`,
@@ -1224,6 +1259,85 @@ describe('binder/bindTemplate — two-call protocol', () => {
     expect(result.blockers[0]).toMatchObject({ code: reason });
     expect(result.blockers[0].detail).toContain(detail);
     expect(result.proposal?.filters).toEqual([{ field, context: true }]);
+  });
+});
+
+describe('binder/within-datasource resolution of sort and filters', () => {
+  const twoDatasources = WORKBOOK_XML.replace(
+    '</datasources>',
+    "<datasource name='Targets'><column name='[Region]' role='dimension' type='nominal' datatype='string' /><column name='[Quota Tier]' role='dimension' type='nominal' datatype='string' /></datasource></datasources>",
+  );
+  const bindWith = (extra: Record<string, unknown>): ReturnType<typeof bindTemplate> =>
+    bindTemplate({
+      ask: 'bar chart of Sales by Category',
+      workbookXml: twoDatasources,
+      manifests: descriptors,
+      proposal: {
+        ...rankingProposal(),
+        bindings: [
+          { slot_id: 'field_base_1', field: 'Category' },
+          { slot_id: 'field_base_2', field: 'Sales' },
+        ],
+        ...extra,
+      },
+    });
+
+  it('binds a filter on a field that exists in both datasources when the bound one has it', async () => {
+    const result = await bindWith({ filters: [{ field: 'Region', context: true }] });
+
+    expect(result.status).toBe('bound');
+  });
+
+  it.each(['Sales &amp; Ops', 'Partner&apos;s data'])(
+    'narrows sort and filters to a bound datasource named %s',
+    async (escapedName) => {
+      const renamed = twoDatasources.replace("name='Superstore'", `name='${escapedName}'`);
+      const bindRenamed = (extra: Record<string, unknown>): ReturnType<typeof bindTemplate> =>
+        bindTemplate({
+          ask: 'bar chart of Sales by Category',
+          workbookXml: renamed,
+          manifests: descriptors,
+          proposal: {
+            ...rankingProposal(),
+            bindings: [
+              { slot_id: 'field_base_1', field: 'Category' },
+              { slot_id: 'field_base_2', field: 'Sales' },
+            ],
+            ...extra,
+          },
+        });
+
+      const shared = await bindRenamed({ filters: [{ field: 'Region', context: true }] });
+      expect(shared.status).toBe('bound');
+
+      const sorted = await bindRenamed({ sort: { by: 'Quota Tier', direction: 'asc' } });
+      expect(sorted.status).toBe('bound');
+      if (sorted.status !== 'bound') return;
+      expect(sorted.args.sort).toBeUndefined();
+      expect(sorted.warnings?.join('\n')).toContain("exists only in datasource 'Targets'");
+    },
+  );
+
+  it('refuses a filter field that lives only in another datasource', async () => {
+    const result = await bindWith({ filters: [{ field: 'Quota Tier' }] });
+
+    expect(result.status).toBe('escalate');
+    if (result.status !== 'escalate') return;
+    expect(result.reason).toBe('field-not-found');
+    expect(result.blockers[0].detail).toBe(
+      "\"Quota Tier\" exists only in datasource 'Targets'; bind-template filters must come from the bound datasource 'Superstore'.",
+    );
+  });
+
+  it('drops a sort field that lives only in another datasource with a warning', async () => {
+    const result = await bindWith({ sort: { by: 'Quota Tier', direction: 'asc' } });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') return;
+    expect(result.args.sort).toBeUndefined();
+    expect(result.warnings?.join('\n')).toContain(
+      "\"Quota Tier\" exists only in datasource 'Targets'; bind-template sort must come from the bound datasource 'Superstore'.",
+    );
   });
 });
 

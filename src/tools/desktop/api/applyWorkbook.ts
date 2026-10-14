@@ -6,12 +6,12 @@ import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
-  UnknownError,
   WorkbookXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../params.js';
-import { jsonToolResult } from '../structuredContent.js';
+import { jsonToolResult, prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { acceptedNoReadbackApplyResult, runApplyPreamble } from './applyPreamble.js';
 
@@ -88,8 +88,11 @@ export const getApplyWorkbookTool = (
           // no structural readback, so say so honestly instead of implying
           // full re-verification happened.
           const validationWarnings = result.isOk() ? result.value.validationWarnings : [];
+          const documentWarnings = result.isOk() ? (result.value.documentWarnings ?? []) : [];
+          const diagnostics = result.isOk() ? result.value.diagnostics : undefined;
+          const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
           const hostVerification = result.isOk()
-            ? formatWorkbookPromiseCheck(validationWarnings)
+            ? formatWorkbookPromiseCheck(validationWarnings, documentWarnings)
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -105,13 +108,57 @@ export const getApplyWorkbookTool = (
           // The shared structured receipt mirrors the text above and nothing more:
           // dispatch and preflight warnings were observed; the applied structure was
           // not, so it is listed as unverified (promise_outcome 'unverified' above).
-          return new Ok(
-            acceptedNoReadbackApplyResult({
-              kind: 'workbook',
-              resultWarnings: validationWarnings,
-              hostVerification,
-            }),
+          const diagnosticsCoverage = diagnosticsInvalid
+            ? 'invalid'
+            : diagnostics
+              ? diagnostics.worksheets.length > 0 &&
+                diagnostics.worksheets.every((worksheet) => worksheet.status === 'complete')
+                ? 'complete'
+                : 'incomplete'
+              : 'absent';
+          const hasInvalidFields = diagnostics?.worksheets.some(
+            (worksheet) => (worksheet.invalidFields?.length ?? 0) > 0,
           );
+          const accepted = acceptedNoReadbackApplyResult({
+            kind: 'workbook',
+            preflightWarnings: validationWarnings,
+            resultWarnings: documentWarnings,
+            hostVerification,
+            ...(diagnosticsCoverage === 'incomplete'
+              ? {
+                  messageSuffix:
+                    ' Diagnostics are partial; not all worksheet diagnostics completed.',
+                  additionalUnverified: ['not all worksheet diagnostics completed'],
+                }
+              : diagnosticsCoverage === 'invalid'
+                ? {
+                    messageSuffix:
+                      ' Diagnostics are unavailable because Desktop returned malformed diagnostics.',
+                    additionalUnverified: ['static field diagnostics were unavailable'],
+                  }
+                : {}),
+          });
+          const acceptedWithGuidance = hasInvalidFields
+            ? withNextAction(
+                {
+                  ...accepted,
+                  message:
+                    `${accepted.message} The edit was accepted; address the reported invalid fields ` +
+                    'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
+                },
+                prefillNextAction(
+                  documentWarnings.length > 0
+                    ? 'Fix invalid fields; tell the user what Desktop warned about'
+                    : 'Address invalid fields reported in diagnostics',
+                ),
+              )
+            : accepted;
+          return new Ok({
+            ...acceptedWithGuidance,
+            ...(diagnostics ? { diagnostics } : {}),
+            ...(diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
+            ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),
+          });
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

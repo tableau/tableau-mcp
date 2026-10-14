@@ -10,10 +10,10 @@ import { discoveryFileSchema, ExternalApiInstance } from './types.js';
  * discovery files, most-likely first. Overridable via `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`.
  *
  * Desktop writes to Qt's AppLocalDataLocation, which is `<root>/<Org>/<AppName>` — and
- * both Org and AppName are "Tableau", so the REAL path carries a DOUBLED segment:
- * live-confirmed on Windows 2026-07-07 (Lauren Jackson's machine):
- * `%LOCALAPPDATA%\Tableau\Tableau\ExternalApi\<pid>.json`. The single-`Tableau` form is
- * kept as a fallback candidate in case a platform/build collapses the org segment.
+ * both Org and AppName are "Tableau", so the REAL path carries a DOUBLED segment,
+ * live-confirmed on Windows: `%LOCALAPPDATA%\Tableau\Tableau\ExternalApi\<pid>.json`.
+ * The single-`Tableau` form is kept as a fallback candidate in case a platform/build
+ * collapses the org segment.
  */
 export function getExternalApiDiscoveryDirs(
   env: Record<string, string | undefined> = process.env,
@@ -37,16 +37,8 @@ export function getExternalApiDiscoveryDirs(
   ];
 }
 
-/** Back-compat single-dir resolver: the most likely candidate. */
-export function getExternalApiDiscoveryDir(
-  env: Record<string, string | undefined> = process.env,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  return getExternalApiDiscoveryDirs(env, platform)[0];
-}
-
 export type DiscoverInstancesDeps = {
-  /** Discovery directory to scan. Defaults to {@link getExternalApiDiscoveryDir}. */
+  /** Discovery directory to scan. Defaults to {@link getExternalApiDiscoveryDirs}. */
   discoveryDir?: string;
   /** Directory listing. Injectable for tests. */
   readDir?: (dir: string) => Array<string>;

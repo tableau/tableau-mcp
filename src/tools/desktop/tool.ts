@@ -11,13 +11,30 @@ import {
   episodeSessionIdFromArgs,
 } from '../../desktop/episode-events.js';
 import { ApiVersionFloor } from '../../desktop/externalApi/apiVersion.js';
+import { resolveSession } from '../../desktop/session/sessionResolution.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
+import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
+
+// begin-episode keys episodes by the resolved pid, so tool events must look them up the same way.
+// Resolution scans the discovery dir, so it runs only when episode events are on.
+export function resolveEpisodeKey(
+  config: TableauDesktopRequestHandlerExtra['config'],
+  args: unknown,
+  fallback: string,
+): string {
+  if (!config.episodeEventsEnabled) return fallback;
+  const session =
+    typeof args === 'object' && args !== null ? (args as { session?: unknown }).session : undefined;
+  const resolved = resolveSession(typeof session === 'string' ? session : undefined);
+  return resolved.isOk() ? resolved.value : fallback;
+}
 
 /**
  * The parameters the logAndExecute method
@@ -65,17 +82,28 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     const { requestId } = extra;
     this.notifyInvocation({ requestId, args });
 
-    let toolResult: CallToolResult;
+    let toolResult: CallToolResult | undefined;
     const sessionId = episodeSessionIdFromArgs(extra.config, args);
-    const episodeId = currentEpisodeId(sessionId);
+    const episodeKey = resolveEpisodeKey(extra.config, args, sessionId);
+    const episodeId = currentEpisodeId(episodeKey);
 
     void emitEpisodeEvent(extra.config, {
       type: 'tool_start',
-      session_id: sessionId,
+      session_id: episodeKey,
       episode_id: episodeId,
       tool: this.name,
     });
     const startedAt = performance.now();
+
+    // Mirrors the web path's `tool_call` product-telemetry event (see src/tools/web/tool.ts) so
+    // desktop tool calls land in the same pipeline. Emitted once, in the finally below.
+    const productTelemetryForwarder = getProductTelemetry();
+    let success = false;
+    // errorCode is McpToolError's HTTP statusCode; errorType its stable `type` slug (e.g.
+    // 'args-validation'). Both stay empty unless a typed McpToolError is in play. We send only the
+    // slug as `error_message` — the human-readable message is omitted to keep PII off the wire.
+    let errorCode = '';
+    let errorType = '';
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -86,20 +114,34 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               isError: false,
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
+        const mappedError = toolResult.isError === true;
+        success = !mappedError;
+        if (mappedError) {
+          void emitToolErrorEvent({
+            config: extra.config,
+            sessionId: episodeKey,
+            tool: this.name,
+            error: 'Tool returned an error result.',
+          });
+        }
         void emitEpisodeEvent(extra.config, {
           type: 'tool_end',
-          session_id: sessionId,
+          session_id: episodeKey,
           episode_id: episodeId,
           tool: this.name,
           duration_ms: performance.now() - startedAt,
-          success: true,
-          outcome: 'succeeded',
+          success: !mappedError,
+          outcome: mappedError ? 'failed' : 'succeeded',
           request_id_hash: hashRequestId(requestId),
           result_size_chars: serializedResultSize(toolResult),
         });
         return toolResult;
       }
 
+      if (result.error instanceof McpToolError) {
+        errorCode = String(result.error.statusCode);
+        errorType = result.error.type;
+      }
       const structuredContent = getStructuredContent(result.error);
       toolResult = {
         isError: true,
@@ -108,13 +150,13 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       };
       void emitToolErrorEvent({
         config: extra.config,
-        sessionId,
+        sessionId: episodeKey,
         tool: this.name,
         error: result.error.getErrorText(),
       });
       void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
-        session_id: sessionId,
+        session_id: episodeKey,
         episode_id: episodeId,
         tool: this.name,
         duration_ms: performance.now() - startedAt,
@@ -126,6 +168,10 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } catch (error) {
       const timedOut = isDesktopCallTimeout(error);
+      if (error instanceof McpToolError) {
+        errorCode = String(error.statusCode);
+        errorType = error.type;
+      }
       log({
         message: timedOut
           ? 'Tool execution exceeded the Desktop call deadline'
@@ -143,15 +189,25 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           session: sessionId,
           nativeDialogRequestId: extra.deadline?.nativeDialogRequestId(),
         });
-        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error: text });
+        void emitToolErrorEvent({
+          config: extra.config,
+          sessionId: episodeKey,
+          tool: this.name,
+          error: text,
+        });
         toolResult = { isError: true, content: [{ type: 'text', text }] };
       } else {
-        void emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
+        void emitToolErrorEvent({
+          config: extra.config,
+          sessionId: episodeKey,
+          tool: this.name,
+          error,
+        });
         toolResult = getErrorResult(requestId, error);
       }
       void emitEpisodeEvent(extra.config, {
         type: 'tool_end',
-        session_id: sessionId,
+        session_id: episodeKey,
         episode_id: episodeId,
         tool: this.name,
         duration_ms: performance.now() - startedAt,
@@ -161,6 +217,29 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         result_size_chars: serializedResultSize(toolResult),
       });
       return toolResult;
+    } finally {
+      productTelemetryForwarder.send(
+        'tool_call',
+        {
+          tool_name: this.name,
+          request_id: requestId.toString(),
+          // utilizes the desktop stable session GUID (not sessionID which is a process id that can be reused)
+          session_id: extra.config.desktopSessionLuid ?? '',
+          site_luid: extra.config.siteLuid,
+          user_luid: extra.config.userLuid,
+          chat_id: extra.config.chatId,
+          success,
+          error_code: errorCode,
+          // Only the error `type` slug (e.g. 'args-validation'); the human-readable message is
+          // omitted to keep PII off the wire.
+          error_message: errorType,
+          auth_type: 'desktop',
+          // oauth is omitted due to using stdio for desktop
+          oauth_client_id: '',
+          oauth_client_display_name: '',
+        },
+        { includeHostName: false },
+      );
     }
   }
 }

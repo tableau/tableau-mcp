@@ -8,7 +8,8 @@ export const mcpSiteSettingsSchema = z.object({
         value: z.string().max(1000),
       }),
     )
-    .max(100),
+    .max(100)
+    .default([]),
 });
 
 export type McpSiteSettingsResult = z.infer<typeof mcpSiteSettingsSchema>;

@@ -1,6 +1,10 @@
 import { log } from '../../logging/logger.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
+import {
+  getDatasourceNamesAndTagsByLuid,
+  getDatasourceNamesAndTagsQuery,
+} from '../../sdks/tableau/methods/lineageUtils.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Flow, FlowOutputStep } from '../../sdks/tableau/types/flow.js';
 import { View } from '../../sdks/tableau/types/view.js';
@@ -10,6 +14,8 @@ import {
   RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
 } from '../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../../utils/getHttpStatus.js';
+import { MAX_PAGE_SIZE, paginate } from '../../utils/paginate.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
@@ -187,6 +193,7 @@ class ResourceAccessChecker {
     datasourceLuid: string;
     extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult<DataSource>> {
+    // If INCLUDE_DATASOURCE_IDS is defined, check if datasource is in that allowlist.
     const allowedDatasourceIds = await this.getAllowedDatasourceIds({ extra });
     if (allowedDatasourceIds && !allowedDatasourceIds.has(datasourceLuid)) {
       return {
@@ -198,8 +205,18 @@ class ResourceAccessChecker {
       };
     }
 
-    let datasource: DataSource | undefined;
-    async function getDatasource(): Promise<DataSource> {
+    const allowedTags = await this.getAllowedTags({ extra });
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    if (!allowedTags && !allowedProjectIds) {
+      return { allowed: true };
+    }
+
+    // GET /datasources/{id}
+    // Returns both the project and the tags.
+    //
+    // Limitations: This API requires View permissions on the parent project,
+    // which is not strictly necessary to query the datasource itself.
+    async function queryDatasource(): Promise<DataSource> {
       return await useRestApi({
         ...extra,
         jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
@@ -211,72 +228,186 @@ class ResourceAccessChecker {
       });
     }
 
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    // Metadata API, by LUID
+    // Returns the datasource name and tags.
+    //
+    // Limitations:
+    // * Requires Metadata API to be enabled on the server
+    // * This API does not return the project ID of the datasource
+    //
+    // Returns undefined when Metadata API requests are disabled, the request fails, or the datasource isn't returned.
+    async function getNameAndTagsFromMetadataApi(): Promise<
+      { name: string; tags: Array<string> } | undefined
+    > {
+      if ((await extra.getConfigWithOverrides()).disableMetadataApiRequests) {
+        return undefined;
+      }
+
+      try {
+        const response = await useRestApi({
+          ...extra,
+          jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+          callback: async (restApi) =>
+            await restApi.metadataMethods.graphql(getDatasourceNamesAndTagsQuery([datasourceLuid])),
+        });
+        return getDatasourceNamesAndTagsByLuid(response).get(datasourceLuid);
+      } catch (error) {
+        log(
+          {
+            message: `Metadata API lookup failed for datasource ${datasourceLuid}`,
+            level: 'warning',
+            logger: 'resource-access',
+            data: getExceptionMessage(error),
+          },
+          extra,
+        );
+        return undefined;
+      }
+    }
+
+    // GET /datasources (list), filtered by name
+    // Returns the datasources with the given name, which include their project IDs.
+    //
+    // Limitations:
+    // * This API can't filter by LUID, so callers must match the LUID themselves
+    // * Filter expressions are comma-delimited, so a name with a comma can't be filtered on
+    //
+    // Returns an empty list when the name can't be filtered on or the request fails.
+    async function getDatasourcesByName(name: string): Promise<Array<DataSource>> {
+      if (name.includes(',')) {
+        return [];
+      }
+
+      try {
+        return await useRestApi({
+          ...extra,
+          jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+          callback: async (restApi) =>
+            await paginate({
+              pageConfig: { pageSize: MAX_PAGE_SIZE },
+              getDataFn: async (pageConfig) => {
+                const { pagination, datasources } =
+                  await restApi.datasourcesMethods.listDatasources({
+                    siteId: restApi.siteId,
+                    filter: `name:eq:${name}`,
+                    pageSize: pageConfig.pageSize,
+                    pageNumber: pageConfig.pageNumber,
+                  });
+                return { pagination, data: datasources };
+              },
+            }),
+        });
+      } catch (error) {
+        log(
+          {
+            message: `List lookup failed for datasource ${datasourceLuid}`,
+            level: 'warning',
+            logger: 'resource-access',
+            data: getExceptionMessage(error),
+          },
+          extra,
+        );
+        return [];
+      }
+    }
+
+    let datasource: DataSource | undefined;
+    let datasourceName: string;
+    let datasourceTags: Array<string>;
+    try {
+      // Query Data Source returns the project LUID and tags, so prefer it over the Metadata API.
+      datasource = await queryDatasource();
+      datasourceName = datasource.name;
+      datasourceTags = datasource.tags?.tag?.map((tag) => tag.label) ?? [];
+    } catch (error) {
+      // Query Data Source returns 403 when the user can't see the data source's parent project,
+      // even if they can query the data source itself.
+      // The Metadata API isn't subject to that check, so fall back to it.
+      const metadata =
+        error instanceof Error && getHttpStatus(error) === '403'
+          ? await getNameAndTagsFromMetadataApi()
+          : undefined;
+      if (!metadata) {
+        log(
+          {
+            message: `Resource access check failed for datasource ${datasourceLuid}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
+        const checks = [
+          ...(allowedProjectIds ? ['is in an allowed project'] : []),
+          ...(allowedTags ? ['has one of the allowed tags'] : []),
+        ].join(' and ');
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `An error occurred while checking if the datasource with LUID ${datasourceLuid} ${checks}:`,
+            getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
+      datasourceName = metadata.name;
+      datasourceTags = metadata.tags;
+    }
+
+    // If INCLUDE_TAGS is defined, check if the datasource has one of the allowed tags.
+    // Tags are checked before the project because, after a 403, retrieving the project LUID requires a call to ListDatasources.
+    if (allowedTags && !datasourceTags.some((tag) => allowedTags.has(tag))) {
+      return {
+        allowed: false,
+        message: [
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
+          `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
+        ].join(' '),
+      };
+    }
+
+    // If INCLUDE_PROJECT_IDS is defined, check if the datasource belongs to one of the allowed projects.
     if (allowedProjectIds) {
-      try {
-        datasource = await getDatasource();
-
-        if (!allowedProjectIds.has(datasource.project.id)) {
+      if (!datasource) {
+        // If we didn't get the datasource from Query Data Source,
+        // we need to look it up by name with the List Data Sources API
+        const datasourcesWithSameName = await getDatasourcesByName(datasourceName);
+        datasource = datasourcesWithSameName.find((ds) => ds.id === datasourceLuid);
+        if (!datasource) {
           return {
             allowed: false,
             message: [
               'The set of allowed data sources that can be queried is limited by the server configuration.',
-              `The datasource with LUID ${datasourceLuid} cannot be queried because it does not belong to an allowed project.`,
+              `The datasource with LUID ${datasourceLuid} cannot be queried because its project could not be determined.`,
             ].join(' '),
           };
         }
-      } catch (error) {
-        log({
-          message: `Resource access check failed for datasource ${datasourceLuid}`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+      }
+
+      if (!datasource.project) {
+        // Embedded (workbook) data sources have no project, so a project allowlist can't admit
+        // them. Fail closed here; resolving the parent workbook's project for allowlist matching
+        // is tracked by W-23864479.
         return {
           allowed: false,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `An error occurred while checking if the datasource with LUID ${datasourceLuid} is in an allowed project:`,
-            getExceptionMessage(error),
+            `The datasource with LUID ${datasourceLuid} cannot be queried because it is an embedded (workbook) data source, which cannot be matched against the allowed projects.`,
+          ].join(' '),
+        };
+      }
+
+      if (!allowedProjectIds.has(datasource.project.id)) {
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `The datasource with LUID ${datasourceLuid} cannot be queried because it does not belong to an allowed project.`,
           ].join(' '),
         };
       }
     }
 
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (allowedTags) {
-      try {
-        datasource = datasource ?? (await getDatasource());
-
-        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
-          return {
-            allowed: false,
-            message: [
-              'The set of allowed data sources that can be queried is limited by the server configuration.',
-              `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
-            ].join(' '),
-          };
-        }
-      } catch (error) {
-        log({
-          message: `Resource access check failed for datasource ${datasourceLuid} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
-        return {
-          allowed: false,
-          message: [
-            'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `An error occurred while checking if the datasource with LUID ${datasourceLuid} has one of the allowed tags:`,
-            getExceptionMessage(error),
-          ].join(' '),
-        };
-      }
-    }
-
-    // Reuse the datasource already fetched by a project/tag scope check (undefined when no scope
-    // forced a fetch) so callers can avoid querying it again. Mirrors isWorkbookAllowed.
     return { allowed: true, content: datasource };
   }
 
@@ -326,12 +457,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for workbook ${workbookId}`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for workbook ${workbookId}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -358,12 +492,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for workbook ${workbookId} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for workbook ${workbookId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -417,12 +554,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for flow ${flowId}`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for flow ${flowId}`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -449,12 +589,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for flow ${flowId} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for flow ${flowId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -516,12 +659,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} workbook`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} workbook`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -548,12 +694,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} project`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} project`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -580,12 +729,15 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
-        log({
-          message: `Resource access check failed for view ${viewId} tags`,
-          level: 'error',
-          logger: 'resource-access',
-          data: error,
-        });
+        log(
+          {
+            message: `Resource access check failed for view ${viewId} tags`,
+            level: 'error',
+            logger: 'resource-access',
+            data: error,
+          },
+          extra,
+        );
         return {
           allowed: false,
           message: [
@@ -629,12 +781,15 @@ class ResourceAccessChecker {
       });
       underlyingViewId = customView.view.id;
     } catch (error) {
-      log({
-        message: `Resource access check failed for custom view ${customViewId}`,
-        level: 'error',
-        logger: 'resource-access',
-        data: error,
-      });
+      log(
+        {
+          message: `Resource access check failed for custom view ${customViewId}`,
+          level: 'error',
+          logger: 'resource-access',
+          data: error,
+        },
+        extra,
+      );
       return {
         allowed: false,
         message: [

@@ -2,9 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/wrappers/getWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -20,6 +21,10 @@ vi.mock('../../../desktop/wrappers/cacheFingerprint.js', async (importOriginal) 
   return { ...actual, writeSidecar: vi.fn() };
 });
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 describe('getWorkbookXmlTool', () => {
   const inlineResultSchema = z.object({
@@ -70,6 +75,40 @@ describe('getWorkbookXmlTool', () => {
     expect(resultObj.workbookXml).toBe(mockXml);
     expect(resultObj.message).toContain('inline');
     expect(resultObj.message).toContain('bytes');
+  });
+
+  it('redacts connection credentials but leaves calc formulas alone', async () => {
+    const mockXml =
+      "<workbook><connection password='hunter2'/><calculation formula='[Token]=1'/></workbook>";
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockXml));
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const resultObj = inlineResultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.workbookXml).not.toContain('hunter2');
+    expect(resultObj.workbookXml).toContain("password='__TABLEAU_MCP_REDACTED_CREDENTIAL__'");
+    expect(resultObj.workbookXml).toContain("formula='[Token]=1'");
+  });
+
+  it('writes the redacted workbook, not the secret, to the cache file', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
+      Ok("<workbook><connection password='hunter2'/></workbook>"),
+    );
+
+    await getToolResult({
+      session: '12345',
+      mode: 'file',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    const written = vi.mocked(cachePathModule.writeCacheTextFile).mock.calls[0][1];
+    expect(written).not.toContain('hunter2');
+    expect(written).toContain("password='__TABLEAU_MCP_REDACTED_CREDENTIAL__'");
   });
 
   it('should write to file and return path when mode is file', async () => {

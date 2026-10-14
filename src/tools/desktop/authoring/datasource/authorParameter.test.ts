@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../../../../desktop/externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -103,21 +104,18 @@ const XML_TWO_CAPTIONED_DATASOURCES = [
   '</workbook>',
 ].join('');
 
-let originalDesktopSessionId: string | undefined;
-
 beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
   vi.clearAllMocks();
-  originalDesktopSessionId = process.env.TABLEAU_DESKTOP_SESSION_ID;
-  delete process.env.TABLEAU_DESKTOP_SESSION_ID;
+  vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', undefined);
 });
 afterEach(() => {
-  restoreEnv('TABLEAU_DESKTOP_SESSION_ID', originalDesktopSessionId);
   vi.restoreAllMocks();
 });
 
 describe('authorParameterTool', () => {
   it('creates a list parameter in place against the same session (no reopen)', async () => {
-    process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     const { result, applyWorkbookDocument, getExecutor } = await getToolResult({
@@ -188,6 +186,29 @@ describe('authorParameterTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('caption collision');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a"b', '"a""b"'],
+    ['C:\\x', '"C:\\x"'],
+    ["R&D ]x' $1", '"R&D ]x\' $1"'],
+  ])('quotes the string value %s by doubling quotes', async (value, literal) => {
+    const str = await getToolResult({ args: { caption: 'p.Str', datatype: 'string', value } });
+    const strXml = str.applyWorkbookDocument.mock.calls[0][0] as string;
+    const decode = (v: string): string =>
+      v.replaceAll('&quot;', '"').replaceAll('&apos;', "'").replaceAll('&amp;', '&');
+    const strValue = /caption='p\.Str'[^>]* value='([^']*)'/.exec(strXml)?.[1] ?? '';
+    expect(decode(strValue)).toBe(literal);
+  });
+
+  it('writes dates as # literals', async () => {
+    const date = await getToolResult({
+      args: { caption: 'p.When', datatype: 'date', value: '2024-01-01' },
+    });
+    const dateXml = date.applyWorkbookDocument.mock.calls[0][0] as string;
+    expect(dateXml).toContain("datatype='date'");
+    expect(dateXml).toContain("value='#2024-01-01#'");
+    expect(dateXml).toContain("formula='#2024-01-01#'");
   });
 
   it('rejects an empty caption', async () => {
@@ -326,7 +347,7 @@ describe('authorParameterTool', () => {
   });
 
   it('errors when the readback does not contain the new parameter (did not materialize)', async () => {
-    process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '12345');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     const { result } = await getToolResult({
@@ -450,12 +471,4 @@ function datasourceBlock(xml: string, datasourceName: string): string {
     cursor = xml.indexOf('<datasource', openEnd);
   }
   throw new Error(`missing datasource ${datasourceName}`);
-}
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-    return;
-  }
-  process.env[name] = value;
 }

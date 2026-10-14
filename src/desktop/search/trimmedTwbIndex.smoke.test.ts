@@ -1,16 +1,11 @@
 import { statSync } from 'fs';
 import { join } from 'path';
 
-// Smoke test for the TRIMMED, committed twb-example-index.json (see
-// src/scripts/trimTwbExampleIndex.ts). Under vitest, DATA_ROOT does not resolve
-// to the source data dir (same reason testSetup.ts pins CORPUS_PATH), so point
-// the loader at the committed trimmed file explicitly. loadTwbExampleIndex()
-// reads TWB_INDEX_PATH at call time, so setting it before any test call is
-// enough; this file never mocks searchLibrary, so it exercises the real file.
-const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
-process.env.TWB_INDEX_PATH = TRIMMED_INDEX_PATH;
-
 import { searchWorkbookExamples } from './searchLibrary.js';
+
+// Smoke test for the TRIMMED, committed twb-example-index.json (see
+// src/scripts/trimTwbExampleIndex.ts); this file never mocks searchLibrary, so it exercises the real file.
+const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
 
 interface TwbSnippet {
   xml?: string;
@@ -18,7 +13,7 @@ interface TwbSnippet {
 }
 interface TwbEntry {
   name: string;
-  relativePath: string;
+  id: string;
   features: string[];
   snippets: Record<string, TwbSnippet>;
 }

@@ -96,6 +96,9 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),
   tableauSiteId: z.string().optional(),
+  // Site contentUrl the token was minted for ('' is the Default site). Optional only so tokens
+  // minted before site binding existed still parse; the validator fails closed when it is absent.
+  tableauSiteContentUrl: z.string().optional(),
   scope: z.string().optional(),
 });
 

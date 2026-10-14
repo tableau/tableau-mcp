@@ -5,11 +5,8 @@ import { z } from 'zod';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
@@ -137,7 +134,12 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             ).toErr();
           }
 
-          const setName = `[${caption}]`;
+          const setName = `[${caption.replaceAll(']', ']]')}]`;
+          if (hasNameCollision(target.xml, setName, caption)) {
+            return new ArgsValidationError(
+              'caption collision — a field with that name already exists; pick a new caption',
+            ).toErr();
+          }
           let groupXml: string;
           if (mode === 'top-n') {
             if (orderBy === undefined || orderBy.trim().length === 0) {
@@ -226,6 +228,25 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
 
   return tool;
 };
+
+function hasNameCollision(datasourceXml: string, setName: string, caption: string): boolean {
+  // Tableau resolves field references case-insensitively, so compare folded names.
+  const wantName = setName.toLowerCase();
+  const wantCaption = caption.toLowerCase();
+  const attr = (tag: string, name: string): string =>
+    unescapeXml(getAttr(tag, name) ?? '').toLowerCase();
+  const columnTags = [...datasourceXml.matchAll(/<column\b[^>]*>/g)].map((m) => m[0]);
+  const localNames = [...datasourceXml.matchAll(/<local-name>([^<]*)<\/local-name>/g)].map((m) =>
+    unescapeXml(m[1].trim()).toLowerCase(),
+  );
+  return (
+    columnTags.some(
+      (tag) => attr(tag, 'name') === wantName || attr(tag, 'caption') === wantCaption,
+    ) ||
+    localNames.includes(wantName) ||
+    findGroupTags(datasourceXml).some((tag) => attr(tag, 'name') === wantName)
+  );
+}
 
 function hasGroupCaption(datasourceXml: string, caption: string): boolean {
   return findGroupTags(datasourceXml).some(

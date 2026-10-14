@@ -1,0 +1,305 @@
+import { z } from 'zod';
+
+import { userSchema } from '../../../src/sdks/tableau/types/user.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { McpClient } from '../mcpClient.js';
+
+/**
+ * E2E coverage for the admin-only, read-only `list-users` tool.
+ *
+ * This tier catches the exact regression unit tests could not: `list-users` must request an
+ * explicit lean field set (`id,name,fullName,siteRole,email,lastLogin`) from Tableau's "Get Users
+ * on Site" endpoint so that `lastLogin` comes back populated. Relying on Tableau's default set
+ * silently omits `lastLogin` on some sites, which (a) dropped it from output and (b) made the
+ * client-side `lastLogin` filter match nothing. These assertions hit the real server and prove
+ * lastLogin arrives end-to-end.
+ *
+ * The filter surface is narrowed to exactly those fetched fields; `authSetting` (and locale,
+ * language, externalAuthUserId) are no longer requested or filterable — a filter on any of them
+ * must be REJECTED with a validation error, NOT silently return an empty result.
+ *
+ * The site's PAT owner is a site admin who has signed in, so at least one returned user is
+ * guaranteed to carry a real `lastLogin`.
+ */
+const listUsersResultSchema = z.object({
+  users: z.array(userSchema),
+  totalAvailable: z.number().optional(),
+  mcp: z
+    .object({
+      resultInfo: z.object({
+        returnedCount: z.number(),
+        truncated: z.boolean(),
+        truncationReason: z
+          .enum(['requested-limit', 'admin-cap', 'default-limit', 'max-limit'])
+          .optional(),
+        summary: z.string(),
+      }),
+    })
+    .optional(),
+});
+
+describe('list-users', () => {
+  let client: McpClient;
+  let toolsAvailable = false;
+
+  beforeAll(setEnv);
+  afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient({
+      env: getAdminToolsEnv(),
+    });
+    await client.connect();
+    const tools = await client.listTools();
+    toolsAvailable = tools.includes('list-users');
+    if (!toolsAvailable) {
+      console.warn(
+        'Skipping list-users e2e tests — admin tools not registered. ' +
+          'Ensure the caller is a site admin.',
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it('should register the tool only when admin tools are enabled', async () => {
+    const defaultClient = new McpClient({ env: getDefaultEnv() });
+    await defaultClient.connect();
+    try {
+      const tools = await defaultClient.listTools();
+      expect(tools.includes('list-users')).toBe(false);
+    } finally {
+      await defaultClient.close();
+    }
+  });
+
+  it('should return users with a populated lastLogin (lean explicit field set regression guard)', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // The site has ~27k users; fetching every page (default pageSize 100) is ~271 sequential
+    // REST calls and blows the e2e timeout. Bound to a single 1000-user page — that page already
+    // contains admins/service accounts with real lastLogin values, which is all this guard needs.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 1000 },
+    });
+
+    expect(result.users.length).toBeGreaterThan(0);
+
+    // At least one user must carry a real lastLogin timestamp. Before the fix the lean field set
+    // was never requested, so on the reproducing site EVERY user's lastLogin was undefined — this
+    // assertion would fail.
+    const usersWithLastLogin = result.users.filter((u) => u.lastLogin !== undefined);
+    expect(usersWithLastLogin.length).toBeGreaterThan(0);
+    // The populated value must be a parseable ISO 8601 timestamp.
+    expect(Number.isNaN(new Date(usersWithLastLogin[0].lastLogin!).getTime())).toBe(false);
+
+    // The tool projects output to exactly 6 fields. Tableau's `fields` param does NOT restrict the
+    // response (it still returns authSetting/locale/language/externalAuthUserId), and userSchema
+    // keeps those as known optional keys — so the tool-local projection is what strips them. Assert
+    // NONE of the four extras survive on ANY returned user, and that only the 6 keys appear.
+    const allowedKeys = ['id', 'name', 'fullName', 'siteRole', 'email', 'lastLogin'].sort();
+    for (const user of result.users) {
+      expect(user).not.toHaveProperty('authSetting');
+      expect(user).not.toHaveProperty('locale');
+      expect(user).not.toHaveProperty('language');
+      expect(user).not.toHaveProperty('externalAuthUserId');
+      // Every key present must be one of the 6 advertised fields (id/name always present).
+      const keys = Object.keys(user).sort();
+      expect(keys.every((k) => allowedKeys.includes(k))).toBe(true);
+    }
+  });
+
+  it('should return rows for a lastLogin filter, proving the filter is not silently empty', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // `gt` excludes never-logged-in users (undefined lastLogin), so any row returned here MUST
+    // have a real lastLogin — this is a stronger proof that lastLogin is populated end-to-end.
+    // The site's admin PAT owner has logged in well after 2020 and appears in the first page, so
+    // this is guaranteed non-empty. Keep `limit` small: post-W-23600028 the filter is applied
+    // DURING pagination and `limit` bounds POST-filter matches, so a large limit against a site
+    // with sparse `lastLogin` matches (seeded sites are almost all never-logged-in users) would
+    // page the entire population to prove it can't reach the limit and blow the timeout.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:gt:2020-01-01T00:00:00Z' },
+    });
+
+    expect(result.users.length).toBeGreaterThan(0);
+    // Every returned user must have a real lastLogin newer than the cutoff.
+    for (const user of result.users) {
+      expect(user.lastLogin).toBeDefined();
+      expect(new Date(user.lastLogin!).getTime()).toBeGreaterThan(
+        new Date('2020-01-01T00:00:00Z').getTime(),
+      );
+    }
+  });
+
+  it('W-23600028: a small limit + an inactivity filter returns `limit` matching users, not 0', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    const cutoff = '2026-07-01T00:00:00Z';
+    const inactivityFilter = `lastLogin:lt:${cutoff}`;
+    const witness = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 6, filter: inactivityFilter },
+    });
+
+    expect(
+      witness.users.length,
+      'This E2E site needs at least two inactive users to witness requested-limit truncation.',
+    ).toBeGreaterThanOrEqual(2);
+    const witnessIds = witness.users.map((user) => user.id);
+    expect(new Set(witnessIds).size).toBe(witnessIds.length);
+    const cutoffTime = new Date(cutoff).getTime();
+    for (const user of witness.users) {
+      if (user.lastLogin === undefined) {
+        continue;
+      }
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
+    }
+
+    const requestedLimit = witnessIds.length - 1;
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: {
+        pageSize: 1000,
+        limit: requestedLimit,
+        filter: `id:in:${witnessIds.join('|')},${inactivityFilter}`,
+      },
+    });
+
+    const resultIds = result.users.map((user) => user.id);
+    expect(resultIds).toHaveLength(requestedLimit);
+    expect(new Set(resultIds).size).toBe(requestedLimit);
+    expect(resultIds.every((id) => witnessIds.includes(id))).toBe(true);
+    for (const user of result.users) {
+      if (user.lastLogin === undefined) {
+        continue;
+      }
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
+    }
+    expect(result.mcp?.resultInfo.returnedCount).toBe(requestedLimit);
+    expect(result.mcp?.resultInfo.truncated).toBe(true);
+    expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
+  });
+
+  it('W-23757370: an unbounded call is bounded by a default limit and flagged default-limit, not paged over the whole site', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // No limit and no filter. Before the fix this paged the entire ~27k-user
+    // site into one multi-MB payload that overflows the transport. Now the tool
+    // injects a default cap so the response is bounded and readable, and the
+    // result is explicitly flagged as a partial page the caller did not limit.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: {},
+    });
+
+    // Bounded to the default cap (100), never the full population — on any site size.
+    expect(result.users.length).toBeGreaterThan(0);
+    expect(result.users.length).toBeLessThanOrEqual(100);
+
+    // The default-cap truncation can only fire when the site actually has MORE than the default
+    // limit (100) of users. On a small site (e.g. the shared CI test site, which has far fewer)
+    // the cap does not bind, so the unbounded call correctly returns the COMPLETE list
+    // un-truncated — asserting that here proves the default cap never OVER-truncates a small site.
+    // The truncation branch itself is covered deterministically by the unit tests (which mock a
+    // large population), so this leg does not need a large live site to be meaningful.
+    const siteTotal = result.totalAvailable;
+    if (siteTotal !== undefined && siteTotal > 100) {
+      expect(result.users.length).toBe(100);
+      expect(result.mcp?.resultInfo.truncated).toBe(true);
+      expect(result.mcp?.resultInfo.truncationReason).toBe('default-limit');
+      // The partial-list signal is spelled out in the data, not just a boolean.
+      expect(result.mcp?.resultInfo.summary).toContain('default cap');
+    } else {
+      console.warn(
+        `Skipping default-limit truncation assertion — site reports ${siteTotal ?? result.users.length} users (<=100), so the default cap cannot bind. Unit tests cover the truncation path.`,
+      );
+      expect(result.mcp?.resultInfo.truncated).toBe(false);
+    }
+  });
+
+  it('W-23757370: an explicit limit above the per-call ceiling (1000) is clamped and flagged max-limit', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // A model told "pass a higher limit" to escape truncation must not be able to
+    // re-trigger the multi-MB overflow. An over-ceiling limit is clamped to the
+    // hard per-call maximum (1000) and the truncation is reported as max-limit, so
+    // the caller learns a single call cannot return more.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 50000 },
+    });
+
+    // The over-ceiling limit is clamped to the hard per-call maximum (1000). The clamp only
+    // TRUNCATES when the site has more than 1000 users; on a smaller site (e.g. the shared CI
+    // test site) fewer than 1000 exist, so the whole population comes back un-truncated — which
+    // still proves the clamp never fabricates rows or over-truncates. The max-limit truncation
+    // branch is covered deterministically by the unit tests (which mock a >1000-user population).
+    const siteTotal = result.totalAvailable;
+    if (siteTotal !== undefined && siteTotal > 1000) {
+      expect(result.users.length).toBe(1000);
+      expect(result.mcp?.resultInfo.returnedCount).toBe(1000);
+      expect(result.mcp?.resultInfo.truncated).toBe(true);
+      expect(result.mcp?.resultInfo.truncationReason).toBe('max-limit');
+      expect(result.mcp?.resultInfo.summary).toContain('per-call maximum of 1000');
+    } else {
+      console.warn(
+        `Skipping max-limit clamp assertion — site reports ${siteTotal ?? result.users.length} users (<=1000), so the 1000 ceiling cannot bind. Unit tests cover the clamp path.`,
+      );
+      // Never more than the ceiling, and no truncation flagged when the site fits under it.
+      expect(result.users.length).toBeLessThanOrEqual(1000);
+      expect(result.mcp?.resultInfo.truncated).toBe(false);
+    }
+  });
+
+  it('should reject a filter on a now-removed field (authSetting) with an enum error, not silent-empty', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // authSetting is no longer fetched, so it is no longer filterable. The tool must surface a
+    // clean enum-validation error rather than silently returning "No users were found" — the same
+    // silent-match failure class as the original lastLogin bug. Bound to one page: filter
+    // validation runs AFTER pagination, so an unbounded call would page all ~27k users first.
+    const result = await client.client.callTool({
+      name: 'list-users',
+      arguments: { pageSize: 1000, limit: 1000, filter: 'authSetting:eq:SAML' },
+    });
+
+    expect(result.isError).toBe(true);
+    const content = Array.isArray(result.content) ? result.content[0] : undefined;
+    const text = content && content.type === 'text' ? content.text : '';
+    expect(text).toContain('authSetting');
+    expect(text).not.toContain('No users were found');
+  });
+
+  it('should reject an unknown filter field with a structured error', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // Filter validation runs AFTER pagination (applyUserFilters), so bound the fetch to one page
+    // — an unbounded call would page through all ~27k users before rejecting and blow the timeout.
+    const result = await client.client.callTool({
+      name: 'list-users',
+      arguments: { pageSize: 1000, limit: 1000, filter: 'notAField:eq:x' },
+    });
+
+    expect(result.isError).toBe(true);
+  });
+});

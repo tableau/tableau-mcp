@@ -2,11 +2,11 @@ import { Ok, type Result } from 'ts-results-es';
 
 import {
   ArgsValidationError,
-  FileReadError,
   McpToolError,
   XmlValidationError,
 } from '../../errors/mcpToolError.js';
 import { bindExplicitTemplate, formatExplicitBindErrors } from '../binder/explicit-bind.js';
+import type { Derivation } from '../binder/manifest-types.js';
 import { summarizeSchema } from '../binder/schema-summary.js';
 import { resolveUniqueDatasourceName } from '../metadata/field-resolver.js';
 import { extractSheetXml, extractWorksheetWindowXml } from '../metadata/sheets.js';
@@ -48,6 +48,7 @@ export interface WorksheetTemplatePlan {
   title: string;
   datasource: string;
   fieldMapping: Record<string, string>;
+  derivationOverrides?: Record<string, Derivation>;
   topN?: number;
 }
 
@@ -112,6 +113,7 @@ export function buildTemplateWorksheetArtifact({
       contract: snapshot.descriptor,
       title: plan.title,
       datasource: resolvedPlanDatasource,
+      derivationOverrides: plan.derivationOverrides,
     });
     if (!explicitBind.ok) {
       return new ArgsValidationError(
@@ -128,6 +130,25 @@ export function buildTemplateWorksheetArtifact({
       return new ArgsValidationError(
         `Datasource "${plan.datasource}" does not match the bound datasource "${explicitBind.datasource}".`,
       ).toErr();
+    }
+
+    // The legacy binder forces aggregated calculations to `usr`, including when an
+    // override was requested. Artifact callers require exact aggregation semantics.
+    // Compare raw prefixes so punctuation in datasource and field names stays intact.
+    for (const slot of explicitBind.templateSlots) {
+      const requested = plan.derivationOverrides?.[slot.slot_id];
+      if (requested === undefined) continue;
+      const key = slot.qualified_key_required
+        ? `${slot.template_field}@${slot.derivation}`
+        : slot.template_field;
+      const bound = explicitBind.fieldMapping[key];
+      if (!bound?.startsWith(`[${explicitBind.datasource}].[${requested}:`)) {
+        return new ArgsValidationError(
+          `Aggregation override '${requested}' for slot '${slot.slot_id}' cannot be honored: ` +
+            `the binding emits '${bound}'. Already aggregated fields retain their existing calculation. ` +
+            'Drop the override to use that calculation, or bind a row-level field for the requested aggregation. No worksheet artifact was produced.',
+        ).toErr();
+      }
     }
 
     const injected = buildInjectedWorkbookXml({
@@ -191,6 +212,6 @@ export function buildTemplateWorksheetArtifact({
         ),
     });
   } catch (error) {
-    return new FileReadError(error).toErr();
+    return new ArgsValidationError(error instanceof Error ? error.message : String(error)).toErr();
   }
 }

@@ -8,6 +8,7 @@ import {
   PulseBundleResponse,
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
@@ -23,7 +24,6 @@ const paramsSchema = {
       'full (default): returns the response verbatim, including viz. slim: strips the large viz ' +
         '(Vega chart-spec) blobs from every insight and summary result.',
     ),
-  slim: z.optional(z.boolean()).describe('Deprecated: use verbosity=slim.'),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
@@ -32,6 +32,8 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
   const generatePulseMetricValueInsightBundleTool = new WebTool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
+    minRequiredRole: SiteRole.VIEWER,
+    registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
@@ -59,7 +61,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
   - 'exploration' - Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.
 - \`verbosity\` (optional): 'full' returns the response verbatim, including \`viz\`. 'slim' strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result. Defaults to 'full'.
-- \`slim\` (optional): Deprecated: use \`verbosity=slim\`.
 
 **Example Usage:**
 - Generate the default insight bundle for the Pulse metric:
@@ -165,14 +166,11 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { bundleRequest, bundleType, verbosity, slim },
-      extra,
-    ): Promise<CallToolResult> => {
-      const useSlim = verbosity ? verbosity === 'slim' : Boolean(slim);
+    callback: async ({ bundleRequest, bundleType, verbosity }, extra): Promise<CallToolResult> => {
+      const useSlim = verbosity === 'slim';
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
-        args: { bundleRequest, bundleType, verbosity, slim },
+        args: { bundleRequest, bundleType, verbosity },
         callback: async () => {
           const validationError = validateBundleRequest(bundleRequest);
           if (validationError) {

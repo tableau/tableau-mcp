@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <!-- W60 portability CI fixture A — SaaS revenue ops. Synthetic non-Superstore schema
-     from the W60 portability spike (~/.claude/state/minion/w60-portability-spike.md).
+     retained from the portability investigation that established these regression cases.
      [Region Name] is a PLAIN string dimension with NO geo semantic-role — the geo-refusal
      regression lock: choropleth/filled-map asks must stay not-bound even under the W60
      geo-slot completion widening. -->

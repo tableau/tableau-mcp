@@ -1,8 +1,10 @@
-import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { log } from '../../../logging/logger.js';
+import { AxiosRequestConfig, getStringResponseHeader, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { assertLuid, buildRestPath, RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { CustomView } from '../types/customView.js';
@@ -11,6 +13,11 @@ import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message: string };
+
+export type ViewAllDataResponse = {
+  body: Uint8Array;
+  contentType: string;
+};
 
 /**
  * Views methods of the Tableau Server REST API
@@ -21,7 +28,7 @@ type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message
  */
 export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, viewsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, viewsApis, { axiosConfig }), creds);
   }
 
   /**
@@ -198,6 +205,8 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       return handleQueryImageError(error);
     }
   };
@@ -229,11 +238,68 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       }
     }
 
-    return await this._apiClient.queryViewData({
-      params: { siteId, viewId },
-      queries,
-      ...this.authHeader,
+    const response = await this._apiClient.axios.get<string>(
+      buildRestPath('sites', siteId, 'views', assertLuid('viewId', viewId), 'data'),
+      {
+        ...this.authHeader,
+        params: queries,
+        responseType: 'text',
+      },
+    );
+    return response.data;
+  };
+
+  /**
+   * Returns all constituent sheets for a view as a multipart response.
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @param {string} viewId The ID of the view to return data for.
+   * @param {string} siteId The Tableau site ID.
+   * @param {Record<string, string>} viewFilters Map of field name to filter value; keys are prefixed with `vf_` unless already present.
+   */
+  getViewAllData = async ({
+    viewId,
+    siteId,
+    viewFilters,
+  }: {
+    viewId: string;
+    siteId: string;
+    viewFilters?: Record<string, string>;
+  }): Promise<ViewAllDataResponse> => {
+    const queries: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
+    const response = await this._apiClient.axios.get<Uint8Array>(
+      buildRestPath('sites', siteId, 'views', assertLuid('viewId', viewId), 'allData'),
+      {
+        ...this.authHeader,
+        params: queries,
+        responseType: 'arraybuffer',
+      },
+    );
+
+    const contentType = getStringResponseHeader(response.headers, 'content-type');
+    log({
+      message: 'Received view all-data response',
+      level: 'debug',
+      logger: 'rest-api',
+      data: {
+        status: response.status,
+        contentType,
+        bodyBytes: response.data.byteLength,
+      },
     });
+
+    return {
+      body: response.data,
+      contentType,
+    };
   };
 
   /**
@@ -290,6 +356,8 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
       return handleQueryImageError(error);
     }
   };

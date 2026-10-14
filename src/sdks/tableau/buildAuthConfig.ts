@@ -3,14 +3,17 @@ import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { AuthConfig } from './authConfig.js';
 
 function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', () => authInfo?.username ?? '');
 }
 
 function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  const json = config.jwtAdditionalPayload.replaceAll(
+    '{OAUTH_USERNAME}',
+    () => authInfo?.username ?? '',
+  );
   return JSON.parse(json || '{}');
 }
 

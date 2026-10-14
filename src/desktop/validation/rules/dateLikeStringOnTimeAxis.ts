@@ -103,7 +103,7 @@ const AGGREGATE_PREFIXES = new Set([
   'varp',
 ]);
 
-const FIELD_REF = /\[([^\]]+)\]\.\[([^\]]+)\]/g;
+const FIELD_REF = /\[((?:[^\]]|\]\])+)\]\.\[((?:[^\]]|\]\])+)\]/g;
 
 interface ColumnMeta {
   field: string;

@@ -1,6 +1,7 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
   MIN_DESKTOP_CALL_TIMEOUT_MS,
 } from './desktop/callDeadline.js';
 import {
@@ -8,6 +9,7 @@ import {
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
 } from './desktop/limits/inlineImageCap.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/limits/inlineXmlCap.js';
+import { parseSessionLuid } from './desktop/session/parseSessionLuid.js';
 import { parseSessionPid } from './desktop/session/parseSessionPid.js';
 import { parseNumber } from './utils/parseNumber.js';
 
@@ -39,6 +41,9 @@ export class Config extends BaseConfig {
   /** Optional override for the External Client API discovery directory. */
   externalApiDiscoveryDir: string | undefined;
 
+  /** Optional directory holding the Desktop command-param and codegen registry JSON files. */
+  commandsRegistryDir: string | undefined;
+
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
    * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
@@ -47,6 +52,32 @@ export class Config extends BaseConfig {
    * still target another open Desktop. Ignored unless it is a non-blank numeric pid.
    */
   desktopSessionId: string | undefined;
+
+  /**
+   * Stable GUID identity of the launching Tableau Desktop session, pinned via
+   * `TABLEAU_DESKTOP_SESSION_LUID` (the guid counterpart to the pid in `TABLEAU_DESKTOP_SESSION_ID`).
+   * Forwarded as the product-telemetry `session_id`, so a run's desktop tool calls can be
+   * correlated the way the web path correlates by mcp-session-id. Ignored unless it is a
+   * well-formed GUID.
+   */
+  desktopSessionLuid: string | undefined;
+
+  /**
+   * Signed-in Tableau site and user LUID of the launching Desktop session, forwarded by the agent
+   * from `TABLEAU_SITE_LUID` / `TABLEAU_USER_LUID` (resolved by Desktop at agent launch) and sent as
+   * product-telemetry context. Empty string when the launcher did not provide them. The server/pod
+   * is resolved separately from `TABLEAU_POD_NAME` in resolveTelemetryEnv (telemetryForwarder.ts).
+   */
+  siteLuid: string;
+  userLuid: string;
+
+  /**
+   * The agent's chat (conversation) id for this session, forwarded by tab-agent-south via
+   * `TABLEAU_CHAT_ID`. The agent spawns one desktop MCP child per chat, so this is stable for
+   * the child's life. Sent as the product-telemetry `chat_id` to correlate a run's desktop tool
+   * calls with the conversation that drove them. Empty string when the launcher did not provide it.
+   */
+  chatId: string;
 
   /**
    * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
@@ -64,6 +95,15 @@ export class Config extends BaseConfig {
    */
   allowSkipValidation: boolean;
 
+  /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
+  knowledgeDir: string | undefined;
+
+  // Dev/test overrides for search assets; not user settings.
+  workbookXsdPath: string | undefined;
+  schemaReferencePath: string | undefined;
+  examplesDir: string | undefined;
+  twbIndexPath: string | undefined;
+
   constructor() {
     super();
 
@@ -73,7 +113,12 @@ export class Config extends BaseConfig {
       INLINE_IMAGE_MAX_BYTES: inlineImageMaxBytes,
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
+      TABLEAU_COMMANDS_REGISTRY_DIR: commandsRegistryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
+      TABLEAU_SITE_LUID: siteLuid,
+      TABLEAU_USER_LUID: userLuid,
+      TABLEAU_CHAT_ID: chatId,
       TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
       ALLOW_SKIP_VALIDATION: allowSkipValidation,
     } = cleansedVars;
@@ -83,10 +128,17 @@ export class Config extends BaseConfig {
     }
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
+    this.commandsRegistryDir = commandsRegistryDir?.trim() || undefined;
     this.desktopSessionId =
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
         ? desktopSessionId
         : undefined;
+
+    this.desktopSessionLuid = desktopSessionLuid ? parseSessionLuid(desktopSessionLuid) : undefined;
+
+    this.siteLuid = siteLuid || '';
+    this.userLuid = userLuid || '';
+    this.chatId = chatId || '';
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,
@@ -98,17 +150,38 @@ export class Config extends BaseConfig {
       minValue: 1,
     });
 
-    this.imageExportTimeoutMs = parseNumber(imageExportTimeoutMs, {
-      defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
-      minValue: 1,
-    });
+    // Node turns a setTimeout delay above 2^31-1 into 1 ms, so "effectively never" must clamp, not fall back.
+    this.imageExportTimeoutMs = Math.min(
+      parseNumber(imageExportTimeoutMs, {
+        defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
+        minValue: 1,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
-    this.desktopCallTimeoutMs = parseNumber(desktopCallTimeoutMs, {
-      defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
-      minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
-    });
+    this.desktopCallTimeoutMs = Math.min(
+      parseNumber(desktopCallTimeoutMs, {
+        defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+        minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
     this.allowSkipValidation = allowSkipValidation === 'true';
+
+    const {
+      TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
+      WORKBOOK_XSD_PATH: workbookXsdPath,
+      SCHEMA_REFERENCE_PATH: schemaReferencePath,
+      EXAMPLES_DIR: examplesDir,
+      TWB_INDEX_PATH: twbIndexPath,
+    } = cleansedVars;
+    this.knowledgeDir = knowledgeDir || undefined;
+    this.workbookXsdPath = workbookXsdPath || undefined;
+    this.schemaReferencePath = schemaReferencePath || undefined;
+    // An empty EXAMPLES_DIR still selects the directory route (an empty list), as before.
+    this.examplesDir = examplesDir;
+    this.twbIndexPath = twbIndexPath || undefined;
   }
 }
 

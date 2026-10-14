@@ -74,6 +74,7 @@ export interface BindRecoveryProposalContext {
     session: string;
     ask: string;
     target_worksheet?: string;
+    datasource?: string;
     auto_apply: true;
   };
   recommended?: {
@@ -93,6 +94,11 @@ export interface BindRecoveryProposalContext {
       required: boolean;
       compatible_field_names: string[];
       compatible_field_options?: Array<{ name: string; label: string }>;
+      conditional_field_options?: Array<{
+        name: string;
+        label?: string;
+        requires_derivation: Array<'cnt' | 'ctd'>;
+      }>;
     }>;
   }>;
   proposal_requirements: {
@@ -387,12 +393,6 @@ export class SessionRouteStateStore {
       if (terminalAsk !== undefined) {
         state.bindRecoveryByAsk.delete(terminalAsk);
         continue;
-      }
-
-      const selfIsTerminal = !this.isActiveBindRecovery(record);
-      if (selfIsTerminal) {
-        state.bindRecoveryByAsk.delete(ask);
-        return false;
       }
 
       state.bindRecoveryByAsk.delete(ask);

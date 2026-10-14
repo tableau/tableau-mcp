@@ -1,5 +1,3 @@
-// src/binder/field-narrowing.test.ts
-//
 // STAGE 2B FIELD-NARROWING (adjudicated attack 1, SUSTAINED): buildLlmInput used
 // to send ALL summary.fields, so a wide schema (300–1000 fields) blew the propose
 // prompt. These tests pin the narrowing contract:

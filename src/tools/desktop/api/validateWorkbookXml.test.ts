@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import * as episodeEvents from '../../../desktop/episode-events.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -30,11 +31,33 @@ describe('validateWorkbookXmlTool', () => {
   });
 
   it('should return error for malformed workbook content', async () => {
-    const result = await getResult('<workbook><worksheets></workbook>');
+    const eventSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent');
+    const errorSpy = vi.spyOn(episodeEvents, 'emitToolErrorEvent');
+    try {
+      const result = await getResult('<workbook><worksheets></workbook>');
 
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Workbook structure has');
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Workbook structure has');
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: 'validate-workbook-xml',
+          error: 'Tool returned an error result.',
+        }),
+      );
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          type: 'tool_end',
+          tool: 'validate-workbook-xml',
+          success: false,
+          outcome: 'failed',
+        }),
+      );
+    } finally {
+      errorSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
   });
 
   it('should include fix suggestion referencing apply-workbook', async () => {

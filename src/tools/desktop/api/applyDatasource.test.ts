@@ -193,7 +193,7 @@ describe('getApplyDatasourceTool', () => {
       const { result, order, executor } = await invoke({
         datasourceName,
         datasources,
-        file: join(outsideDirectory('must-not-read'), 'missing.xml'),
+        file: datasourceFile('must-not-read'),
       });
 
       expect(result.isError).toBe(true);
@@ -204,7 +204,7 @@ describe('getApplyDatasourceTool', () => {
     },
   );
 
-  it('preserves terminal warnings and emits an honest no-readback receipt', async () => {
+  it('shows Desktop warnings in the text and does not mark the apply done', async () => {
     const file = datasourceFile('receipt');
     writeMatchingSidecar(file);
     const warnings: ExecuteCommandWarning[] = [
@@ -216,16 +216,28 @@ describe('getApplyDatasourceTool', () => {
     expect(result.isError).toBe(false);
     const body = successSchema.parse(JSON.parse(resultText(result)));
     expect(body.warnings).toEqual(warnings);
-    expect(body.message).toContain('Successfully applied datasource update for "Sales"');
+    expect(body.message).not.toContain('Successfully applied');
+    expect(body.message).toContain('datasource-warning: Desktop normalized one attribute.');
     expect(body.message).toContain('No post-apply datasource readback ran');
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('emits an honest no-readback receipt for a clean apply', async () => {
+    const file = datasourceFile('clean-receipt');
+    writeMatchingSidecar(file);
+
+    const { result } = await invoke({ datasourceName: 'Sales', file });
+
+    const body = successSchema.parse(JSON.parse(resultText(result)));
+    expect(body.warnings).toEqual([]);
+    expect(body.message).toContain('Successfully applied datasource update for "Sales"');
     const structured = structuredSchema.parse(result.structuredContent);
     expect(structured.message).toBe(body.message);
-    expect(structured.warnings).toEqual(warnings);
+    expect(structured.warnings).toEqual([]);
+    expect(structured.nextAction.receipt.didNot).toEqual([]);
     expect(structured.nextAction.receipt.did).toEqual([
       'Desktop accepted the datasource XML apply for "Sales"',
-      'preflight validation returned 1 warning(s)',
     ]);
-    expect(structured.nextAction.receipt.didNot).toEqual([]);
     expect(structured.nextAction.receipt.unverified).toEqual([
       'whether the applied datasource retained its intended structure — no structural readback ran (datasource applies have none)',
     ]);
@@ -261,17 +273,14 @@ describe('getApplyDatasourceTool', () => {
         return join(directory, 'linked', 'datasource.xml');
       },
     ],
-  ] as const)(
-    'lists the datasource but refuses a %s file before POST',
-    async (_label, makeFile) => {
-      const file = makeFile();
-      const { result, order, executor } = await invoke({ datasourceName: 'Sales', file });
+  ] as const)('refuses a %s file before any Desktop call', async (_label, makeFile) => {
+    const file = makeFile();
+    const { result, order, executor } = await invoke({ datasourceName: 'Sales', file });
 
-      expect(result.isError).toBe(true);
-      expect(order).toEqual(['list']);
-      expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
-    },
-  );
+    expect(result.isError).toBe(true);
+    expect(order).toEqual([]);
+    expect(executor.applyDatasourceDocument).not.toHaveBeenCalled();
+  });
 
   it('maps a secure descriptor read failure to the existing file-read error', async () => {
     const file = datasourceFile('unreadable');

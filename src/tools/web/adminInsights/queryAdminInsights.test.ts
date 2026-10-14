@@ -11,6 +11,7 @@ import { getQueryAdminInsightsTool } from './queryAdminInsights.js';
 import { adminInsightsResolver } from './resolver.js';
 
 const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
   mockAssertAdmin: vi.fn(),
@@ -39,6 +40,10 @@ vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
+}));
+
 const validQuery: Query = {
   fields: [{ fieldCaption: 'Item ID' }],
 };
@@ -53,9 +58,10 @@ describe('query-admin-insights tool', () => {
     // Resolver filters by projectName:eq:Admin Insights (single call) and matches datasets by name
     // client-side, so the mock returns every dataset the resolver might look up in one page.
     mocks.mockListDatasources.mockResolvedValue({
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 3 },
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 4 },
       datasources: [
         { id: 'luid-tse', name: 'TS Events' },
+        { id: 'luid-tsu', name: 'TS Users' },
         { id: 'luid-sc', name: 'Site Content' },
         { id: 'luid-jp', name: 'Job Performance' },
       ],
@@ -71,6 +77,26 @@ describe('query-admin-insights tool', () => {
     expect(tool.name).toBe('query-admin-insights');
   });
 
+  it.each([
+    [true, true, false],
+    [true, false, true],
+    [false, true, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', String(adminToolsEnabled));
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      try {
+        const tool = getQueryAdminInsightsTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(disabled);
+      } finally {
+        vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      }
+    },
+  );
+
   it('dispatches kind=ts-events to the TS Events datasource', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [{ 'Item ID': 'wb-1' }] }));
 
@@ -79,6 +105,17 @@ describe('query-admin-insights tool', () => {
     expect(result.isError).toBeFalsy();
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasource: { datasourceLuid: 'luid-tse' } }),
+    );
+  });
+
+  it('dispatches kind=ts-users to the TS Users datasource', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [{ 'User Email': 'a@b.com' }] }));
+
+    const result = await getToolResult({ kind: 'ts-users', query: validQuery });
+
+    expect(result.isError).toBeFalsy();
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ datasource: { datasourceLuid: 'luid-tsu' } }),
     );
   });
 
@@ -376,7 +413,7 @@ function parseStalePayload(result: CallToolResult): StaleContentPayload {
 }
 
 async function getToolResult(params: {
-  kind: 'ts-events' | 'site-content' | 'job-performance' | 'stale-content';
+  kind: 'ts-events' | 'ts-users' | 'site-content' | 'job-performance' | 'stale-content';
   query?: Query;
   limit?: number;
   minAgeDays?: number;

@@ -32,6 +32,13 @@ export const undeclaredSetReferenceRule: ValidationRule = {
       const colRe = new RegExp(`<column\\b[^>]*\\bname=(['"])\\[${escapeRe(name)}\\]\\1`, 'i');
       if (colRe.test(s)) continue;
 
+      // A physical field named like a set (e.g. [Data Set]) is declared only in metadata.
+      const physicalRe = new RegExp(
+        `<local-name>\\s*\\[${escapeRe(name)}\\]\\s*</local-name>`,
+        'i',
+      );
+      if (physicalRe.test(s)) continue;
+
       issues.push({
         ruleId: 'undeclared-set-reference',
         severity: 'error',

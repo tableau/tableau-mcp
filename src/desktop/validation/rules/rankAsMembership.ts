@@ -26,7 +26,7 @@ function calcFormulaMap(xml: string): Map<string, string> {
 export const rankAsMembershipRule: ValidationRule = {
   id: 'rank-as-membership',
   description:
-    'Warns (blocking) when a calc assigns discrete group MEMBERSHIP by comparing a RANK table-calc to a threshold and ' +
+    'Errors (blocking) when a calc assigns discrete group MEMBERSHIP by comparing a RANK table-calc to a threshold and ' +
     'branching to string labels (IF RANK(...) <= [p] THEN "Top"…). That\'s the wrong construct — a table calc runs after ' +
     "the grouping is needed, can't be a set-action target, and won't re-rank live. Use the LOD membership tier calc pattern " +
     '(nested LOD percentile thresholds) — see lod-membership-tier-calc. RANK stays correct for a displayed ordinal VALUE.',

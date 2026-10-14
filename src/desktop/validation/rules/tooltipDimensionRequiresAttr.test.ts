@@ -53,6 +53,12 @@ describe('tooltip-dimension-requires-attr rule', () => {
     expect(issues[0].message).toContain('[DS].[attr:Segment:nk]');
   });
 
+  it('sees an aggregate ref whose datasource name contains a ]]-escaped bracket', () => {
+    expect(
+      tooltipDimensionRequiresAttrRule.validate(ws({ cols: '[D]]S].[sum:Sales:qk]' })),
+    ).toHaveLength(1);
+  });
+
   it('blocks validation when registered and the broken shape is present', () => {
     const result = runValidation(ws(), 'worksheet');
     expect(result.valid).toBe(false);

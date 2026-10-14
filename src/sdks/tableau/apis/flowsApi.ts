@@ -1,14 +1,61 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   flowConnectionSchema,
   flowOutputStepSchema,
   flowRunSchema,
   flowSchema,
 } from '../types/flow.js';
+import { runFlowJobResponseSchema } from '../types/job.js';
 import { paginationSchema } from '../types/pagination.js';
 import { paginationParameters } from './paginationParameters.js';
+
+/**
+ * Request body for "Run Flow Now". Note `flowId` is required INSIDE the body in
+ * addition to the URI path — Tableau returns 400 if the body omits it. The tool
+ * derives both from one input id so they cannot diverge.
+ */
+const runFlowNowRequestSchema = z.object({
+  flowRunSpec: z.object({
+    flowId: z.string(),
+    runMode: z.enum(['full', 'incremental']).optional(),
+    flowParameterSpecs: z
+      .object({
+        flowParameterSpec: z.array(
+          z.object({
+            parameterId: z.string(),
+            overrideValue: z.string(),
+          }),
+        ),
+      })
+      .optional(),
+    flowOutputSteps: z
+      .object({
+        flowOutputStep: z.array(z.object({ id: z.string() })),
+      })
+      .optional(),
+  }),
+});
+
+const runFlowNowEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/flows/:flowId/run',
+  alias: 'runFlowNow',
+  description:
+    'Runs the specified flow on demand and returns the async background job (job id + flow run id).',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('flowId'),
+    {
+      name: 'body',
+      type: 'Body',
+      schema: runFlowNowRequestSchema,
+    },
+  ],
+  response: runFlowJobResponseSchema,
+});
 
 const queryFlowsForSiteEndpoint = makeEndpoint({
   method: 'get',
@@ -18,11 +65,7 @@ const queryFlowsForSiteEndpoint = makeEndpoint({
     'Returns the flows on a site. If the user is not an administrator, the method returns just the flows that the user has permissions to view.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -52,6 +95,7 @@ const queryFlowEndpoint = makeEndpoint({
   alias: 'queryFlow',
   description:
     'Returns information about the specified flow, including information about the project, owner, and output steps.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowId')],
   response: z.object({
     flowOutputSteps: z
       .object({
@@ -67,6 +111,7 @@ const queryFlowConnectionsEndpoint = makeEndpoint({
   path: '/sites/:siteId/flows/:flowId/connections',
   alias: 'queryFlowConnections',
   description: 'Returns a list of data connections for the specified flow.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowId')],
   response: z.object({
     connections: z.object({
       connection: z.optional(z.array(flowConnectionSchema)),
@@ -82,11 +127,7 @@ const getFlowRunsEndpoint = makeEndpoint({
     'Returns flow runs on a site. Supports filtering by predefined fields such as flowId, userId, progress, startedAt, and completedAt.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -109,11 +150,39 @@ const getFlowRunsEndpoint = makeEndpoint({
   }),
 });
 
+/** Cancel Flow Run returns `{}` on success or an `{ error }` envelope in some 2xx responses. */
+const cancelFlowRunResponseSchema = z.union([
+  z.object({ error: z.undefined().optional() }).passthrough(),
+  z
+    .object({
+      error: z
+        .object({
+          code: z.string().optional(),
+          summary: z.string().optional(),
+          detail: z.string().optional(),
+        })
+        .passthrough(),
+    })
+    .passthrough(),
+]);
+
+const cancelFlowRunEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/flows/runs/:flowRunId',
+  alias: 'cancelFlowRun',
+  description:
+    'Requests cancellation of a queued or in-progress flow run. No request body; returns HTTP 200 (body {} on success, or an { error } envelope for some failures).',
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowRunId')],
+  response: cancelFlowRunResponseSchema,
+});
+
 const flowsApi = makeApi([
   queryFlowsForSiteEndpoint,
   queryFlowEndpoint,
   queryFlowConnectionsEndpoint,
   getFlowRunsEndpoint,
+  runFlowNowEndpoint,
+  cancelFlowRunEndpoint,
 ]);
 
 export const flowsApis = [...flowsApi] as const satisfies ZodiosEndpointDefinitions;

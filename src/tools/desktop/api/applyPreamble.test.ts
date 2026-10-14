@@ -6,7 +6,12 @@ import * as configModule from '../../../config.desktop.js';
 import { getCacheDir } from '../../../desktop/cachePath.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { sidecarPath } from '../../../desktop/wrappers/cacheFingerprint.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { runApplyPreamble } from './applyPreamble.js';
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('runApplyPreamble secure contained cache read', () => {
   const temporaryPaths: string[] = [];

@@ -21,4 +21,12 @@ export type LogEntry = {
   data?: unknown;
   level: LogLevel;
   logger: string | undefined;
+  tool_name?: string;
+  request_id?: string;
+};
+
+// A LogEntry as serialized to a sink, including the always-on LUID fields log() injects.
+export type SerializedLogEntry = LogEntry & {
+  site_luid: string;
+  user_luid: string;
 };

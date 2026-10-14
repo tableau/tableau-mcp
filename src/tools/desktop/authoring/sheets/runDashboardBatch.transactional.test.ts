@@ -6,7 +6,6 @@ import type {
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
 import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
-import { listSheets } from '../../../../desktop/metadata/sheets.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -14,6 +13,7 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -22,10 +22,14 @@ import { getRunDashboardBatchTool } from './runDashboardBatch.js';
 
 vi.mock('../../../../desktop/session/sessionResolution.js');
 
+// `<rows>` text (any non-empty text, here just the field name) is enough for
+// worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
+// blank; see composeDashboardCore.test.ts's PRISTINE fixture for the same pattern. "Existing" is
+// referenced via existingWorksheetNames and must resolve as a genuinely rendered worksheet.
 const BASELINE = `<?xml version="1.0"?>
 <workbook>
   <worksheets>
-    <worksheet name="Existing"><table/></worksheet>
+    <worksheet name="Existing"><table><rows>Existing</rows></table></worksheet>
   </worksheets>
   <dashboards>
     <dashboard name="Executive Overview"><zones><zone name="Existing"/></zones></dashboard>
@@ -37,6 +41,10 @@ const BASELINE = `<?xml version="1.0"?>
     <window class="dashboard" name="Keep"><viewpoints><viewpoint name="Existing"/></viewpoints></window>
   </windows>
 </workbook>`;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('run-dashboard-batch transactional apply', () => {
   beforeEach(() => {
@@ -83,7 +91,7 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
     expect(harness.getCalls()).toBe(4); // baseline, guard, shared readback, validated focus read
-    expect(listSheets(harness.posts[0]!)).toEqual(
+    expect(worksheetNames(harness.posts[0]!)).toEqual(
       expect.arrayContaining(['Existing', 'New A', 'New B']),
     );
     expect(listWorkbookDashboards(harness.posts[0]!)).toEqual(['Keep', 'Executive Overview']);
@@ -359,4 +367,8 @@ function artifactStore(
 function bodyOf(result: CallToolResult): Record<string, any> {
   invariant(result.content[0]?.type === 'text');
   return JSON.parse(result.content[0].text) as Record<string, any>;
+}
+
+function worksheetNames(xml: string): string[] {
+  return [...xml.matchAll(/<worksheet\s[^>]*?\bname=["']([^"']+)["']/g)].map((m) => m[1]);
 }

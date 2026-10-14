@@ -104,6 +104,18 @@ describe('parseInstanceRef', () => {
     });
   });
 
+  it.each([
+    ['[ds].[sum:Sum: Total:qk]', 'Sum: Total', 'sum'],
+    ['[ds].[none:Sum: Total:nk]', 'Sum: Total', 'none'],
+    ['[ds].[sum:min: Duration:qk]', 'min: Duration', 'sum'],
+    ['[ds].[pcto:sum:Sales:qk]', 'Sales', 'sum'],
+    ['[ds].[cum:usr:Calc:qk]', 'Calc', 'usr'],
+    ['[ds].[pcto:cum:sum:Sales:qk]', 'Sales', 'sum'],
+    ['[ds].[cum:Sum:Sales:qk]', 'Sales', 'sum'],
+  ])('only a table-calc wrapper may be followed by another prefix: %s', (ref, base, derivation) => {
+    expect(parseInstanceRef(ref)).toEqual({ base, derivation });
+  });
+
   it('does not over-consume a field literally named like a derivation', () => {
     // [none:sum:qk] is a dimension whose base field is named "sum"; the base must survive.
     expect(parseInstanceRef('[ds].[none:sum:qk]')).toEqual({ base: 'sum', derivation: 'none' });

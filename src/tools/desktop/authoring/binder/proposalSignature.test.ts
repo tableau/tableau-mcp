@@ -1,4 +1,4 @@
-import { proposalSignature } from './proposalSignature.js';
+import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const baseProposal = {
   template: 'ranking-ordered-bar',
@@ -88,6 +88,19 @@ describe('proposalSignature', () => {
     ).not.toBe(proposalSignature(baseProposal));
   });
 
+  it('changes when only a template parameter value changes, and ignores parameter key order', () => {
+    const a = { ...baseProposal, template_parameters: { DATE_MIN: '2020', DATE_MAX: '2021' } };
+    expect(
+      proposalSignature({ ...a, template_parameters: { DATE_MIN: '2019', DATE_MAX: '2021' } }),
+    ).not.toBe(proposalSignature(a));
+    expect(
+      proposalSignature({ ...a, template_parameters: { DATE_MAX: '2021', DATE_MIN: '2020' } }),
+    ).toBe(proposalSignature(a));
+    expect(proposalSignature({ ...baseProposal, template_parameters: {} })).toBe(
+      proposalSignature(baseProposal),
+    );
+  });
+
   it('treats filter order as non-semantic but values/context as semantic', () => {
     const a = {
       ...baseProposal,
@@ -107,5 +120,15 @@ describe('proposalSignature', () => {
       ],
     };
     expect(proposalSignature(contextFlipped)).not.toBe(proposalSignature(a));
+  });
+
+  it('ignores the idempotency key but still counts other template parameters', () => {
+    const withKey = (key: string): Parameters<typeof proposalSignature>[0] => ({
+      ...baseProposal,
+      template_parameters: { DATE_MIN: '2020', [IDEMPOTENCY_TEMPLATE_PARAMETER]: key },
+    });
+
+    expect(proposalSignature(withKey('run-1'))).toBe(proposalSignature(withKey('run-2')));
+    expect(proposalSignature(withKey('run-1'))).not.toBe(proposalSignature(baseProposal));
   });
 });

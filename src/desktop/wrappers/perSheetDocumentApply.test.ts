@@ -119,6 +119,44 @@ describe('tryApplyViaPerSheetRoute', () => {
     },
   );
 
+  it('retains inline diagnostics for the exact worksheet addressed by the document POST', async () => {
+    const fixture = FIXTURES[0];
+    const diagnostics = {
+      worksheets: [
+        {
+          worksheetId: fixture.id,
+          status: 'partial' as const,
+          invalidFields: [],
+          message: 'Some fields could not be checked.',
+        },
+      ],
+    };
+    const applyWorksheetDocument = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-apply',
+        status: 'completed',
+        submitted_at: '',
+        diagnostics,
+      }),
+    );
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(Ok(fixture.listValue)),
+      applyWorksheetDocument,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: fixture.kind,
+      sheetName: fixture.sheetName,
+      fragmentXml: fixture.fragmentXml,
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ status: 'applied', id: fixture.id, diagnostics });
+  });
+
   it.each([
     {
       ...FIXTURES[0],
@@ -690,5 +728,31 @@ describe('tryApplyViaPerSheetRoute', () => {
     if (result.isErr()) {
       expect(result.error).toEqual(listError);
     }
+  });
+});
+
+describe('retitleFragment entity-like names', () => {
+  it('retitles a fragment named literally `A &amp; B` onto the live sheet `A & B`', async () => {
+    const apply = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: 'A & B' }] })),
+      applyWorksheetDocument: apply,
+    });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: 'sheet-1',
+      fragmentXml: "<worksheet name='A &amp;amp; B'><simple-id uuid='sheet-1' /></worksheet>",
+      focus: NO_FOCUS,
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(apply.mock.calls[0][1]).toContain("name='A &amp; B'");
   });
 });

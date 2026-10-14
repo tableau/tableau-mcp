@@ -6,7 +6,8 @@ import { z } from 'zod';
 import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/wrappers/loadDashboardXml.js';
-import { DesktopCommandExecutionError, FileReadError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -58,7 +59,7 @@ describe('applyDashboardTool', () => {
   it('should successfully apply dashboard XML in inline mode', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const result = await getToolResult({
@@ -92,6 +93,27 @@ describe('applyDashboardTool', () => {
     });
   });
 
+  it('shows Desktop warnings and does not mark a warned dashboard apply done', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+
+    const result = await getToolResult({
+      dashboardXml: '<dashboard name="Sales Dashboard"><zones></zones></dashboard>',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const { message } = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(message).not.toContain('Successfully applied');
+    expect(message).toContain('Desktop reported 1 warning(s)');
+    expect(message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(message).toContain("Desktop's warnings are host evidence");
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+    expect(result.structuredContent).not.toMatchObject({ nextAction: { kind: 'done' } });
+  });
+
   it('should successfully apply dashboard XML in file mode', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
     const mockFilePath = '/path/to/dashboard.xml';
@@ -103,7 +125,7 @@ describe('applyDashboardTool', () => {
       sourceHash: 'b'.repeat(64),
     });
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const result = await getToolResult({ dashboardFile: mockFilePath });
@@ -129,7 +151,7 @@ describe('applyDashboardTool', () => {
     });
     const loadSpy = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const result = await getToolResult({ dashboardFile: '/path/to/dashboard.xml' });
 
@@ -197,7 +219,7 @@ describe('applyDashboardTool', () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
     const customSignal = new AbortController().signal;
 
     await getToolResult({ dashboardXml: mockXml, customSignal });

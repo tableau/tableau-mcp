@@ -7,6 +7,7 @@ import { getApplyDatasourceTool } from './api/applyDatasource.js';
 import { getApplyStoryboardTool } from './api/applyStoryboard.js';
 import { getApplyWorkbookTool } from './api/applyWorkbook.js';
 import { getApplyWorksheetTool } from './api/applyWorksheet.js';
+import { getCaptureWindowScreenshotTool } from './api/captureWindowScreenshot.js';
 import { getDeleteSheetTool } from './api/deleteSheet.js';
 import { getExecuteTableauCommandTool } from './api/executeTableauCommand.js';
 import { exportDashboardImageTool } from './api/exportDashboardImage.js';
@@ -20,9 +21,9 @@ import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
 import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
+import { getDiagnosticsTool } from './api/getDiagnostics.js';
 import { getHealthTool } from './api/getHealth.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
-import { getSiteInfoTool } from './api/getSiteInfo.js';
 import { getStoryboardInfoTool } from './api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './api/getStoryboardXml.js';
 import { getSummaryDataTool } from './api/getSummaryData.js';
@@ -34,19 +35,18 @@ import { getGetWorksheetXmlTool } from './api/getWorksheetXml.js';
 import { getInvokeDialogActionTool } from './api/invokeDialogAction.js';
 import { getListDashboardsTool } from './api/listDashboards.js';
 import { getListInstancesTool } from './api/listInstances.js';
-import { getListSiteDatasourcesTool } from './api/listSiteDatasources.js';
-import { getListSiteWorkbooksTool } from './api/listSiteWorkbooks.js';
 import { getListStoryboardsTool } from './api/listStoryboards.js';
 import { getListWorkbookDatasourcesTool } from './api/listWorkbookDatasources.js';
 import { getListWorksheetLogicalTablesTool } from './api/listWorksheetLogicalTables.js';
 import { getListWorksheetsTool } from './api/listWorksheets.js';
 import { getOpenFileTool } from './api/openFile.js';
 import { getPauseAutoUpdatesTool } from './api/pauseAutoUpdates.js';
-import { getPublishWorkbookTool } from './api/publishWorkbook.js';
 import { getRedoWorkbookTool } from './api/redoWorkbook.js';
 import { getRefreshAutoUpdatesTool } from './api/refreshAutoUpdates.js';
+import { getRefreshDashboardAutoUpdatesTool } from './api/refreshDashboardAutoUpdates.js';
 import { getRefreshDatasourceDataTool } from './api/refreshDatasourceData.js';
 import { getRefreshDatasourceExtractTool } from './api/refreshDatasourceExtract.js';
+import { getRefreshStoryboardAutoUpdatesTool } from './api/refreshStoryboardAutoUpdates.js';
 import { getRenameSheetTool } from './api/renameSheet.js';
 import { getResumeAutoUpdatesTool } from './api/resumeAutoUpdates.js';
 import { getSaveWorkbookTool } from './api/saveWorkbook.js';
@@ -103,6 +103,7 @@ import { getSearchWorkbookExamplesTool } from './local/search/searchWorkbookExam
 export const desktopToolFactories = [
   getListInstancesTool,
   getDesktopStateTool,
+  getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,
   getGetWorkbookXmlTool,
@@ -118,7 +119,6 @@ export const desktopToolFactories = [
   getAddDashboardTool,
   getAddStoryboardTool,
   getComposeStoryTool,
-  getPublishWorkbookTool,
   getRefreshDatasourceDataTool,
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
@@ -132,6 +132,8 @@ export const desktopToolFactories = [
   getShowMeTool,
   getPauseAutoUpdatesTool,
   getRefreshAutoUpdatesTool,
+  getRefreshStoryboardAutoUpdatesTool,
+  getRefreshDashboardAutoUpdatesTool,
   getResumeAutoUpdatesTool,
   getRefineWorksheetTool,
   getGetDashboardXmlTool,
@@ -178,19 +180,17 @@ export const desktopToolFactories = [
   getStoryboardXmlTool,
   getApplyStoryboardTool,
   getApiRootTool,
-  getSiteInfoTool,
   getDashboardInfoTool,
   getStoryboardInfoTool,
   getSummaryDataTool,
   getListWorksheetLogicalTablesTool,
   getWorksheetUnderlyingDataTool,
+  getCaptureWindowScreenshotTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
   exportStoryboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
-  getListSiteDatasourcesTool,
-  getListSiteWorkbooksTool,
   getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,

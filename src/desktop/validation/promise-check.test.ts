@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyWorksheetPromiseOutcome,
   formatDashboardPromiseCheck,
+  formatDesktopWarnings,
   formatWorkbookPromiseCheck,
   formatWorksheetPromiseCheck,
 } from './promise-check.js';
@@ -132,14 +133,55 @@ describe('promise check receipt (W-23447506)', () => {
     expect(text).not.toContain('promised sort NOT verified');
   });
 
+  it.each(['unsupported-api', 'validation-read-failed'])(
+    'keeps known promised sort loss failed when native validation is unavailable: %s',
+    (reason) => {
+      expect(
+        classifyWorksheetPromiseOutcome({
+          validationWarnings: [],
+          readback: {
+            ok: true,
+            status: 'skipped',
+            findings: [
+              {
+                severity: 'warning',
+                source: 'used-field-validity',
+                message: 'Native validation unavailable.',
+                reason,
+              },
+            ],
+          },
+          readbackFindings: [sortWarning('computed-sort')],
+        }),
+      ).toBe('failed');
+    },
+  );
+
   it('formats workbook applies as honestly unverified', () => {
-    const text = formatWorkbookPromiseCheck([]);
+    const text = formatWorkbookPromiseCheck([], []);
     expect(text).toContain('HOST VERIFICATION — unverified');
     expect(text).toContain('full workbook intent NOT re-verified');
   });
 
   it('formats dashboard applies as honestly unverified', () => {
-    const text = formatDashboardPromiseCheck([]);
+    const text = formatDashboardPromiseCheck([], []);
     expect(text).toContain('full dashboard intent NOT re-verified');
+    expect(text).toContain('do not report problems without host evidence');
+  });
+
+  it.each([formatWorkbookPromiseCheck, formatDashboardPromiseCheck])(
+    'treats Desktop warnings as host evidence instead of telling the model not to report',
+    (format) => {
+      const text = format([], [{ code: 'dropped-node', message: 'zone removed' }]);
+      expect(text).toContain('Desktop reported 1 warning(s)');
+      expect(text).toContain("Desktop's warnings are host evidence");
+      expect(text).not.toContain('do not report problems without host evidence');
+    },
+  );
+
+  it('lists each Desktop warning with its code and message', () => {
+    expect(formatDesktopWarnings([])).toBe('');
+    const text = formatDesktopWarnings([{ code: 'a', message: 'first' }]);
+    expect(text).toContain('- a: first');
   });
 });

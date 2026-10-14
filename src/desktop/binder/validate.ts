@@ -1,5 +1,3 @@
-// src/binder/validate.ts
-//
 // Tier-1 fast-path binder — the deterministic validation gate (design doc §2.4).
 //
 // `validateBinding(manifest, proposal, schema)` is PURE (no I/O): it takes a
@@ -105,6 +103,7 @@ export type EscalateReason =
   | 'ambiguous-field'
   | 'field-not-found'
   | 'kind-mismatch'
+  | 'duplicate-slot-binding'
   | 'derivation-illegal'
   | 'aggregation-level-mismatch'
   | 'base-column-conflict'
@@ -172,6 +171,7 @@ const NUMERIC_AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
   'var',
   'vrp',
 ]);
+const COUNT_AGGREGATION_DERIVATIONS: ReadonlySet<Derivation> = new Set(['cnt', 'ctd']);
 
 const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
@@ -255,15 +255,13 @@ function typeSuffixFor(type: string): string {
   return 'nk';
 }
 
-/**
- * Pivot suffix for the emitted column-instance value. A date TRUNCATION is
- * continuous and must carry ':qk' (the authored template pivot), regardless of
- * the source field's `type` — otherwise an ordinal date dimension drifts a
- * tmn/tqr/tdy slot to ':ok', diverging from the template contract (P1-3).
- * Every other derivation (aggregations, dimensions, discrete date parts) keeps
- * the field-type rule.
- */
-function suffixFor(derivation: string, type: string, authoredRole?: 'nk' | 'ok' | 'qk'): string {
+/** Count results remain quantitative even when the source or authored instance is discrete. */
+export function columnInstanceSuffix(
+  derivation: Derivation,
+  type: string,
+  authoredRole?: 'nk' | 'ok' | 'qk',
+): string {
+  if (COUNT_AGGREGATION_DERIVATIONS.has(derivation)) return 'qk';
   if (authoredRole) return authoredRole;
   if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
   return typeSuffixFor(type);
@@ -417,13 +415,45 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   }
 }
 
-function effectiveSlotDerivation(
+/** Shared assignment/validation rule; aggregation legality is checked separately. */
+export function slotAcceptsSource(
+  slot: SlotSpec,
+  derivation: Derivation,
+  field: SchemaField,
+  preferValueSlot = false,
+): boolean {
+  const measureSlot = slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical';
+  if (!field.isAggregated && COUNT_AGGREGATION_DERIVATIONS.has(derivation)) {
+    return measureSlot;
+  }
+  if (!field.isAggregated && temporalMinMax(derivation, field)) {
+    return (
+      measureSlot ||
+      slot.kind === 'temporal' ||
+      (!preferValueSlot && kindCompatible(slot.kind, field))
+    );
+  }
+  return kindCompatible(slot.kind, field);
+}
+
+function temporalMinMax(derivation: Derivation, field: SchemaField): boolean {
+  return TEMPORAL_MINMAX_DERIVATIONS.has(derivation) && TEMPORAL_DATATYPES.has(field.datatype);
+}
+
+export function effectiveSlotDerivation(
   slot: SlotSpec,
   field: SchemaField,
   override?: Derivation,
 ): Derivation {
   if (override !== undefined) return override;
-  if (slot.kind === 'quantitative-or-categorical' && field.role === 'dimension') return 'none';
+  if (
+    slot.kind === 'quantitative-or-categorical' &&
+    field.role === 'dimension' &&
+    !COUNT_AGGREGATION_DERIVATIONS.has(slot.derivation) &&
+    !temporalMinMax(slot.derivation, field)
+  ) {
+    return 'none';
+  }
   return slot.derivation;
 }
 
@@ -446,8 +476,20 @@ export function validateBinding(
   for (const slot of m.slots) slotById.set(slot.slot_id, slot);
   const calcById = new Map<string, CalcSlot>();
   for (const c of m.calcs) calcById.set(c.slot_id, c);
+  const calcInputTemplateFields = new Set<string>();
+  for (const calc of m.calcs) {
+    for (const dep of calc.depends_on_slots) {
+      const depSlot = slotById.get(dep);
+      if (depSlot) calcInputTemplateFields.add(depSlot.template_field);
+    }
+    for (const input of calc.inputs ?? []) {
+      if (input.template_internal || input.slot_id === null) continue;
+      const inputSlot = slotById.get(input.slot_id);
+      if (inputSlot) calcInputTemplateFields.add(inputSlot.template_field);
+    }
+  }
 
-  // Index the proposed bindings by slot_id (last wins if duplicated).
+  // Index the proposed bindings by slot_id (a duplicate is blocked in gate 1).
   const boundBySlot = new Map<string, string>();
   const overrideBySlot = new Map<string, Derivation>(); // optional per-slot derivation override
   for (const b of p.bindings) {
@@ -484,7 +526,16 @@ export function validateBinding(
       });
     }
   }
+  const seenBindingSlots = new Set<string>();
   for (const b of p.bindings) {
+    if (seenBindingSlots.has(b.slot_id)) {
+      blockers.push({
+        code: 'duplicate-slot-binding',
+        slot_id: b.slot_id,
+        detail: `slot '${b.slot_id}' is bound more than once; give each slot exactly one binding`,
+      });
+    }
+    seenBindingSlots.add(b.slot_id);
     const slot = slotById.get(b.slot_id);
     if (!slot) {
       // Binding to a calc slot or a wholly unknown slot_id.
@@ -535,9 +586,80 @@ export function validateBinding(
     }
     resolutionNotes.push(...(r.notes ?? []));
     const f = r.field;
+    const override = overrideBySlot.get(slotId);
+    const effDeriv = effectiveSlotDerivation(slot, f, override);
+    const hasCountOverride = override !== undefined && COUNT_AGGREGATION_DERIVATIONS.has(override);
+    const countDimensionInMeasureSlot =
+      (slot.kind === 'quantitative' || slot.kind === 'quantitative-or-categorical') &&
+      f.role === 'dimension' &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv);
+    const temporalDimensionInMeasureSlot =
+      slot.kind === 'quantitative' && f.role === 'dimension' && temporalMinMax(effDeriv, f);
+    const feedsCalc = m.calcs.some(
+      (calc) =>
+        calc.depends_on_slots.includes(slotId) ||
+        (calc.inputs ?? []).some(
+          (input) => input.slot_id === slotId && input.required && !input.template_internal,
+        ),
+    );
+
+    if (
+      !f.isAggregated &&
+      COUNT_AGGREGATION_DERIVATIONS.has(effDeriv) &&
+      slot.kind !== 'quantitative' &&
+      slot.kind !== 'quantitative-or-categorical'
+    ) {
+      const countSource =
+        override !== undefined ? 'requested count override' : 'template count derivation';
+      blockers.push({
+        code: 'derivation-illegal',
+        slot_id: slotId,
+        detail:
+          `${countSource} '${effDeriv}' returns a quantitative value and cannot bind to ` +
+          `${slot.kind} slot '${slotId}'. Use a quantitative or quantitative-or-categorical slot for count/count-distinct.`,
+      });
+      continue;
+    }
+
+    if (hasCountOverride && f.isAggregated) {
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `requested count override '${override}' cannot apply to already aggregated field "${fieldQuery}"; ` +
+          "the binding would emit Tableau's user-aggregate ('usr') derivation instead of the requested count. Bind a row-level field.",
+      });
+      continue;
+    }
+
+    if (
+      (countDimensionInMeasureSlot && feedsCalc) ||
+      (temporalDimensionInMeasureSlot && calcInputTemplateFields.has(slot.template_field)) ||
+      (override !== undefined &&
+        override !== slot.derivation &&
+        calcInputTemplateFields.has(slot.template_field))
+    ) {
+      const countSource =
+        override !== undefined
+          ? hasCountOverride
+            ? 'requested count override'
+            : 'requested aggregation override'
+          : temporalDimensionInMeasureSlot
+            ? 'template temporal aggregation'
+            : 'template count derivation';
+      blockers.push({
+        code: 'aggregation-level-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' maps template field '${slot.template_field}' used by a template calculation, so ` +
+          `${countSource} '${effDeriv}' would change mapped shelf instances while leaving the calculation's ` +
+          "authored raw or aggregate semantics unchanged. Bind a source compatible with the authored calculation, keep the template's authored aggregation, or choose a template whose calculation implements the requested aggregation.",
+      });
+      continue;
+    }
 
     // Gate 3: kind/role compatibility.
-    if (!kindCompatible(slot.kind, f)) {
+    if (!slotAcceptsSource(slot, effDeriv, f)) {
       // temporal_axis_from_string: a temporal slot that opted in accepts a date-like
       // STRING field, which the apply-side DATEPARSE splice turns into a real date
       // (see dateparseTemporalAxis.ts). Only when the slot opts in AND the string
@@ -586,8 +708,6 @@ export function validateBinding(
     // aggregated calc forces `usr` (handled in gate 7) and bypasses legality
     // entirely. An illegal override yields a teaching blocker so the caller
     // knows why the requested aggregation/grain cannot apply.
-    const override = overrideBySlot.get(slotId);
-    const effDeriv = effectiveSlotDerivation(slot, f, override);
     const src = override !== undefined ? 'requested override' : 'template derivation';
     if (!f.isAggregated) {
       if (TEMPORAL_DERIVATIONS.has(effDeriv) && !TEMPORAL_DATATYPES.has(f.datatype)) {
@@ -604,8 +724,7 @@ export function validateBinding(
       // MIN/MAX over a date/datetime field is legal (earliest/latest date), so the
       // numeric-measure requirement is waived for that temporal case; every other
       // aggregation still requires a numeric measure.
-      const temporalMinMaxOk =
-        TEMPORAL_MINMAX_DERIVATIONS.has(effDeriv) && TEMPORAL_DATATYPES.has(f.datatype);
+      const temporalMinMaxOk = temporalMinMax(effDeriv, f);
       if (
         NUMERIC_AGGREGATION_DERIVATIONS.has(effDeriv) &&
         !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure') &&
@@ -625,13 +744,6 @@ export function validateBinding(
     }
 
     if (f.isAggregated && effDeriv !== 'usr') {
-      const feedsCalc = m.calcs.some(
-        (calc) =>
-          calc.depends_on_slots.includes(slotId) ||
-          (calc.inputs ?? []).some(
-            (input) => input.slot_id === slotId && input.required && !input.template_internal,
-          ),
-      );
       if (feedsCalc) {
         blockers.push({
           code: 'aggregation-level-mismatch',
@@ -1089,9 +1201,9 @@ export function validateBinding(
     // override changes the resolved value, not which instance is targeted.
     const override = overrideBySlot.get(slot.slot_id);
     const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
-    // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
-    // truncation is continuous (':qk') even on an ordinal date field (P1-3).
-    const suffix = suffixFor(deriv, f.type, slot.instance_role);
+    // Suffix follows the EFFECTIVE derivation, not the field type alone: counts
+    // and date truncations are continuous (':qk') even on discrete source fields.
+    const suffix = columnInstanceSuffix(deriv, f.type, slot.instance_role);
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;

@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -10,9 +9,7 @@ import { DesktopTool } from '../../tool.js';
 
 function loadCorpus(): Corpus | null {
   try {
-    const raw = process.env.CORPUS_PATH
-      ? readFileSync(process.env.CORPUS_PATH, 'utf8')
-      : readDataAsset('corpus.json');
+    const raw = readDataAsset('corpus.json');
     return raw ? (JSON.parse(raw) as Corpus) : null;
   } catch {
     return null;

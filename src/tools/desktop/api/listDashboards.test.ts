@@ -3,7 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as listDashboardsModule from '../../../desktop/wrappers/listDashboards.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';

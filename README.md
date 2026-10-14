@@ -29,7 +29,10 @@ See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/docs/hos
 
 ### Self-Hosted / Local (npx)
 
-The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
+The `@tableau/mcp-server` npm package contains the Web server for Tableau Cloud and Tableau
+Server. It does not contain the Tableau Desktop authoring server or its data.
+
+This is the quickest way to run Tableau MCP locally. It requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
 
 ```json
 {
@@ -50,9 +53,11 @@ The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.o
 
 For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/docs/getting-started).
 
-### Tableau Desktop Authoring Server (from source)
+### Tableau Desktop Authoring Server
 
-The **desktop** build variant exposes a local authoring tool surface that drives a running Tableau Desktop instance over MCP stdio. It can inspect workbooks, list/inject chart templates, bind fields into worksheets, and work with dashboards.
+Desktop is not installed through the npm package. The **desktop** build variant exposes a local
+authoring tool surface that drives a running Tableau Desktop instance over MCP stdio. It can inspect
+workbooks, list/inject chart templates, bind fields into worksheets, and work with dashboards.
 
 Build it from a clone with Node.js 22.7.5 or later:
 
@@ -73,9 +78,11 @@ Point an MCP client at the desktop entry:
 }
 ```
 
-Headless reference tools such as `list-templates` read the bundled snapshot. Tools that inspect or mutate a workbook require a running Tableau Desktop instance; use `list-instances` and pass the returned `session` id to those calls.
+The Desktop build stages its reference data under `build/desktop/data/`. Headless reference tools
+such as `list-templates` read that data. Tools that inspect or mutate a workbook require a running
+Tableau Desktop instance; use `list-instances` and pass the returned `session` id to those calls.
 
-See [`README.desktop.md`](README.desktop.md) for the full desktop authoring quickstart and known gaps.
+See [`README.desktop.md`](README.desktop.md) for the full desktop authoring quickstart.
 
 ## Standalone Binaries (SEA)
 
@@ -95,6 +102,11 @@ Output lands in `build/sea/<variant>/<platform>/`. Platforms: `macos-arm64`, `ma
 macOS host. Each binary is fully self-contained: the desktop variant's knowledge, data,
 templates, and examples are embedded into the executable as SEA assets, so it can be
 distributed and run as a single file with no sibling folders.
+
+For a published GitHub Release, the `upload-binaries` workflow is configured to attach one archive
+per supported release platform. Each archive contains the Web executable (`tableau-mcp`) and the
+Desktop executable (`tableau-mcp-desktop`; `.exe` on Windows). This is the release workflow
+contract; releases that predate it may not have these archives.
 
 ## Deploy to Heroku
 

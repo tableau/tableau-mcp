@@ -7,9 +7,11 @@ import {
   ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import {
   blockingValidationIssues,
   introducedBlockingValidationIssues,
+  runAlwaysBlockingValidation,
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
@@ -28,6 +30,9 @@ export type LoadWorkbookXmlError =
 
 export interface LoadWorkbookXmlOk {
   validationWarnings: ValidationIssue[];
+  documentWarnings: ExecuteCommandWarning[];
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
 }
 
 export function describeLoadWorkbookXmlError(error: LoadWorkbookXmlError): string {
@@ -74,15 +79,15 @@ export async function loadWorkbookXml({
 
   // Preflight semantic validation — catches known failure patterns before
   // sending XML to Tableau. Rules are extensible via src/validation/rules/.
-  // Skipped entirely on the trusted deterministic path (skipValidation); otherwise
-  // fail only on blocking issues, or on baseline-introduced ones when a baseline is given.
+  // Trusted deterministic paths skip ordinary checks, but never known crash hazards.
+  // Other baseline defects may be preserved while repairing the submitted document.
   let validation = { valid: true, issues: [] as ValidationIssue[] };
-  if (!cachedLiveRelative) {
+  if (!cachedLiveRelative || skipValidation) {
     validation = skipValidation
-      ? { valid: true, issues: [] as ValidationIssue[] }
+      ? runAlwaysBlockingValidation(xml, 'workbook')
       : runValidation(xml, 'workbook');
     const blockingIssues = skipValidation
-      ? []
+      ? blockingValidationIssues(validation.issues)
       : baselineXml === undefined
         ? blockingValidationIssues(validation.issues)
         : introducedBlockingValidationIssues(
@@ -150,7 +155,7 @@ export async function loadWorkbookXml({
     }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
-    return Ok({ validationWarnings: validation.issues });
+    return Ok({ validationWarnings: validation.issues, ...result.value });
   });
 }
 
@@ -196,7 +201,14 @@ export async function applyWorkbookText({
   focus: ApplyFocus;
   applyOptions?: ApplyWorkbookDocumentOptions;
 } & WithExecutorAndAbortSignal): Promise<
-  Result<{ documentWarnings: ExecuteCommandWarning[] }, ExecuteCommandError>
+  Result<
+    {
+      documentWarnings: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
+      diagnosticsInvalid?: boolean;
+    },
+    ExecuteCommandError
+  >
 > {
   const result = await executor.applyWorkbookDocument(xml, signal, applyOptions);
 
@@ -224,5 +236,9 @@ export async function applyWorkbookText({
   // fails the apply that already landed.
   await dispatchApplyFocus({ focus, postedXml: xml, executor, signal });
 
-  return Ok({ documentWarnings: result.value.warnings ?? [] });
+  return Ok({
+    documentWarnings: result.value.warnings ?? [],
+    ...(result.value.diagnostics ? { diagnostics: result.value.diagnostics } : {}),
+    ...(result.value.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
+  });
 }

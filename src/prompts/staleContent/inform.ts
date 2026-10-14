@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { STALE_CONTENT_MIN_AGE_DAYS_DEFAULT } from '../../overridableConfig.js';
 import { WebPromptFactory } from '../registry.js';
 
@@ -27,9 +28,10 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
   description:
     'Tableau Cloud admin workflow: identify stale workbooks and published datasources by ' +
     'invoking the deterministic `query-admin-insights` tool (kind: "stale-content"), which performs the ' +
-    'TS Events / Site Content anti-join and threshold filter server-side. Read-only.',
+    'TS Events / Site Content anti-join and threshold filter server-side. Read-only. ' +
+    'Consider for general admin/site-health, governance, and cleanup questions.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const minAgeDays = args.minAgeDays
       ? parseInt(args.minAgeDays, 10)

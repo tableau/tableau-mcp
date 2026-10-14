@@ -8,9 +8,9 @@ import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerpr
 import * as loadWorkbookXmlModule from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
   DesktopCommandExecutionError,
-  FileReadError,
   WorkbookXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -66,7 +66,7 @@ describe('applyWorkbookTool', () => {
   it('should successfully apply workbook XML in inline mode', async () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
@@ -105,6 +105,193 @@ describe('applyWorkbookTool', () => {
     });
   });
 
+  it('returns aggregate diagnostics and document warnings without claiming a partial workbook check passed', async () => {
+    const diagnostics = {
+      worksheets: [
+        { worksheetId: 'sheet-valid', status: 'complete' as const, invalidFields: [] },
+        {
+          worksheetId: 'sheet-partial',
+          status: 'partial' as const,
+          invalidFields: [],
+          message: 'Some fields could not be checked.',
+        },
+      ],
+    };
+    const warnings = [{ code: 'document-warning', message: 'Dropped unsupported formatting.' }];
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: warnings, diagnostics }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({ diagnostics, warnings });
+    expect(body.message.toLowerCase()).toContain('partial');
+    expect(body.message.toLowerCase()).not.toContain('all worksheet diagnostics passed');
+    expect(body.message).not.toContain('Successfully applied');
+    expect(body.message).toContain('document-warning: Dropped unsupported formatting.');
+    expect(result.structuredContent).toMatchObject({
+      diagnostics,
+      warnings,
+      nextAction: { kind: 'prefill' },
+    });
+  });
+
+  it('shows Desktop warnings and does not mark a warned apply done', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.message).toContain('Desktop reported 1 warning(s)');
+    expect(body.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(body.message).toContain("Desktop's warnings are host evidence");
+    expect(body.warnings).toEqual(warnings);
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('names Desktop warnings in the next action when invalid fields are also reported', async () => {
+    const diagnostics = {
+      worksheets: [
+        {
+          worksheetId: 'sheet-invalid',
+          status: 'complete' as const,
+          invalidFields: [
+            {
+              fieldName: '[none:Missing Sales:qk]',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        },
+      ],
+    };
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: warnings, diagnostics }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'prefill',
+        label: 'Fix invalid fields; tell the user what Desktop warned about',
+      },
+    });
+  });
+
+  it.each(['complete', 'partial'] as const)(
+    'keeps an accepted apply actionable when %s diagnostics report invalid fields',
+    async (status) => {
+      const diagnostics = {
+        worksheets: [
+          {
+            worksheetId: 'sheet-invalid',
+            status,
+            invalidFields: [
+              {
+                fieldName: '[none:Missing Sales:qk]',
+                shelf: 'rows',
+                marksSpecificationId: 'marks-1',
+                encodingType: 'text',
+                reason: 'Field is unavailable.',
+              },
+            ],
+            ...(status === 'partial' ? { message: 'Some fields could not be checked.' } : {}),
+          },
+        ],
+      };
+      const loadSpy = vi
+        .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
+        .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [], diagnostics }));
+
+      const result = await getToolResult({
+        session: '12345',
+        workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+        mockExecutor: vi.fn().mockResolvedValue({}),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body).toMatchObject({ diagnostics });
+      expect(body.message).toContain('Successfully applied workbook update');
+      expect(body.message).toContain(
+        'address the reported invalid fields without replaying the apply',
+      );
+      expect(body.message).toContain(
+        'Static diagnostics do not establish query execution or rendering success',
+      );
+      expect(body.message).toContain('HOST VERIFICATION — unverified');
+      if (status === 'partial') {
+        expect(body.message).toContain(
+          'Diagnostics are partial; not all worksheet diagnostics completed',
+        );
+      }
+      expect(result.structuredContent).toMatchObject({
+        ...body,
+        nextAction: {
+          kind: 'prefill',
+          label: 'Address invalid fields reported in diagnostics',
+        },
+      });
+    },
+  );
+
+  it('reports malformed diagnostics as unavailable without calling them document warnings', async () => {
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: [], diagnosticsInvalid: true }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({ diagnosticsInvalid: true });
+    expect(body).not.toHaveProperty('warnings');
+    expect(body.message).toContain('Diagnostics are unavailable');
+    expect(result.structuredContent).toMatchObject({
+      diagnosticsInvalid: true,
+      nextAction: {
+        kind: 'done',
+        receipt: {
+          unverified: expect.arrayContaining(['static field diagnostics were unavailable']),
+        },
+      },
+    });
+  });
+
   it('should successfully apply workbook XML in file mode', async () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const mockFilePath = '/path/to/workbook.twb';
@@ -116,7 +303,7 @@ describe('applyWorkbookTool', () => {
       sourceHash: 'a'.repeat(64),
     });
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
@@ -162,7 +349,7 @@ describe('applyWorkbookTool', () => {
     });
     const loadSpy = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const result = await getToolResult({
       session: '12345',
@@ -188,7 +375,7 @@ describe('applyWorkbookTool', () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
@@ -340,7 +527,7 @@ describe('applyWorkbookTool', () => {
   it('does not append the note for an under-cap inline apply', async () => {
     const smallXml = '<?xml version="1.0"?><workbook></workbook>';
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
+      Ok({ validationWarnings: [], documentWarnings: [] }),
     );
 
     const result = await getToolResult({
@@ -358,7 +545,7 @@ describe('applyWorkbookTool', () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const mockLoadWorkbookXml = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     const mockExecutor = vi.fn().mockResolvedValue({});
     const customSignal = new AbortController().signal;

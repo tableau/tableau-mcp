@@ -6,6 +6,7 @@ import {
   pulseInsightBriefRequestSchema,
   PulseInsightBriefResponse,
 } from '../../../../sdks/tableau/types/pulse.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBriefRequest } from '../validatePulsePayload.js';
@@ -20,6 +21,8 @@ export const getGeneratePulseInsightBriefTool = (
   const generatePulseInsightBriefTool = new WebTool({
     server,
     name: 'generate-pulse-insight-brief',
+    minRequiredRole: SiteRole.VIEWER,
+    registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
     description: `
 Generate a concise insight brief for Pulse Metrics using Tableau REST API. This endpoint provides AI-powered conversational insights based on natural language questions about your metrics.
 
@@ -36,7 +39,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 - **Ban**: Current value with period-over-period change and top dimensional insights
 - **Breakdown**: Emphasizes categorical dimension analysis and distributions
 
-**IMPORTANT Requirements:**
+**IMPORTANT Details:**
 
 1. **Same Datasource Recommendation**: The API works best when all metrics in \`metric_group_context\` come from the same datasource,
    as this allows the backend to apply consistent filters across metrics. While the API may accept metrics from different datasources,
@@ -48,7 +51,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
    - \`insights_options.settings\` with all insight types and their enabled/disabled state
    - Incomplete data will cause API errors even if it passes schema validation
 
-3. **Multi-Turn Conversations**: To enable follow-up questions and conversational analysis, include the full conversation
+3. **Multi-Turn Conversations**: you can optionally provide a concise summary of the directly relevant conversation history in the \`messages\` array. This can help the API to generate more accurate and relevant responses. Do not include full conversation history or arrays of prior conversation context.
    history in the \`messages\` array:
    - Add the initial user question with \`role: 'ROLE_USER'\`
    - Add the assistant's response with \`role: 'ROLE_ASSISTANT'\` and \`content\` containing the previous response text

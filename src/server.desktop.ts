@@ -33,6 +33,7 @@ import {
 import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
+import { registerSkills } from './skills/index.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -113,10 +114,10 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Sixty-eight tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
+ * Seventy-five tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
  * first-class workbook/data reads/navigation, scoped datasource/dashboard/story cached-XML
  * fallbacks, dialog inspection and action handling, and a narrow whole-workbook cached-XML
- * fallback. Standalone validation and unrelated info/site tools stay out. This is the
+ * fallback. Standalone validation and unrelated info tools stay out. This is the
  * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
  * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
@@ -136,6 +137,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-dashboard-xml',
     'get-storyboard-xml',
     'get-workbook-xml',
+    'export-worksheet-image',
+    'export-dashboard-image',
+    'export-storyboard-image',
     // The edit leg. apply-* no longer accepts a document, so the agent needs a way to
     // read a slice of the cached file and splice an edit back into it. Without these
     // two, an edit that add-field/remove-field/refine-worksheet cannot express has no
@@ -166,9 +170,10 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'set-start-page-visibility',
     'save-workbook',
     'workbook-export-as',
-    'publish-workbook',
     'pause-auto-updates',
     'refresh-auto-updates',
+    'refresh-storyboard-auto-updates',
+    'refresh-dashboard-auto-updates',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
@@ -176,6 +181,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'ask-user',
     'list-instances',
     'get-desktop-state',
+    'get-diagnostics',
     'get-active-dialogs',
     'invoke-dialog-action',
     'list-available-fields',
@@ -186,6 +192,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
+    'capture-window-screenshot',
     'get-workbook-inventory',
     'list-workbook-datasources',
     'get-datasource-info',
@@ -207,7 +214,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
  * Config: trim + lowercase). '' (unset) → the lean {@link DYNAMIC_AUTHORING_TOOL_PROFILE}
  * native surface: the Desktop authoring server SINGS in native Tableau by default, no
- * env var required. 'full' → every tool, including unrelated info/site/validation tools.
+ * env var required. 'full' → every registered tool, including unrelated info/validation tools.
  * 'demo' / 'spec-loop' → their named subsets;
  * 'combined-lean' → the full desktop surface (its lean half is the web side, handled by
  * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
@@ -312,8 +319,11 @@ export class DesktopMcpServer extends Server {
     if (!this.knowledgeCorpusChecked) {
       this.knowledgeCorpusChecked = true;
       if (getKnowledgeCorpusEntryCount() === 0) {
+        const configuredDir = getConfiguredKnowledgeDir();
         log({
-          message: `Knowledge corpus is empty; expected assets under ${getConfiguredKnowledgeDir()}`,
+          message: configuredDir
+            ? `Knowledge corpus is empty; expected assets under ${configuredDir}`
+            : 'Knowledge corpus is empty; set TABLEAU_KNOWLEDGE_DIR to a knowledge root to serve one',
           level: 'warning',
           logger: 'DesktopMcpServer',
         });
@@ -397,6 +407,9 @@ export class DesktopMcpServer extends Server {
         tools: listedTools,
       }));
     }
+
+    await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
@@ -440,7 +453,8 @@ export class DesktopMcpServer extends Server {
     this.registerResource({
       name: 'tableau-expertise-knowledge',
       title: 'Tableau authoring knowledge',
-      description: 'Expertise modules scanned from resources/desktop/knowledge',
+      description:
+        'Expertise modules scanned from the configured knowledge root (TABLEAU_KNOWLEDGE_DIR)',
       template,
       readTemplateCallback: (uri, variables) => {
         const slug = variables['slug'];

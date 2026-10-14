@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -35,6 +36,7 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
       return await renameSheetTool.logAndExecute({
         extra,
         args: { session, sheet, name },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -57,14 +59,21 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
               return new DesktopCommandExecutionError(result.error).toErr();
             }
 
-            return new Ok({
-              sheet: { id: ref.id, kind: ref.kind, name },
-              previousName,
-              message:
-                result.value.status === 'completed'
-                  ? `Renamed ${ref.kind} "${previousName}" to "${name}".`
-                  : `Requested rename to "${name}"; Desktop is still applying it.`,
-            });
+            const subject =
+              result.value.status === 'completed'
+                ? `Renamed ${ref.kind} "${previousName}" to "${name}"`
+                : `Requested rename to "${name}"; Desktop is still applying it`;
+            return new Ok(
+              commandOk(
+                {
+                  sheet: { id: ref.id, kind: ref.kind, name },
+                  previousName,
+                  message: `${subject}.`,
+                },
+                result.value,
+                subject,
+              ),
+            );
           });
         },
       });

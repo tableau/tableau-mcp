@@ -7,6 +7,7 @@ import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -48,6 +49,7 @@ export const getRefreshDatasourceExtractTool = (
       return await refreshDatasourceExtractTool.logAndExecute({
         extra,
         args: { session, datasourceId, isFullRefresh },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const request: RefreshExtractRequest =
             isFullRefresh !== undefined ? { isFullRefresh } : {};
@@ -65,15 +67,11 @@ export const getRefreshDatasourceExtractTool = (
                 return result;
               }
 
-              if (result.value.status !== 'completed') {
-                return new Ok({
-                  message: `Requested refreshing the extract for datasource "${datasourceId}"; Desktop is still applying it.`,
-                });
-              }
-
-              return new Ok({
-                message: `Refreshed the extract for datasource "${datasourceId}".`,
-              });
+              const subject =
+                result.value.status === 'completed'
+                  ? `Refreshed the extract for datasource "${datasourceId}"`
+                  : `Requested refreshing the extract for datasource "${datasourceId}"; Desktop is still applying it`;
+              return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
             },
           });
         },

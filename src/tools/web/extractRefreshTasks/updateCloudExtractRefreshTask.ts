@@ -6,13 +6,17 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { PreviewNotRunError, UnknownError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   UpdateCloudExtractRefreshSchedule,
   updateCloudExtractRefreshScheduleSchema,
 } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
   AppApprovalEvidence,
@@ -42,7 +46,7 @@ export type UpdateCloudExtractRefreshTaskConfirmPanel = {
 };
 
 const paramsSchema = {
-  taskId: z.string().uuid('taskId must be a valid UUID'),
+  taskId: luidSchema,
   schedule: updateCloudExtractRefreshScheduleSchema,
   confirm: z
     .boolean()
@@ -117,14 +121,15 @@ export const getUpdateCloudExtractRefreshTaskTool = async (
   const updateCloudExtractRefreshTaskTool = new WebTool({
     server,
     name: 'update-cloud-extract-refresh-task',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
+    minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     ...(mcpAppsEnabled
       ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }
       : {}),
     description: `
   Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often an extract refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task.
 
-  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag to be enabled.
+  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` environment variable to be enabled.
 
   **Tableau Cloud only.** This tool calls the Cloud variant of the update endpoint and is not appropriate for Tableau Server.
 

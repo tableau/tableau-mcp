@@ -307,7 +307,7 @@ function getWriter(config: EpisodeConfig): FileLogger {
 }
 
 function getEpisodeFileName(): string {
-  episodeFileIso ??= new Date().toISOString();
+  episodeFileIso ??= new Date().toISOString().replace(/[:.]/g, '-');
   return `episodes-${episodeFileIso}.jsonl`;
 }
 

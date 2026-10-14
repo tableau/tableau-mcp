@@ -66,7 +66,7 @@ export default defineConfig({
           reuseExistingServer: !process.env.CI,
           stdout: 'pipe',
           stderr: 'pipe',
-          env,
+          env: { ...env, PRODUCT_TELEMETRY_ENABLED: 'false' },
         },
       ]
     : undefined,

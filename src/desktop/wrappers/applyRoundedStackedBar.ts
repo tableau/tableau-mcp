@@ -235,7 +235,7 @@ export async function applyRoundedStackedBar({
     if (applyOutcome.documentWarnings.length > 0) {
       return afterMutationUnknown(
         'document-warning',
-        `Desktop accepted the worksheet but reported ${applyOutcome.documentWarnings.length} document warning(s).`,
+        `Desktop accepted the worksheet but reported ${applyOutcome.documentWarnings.length} document warning(s): ${applyOutcome.documentWarnings.map((warning) => `${warning.code}: ${warning.message}`).join('; ')}`,
         'sent',
       );
     }

@@ -1,9 +1,4 @@
-import {
-  buildColumnRef,
-  findAndBuildColumnRef,
-  findField,
-  listAvailableFields,
-} from './field-builder.js';
+import { buildColumnRef, listAvailableFields } from './field-builder.js';
 import { AggregationType } from './types.js';
 
 // Workbook XML with two fields in a datasource used by a worksheet
@@ -39,76 +34,6 @@ const WORKBOOK_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </worksheets>
 </workbook>`;
 
-describe('findField', () => {
-  it('should find a measure by name and default to Sum aggregation', () => {
-    const result = findField(WORKBOOK_XML, 'Sales');
-    expect(result).not.toBeNull();
-    expect(result?.columnName).toBe('[Sales]');
-    expect(result?.role).toBe('measure');
-    expect(result?.derivation).toBe(AggregationType.Sum);
-  });
-
-  it('should find a dimension by name and default to None aggregation', () => {
-    const result = findField(WORKBOOK_XML, 'Category');
-    expect(result).not.toBeNull();
-    expect(result?.columnName).toBe('[Category]');
-    expect(result?.role).toBe('dimension');
-    expect(result?.derivation).toBe(AggregationType.None);
-  });
-
-  it('should parse "sum of Sales" as Sum aggregation', () => {
-    const result = findField(WORKBOOK_XML, 'sum of Sales');
-    expect(result).not.toBeNull();
-    expect(result?.derivation).toBe(AggregationType.Sum);
-    expect(result?.columnName).toBe('[Sales]');
-  });
-
-  it('should parse "avg of Sales" as Avg aggregation', () => {
-    const result = findField(WORKBOOK_XML, 'avg of Sales');
-    expect(result).not.toBeNull();
-    expect(result?.derivation).toBe(AggregationType.Avg);
-  });
-
-  it('should accept an explicit aggregation override', () => {
-    const result = findField(WORKBOOK_XML, 'Sales', AggregationType.Max);
-    expect(result).not.toBeNull();
-    expect(result?.derivation).toBe(AggregationType.Max);
-  });
-
-  it('should return null for an unknown field name', () => {
-    expect(findField(WORKBOOK_XML, 'NonExistentField')).toBeNull();
-  });
-
-  it('should strip brackets from input like "[Sales]"', () => {
-    const result = findField(WORKBOOK_XML, '[Sales]');
-    expect(result).not.toBeNull();
-    expect(result?.columnName).toBe('[Sales]');
-  });
-
-  it('should return null when workbook has no worksheets', () => {
-    const noWorksheets = '<workbook><datasources></datasources></workbook>';
-    expect(findField(noWorksheets, 'Sales')).toBeNull();
-  });
-
-  it('matches repeated encoded literals semantically without exposing parser markers', () => {
-    const workbook = `<workbook><worksheets><worksheet name="Sheet"><table><view>
-      <datasources><datasource name="DS &amp;#13;" /></datasources>
-      <datasource-dependencies datasource="DS &amp;#13;">
-        <column name="[Literal &amp;#13;]" datatype="string" role="dimension" type="nominal" />
-        <column-instance name="[none:Literal &amp;#13;:nk]" column="[Literal &amp;#13;]" derivation="None" />
-      </datasource-dependencies>
-    </view></table></worksheet></worksheets></workbook>`;
-
-    expect(findField(workbook, 'Literal &#13;')).toEqual(
-      expect.objectContaining({
-        datasource: 'DS &#13;',
-        columnName: '[Literal &#13;]',
-        columnInstanceName: '[none:Literal &#13;:nk]',
-      }),
-    );
-  });
-});
-
 describe('buildColumnRef', () => {
   it('should construct a column reference in [Datasource].[instance] format', () => {
     const ref = buildColumnRef({
@@ -121,19 +46,6 @@ describe('buildColumnRef', () => {
       datatype: 'real',
     });
     expect(ref).toBe('[Sample].[sum:Sales:qk]');
-  });
-});
-
-describe('findAndBuildColumnRef', () => {
-  it('should return a column ref string for an existing field', () => {
-    const ref = findAndBuildColumnRef(WORKBOOK_XML, 'Sales');
-    expect(ref).not.toBeNull();
-    expect(ref).toContain('[Sample]');
-    expect(ref).toContain('[sum:Sales:qk]');
-  });
-
-  it('should return null for a field that does not exist', () => {
-    expect(findAndBuildColumnRef(WORKBOOK_XML, 'Ghost')).toBeNull();
   });
 });
 
@@ -177,6 +89,96 @@ describe('listAvailableFields', () => {
     expect(profitRatio).toBeDefined();
     expect(profitRatio?.isAggregated).toBe(true);
     expect(profitRatio?.formula).toBeDefined();
+  });
+
+  it('advertises chained aggregate aliases as User within each datasource only', () => {
+    const xml = `<workbook><datasources>
+      <datasource name="Aggregate DS">
+        <column name="[Base]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="SUM([Sales])" />
+        </column>
+        <column name="[Alias]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ABS([Base])" />
+        </column>
+        <column name="[Two Hop]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ZN([Alias])" />
+        </column>
+      </datasource>
+      <datasource name="Row DS">
+        <column name="[Base]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="[Sales] * 2" />
+        </column>
+        <column name="[Alias]" role="measure" type="quantitative" datatype="real">
+          <calculation class="tableau" formula="ABS([Base])" />
+        </column>
+      </datasource>
+    </datasources></workbook>`;
+
+    const fields = listAvailableFields(xml);
+    expect(
+      fields.find(
+        (field) => field.datasource === 'Aggregate DS' && field.columnName === '[Two Hop]',
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: true,
+        derivation: AggregationType.User,
+        columnInstanceName: '[usr:Two Hop:qk]',
+      }),
+    );
+    expect(
+      fields.find((field) => field.datasource === 'Row DS' && field.columnName === '[Alias]'),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: false,
+        derivation: AggregationType.Sum,
+        columnInstanceName: '[sum:Alias:qk]',
+      }),
+    );
+  });
+
+  it('does not classify aggregate-looking text in a string literal as an aggregate calc', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column name="[Display Value]" role="measure" type="quantitative" datatype="real">
+        <calculation class="tableau" formula="IF [Label] = &quot;SUM(&quot; THEN [Sales] ELSE 0 END" />
+      </column>
+    </datasource></datasources></workbook>`;
+
+    const field = listAvailableFields(xml).find(
+      (candidate) => candidate.columnName === '[Display Value]',
+    );
+
+    expect(field).toEqual(
+      expect.objectContaining({
+        isAggregated: false,
+        derivation: AggregationType.Sum,
+        columnInstanceName: '[sum:Display Value:qk]',
+        formula: 'IF [Label] = "SUM(" THEN [Sales] ELSE 0 END',
+      }),
+    );
+  });
+
+  it.each([
+    ['COLLECT([Geometry])', '[usr:Calculated Aggregate:qk]'],
+    ['RAWSQLAGG_REAL(&quot;SUM(%1)&quot;, [Sales])', '[usr:Calculated Aggregate:qk]'],
+  ])('advertises %s as an already-aggregated calculated field', (formula, columnInstanceName) => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column name="[Calculated Aggregate]" role="measure" type="quantitative" datatype="real">
+        <calculation class="tableau" formula="${formula}" />
+      </column>
+    </datasource></datasources></workbook>`;
+
+    expect(
+      listAvailableFields(xml).find(
+        (candidate) => candidate.columnName === '[Calculated Aggregate]',
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        isAggregated: true,
+        derivation: AggregationType.User,
+        columnInstanceName,
+      }),
+    );
   });
 
   it('projects encoded numeric-entity literals as semantic formula text without markers', () => {

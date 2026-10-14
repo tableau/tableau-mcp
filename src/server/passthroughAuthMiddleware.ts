@@ -10,6 +10,11 @@ import { getCookie, getHeader } from './requestUtils';
 
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
 const PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES = 1000;
+const MAX_LOGGED_ERROR_CHARS = 1000;
+const INVALID_TOKEN_BODY = {
+  error: 'invalid_token',
+  error_description: 'Invalid or expired Tableau session token',
+} as const;
 
 export const passthroughAuthInfoSchema = z.object({
   type: z.literal('Passthrough'),
@@ -66,18 +71,25 @@ export function passthroughAuthMiddleware(): RequestHandler {
         maxRequestTimeoutMs,
       });
 
-      restApi.setCredentials(tableauAccessToken, 'unknown user id');
-      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
-      if (!sessionResult.isOk()) {
+      try {
+        restApi.setCredentials(tableauAccessToken, 'unknown user id');
+      } catch {
         log({
-          message: `Passthrough auth validation failed: ${sessionResult.error.message}`,
+          message: 'Passthrough auth validation failed: malformed token',
           level: 'error',
           logger: 'auth',
         });
-        res.status(401).json({
-          error: 'invalid_token',
-          error_description: sessionResult.error.message,
+        res.status(401).json(INVALID_TOKEN_BODY);
+        return;
+      }
+      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+      if (!sessionResult.isOk()) {
+        log({
+          message: `Passthrough auth validation failed: ${JSON.stringify(sessionResult.error).slice(0, MAX_LOGGED_ERROR_CHARS)}`,
+          level: 'error',
+          logger: 'auth',
         });
+        res.status(401).json(INVALID_TOKEN_BODY);
         return;
       }
 

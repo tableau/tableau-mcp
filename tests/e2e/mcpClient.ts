@@ -17,15 +17,18 @@ export class McpClient {
   constructor(args: { variant?: Variant; env?: Record<string, string> } = {}) {
     let { variant, env } = args ?? {};
     variant = variant ?? 'default';
-    env = env ?? getDefaultEnv();
-
-    // https://github.com/nodejs/node/issues/55374
-    env.PATH = process.env.PATH ?? '';
+    env = {
+      ...(env ?? getDefaultEnv()),
+      // https://github.com/nodejs/node/issues/55374
+      PATH: process.env.PATH ?? '',
+      // Set last so no caller env can make an e2e child server send product telemetry.
+      PRODUCT_TELEMETRY_ENABLED: 'false',
+    };
 
     this.transport = new StdioClientTransport({
       command: 'node',
       args: [variant === 'default' ? 'build/index.js' : `build/index.${variant}.js`],
-      env: env ?? {},
+      env,
     });
 
     this.client = new Client({
@@ -49,6 +52,14 @@ export class McpClient {
 
   async listTools(): Promise<Array<string>> {
     return (await this.client.listTools()).tools.map((tool) => tool.name);
+  }
+
+  /**
+   * Returns the server-level `instructions` string carried in the `initialize`
+   * handshake result, or undefined when the server advertised none.
+   */
+  async getInstructions(): Promise<string | undefined> {
+    return this.client.getInstructions();
   }
 
   /**

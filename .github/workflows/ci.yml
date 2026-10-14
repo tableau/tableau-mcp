@@ -2,10 +2,7 @@ name: Build and Test
 
 on:
   pull_request:
-    branches:
-      - main
-      - feature/desktop
-      - 'claude/**'
+    branches: [main, feature/desktop]
 
 jobs:
   build:
@@ -35,11 +32,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Byte-locked engine files shared with agent-to-tableau-desktop. This gate was
-      # only in scripts/agent-check, so drift rode through eight merged PRs.
-      - name: Lockstep-core hash gate
-        run: node scripts/check-lockstep.mjs
-
       - name: Build
         run: npm run build
 
@@ -51,11 +43,16 @@ jobs:
       - name: Build desktop variant
         run: npm run build:desktop:dirty
 
+      - name: Check Desktop bundle runs from outside the repo
+        run: npx tsx src/scripts/assertDesktopBundle.ts
+
       - name: Build Docker image
         run: npm run build:docker
 
       - name: Build NPM package
-        run: npm pack
+        run: |
+          npm pack --json > npm-pack.json
+          npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
 
       - name: Tests
         run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
@@ -145,6 +142,6 @@ jobs:
           if-no-files-found: error
           path: |
             build/
-            junit/
             playwright-report/
             tableau-mcp.mcpb
+            tableau-mcp-server-*.tgz

@@ -5,7 +5,7 @@ import {
   Node as XmlNode,
 } from '@xmldom/xmldom';
 
-import { normalizeXmlName, xmlNamesEqual } from '../xmlElement.js';
+import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
 
 export type TargetDashboardInvariantIssueCode =
   | 'target-dashboard-missing'
@@ -93,7 +93,7 @@ export function targetDashboardInvariantIssues(
   }
 
   for (const worksheetName of expectedNames) {
-    if (!zoneNames.some((zoneName) => xmlNamesEqual(zoneName, worksheetName))) {
+    if (!zoneNames.some((zoneName) => parsedXmlNamesEqual(zoneName, worksheetName))) {
       issues.push({
         code: 'worksheet-zone-missing',
         message: `Dashboard "${dashboardName}" has no worksheet zone for "${worksheetName}".`,
@@ -144,7 +144,7 @@ export function targetDashboardInvariantIssues(
     );
   }
   for (const worksheetName of expectedNames) {
-    if (viewpointNames.some((viewpointName) => xmlNamesEqual(viewpointName, worksheetName))) {
+    if (viewpointNames.some((viewpointName) => parsedXmlNamesEqual(viewpointName, worksheetName))) {
       continue;
     }
     issues.push({
@@ -187,7 +187,7 @@ function viewpointsAreFirstElement(dashboardWindow: XmlElement): boolean {
 
 function elementNameEquals(element: XmlElement, expectedName: string): boolean {
   const name = element.getAttribute('name');
-  return Boolean(name && xmlNamesEqual(name, expectedName));
+  return Boolean(name && parsedXmlNamesEqual(name, expectedName));
 }
 
 function namedWorksheetZones(dashboard: XmlElement): string[] {
@@ -204,7 +204,7 @@ function namedWorksheetZones(dashboard: XmlElement): string[] {
 
 function uniqueNames(names: string[]): string[] {
   return names.filter(
-    (name, index) => names.findIndex((candidate) => xmlNamesEqual(candidate, name)) === index,
+    (name, index) => names.findIndex((candidate) => parsedXmlNamesEqual(candidate, name)) === index,
   );
 }
 
@@ -215,7 +215,7 @@ function exactNameClosureIssues(
   dashboardName: string,
 ): TargetDashboardInvariantIssue[] {
   const actualCounts = nameCounts(actualNames);
-  const expectedKeys = new Set(expectedNames.map(normalizeXmlName));
+  const expectedKeys = new Set(expectedNames.map(normalizeParsedXmlName));
   const issues: TargetDashboardInvariantIssue[] = [];
 
   for (const [key, { displayName, count }] of actualCounts) {
@@ -241,7 +241,7 @@ function exactNameClosureIssues(
 function nameCounts(names: string[]): Map<string, { displayName: string; count: number }> {
   const counts = new Map<string, { displayName: string; count: number }>();
   for (const name of names) {
-    const key = normalizeXmlName(name);
+    const key = normalizeParsedXmlName(name);
     const existing = counts.get(key);
     counts.set(key, {
       displayName: existing?.displayName ?? name,

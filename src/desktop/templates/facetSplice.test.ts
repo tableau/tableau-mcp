@@ -244,6 +244,27 @@ describe('desktop/templates/facetSplice', () => {
     });
   });
 
+  describe('spliceBoundFacet — colon-named dimension on a shelf', () => {
+    const colonDim = `<workbook><worksheets><worksheet name='{{TITLE}}'>
+  <table><view>
+    <datasources><datasource name='{{DATASOURCE}}' /></datasources>
+    <datasource-dependencies datasource='{{DATASOURCE}}'>
+      <column datatype='real' name='[A]' role='measure' type='quantitative' />
+      <column datatype='string' name='[Min: Duration]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
+    </datasource-dependencies>
+  </view></table>
+  <rows>[{{DATASOURCE}}].[sum:A:qk]</rows>
+  <cols>[{{DATASOURCE}}].[none:Min: Duration:nk]</cols>
+</worksheet></worksheets></workbook>`;
+
+    it('resolves the dimension shelf from an undeclared instance whose field holds a colon', () => {
+      const out = spliceBoundFacet(colonDim, { Facet: `[${DS}].[none:Cat:nk]` });
+
+      expect(out).toMatch(/<cols>\[\{\{DATASOURCE\}\}\]\.\[none:Facet:nk\] \/ /);
+    });
+  });
+
   // ── manifest slots are authoritative: no structural guessing ──────────────
   describe('spliceBoundFacet — non-empty manifest slots suppress the structural fallback', () => {
     // gantt-chart / ww-ou-arrow / ww-ou-diff regression: a template whose only

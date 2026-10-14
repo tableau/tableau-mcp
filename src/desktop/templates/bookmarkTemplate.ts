@@ -26,7 +26,7 @@ import type {
   SlotKind,
   TableCalcFact,
 } from '../binder/manifest-types.js';
-import { canonicalShortDerivation, COLUMN_INSTANCE_WRAPPER_PREFIXES } from '../derivations.js';
+import { canonicalShortDerivation, columnInstancePrefixLength } from '../derivations.js';
 import { runValidation } from '../validation/registry.js';
 import { ensureUserNamespace } from './injectTemplateCore.js';
 
@@ -273,12 +273,11 @@ export function deriveTemplatePass1Eligibility(
  *
  * A COMPOUND (table-calc) name prepends wrapper prefixes to the aggregation
  * (`[pcdf:cum:sum:Sales:qk]`); those wrappers are consumed and the BINDING derivation is the
- * underlying aggregation (`sum`), so the measure resolves normally and is not dropped. Leading
- * segments are consumed only while they are known derivation/table-calc short-forms AND at
- * least one segment remains for the base — so a field literally named like a derivation
- * (`[none:sum:qk]` → base `sum`) or containing a colon (`[sum:A:B:qk]` → base `A:B`) is
- * preserved, and an unknown single prefix still occupies the derivation slot
- * (`[foo:Bar:qk]` → { base: 'Bar', derivation: 'none' }).
+ * underlying aggregation (`sum`), so the measure resolves normally and is not dropped. Only a
+ * table-calc wrapper may be followed by another prefix; a plain derivation ends the list, so a
+ * field named like a derivation (`[none:sum:qk]` → base `sum`) or holding a colon
+ * (`[sum:A:B:qk]` → base `A:B`) is preserved, and an unknown single prefix still occupies the
+ * derivation slot (`[foo:Bar:qk]` → { base: 'Bar', derivation: 'none' }).
  */
 export function parseInstanceRef(ref: string): { base: string; derivation: Derivation } {
   const seg = ref.split('].[').pop() ?? ref;
@@ -293,18 +292,10 @@ export function parseInstanceRef(ref: string): { base: string; derivation: Deriv
     }
   }
   if (roleIndex < 2) return { base: inner, derivation: 'none' };
-  // Consume leading known derivation / table-calc wrapper segments, never taking the
-  // second-to-last segment (the base must keep at least one segment before the role marker).
-  const consumed: string[] = [];
-  let i = 0;
-  while (
-    i < roleIndex - 1 &&
-    (canonicalShortDerivation(parts[i]) !== undefined ||
-      COLUMN_INSTANCE_WRAPPER_PREFIXES.has(parts[i].toLowerCase()))
-  ) {
-    consumed.push(parts[i].toLowerCase());
-    i++;
-  }
+  // The base keeps at least one segment before the role marker.
+  const prefixLength = columnInstancePrefixLength(parts, roleIndex);
+  const consumed = parts.slice(0, prefixLength).map((part) => part.toLowerCase());
+  const i = prefixLength;
   if (consumed.length > 0) {
     // Binding derivation = the last consumed segment that is a real aggregation/date-part
     // derivation (a table-calc wrapper like `cum`/`pcdf` is not one), else `none`.
@@ -495,8 +486,8 @@ export function bookmarkToTemplateWorkbook(
     const tok = tokenOf.get(sourceField)!;
     const esc = sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`(?<=[:\\[])${esc}(?=[:\\]])`, 'g');
-    body = body.replace(re, tok);
-    win = win.replace(re, tok);
+    body = body.replace(re, () => tok);
+    win = win.replace(re, () => tok);
   }
 
   body = restoreAttrs(body);

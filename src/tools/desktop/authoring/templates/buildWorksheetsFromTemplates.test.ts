@@ -60,6 +60,26 @@ const SHIPPED_TEMPLATE_NAMES = [
   'gantt-task-rollup-chart',
 ] as const;
 
+const AGGREGATED_WORKBOOK = SUPERSTORE_WORKBOOK.replace(
+  '</datasource>',
+  "<column name='[Total Sales]' datatype='real' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='SUM([Sales])'/></column></datasource>",
+);
+
+const AGGREGATIONS = [
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'cnt',
+  'ctd',
+  'med',
+  'std',
+  'stp',
+  'var',
+  'vrp',
+] as const;
+
 const EXACT_ARGS = {
   session: '12345',
   templateName: 'pulse-bar',
@@ -72,7 +92,6 @@ const EXACT_ARGS = {
 };
 
 describe('build-worksheets-from-templates', () => {
-  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
   let templatesDir: string;
 
   beforeEach(() => {
@@ -86,13 +105,11 @@ describe('build-worksheets-from-templates', () => {
         ),
       );
     }
-    process.env['TEMPLATES_DIR'] = templatesDir;
+    vi.stubEnv('TEMPLATES_DIR', templatesDir);
     sessionRouteState.clear();
   });
 
   afterEach(() => {
-    if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-    else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
     rmSync(templatesDir, { recursive: true, force: true });
     sessionRouteState.clear();
   });
@@ -107,12 +124,12 @@ describe('build-worksheets-from-templates', () => {
       title: expect.any(Object),
       datasource: expect.any(Object),
       fieldMapping: expect.any(Object),
+      derivationOverrides: expect.any(Object),
       topN: expect.any(Object),
     });
-    expect(schema.fieldMapping.description).toBe('Map slot ID to exact returned column_ref.');
-    expect(schema.topN.description).toBe(
-      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
-    );
+    expect(schema.fieldMapping.description).toBe('Slot to column_ref.');
+    expect(schema.derivationOverrides.description).toBe('Aggregation by slot.');
+    expect(schema.topN.description).toBe('Rank limit.');
     expect(schema).not.toHaveProperty('templates');
     expect(schema).not.toHaveProperty('workbookFile');
     expect(schema).not.toHaveProperty('confirmation');
@@ -210,6 +227,173 @@ describe('build-worksheets-from-templates', () => {
       ok: false,
       reason: 'unknown',
     });
+  });
+
+  it('builds a COUNTD Order ID KPI from a typed derivation override', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: SUPERSTORE_WORKBOOK,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+          instanceId: 'inst-build',
+        }),
+      ),
+      applyWorkbookDocument: vi.fn(),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-orders-countd',
+    });
+
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Distinct Orders',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[none:Order ID:nk]' },
+        derivationOverrides: { field_base_1: 'ctd' },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result).bindings).toEqual([
+      { slotId: 'field_base_1', field: '[Sample - Superstore].[ctd:Order ID:qk]' },
+    ]);
+    const reserved = store.reserve('artifact-orders-countd', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping).toEqual({
+      '{{field_base_1}}': '[Sample - Superstore].[ctd:Order ID:qk]',
+    });
+    expect(reserved.artifact.worksheetXml).toMatch(
+      /<column\b[^>]*datatype=(['"])string\1[^>]*name=(['"])\[Order ID\]\2[^>]*type=(['"])nominal\3/,
+    );
+    expect(reserved.artifact.worksheetXml).toMatch(
+      /<column-instance\b[^>]*derivation=(['"])CountD\1[^>]*name=(['"])\[ctd:Order ID:qk\]\2[^>]*type=(['"])quantitative\3/,
+    );
+    expect(reserved.artifact.worksheetXml).toContain('fontsize="36"');
+    expect(reserved.artifact.worksheetXml).toContain(
+      '&lt;[Sample - Superstore].[ctd:Order ID:qk]&gt;',
+    );
+  });
+
+  it.each(
+    AGGREGATIONS.flatMap((derivation) =>
+      ['field_base_1', '{{field_base_1}}', '{{field_base_1}}@sum'].map((mappingKey) => ({
+        derivation,
+        mappingKey,
+      })),
+    ),
+  )(
+    'rejects ignored $derivation overrides with mapping key $mappingKey',
+    async ({ derivation, mappingKey }) => {
+      const store = new TemplateArtifactStore({ capacity: 4 });
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ xml: AGGREGATED_WORKBOOK, instanceId: 'inst-build' })),
+      });
+      const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+        store,
+        createId: () => 'artifact-ignored-override',
+      });
+      const result = await callTool(
+        tool,
+        {
+          session: '12345',
+          templateName: 'kpi-text',
+          title: 'Total Sales',
+          datasource: 'Sample - Superstore',
+          fieldMapping: { [mappingKey]: '[Sample - Superstore].[usr:Total Sales:qk]' },
+          derivationOverrides: { field_base_1: derivation },
+        },
+        executor,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toMatch(/already aggregated/i);
+      expect(result.content[0].text).toContain(derivation);
+      expect(store.reserve('artifact-ignored-override', '12345')).toEqual({
+        ok: false,
+        reason: 'unknown',
+      });
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps already aggregated fields usable without an override', async () => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: AGGREGATED_WORKBOOK, instanceId: 'inst-build' })),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-existing-aggregate',
+    });
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Total Sales',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[usr:Total Sales:qk]' },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    const reserved = store.reserve('artifact-existing-aggregate', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping['{{field_base_1}}']).toBe(
+      '[Sample - Superstore].[usr:Total Sales:qk]',
+    );
+    expect(reserved.artifact.worksheetXml).toContain('derivation="User"');
+    expect(reserved.artifact.worksheetXml).toContain('SUM([Sales])');
+  });
+
+  it.each(AGGREGATIONS)('honors a %s override on a row-level numeric field', async (derivation) => {
+    const store = new TemplateArtifactStore({ capacity: 4 });
+    const executor = makeExecutorMock({
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: SUPERSTORE_WORKBOOK, instanceId: 'inst-build' })),
+    });
+    const tool = getBuildWorksheetsFromTemplatesTool(new DesktopMcpServer(), {
+      store,
+      createId: () => 'artifact-row-level-override',
+    });
+    const result = await callTool(
+      tool,
+      {
+        session: '12345',
+        templateName: 'kpi-text',
+        title: 'Sales',
+        datasource: 'Sample - Superstore',
+        fieldMapping: { field_base_1: '[Sample - Superstore].[sum:Sales:qk]' },
+        derivationOverrides: { field_base_1: derivation },
+      },
+      executor,
+    );
+
+    expect(result.isError).toBe(false);
+    const reserved = store.reserve('artifact-row-level-override', '12345');
+    expect(reserved.ok).toBe(true);
+    if (!reserved.ok) return;
+    expect(reserved.artifact.fieldMapping['{{field_base_1}}']).toBe(
+      `[Sample - Superstore].[${derivation}:Sales:qk]`,
+    );
+    expect(reserved.artifact.worksheetXml).toContain(`[${derivation}:Sales:qk]`);
   });
 
   it('builds and applies the shipped insights bar without leaving a direction token', async () => {
@@ -775,13 +959,18 @@ async function callTool(
     title: string;
     datasource: string;
     fieldMapping: Record<string, string>;
+    derivationOverrides?: Record<string, (typeof AGGREGATIONS)[number]>;
     topN?: number;
   },
   executor: ExternalApiToolExecutor,
 ): Promise<CallToolResult> {
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { ...args, topN: args.topN },
+    {
+      ...args,
+      derivationOverrides: args.derivationOverrides,
+      topN: args.topN,
+    },
     {
       ...getMockRequestHandlerExtra(),
       getExecutor: vi.fn().mockResolvedValue(executor),

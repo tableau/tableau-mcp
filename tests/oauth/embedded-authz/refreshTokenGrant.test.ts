@@ -1,9 +1,10 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
+import type { Test } from 'supertest';
 
 import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
@@ -68,35 +69,31 @@ describe('refresh token grant type', () => {
   });
 
   it('should reject if the refresh token is expired', async () => {
-    process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = '0';
-    try {
-      const { app } = await startServer();
+    vi.stubEnv('OAUTH_REFRESH_TOKEN_TIMEOUT_MS', '0');
+    const { app } = await startServer();
 
-      mocks.mockGetTokenResult.mockResolvedValue({
-        accessToken: 'test-access-token',
-        refreshToken: 'test-refresh-token',
-        expiresInSeconds: 3600,
-        originHost: '10ax.online.tableau.com',
-      });
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
 
-      const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+    const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
-      const tokenResponse = await request(app).post('/oauth2/token').send({
-        grant_type: 'refresh_token',
-        refresh_token,
-        client_id: 'test-client-id',
-        client_secret: 'test-client-secret',
-      });
+    const tokenResponse = await request(app).post('/oauth2/token').send({
+      grant_type: 'refresh_token',
+      refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
 
-      expect(tokenResponse.status).toBe(400);
-      expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
-      expect(tokenResponse.body).toEqual({
-        error: 'invalid_grant',
-        error_description: 'Invalid or expired refresh token',
-      });
-    } finally {
-      process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = undefined;
-    }
+    expect(tokenResponse.status).toBe(400);
+    expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(tokenResponse.body).toEqual({
+      error: 'invalid_grant',
+      error_description: 'Invalid or expired refresh token',
+    });
   });
 
   it('should issue an access token when the refresh token is successfully exchanged', async () => {
@@ -221,5 +218,64 @@ describe('refresh token grant type', () => {
         site_namespace: 'mcp-test',
       }),
     );
+  });
+
+  it('should allow only one of two concurrent uses of the same refresh token (single-use rotation)', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+
+    // Force a real async suspension during the Tableau round-trip so both concurrent requests
+    // reach the refresh-token lookup before either finishes rotating. This makes the race
+    // deterministic: with a non-atomic get() both requests read the same token and both succeed
+    // (yielding two valid refresh tokens from one — the reported bug); an atomic consume() removes
+    // the token on first read, so the second request sees undefined and is rejected.
+    mocks.mockGetTokenResult.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                accessToken: 'refreshed-access-token',
+                refreshToken: 'refreshed-refresh-token',
+                expiresInSeconds: 3600,
+                originHost: '10ax.online.tableau.com',
+              }),
+            25,
+          ),
+        ),
+    );
+
+    const sendRefresh = (): Test =>
+      request(app).post('/oauth2/token').send({
+        grant_type: 'refresh_token',
+        refresh_token,
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+      });
+
+    const [first, second] = await Promise.all([sendRefresh(), sendRefresh()]);
+
+    // Exactly one wins (200) and one loses (400) — never two 200s. Which one wins is
+    // legitimately non-deterministic, so assert on the sorted status pair, not on identity.
+    const statuses = [first.status, second.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 400]);
+
+    const rejected = [first, second].find((r) => r.status === 400)!;
+    expect(rejected.body).toEqual({
+      error: 'invalid_grant',
+      error_description: 'Invalid or expired refresh token',
+    });
+
+    const accepted = [first, second].find((r) => r.status === 200)!;
+    expect(accepted.body.refresh_token).toEqual(expect.any(String));
+    expect(accepted.body.refresh_token).not.toBe(refresh_token);
   });
 });

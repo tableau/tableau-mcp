@@ -4,14 +4,11 @@ import {
   addFieldToEncoding,
   addFieldToRows,
   listFields,
-  moveFieldInCols,
-  moveFieldInEncoding,
-  moveFieldInRows,
-  parseShelfValue,
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
 } from './fields.js';
+import { parseShelfValue } from './shelfTree.js';
 
 // Minimal worksheet XML with one row field, one col field, and one color encoding
 const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -263,6 +260,64 @@ describe('addFieldToRows user derivations', () => {
   });
 });
 
+describe('count aggregation instance types over string dimensions', () => {
+  function columnDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  function instanceDeclaration(xml: string, name: string): string | undefined {
+    return xml.match(new RegExp(`<column-instance\\b[^>]*name="\\[${name}\\]"[^>]*>`))?.[0];
+  }
+
+  it.each([
+    ['cnt', 'Count'],
+    ['ctd', 'CountD'],
+    ['countdistinct', 'CountD'],
+  ])(
+    'uses the explicit qk suffix for %s without changing raw field metadata',
+    (prefix, derivation) => {
+      const modified = addFieldToEncoding(
+        WORKSHEET_XML,
+        'text',
+        `[Sample].[${prefix}:Category:qk]`,
+      );
+
+      expect(columnDeclaration(modified, 'Category')).toContain('datatype="string"');
+      expect(columnDeclaration(modified, 'Category')).toContain('role="dimension"');
+      expect(columnDeclaration(modified, 'Category')).toContain('type="nominal"');
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        `derivation="${derivation}"`,
+      );
+      expect(instanceDeclaration(modified, `${prefix}:Category:qk`)).toContain(
+        'type="quantitative"',
+      );
+    },
+  );
+
+  it('respects an explicit discrete nk suffix for CountD', () => {
+    const modified = addFieldToEncoding(WORKSHEET_XML, 'text', '[Sample].[ctd:Category:nk]');
+
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('derivation="CountD"');
+    expect(instanceDeclaration(modified, 'ctd:Category:nk')).toContain('type="nominal"');
+  });
+
+  it('repairs an existing CountD instance whose type disagrees with its qk suffix', () => {
+    const withMismatchedInstance = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      '<column-instance name="[ctd:Category:qk]" column="[Category]" derivation="CountD" pivot="key" type="nominal"/></datasource-dependencies>',
+    );
+
+    const modified = addFieldToEncoding(
+      withMismatchedInstance,
+      'text',
+      '[Sample].[ctd:Category:qk]',
+    );
+
+    expect(instanceDeclaration(modified, 'ctd:Category:qk')).toContain('type="quantitative"');
+    expect(modified.match(/name="\[ctd:Category:qk\]"/g)).toHaveLength(1);
+  });
+});
+
 describe('addFieldToRows aggregate correction consistency (regression)', () => {
   // ensureColumnInstanceInDependencies corrects an aggregating calculated field to a
   // "usr:" derivation in two places: (1) when the base column is ALREADY in the
@@ -308,6 +363,121 @@ describe('addFieldToRows aggregate correction consistency (regression)', () => {
     // The shelf reference must name the column-instance that was actually written,
     // or the rows shelf points at a pill that does not exist in the datasource-deps.
     expect(rowsField?.column).toBe(`[Sample].${writtenInstanceName}`);
+  });
+
+  it('keeps a row-level calc on the requested Sum derivation when a string contains SUM(', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Display Value]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="IF [Label] = &quot;SUM(&quot; THEN [Sales] ELSE 0 END"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[sum:Display Value:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    expect(modified).toContain(
+      '<column-instance name="[sum:Display Value:qk]" column="[Display Value]" derivation="Sum"',
+    );
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Display Value'),
+      )?.column,
+    ).toBe('[Sample].[sum:Display Value:qk]');
+    expect(modified).not.toContain('[usr:Display Value:qk]');
+  });
+
+  it('writes User for an aggregate alias already declared in worksheet dependencies', () => {
+    const worksheetXml = WORKSHEET_XML.replace(
+      '</datasource-dependencies>',
+      `<column name="[Base]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+      <column name="[Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ABS([Base])"/>
+      </column></datasource-dependencies>`,
+    );
+
+    const modified = addFieldToRows(worksheetXml, '[Sample].[sum:Alias:qk]');
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Alias:qk]" column="[Alias]" derivation="User"',
+    );
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Alias'),
+      )?.column,
+    ).toBe('[Sample].[usr:Alias:qk]');
+  });
+
+  it('writes User and copies the full calculation chain for a workbook-only alias', () => {
+    const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample">
+      <column name="[Base]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="SUM([Sales])"/>
+      </column>
+      <column name="[Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ABS([Base])"/>
+      </column>
+      <column name="[Two Hop Alias]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="ZN([Alias])"/>
+      </column>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const modified = addFieldToRows(
+      WORKSHEET_XML,
+      '[Sample].[sum:Two Hop Alias:qk]',
+      undefined,
+      workbookXml,
+    );
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Two Hop Alias:qk]" column="[Two Hop Alias]" derivation="User"',
+    );
+    expect(modified).toContain('column name="[Alias]"');
+    expect(modified).toContain('formula="ABS([Base])"');
+    expect(modified).toContain('column name="[Base]"');
+    expect(modified).toContain('formula="SUM([Sales])"');
+    expect(
+      listFields(modified).find(
+        (field) => field.location === 'rows' && field.column.includes('Two Hop Alias'),
+      )?.column,
+    ).toBe('[Sample].[usr:Two Hop Alias:qk]');
+  });
+
+  it('copies workbook-only LOD dependencies without classifying the LOD as aggregate', () => {
+    const worksheetXml = `<worksheet name="Sheet 1"><table><view>
+      <datasources><datasource name="Sample"/></datasources>
+      <datasource-dependencies datasource="Sample"/>
+    </view><rows></rows></table></worksheet>`;
+    const workbookXml = `<workbook><datasources><datasource name="Sample">
+      <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
+      <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+      <column name="[LOD]" datatype="real" role="measure" type="quantitative">
+        <calculation class="tableau" formula="{ FIXED [Category] : SUM([Sales]) }"/>
+      </column>
+    </datasource></datasources></workbook>`;
+
+    const modified = addFieldToRows(worksheetXml, '[Sample].[sum:LOD:qk]', undefined, workbookXml);
+
+    expect(modified).toContain(
+      '<column-instance name="[sum:LOD:qk]" column="[LOD]" derivation="Sum"',
+    );
+    expect(modified).toContain('column name="[Category]"');
+    expect(modified).toContain('column name="[Sales]"');
+    expect(modified).not.toContain('[usr:LOD:qk]');
   });
 });
 
@@ -374,14 +544,22 @@ describe('addFieldToRows date-part derivations', () => {
     return m?.[1];
   }
 
+  function instanceTypeOf(xml: string, columnInstanceName: string): string | undefined {
+    return xml.match(
+      new RegExp(`<column-instance[^>]*name="\\[${columnInstanceName}\\]"[^>]*type="([^"]*)"`),
+    )?.[1];
+  }
+
   it('maps the discrete month part [mn:...] to derivation="Month", not "mn"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[mn:Order Date:ok]');
     expect(derivationOf(modified, 'mn:Order Date:ok')).toBe('Month');
+    expect(instanceTypeOf(modified, 'mn:Order Date:ok')).toBe('ordinal');
   });
 
   it('maps the truncated year part [tyr:...] to derivation="Year-Trunc"', () => {
     const modified = addFieldToRows(DATE_XML, '[Sample].[tyr:Order Date:qk]');
     expect(derivationOf(modified, 'tyr:Order Date:qk')).toBe('Year-Trunc');
+    expect(instanceTypeOf(modified, 'tyr:Order Date:qk')).toBe('quantitative');
   });
 
   it('still maps aggregations correctly (sum -> Sum)', () => {
@@ -407,6 +585,97 @@ describe('addFieldToCols / removeFieldFromCols', () => {
 
   it('should throw when removing a field not on cols', () => {
     expect(() => removeFieldFromCols(WORKSHEET_XML, '[Sample].[sum:Profit:qk]')).toThrow();
+  });
+});
+
+describe('remove-field stale placement recovery', () => {
+  it.each([
+    ['rows', removeFieldFromRows, '[Sample].[none:Category:nk]'],
+    ['cols', removeFieldFromCols, '[Sample].[sum:Sales:qk]'],
+  ] as const)(
+    'reports actual placements when the field is on the wrong %s shelf',
+    (shelf, remove, column) => {
+      const attempt = (): string => remove(WORKSHEET_XML, column);
+
+      expect(attempt).toThrow(`Column ${column} not found in ${shelf}`);
+      expect(attempt).toThrow('"rows":["[Sample].[sum:Sales:qk]"]');
+      expect(attempt).toThrow('"cols":["[Sample].[none:Category:nk]"]');
+      expect(attempt).toThrow('"color":["[Sample].[none:Category:nk]"]');
+      expect(attempt).toThrow('read-cached-xml');
+      expect(attempt).toThrow('get-worksheet-xml');
+      expect(attempt).toThrow('pending edits');
+    },
+  );
+
+  it('reports the updated shelf after the field has already been removed', () => {
+    const removed = removeFieldFromRows(WORKSHEET_XML, '[Sample].[sum:Sales:qk]');
+
+    expect(() => removeFieldFromRows(removed, '[Sample].[sum:Sales:qk]')).toThrow('"rows":[]');
+    expect(() => removeFieldFromRows(removed, '[Sample].[sum:Sales:qk]')).toThrow(
+      'Do not retry removal if the field is absent',
+    );
+    expect(listFields(removed).filter((field) => field.location === 'rows')).toEqual([]);
+  });
+
+  it.each(['<worksheet name="Empty"/>', '<worksheet name="Empty"><table/></worksheet>'])(
+    'reports empty placements for an empty worksheet: %s',
+    (xml) => {
+      expect(() => removeFieldFromCols(xml, '[Sample].[sum:Sales:qk]')).toThrow(
+        '"rows":[],"cols":[],"encodings":{}',
+      );
+      expect(() => removeFieldFromEncoding(xml, 'size', '[Sample].[sum:Sales:qk]')).toThrow(
+        '"rows":[],"cols":[],"encodings":{}',
+      );
+    },
+  );
+
+  it.each(['size', 'angle'] as const)(
+    'reports populated channels when %s was never set',
+    (encoding) => {
+      const attempt = (): string =>
+        removeFieldFromEncoding(WORKSHEET_XML, encoding, '[Sample].[sum:Sales:qk]');
+
+      expect(attempt).toThrow(`No ${encoding} encodings found`);
+      expect(attempt).toThrow('"encodings":{"color":["[Sample].[none:Category:nk]"]}');
+      expect(attempt).toThrow('encodingType');
+    },
+  );
+
+  it('reports the actual field when the requested column is absent from a populated encoding', () => {
+    const attempt = (): string =>
+      removeFieldFromEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Profit:qk]');
+
+    expect(attempt).toThrow('Encoding color with column [Sample].[sum:Profit:qk] not found');
+    expect(attempt).toThrow('"color":["[Sample].[none:Category:nk]"]');
+  });
+
+  it('reports the canonical lod channel for a stale detail request', () => {
+    const xml = addFieldToEncoding(WORKSHEET_XML, 'lod', '[Sample].[none:Category:nk]');
+
+    expect(() => removeFieldFromEncoding(xml, 'detail', '[Sample].[sum:Profit:qk]')).toThrow(
+      '"lod":["[Sample].[none:Category:nk]"]',
+    );
+  });
+
+  it('only advertises encoding fields from the first pane that removal actually edits', () => {
+    const xml = WORKSHEET_XML.replace(
+      '</panes>',
+      '<pane><encodings><size column="[Sample].[sum:Profit:qk]"/></encodings></pane></panes>',
+    );
+    const attempt = (): string => removeFieldFromEncoding(xml, 'size', '[Sample].[sum:Sales:qk]');
+
+    expect(attempt).toThrow('first pane');
+    expect(attempt).toThrow('"encodings":{"color":["[Sample].[none:Category:nk]"]}');
+    expect(attempt).not.toThrow('[Sample].[sum:Profit:qk]');
+  });
+
+  it('keeps malformed worksheet errors distinct from stale placements', () => {
+    expect(() => removeFieldFromRows('<workbook/>', '[Sample].[sum:Sales:qk]')).toThrow(
+      'No worksheet found in XML',
+    );
+    expect(() =>
+      removeFieldFromEncoding('<workbook/>', 'color', '[Sample].[sum:Sales:qk]'),
+    ).toThrow('No worksheet found in XML');
   });
 });
 
@@ -470,50 +739,6 @@ describe('detail encoding normalizes to <lod> (regression: coordinate map single
   it('leaves other encoding types (color/size) unchanged', () => {
     const out = addFieldToEncoding(WORKSHEET_XML, 'size', '[Sample].[sum:Profit:qk]');
     expect(out).toMatch(/<size\b[^>]*column=["']\[Sample\]\.\[sum:Profit:qk\]["']/);
-  });
-});
-
-describe('moveFieldInRows', () => {
-  it('should move a field to a new position', () => {
-    const twoRowsXml = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    const moved = moveFieldInRows(twoRowsXml, '[Sample].[sum:Profit:qk]', 0);
-    const fields = listFields(moved).filter((f) => f.location === 'rows');
-    expect(fields[0]?.column).toBe('[Sample].[sum:Profit:qk]');
-  });
-
-  it('should throw when moving to an invalid index', () => {
-    const twoRowsXml = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    expect(() => moveFieldInRows(twoRowsXml, '[Sample].[sum:Profit:qk]', 99)).toThrow();
-  });
-
-  it('should throw when field is not on rows', () => {
-    expect(() => moveFieldInRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]', 0)).toThrow();
-  });
-});
-
-describe('moveFieldInCols', () => {
-  it('should move a col field to position 0', () => {
-    const twoColsXml = addFieldToCols(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
-    const moved = moveFieldInCols(twoColsXml, '[Sample].[sum:Profit:qk]', 0);
-    const fields = listFields(moved).filter((f) => f.location === 'cols');
-    expect(fields[0]?.column).toBe('[Sample].[sum:Profit:qk]');
-  });
-});
-
-describe('moveFieldInEncoding', () => {
-  it('should move an encoding field to position 0', () => {
-    const withSize = addFieldToEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Sales:qk]');
-    const moved = moveFieldInEncoding(withSize, 'color', '[Sample].[sum:Sales:qk]', 0);
-    const fields = listFields(moved).filter(
-      (f) => f.location === 'encodings' && f.encodingType === 'color',
-    );
-    expect(fields[0]?.column).toBe('[Sample].[sum:Sales:qk]');
-  });
-
-  it('should throw when field is not in encoding', () => {
-    expect(() =>
-      moveFieldInEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Sales:qk]', 0),
-    ).toThrow();
   });
 });
 

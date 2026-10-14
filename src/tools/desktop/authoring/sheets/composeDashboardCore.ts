@@ -5,12 +5,7 @@ import {
   deleteDashboard,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
-import {
-  findAllWorksheets,
-  normalizeArray,
-  parseXML,
-} from '../../../../desktop/metadata/parser.js';
-import type { ParsedWindow } from '../../../../desktop/metadata/types.js';
+import { classifyWorkbookWorksheets } from '../../../../desktop/metadata/worksheetRenderState.js';
 import { injectTemplate } from '../../../../desktop/templates/injectTemplate.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
@@ -20,13 +15,12 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { xmlNamesEqual } from '../../../../desktop/xmlElement.js';
+import { parsedXmlNamesEqual, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-  type McpToolError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, type McpToolError } from '../../../../errors/mcpToolError.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { buildDashboardXml, computeZones, escapeXml } from './dashboardZones.js';
 
@@ -50,6 +44,7 @@ export interface ComposeDashboardReceipt {
   worksheets: string[];
   replaced: boolean;
   verification: { status: 'passed'; issues: [] };
+  warnings?: string[];
 }
 
 export interface BuildDashboardCandidateXmlArgs {
@@ -78,12 +73,14 @@ export function buildDashboardCandidateXml({
   const isExecutiveSummary = layoutType === 'executive-summary';
   const kpis = isExecutiveSummary
     ? (layout?.kpiWorksheetNames ?? []).flatMap((kpiName) => {
-        const canonicalName = canonicalWorksheetNames.find((name) => xmlNamesEqual(kpiName, name));
+        const canonicalName = canonicalWorksheetNames.find((name) =>
+          parsedXmlNamesEqual(kpiName, name),
+        );
         return canonicalName ? [canonicalName] : [];
       })
     : [];
   const charts = canonicalWorksheetNames.filter(
-    (name) => !kpis.some((kpiName) => xmlNamesEqual(kpiName, name)),
+    (name) => !kpis.some((kpiName) => parsedXmlNamesEqual(kpiName, name)),
   );
   const zones = computeZones(title, {
     kpis,
@@ -91,7 +88,7 @@ export function buildDashboardCandidateXml({
     layoutType: isExecutiveSummary ? 'executive-summary' : (layoutType ?? 'auto-grid'),
     gridColumns: layout?.gridColumns,
   });
-  const dashboardXml = buildDashboardXml(dashboardName, zones);
+  const dashboardXml = buildDashboardXml(dashboardName, zones, layoutType ?? 'auto-grid');
   const wrapperXml = `<workbook><dashboards>${dashboardXml}</dashboards><windows><window class="dashboard" name="${escapeXml(dashboardName)}"/></windows></workbook>`;
   const candidateXml = injectTemplate(baselineXml, wrapperXml, 'dashboard');
   return injectViewpoints(candidateXml, dashboardName, canonicalWorksheetNames);
@@ -135,17 +132,18 @@ export async function composeDashboardCore({
   }
 
   const pristineXml = workbookResult.value;
-  const resolved = resolveRenderedWorksheetNames(pristineXml, worksheetNames);
+  const resolved = resolveLiveWorksheetNames(pristineXml, worksheetNames);
   const missing = worksheetNames.filter((_, index) => !resolved[index]);
   if (missing.length > 0) {
     return failed(
       'input-validation',
       new ArgsValidationError(
-        `Missing live rendered worksheet name(s): ${missing.map((name) => `"${name}"`).join(', ')}.`,
+        `Missing live worksheet name(s): ${missing.map((name) => `"${name}"`).join(', ')}.`,
       ),
     );
   }
   const canonicalWorksheetNames = resolved as string[];
+  const emptyWorksheetNames = findBlankWorksheetNames(pristineXml, canonicalWorksheetNames);
   const existingDashboardName = listWorkbookDashboards(pristineXml).find((name) =>
     xmlNamesEqual(name, dashboardName),
   );
@@ -163,6 +161,7 @@ export async function composeDashboardCore({
     executor,
     signal,
     replaced: existingDashboardName !== undefined,
+    emptyWorksheetNames,
   });
 }
 
@@ -177,12 +176,14 @@ async function createDashboard({
   executor,
   signal,
   replaced,
+  emptyWorksheetNames,
 }: Omit<ComposeDashboardCoreArgs, 'worksheetNames'> & {
   candidateBaselineXml: string;
   validationBaselineXml: string;
   expectedWorkbookXml: string;
   worksheetNames: string[];
   replaced: boolean;
+  emptyWorksheetNames: string[];
 }): Promise<ComposeDashboardOutcome> {
   let candidateXml: string;
   try {
@@ -287,6 +288,9 @@ async function createDashboard({
       worksheets: worksheetNames,
       replaced,
       verification: { status: 'passed', issues: [] },
+      ...(emptyWorksheetNames.length > 0
+        ? { warnings: [emptyWorksheetWarning(emptyWorksheetNames)] }
+        : {}),
     },
   };
 }
@@ -294,6 +298,7 @@ async function createDashboard({
 const DASHBOARD_SHAPE_ATTRIBUTES = [
   'id',
   'type-v2',
+  'param',
   'name',
   'x',
   'y',
@@ -314,6 +319,7 @@ const DASHBOARD_SHAPE_ATTRIBUTES = [
 interface DashboardShapeElement {
   tagName: string;
   attributes: Record<string, string>;
+  parentZoneId?: string;
   text?: string;
 }
 
@@ -349,9 +355,13 @@ function dashboardShape(
           attributes[attributeName] = element.getAttribute(attributeName) ?? '';
         }
       }
+      const parent = element.parentNode as XmlElement;
       values.push({
         tagName,
         attributes,
+        ...(tagName === 'zone' && parent.tagName === 'zone'
+          ? { parentZoneId: parent.getAttribute('id') ?? undefined }
+          : {}),
         ...(tagName === 'run' ? { text: element.textContent ?? '' } : {}),
       });
     }
@@ -371,6 +381,7 @@ function dashboardShapesEqual(
     if (
       !actualElement ||
       expectedElement.tagName !== actualElement.tagName ||
+      expectedElement.parentZoneId !== actualElement.parentZoneId ||
       expectedElement.text !== actualElement.text
     ) {
       return false;
@@ -485,7 +496,7 @@ export function validateComposeDashboardInput(
   }
   const duplicateKpis = requestedKpis.filter(
     (name, index) =>
-      requestedKpis.findIndex((candidate) => xmlNamesEqual(candidate, name)) !== index,
+      requestedKpis.findIndex((candidate) => parsedXmlNamesEqual(candidate, name)) !== index,
   );
   if (duplicateKpis.length > 0) {
     return new ArgsValidationError(
@@ -495,7 +506,7 @@ export function validateComposeDashboardInput(
     );
   }
   const unknownKpis = requestedKpis.filter(
-    (name) => !worksheetNames.some((worksheetName) => xmlNamesEqual(worksheetName, name)),
+    (name) => !worksheetNames.some((worksheetName) => parsedXmlNamesEqual(worksheetName, name)),
   );
   if (unknownKpis.length > 0) {
     return new ArgsValidationError(
@@ -510,22 +521,41 @@ export function validateComposeDashboardInput(
   return undefined;
 }
 
-export function resolveRenderedWorksheetNames(
+export function resolveLiveWorksheetNames(
   workbookXml: string,
   requestedNames: string[],
 ): Array<string | undefined> {
-  const workbook = parseXML(workbookXml);
-  const worksheetNames = findAllWorksheets(workbook).map((worksheet) => worksheet['@_name']);
-  const worksheetWindowNames = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window)
-    .filter((window) => window['@_class'] === 'worksheet')
-    .map((window) => window['@_name']);
-  return requestedNames.map((requestedName) =>
-    worksheetNames.find(
-      (worksheetName) =>
-        xmlNamesEqual(worksheetName, requestedName) &&
-        worksheetWindowNames.some((windowName) => xmlNamesEqual(windowName, worksheetName)),
-    ),
-  );
+  const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
+  return requestedNames.map((requestedName) => {
+    const worksheet = worksheets.find(
+      (candidate) =>
+        parsedXmlNamesEqual(candidate.name, requestedName) &&
+        worksheetWindowNames.some((windowName) => parsedXmlNamesEqual(windowName, candidate.name)),
+    );
+    if (!worksheet) {
+      return undefined;
+    }
+    return worksheet.name;
+  });
+}
+
+export function findBlankWorksheetNames(workbookXml: string, worksheetNames: string[]): string[] {
+  const { worksheets, worksheetWindowNames } = classifyWorkbookWorksheets(workbookXml);
+  return worksheetNames.flatMap((worksheetName) => {
+    const worksheet = worksheets.find(
+      (candidate) =>
+        parsedXmlNamesEqual(candidate.name, worksheetName) &&
+        worksheetWindowNames.some((windowName) => parsedXmlNamesEqual(windowName, candidate.name)),
+    );
+    return worksheet?.state === 'blank' ? [worksheet.name] : [];
+  });
+}
+
+export function emptyWorksheetWarning(worksheetNames: string[]): string {
+  if (worksheetNames.length === 1) {
+    return `Worksheet "${worksheetNames[0]}" is empty and will display as an empty tile on the dashboard.`;
+  }
+  return `${worksheetNames.length} worksheets are empty and will display as empty tiles on the dashboard.`;
 }
 
 function describeApplyError(error: Parameters<typeof loadFailureOutcome>[0]['error']): string {

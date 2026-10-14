@@ -129,4 +129,54 @@ describe('ExpiringMap', () => {
       ).toThrow('Max size must be greater than 0');
     });
   });
+
+  describe('onDelete hook', () => {
+    it('fires when a key is removed by natural expiry', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 1000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+
+      vi.advanceTimersByTime(1000);
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('fires when a key is evicted by maxSize', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        maxSize: 1,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+      map.set('b', 2); // evicts 'a'
+
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('fires when a key is removed by an explicit delete', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+      map.delete('a');
+
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('does not fire when deleting a key that does not exist', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.delete('missing');
+
+      expect(deleted).toEqual([]);
+    });
+  });
 });

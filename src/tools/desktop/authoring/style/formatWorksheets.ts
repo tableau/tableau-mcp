@@ -10,11 +10,8 @@ import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { resolveShelfField } from '../../api/resolveShelfField.js';
 import { sessionParam } from '../../params.js';

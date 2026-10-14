@@ -1,12 +1,26 @@
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
+  addDashboard,
   deleteDashboard,
   extractDashboardXml,
   listDashboardRefs,
   listWorkbookDashboards,
   resolveDashboardRef,
-  upsertDashboardIntoWorkbook,
 } from './dashboards.js';
+import { normalizeArray, parseXML } from './parser.js';
+
+describe('addDashboard', () => {
+  it('creates a dashboard shell with a vertical flow inside the root basic layout', () => {
+    const workbook = parseXML(addDashboard('<workbook/>', 'New Dashboard'));
+    const root = normalizeArray(
+      normalizeArray(workbook.workbook?.dashboards?.dashboard)[0]?.zones?.zone,
+    )[0];
+    expect(root?.['@_type-v2']).toBe('layout-basic');
+    const flow = normalizeArray(root?.zone)[0];
+    expect(flow).toMatchObject({ '@_type-v2': 'layout-flow', '@_param': 'vert' });
+    expect(root?.['@_id']).not.toBe(flow?.['@_id']);
+  });
+});
 
 // Same shape as the worksheet regression (sheets.test.ts): the <workbook> root declares
 // xmlns:user, and a zone's filter carries a user:-prefixed attribute. The declaration lives on
@@ -60,65 +74,6 @@ describe('extractDashboardXml', () => {
     const xml = extractDashboardXml(workbookWithConflict, 'q');
     expect(xml).toContain('http://example.com/already-declared');
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
-  });
-});
-
-describe('upsertDashboardIntoWorkbook', () => {
-  // The POST replaces the open workbook wholesale, so the posted doc must carry the entire live
-  // workbook — worksheets included (the dashboard's zones reference them by name) — with only the
-  // target dashboard swapped in.
-  const LIVE_WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
-<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
-  <worksheets>
-    <worksheet name='Sheet 1'><table /></worksheet>
-  </worksheets>
-  <dashboards>
-    <dashboard name='Dashboard 1'><zones><old /></zones></dashboard>
-    <dashboard name='Dashboard 2'><zones /></dashboard>
-  </dashboards>
-</workbook>`;
-
-  it('replaces the target dashboard while preserving siblings and worksheets', () => {
-    const edited = "<dashboard name='Dashboard 1'><zones><new /></zones></dashboard>";
-    const doc = upsertDashboardIntoWorkbook(LIVE_WORKBOOK, 'Dashboard 1', edited);
-
-    expect(doc).toContain('<new');
-    expect(doc).not.toContain('<old');
-    expect(doc).toContain('name="Dashboard 2"');
-    expect(doc).toContain('name="Sheet 1"');
-    expect(listWorkbookDashboards(doc)).toEqual(['Dashboard 1', 'Dashboard 2']);
-  });
-
-  it('appends a brand-new dashboard, keeping the existing ones and worksheets', () => {
-    const edited = "<dashboard name='Dashboard 3'><zones /></dashboard>";
-    const doc = upsertDashboardIntoWorkbook(LIVE_WORKBOOK, 'Dashboard 3', edited);
-
-    expect(listWorkbookDashboards(doc)).toEqual(['Dashboard 1', 'Dashboard 2', 'Dashboard 3']);
-    expect(doc).toContain('name="Sheet 1"');
-  });
-
-  it('throws when the edited XML does not carry a <dashboard> with the given name', () => {
-    const edited = "<dashboard name='Wrong'><zones /></dashboard>";
-    expect(() => upsertDashboardIntoWorkbook(LIVE_WORKBOOK, 'Dashboard 1', edited)).toThrow();
-  });
-
-  it('preserves whitespace-significant run text on an untouched sibling worksheet', () => {
-    // A dashboard apply re-serializes the whole workbook, worksheets included. A worksheet's
-    // formatted <run> text with significant spaces must survive verbatim.
-    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
-<workbook>
-  <worksheets>
-    <worksheet name='Sheet 1'><table><formatted-text><run>Sales: </run><run>  $1.2M</run></formatted-text></table></worksheet>
-  </worksheets>
-  <dashboards>
-    <dashboard name='Dashboard 1'><zones><old /></zones></dashboard>
-  </dashboards>
-</workbook>`;
-    const edited = "<dashboard name='Dashboard 1'><zones><new /></zones></dashboard>";
-    const doc = upsertDashboardIntoWorkbook(workbook, 'Dashboard 1', edited);
-
-    expect(doc).toContain('<run>Sales: </run>');
-    expect(doc).toContain('<run>  $1.2M</run>');
   });
 });
 

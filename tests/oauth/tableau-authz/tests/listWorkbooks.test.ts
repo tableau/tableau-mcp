@@ -8,8 +8,8 @@ test.describe('list-workbooks', () => {
   test('list workbooks', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 
-    const workbooks = await client.callTool('list-workbooks', {
-      schema: z.array(workbookSchema),
+    const { data: workbooks } = await client.callTool('list-workbooks', {
+      schema: z.object({ data: z.array(workbookSchema), totalAvailable: z.number() }),
       toolArgs: {},
     });
 

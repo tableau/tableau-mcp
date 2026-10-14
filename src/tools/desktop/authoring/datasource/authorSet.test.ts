@@ -472,6 +472,48 @@ describe('authorSetTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it("escapes ] once in the internal set name and keeps & ' $ intact", async () => {
+    const group =
+      "<group caption='Sales [USD] &amp; $1 &apos;x&apos;' name='[Sales [USD]] &amp; $1 &apos;x&apos;]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { mode: 'empty', caption: "Sales [USD] & $1 'x'", dimension: 'Category' },
+      readbackXml: withGroup(BASE_XML, group),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toBe(withGroup(BASE_XML, group));
+  });
+
+  it('rejects a caption that collides with an existing column name', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { mode: 'empty', caption: 'Profit', dimension: 'Category' },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('already exists');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each(['Profit', 'Category', 'Segment', 'Customer Name', 'profit', 'PROFIT'])(
+    'refuses a caption that matches the real physical field %s before applying',
+    async (caption) => {
+      const realXml = readFileSync(
+        join(
+          process.cwd(),
+          'src/tools/desktop/authoring/datasource/__fixtures__/real-superstore-document.twb.xml',
+        ),
+        'utf8',
+      );
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { mode: 'empty', caption, dimension: 'Sub-Category' },
+        initialXml: realXml,
+      });
+      expect(result.isError).toBe(true);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
   it('accepts a bare integer count (fixed-N set, no param link)', async () => {
     const readbackXml = withGroup(
       BASE_XML,

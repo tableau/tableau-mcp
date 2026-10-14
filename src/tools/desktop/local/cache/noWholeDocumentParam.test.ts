@@ -23,6 +23,8 @@ vi.mock('fs');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
   ...(await importOriginal<typeof cachePathModule>()),
   readContainedCacheTextFile: vi.fn(),
+  writeContainedCacheTextFile: vi.fn(),
+  writeCacheTextFile: vi.fn(),
 }));
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorksheetXml.js', async (importOriginal) => ({
@@ -100,6 +102,13 @@ describe('the served profile still has a working edit path with no document para
       store.set(String(p), String(data));
     });
     mockContainedCacheReadFromFs();
+    vi.mocked(cachePathModule.writeCacheTextFile).mockImplementation((path, text) => {
+      store.set(path, text);
+    });
+    vi.mocked(cachePathModule.writeContainedCacheTextFile).mockImplementation((path, text) => {
+      store.set(path, text);
+      return { ok: true, path };
+    });
   });
 
   it('runs the get -> slice-read -> splice-write -> apply(file) repair path', async () => {

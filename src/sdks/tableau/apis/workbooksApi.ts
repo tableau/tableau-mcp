@@ -1,9 +1,11 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { paginationSchema } from '../types/pagination.js';
+import { workbookPermissionsSchema } from '../types/permissions.js';
 import { tagsSchema } from '../types/tags.js';
-import { workbookSchema } from '../types/workbook.js';
+import { workbookConnectionSchema, workbookSchema } from '../types/workbook.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -12,6 +14,7 @@ const getWorkbookEndpoint = makeEndpoint({
   alias: 'getWorkbook',
   description:
     'Returns information about the specified workbook, including information about views and tags.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: z.object({ workbook: workbookSchema }),
 });
 
@@ -22,11 +25,7 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   description: 'Returns the workbooks on a site.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -49,18 +48,7 @@ const deleteWorkbookEndpoint = makeEndpoint({
   alias: 'deleteWorkbook',
   description:
     'Deletes the specified workbook from the site. On Tableau Cloud the workbook is moved to the recycle bin and can be restored for a limited time.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
   response: z.void(),
 });
 
@@ -70,16 +58,8 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   alias: 'addTagsToWorkbook',
   description: 'Adds one or more tags to the specified workbook.',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'workbookId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
     {
       name: 'body',
       type: 'Body',
@@ -89,11 +69,85 @@ const addTagsToWorkbookEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const queryWorkbookConnectionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/connections',
+  alias: 'queryWorkbookConnections',
+  description:
+    'Returns a list of data connections for the specified workbook, including the datasource each connection points to.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
+  response: z.object({
+    connections: z.object({
+      connection: z.optional(z.array(workbookConnectionSchema)),
+    }),
+  }),
+});
+
+/**
+ * Query Workbook Permissions
+ * GET /api/api-version/sites/site-id/workbooks/workbook-id/permissions
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions
+ */
+const queryWorkbookPermissionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/permissions',
+  alias: 'queryWorkbookPermissions',
+  description: 'Returns the permissions (grantee capabilities) for the specified workbook.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('workbookId')],
+  response: workbookPermissionsSchema,
+});
+
+/**
+ * Update Workbook
+ * PUT /api/api-version/sites/site-id/workbooks/workbook-id
+ * Modifies the project or Personal Space location of the specified workbook.
+ * Tableau Cloud scope: tableau:workbooks:update
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
+ */
+const updateWorkbookEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/workbooks/:workbookId',
+  alias: 'updateWorkbook',
+  description: 'Modifies the project or Personal Space location of the specified workbook.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
+    {
+      name: 'body',
+      type: 'Body',
+      schema: z.object({
+        workbook: z.union([
+          z.object({ project: z.object({ id: z.string() }) }),
+          z.object({ location: z.object({ id: z.string(), type: z.literal('PersonalSpace') }) }),
+        ]),
+      }),
+    },
+  ],
+  response: z.object({ workbook: workbookSchema.partial() }),
+});
+
+const deleteTagFromWorkbookEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/workbooks/:workbookId/tags/:tagName',
+  alias: 'deleteTagFromWorkbook',
+  description: 'Removes a single tag (by label) from the specified workbook.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('workbookId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const workbooksApi = makeApi([
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
+  queryWorkbookConnectionsEndpoint,
+  queryWorkbookPermissionsEndpoint,
   deleteWorkbookEndpoint,
   addTagsToWorkbookEndpoint,
+  deleteTagFromWorkbookEndpoint,
+  updateWorkbookEndpoint,
 ]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

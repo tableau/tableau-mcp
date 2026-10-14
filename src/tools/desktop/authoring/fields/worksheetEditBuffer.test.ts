@@ -1,4 +1,8 @@
+import { Err, Ok } from 'ts-results-es';
+
+import * as cachePathModule from '../../../../desktop/cachePath.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { CacheFileOutsideCacheError } from '../../../../errors/mcpToolError.desktop.js';
 import {
   clearStickyWorksheetFile,
   getStickyWorksheetFile,
@@ -6,6 +10,12 @@ import {
 } from './worksheetEditBuffer.js';
 
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  checkCacheFileArg: vi.fn(),
+  readContainedCacheTextFile: vi.fn(),
+  writeCacheTextFile: vi.fn(),
+}));
 vi.mock('fs');
 
 const SESSION = '12345';
@@ -16,10 +26,17 @@ describe('worksheetEditBuffer', () => {
   // In-memory stand-in for the fs mock so pointer read/write/unlink round-trip like a
   // real filesystem within one test.
   let files: Map<string, string>;
+  let symlinks: Set<string>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     files = new Map();
+    symlinks = new Set();
+    vi.mocked(cachePathModule.checkCacheFileArg).mockImplementation((argName, raw) =>
+      raw.startsWith('/cache/') && files.has(raw) && !symlinks.has(raw)
+        ? Ok(raw)
+        : Err(new CacheFileOutsideCacheError(argName)),
+    );
     const fs = await import('fs');
     vi.mocked(fs.existsSync).mockImplementation((path) => files.has(String(path)));
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
@@ -29,7 +46,13 @@ describe('worksheetEditBuffer', () => {
       }
       return content;
     });
-    vi.mocked(fs.writeFileSync).mockImplementation((path, data) => {
+    vi.mocked(cachePathModule.readContainedCacheTextFile).mockImplementation((path) => {
+      const text = files.get(String(path));
+      return text === undefined
+        ? { ok: false, issue: 'missing' }
+        : { ok: true, path: String(path), text };
+    });
+    vi.mocked(cachePathModule.writeCacheTextFile).mockImplementation((path, data) => {
       files.set(String(path), String(data));
     });
     vi.mocked(fs.unlinkSync).mockImplementation((path) => {
@@ -50,6 +73,25 @@ describe('worksheetEditBuffer', () => {
     expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBe(
       TARGET_FILE,
     );
+  });
+
+  it('ignores a pointer whose file is outside the cache directory', () => {
+    files.set('/etc/outside.xml', '<worksheet/>');
+    setStickyWorksheetFile({
+      session: SESSION,
+      worksheetId: WORKSHEET_ID,
+      file: '/etc/outside.xml',
+    });
+
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
+  });
+
+  it('ignores a pointer whose file was replaced by a symlink, so the caller mints a fresh file', () => {
+    files.set(TARGET_FILE, '<worksheet/>');
+    setStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID, file: TARGET_FILE });
+    symlinks.add(TARGET_FILE);
+
+    expect(getStickyWorksheetFile({ session: SESSION, worksheetId: WORKSHEET_ID })).toBeUndefined();
   });
 
   it('keys the pointer by worksheet id — a different sheet id sees no buffer', () => {

@@ -12,6 +12,7 @@ import {
 } from 'fs';
 import { join, resolve, sep } from 'path';
 
+import { log } from '../../logging/logger.js';
 import { DATA_ROOT, listDataAssetNames, readDataAsset } from '../assets.js';
 import { normalizeBookmarkXml, type TemplatePass1Eligibility } from './bookmarkTemplate.js';
 import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
@@ -272,6 +273,25 @@ function scanExternalRoot(
   });
 }
 
+function scanExternalRootOrSkip(
+  sourceRoot: string,
+  provenance: Exclude<TemplateProvenance, 'protected'>,
+  operations: ContainedFileReadOperations,
+  repositoryRoot: string,
+): TemplateCatalogEntry[] {
+  try {
+    return scanExternalRoot(sourceRoot, provenance, operations, repositoryRoot);
+  } catch (error) {
+    log({
+      message: 'Template root skipped',
+      level: 'warning',
+      logger: 'TemplateCatalog',
+      data: { sourceRoot, error: error instanceof Error ? error.message : String(error) },
+    });
+    return [];
+  }
+}
+
 export function listTemplateCatalog(options: TemplateCatalogOptions = {}): TemplateCatalogEntry[] {
   const operations = options.operations ?? DEFAULT_CONTAINED_FILE_READ_OPERATIONS;
   const includeProtected = options.includeProtected !== false;
@@ -296,7 +316,7 @@ export function listTemplateCatalog(options: TemplateCatalogOptions = {}): Templ
     : undefined;
   if (repositoryRoot !== undefined && repositoryRoot !== '') {
     addTier(
-      scanExternalRoot(
+      scanExternalRootOrSkip(
         join(repositoryRoot, 'Tableau Agent', 'templates', '.vendored', 'overridable'),
         'overridable',
         operations,
@@ -304,10 +324,15 @@ export function listTemplateCatalog(options: TemplateCatalogOptions = {}): Templ
       ),
     );
     addTier(
-      scanExternalRoot(join(repositoryRoot, 'Bookmarks'), 'bookmark', operations, repositoryRoot),
+      scanExternalRootOrSkip(
+        join(repositoryRoot, 'Bookmarks'),
+        'bookmark',
+        operations,
+        repositoryRoot,
+      ),
     );
     addTier(
-      scanExternalRoot(
+      scanExternalRootOrSkip(
         join(repositoryRoot, 'Tableau Agent', 'templates'),
         'custom',
         operations,

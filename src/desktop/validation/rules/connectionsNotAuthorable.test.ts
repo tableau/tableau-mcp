@@ -76,9 +76,9 @@ describe('connections-not-authorable rule', () => {
     const xml = `<?xml version="1.0"?>
 <workbook>
   <datasources>
-    <datasource caption="GUS-Work" name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s">
+    <datasource caption="Example-Datasource" name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s">
       <connection channel="https" class="sqlproxy" composed-connection-name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s"
-        dbname="GUS-Work" port="443" server="10ax.online.tableau.com" username="user" />
+        dbname="Example-Datasource" port="443" server="10ax.online.tableau.com" username="user" />
     </datasource>
   </datasources>
 </workbook>`;

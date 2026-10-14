@@ -54,6 +54,43 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
     expect(out).not.toContain('name="[qk]"');
   });
 
+  it.each([
+    ['[DS].[none:Order: Date:nk]', 'none', 'Order: Date'],
+    ['[DS].[sum:Q1: Sales:qk]', 'sum', 'Q1: Sales'],
+    ['[DS].[pcto:cum:sum:A:B:C:qk:3]', 'pcto:cum:sum', 'A:B:C'],
+    ['[DS].[none:Sum: Total:nk]', 'none', 'Sum: Total'],
+    ['[DS].[sum:Sum: Total:qk]', 'sum', 'Sum: Total'],
+    ['[DS].[sum:min: Duration:qk]', 'sum', 'min: Duration'],
+  ])('keeps a colon inside a bound field name for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`:${field}:`);
+    expect(out).not.toContain(`name="[${field.split(':').pop()}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each([
+    ['[DS].[pcto:sum:Sales:qk]', 'pcto:sum', 'Sales'],
+    ['[DS].[cum:usr:Calc:qk]', 'cum:usr', 'Calc'],
+    ['[DS].[cum:Sum:Sales:qk]', 'cum:sum', 'Sales'],
+    ['[DS].[pcto:cum:sum:Sales:qk]', 'pcto:cum:sum', 'Sales'],
+  ])('consumes a table-calc wrapper chain for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each(['[DS].[sum::qk]', '[DS].[pcto:sum::qk]'])(
+    'skips a malformed mapping with an empty field name: %s',
+    (mapped) => {
+      const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+      expect(out).not.toContain('name="[]"');
+    },
+  );
+
   it('rewrites an unqualified generated-instance source reference', () => {
     const forecastXml = xml.replace(
       "name='[none:Field:nk]'",
@@ -422,6 +459,187 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
     expect(out).not.toContain('{{DATASOURCE}}');
     expect(out).not.toContain('{{field_base_1}}');
   });
+
+  it('rewrites swapped fields once without consuming generated target references', () => {
+    const swappedXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column name="[Sales]" datatype="real" role="measure" type="quantitative"/>' +
+      '<column name="[Profit]" datatype="real" role="measure" type="quantitative"/>' +
+      '<column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]"/>' +
+      '<column-instance column="[Profit]" derivation="Sum" name="[sum:Profit:qk]"/>' +
+      '<column name="[Ratio]" datatype="real" role="measure" type="quantitative">' +
+      '<calculation class="tableau" formula="SUM([Sales])/SUM([Profit])"/>' +
+      '</column></datasource-dependencies></view>' +
+      '<rows>[{{DATASOURCE}}].[sum:Sales:qk]</rows>' +
+      '<cols>[{{DATASOURCE}}].[sum:Profit:qk]</cols>' +
+      '</table></worksheet></worksheets></workbook>';
+
+    const out = rewriteFieldReferences(
+      swappedXml,
+      {
+        Sales: '[Target Data].[avg:Profit:qk]',
+        Profit: '[Target Data].[min:Sales:qk]',
+      },
+      'Target Data',
+      {
+        Sales: { datatype: 'integer', type: 'quantitative' },
+        Profit: { datatype: 'real', type: 'quantitative' },
+      },
+    );
+
+    expect(out).toContain(
+      '<column name="[Profit]" datatype="integer" role="measure" type="quantitative"/>',
+    );
+    expect(out).toContain(
+      '<column name="[Sales]" datatype="real" role="measure" type="quantitative"/>',
+    );
+    expect(out).toContain(
+      '<column-instance column="[Profit]" derivation="Avg" name="[avg:Profit:qk]"/>',
+    );
+    expect(out).toContain(
+      '<column-instance column="[Sales]" derivation="Min" name="[min:Sales:qk]"/>',
+    );
+    expect(out).toContain('<rows>[Target Data].[avg:Profit:qk]</rows>');
+    expect(out).toContain('<cols>[Target Data].[min:Sales:qk]</cols>');
+    expect(out).toContain('formula="SUM([Profit])/SUM([Sales])"');
+  });
+
+  it('produces the same chained remap regardless of mapping insertion order', () => {
+    const chainedXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column name="[A]" datatype="real" role="measure" type="quantitative"/>' +
+      '<column name="[B]" datatype="real" role="measure" type="quantitative"/>' +
+      '<column-instance column="[A]" derivation="Sum" name="[sum:A:qk]"/>' +
+      '<column-instance column="[B]" derivation="Sum" name="[sum:B:qk]"/>' +
+      '</datasource-dependencies></view>' +
+      '<rows>[{{DATASOURCE}}].[sum:A:qk]</rows>' +
+      '<cols>[{{DATASOURCE}}].[sum:B:qk]</cols>' +
+      '</table></worksheet></worksheets></workbook>';
+    const forward = rewriteFieldReferences(
+      chainedXml,
+      { A: '[Target].[sum:B:qk]', B: '[Target].[sum:C:qk]' },
+      'Target',
+    );
+    const reversed = rewriteFieldReferences(
+      chainedXml,
+      { B: '[Target].[sum:C:qk]', A: '[Target].[sum:B:qk]' },
+      'Target',
+    );
+
+    expect(reversed).toBe(forward);
+    expect(forward).toContain('<rows>[Target].[sum:B:qk]</rows>');
+    expect(forward).toContain('<cols>[Target].[sum:C:qk]</cols>');
+    expect(forward).toContain('column="[B]" derivation="Sum" name="[sum:B:qk]"');
+    expect(forward).toContain('column="[C]" derivation="Sum" name="[sum:C:qk]"');
+  });
+
+  it('rewrites descriptor-backed bare and derived references in one pass', () => {
+    const overlapXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<format bare="[Sales] / [Profit]" qualified="[Sales].[sum:Profit:qk]"/>' +
+      '<rows>[{{DATASOURCE}}].[sum:Sales:qk]</rows>' +
+      '<cols>[{{DATASOURCE}}].[sum:Profit:qk]</cols>' +
+      '</view></table></worksheet></worksheets></workbook>';
+    const out = rewriteFieldReferences(
+      overlapXml,
+      {
+        Sales: '[Profit].[avg:Revenue:qk]',
+        Profit: '[Profit].[min:Margin:qk]',
+      },
+      'Profit',
+      undefined,
+      {
+        templateSlots: [
+          { template_field: 'Sales', required: true },
+          { template_field: 'Profit', required: true },
+        ],
+      },
+    );
+
+    expect(out).toContain('bare="[Revenue] / [Margin]"');
+    expect(out).toContain('qualified="[Profit].[min:Margin:qk]"');
+    expect(out).not.toContain('qualified="[Margin].');
+  });
+
+  it('rewrites a filter without children and preserves unchanged filter structure', () => {
+    const filterXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<filter class="categorical" column="[{{DATASOURCE}}].[none:Region:nk]"/>' +
+      '<filter class="categorical" column="[{{DATASOURCE}}].[none:Category:nk]">' +
+      '<groupfilter function="filter" field="[Sales]" expression="SUM([Sales]) &gt; 0">' +
+      '<groupfilter function="member" level="[none:Category:nk]" member="&quot;[Sales]&quot;"/>' +
+      '</groupfilter></filter>' +
+      '<group name="[Top]"><groupfilter function="order" expression="SUM([Sales])">' +
+      '<groupfilter function="level-members" level="[none:Region:nk]"/>' +
+      '</groupfilter></group>' +
+      '</view></table></worksheet></worksheets></workbook>';
+    const out = rewriteFieldReferences(
+      filterXml,
+      {
+        Region: '[Target].[none:Segment:nk]',
+        Category: '[Target].[none:Category:nk]',
+        Sales: '[Target].[sum:Profit:qk]',
+      },
+      'Target',
+    );
+
+    expect(out).toContain('<filter class="categorical" column="[Target].[none:Segment:nk]"/>');
+    expect(out).toContain(
+      '<groupfilter function="filter" field="[Profit]" expression="SUM([Profit]) &gt; 0">',
+    );
+    expect(out).toContain(
+      '<groupfilter function="member" level="[none:Category:nk]" member="&quot;[Sales]&quot;"/>',
+    );
+    expect(out).toContain(
+      '<group name="[Top]"><groupfilter function="order" expression="SUM([Profit])">' +
+        '<groupfilter function="level-members" level="[none:Segment:nk]"/>',
+    );
+  });
+
+  it('neutralizes hard-coded filter members only when the bound identity changes', () => {
+    const filterXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<filter class="categorical" column="[{{DATASOURCE}}].[none:Region:nk]">' +
+      '<groupfilter function="union"><groupfilter function="member" level="[none:Region:nk]" member="West"/></groupfilter>' +
+      '</filter></view></table></worksheet></worksheets></workbook>';
+    const out = rewriteFieldReferences(
+      filterXml,
+      { Region: '[Target].[none:Segment:nk]' },
+      'Target',
+    );
+
+    expect(out).toContain('column="[Target].[none:Segment:nk]"');
+    expect(out).toContain('<groupfilter function="level-members" level="[none:Segment:nk]"/>');
+    expect(out).not.toContain('member="West"');
+  });
+
+  it('neutralizes donor members when a bare filter identity changes', () => {
+    const filterXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      '<filter class="categorical" column="[Region]">' +
+      '<groupfilter function="member" level="[Region]" member="West"/>' +
+      '</filter>' +
+      '<filter class="categorical" column="[Category]">' +
+      '<groupfilter function="member" level="[Category]" member="Furniture"/>' +
+      '</filter>' +
+      '</view></table></worksheet></worksheets></workbook>';
+    const out = rewriteFieldReferences(
+      filterXml,
+      {
+        Region: '[Target].[none:Segment:nk]',
+        Category: '[Target].[none:Category:nk]',
+      },
+      'Target',
+    );
+
+    expect(out).toContain('column="[Segment]"');
+    expect(out).toContain('<groupfilter function="level-members" level="[Segment]"/>');
+    expect(out).not.toContain('member="West"');
+    expect(out).toContain('column="[Category]"');
+    expect(out).toContain('member="Furniture"');
+  });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated measure)', () => {
@@ -769,6 +987,20 @@ describe('rewriteFieldReferences — per-apply calc namespacing (opt-in, determi
     expect(out).not.toContain(':Calc:');
   });
 
+  it('does not namespace a matching token inside geo semantic-role metadata', () => {
+    const xml =
+      '<workbook><column name="[City]" semantic-role="[Country].[Name]"/>' +
+      '<column name="[Name]"><calculation formula="1"/></column></workbook>';
+
+    const out = rewriteFieldReferences(xml, {}, 'DS', undefined, {
+      namespaceCalcs: true,
+      applyNonce: 'semantic-role',
+    });
+
+    expect(out).toContain('name="[Name_tpl_');
+    expect(out).toContain('semantic-role="[Country].[Name]"');
+  });
+
   it('stripping the per-apply suffix reproduces the non-namespaced output byte-for-byte', () => {
     const off = rewriteFieldReferences(snapshot.xml, mapping, 'DS', undefined, {
       templateSlots: snapshot.descriptor.slots,
@@ -825,6 +1057,56 @@ describe('rewriteFieldReferences — semantic-role reconciliation (empty-map reg
     );
     expect(out).toContain('semantic-role="[Country].[ISO3166_2]"');
     expect(out).not.toContain('[City].[Name]');
+  });
+
+  it('does not remap a target semantic role that overlaps another mapped field', () => {
+    const collisionTemplate =
+      '<?xml version="1.0"?><worksheet><table><view>' +
+      '<datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column datatype="string" name="[City]" role="dimension" semantic-role="[City].[Name]" type="nominal"/>' +
+      '<column datatype="string" name="[Name]" role="dimension" type="nominal"/>' +
+      '</datasource-dependencies></view></table></worksheet>';
+    const out = rewriteFieldReferences(
+      collisionTemplate,
+      {
+        City: '[Target].[none:Country/Region:nk]',
+        Name: '[Target].[none:Customer Name:nk]',
+      },
+      'Target',
+      {
+        City: { semanticRole: '[Country].[Name]' },
+        Name: { datatype: 'string', type: 'nominal' },
+      },
+      {
+        templateSlots: [
+          { template_field: 'City', required: true },
+          { template_field: 'Name', required: true },
+        ],
+      },
+    );
+
+    expect(out).toContain('name="[Country/Region]"');
+    expect(out).toContain('semantic-role="[Country].[Name]"');
+    expect(out).toContain('name="[Customer Name]"');
+    expect(out).not.toContain('semantic-role="[Target].[Customer Name]"');
+  });
+
+  it('does not prune a geo column when an omitted slot matches its semantic role token', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Country/Region:nk]' },
+      'World Indicators',
+      { City: { semanticRole: '[Country].[Name]' } },
+      {
+        templateSlots: [
+          { template_field: 'City', required: true },
+          { template_field: 'Name', required: false },
+        ],
+      },
+    );
+
+    expect(out).toContain('name="[Country/Region]"');
+    expect(out).toContain('semantic-role="[Country].[Name]"');
   });
 
   it('drops the donor role when no metadata is supplied at all (assert nothing, never the donor)', () => {
@@ -992,6 +1274,23 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
     expect(out).not.toContain('name="[sum:Latitude (generated):qk]"');
   });
 
+  it('synthesizes a declaration for a colon-named field without splitting its name', () => {
+    const colonMap =
+      "<worksheet name='m'><table><view>" +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column datatype='real' name='[min: Duration]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies>' +
+      '<panes><pane><encodings>' +
+      "<size column='[{{DATASOURCE}}].[sum:min: Duration:qk]' />" +
+      '</encodings></pane></panes>' +
+      '</view></table></worksheet>';
+    const out = rewriteFieldReferences(colonMap, {}, 'DS');
+
+    expect(out).toContain(
+      '<column-instance column="[min: Duration]" derivation="Sum" name="[sum:min: Duration:qk]" pivot="key" type="quantitative"/>',
+    );
+  });
+
   it('carries the synthesized instance through a rename, matching the renamed base column', () => {
     // color references [sum:Quantity:qk]; Quantity is remapped to Profit → the
     // synthesized declaration must name the RENAMED base column, not the donor's.
@@ -1004,5 +1303,34 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
       '<column-instance column="[Profit]" derivation="Sum" name="[sum:Profit:qk]" pivot="key" type="quantitative"/>',
     );
     expect(out).not.toContain('name="[sum:Quantity:qk]"');
+  });
+});
+
+describe('rewriteFieldReferences — pruning an unmapped optional pill keeps shelf operators', () => {
+  const sheet = (rows: string): string =>
+    `<worksheet name='S'><table><view><datasources><datasource name='{{DATASOURCE}}'/></datasources><datasource-dependencies datasource='{{DATASOURCE}}'><column name='[A]' datatype='real' role='measure' type='quantitative'/><column name='[B]' datatype='real' role='measure' type='quantitative'/><column name='[Opt]' datatype='real' role='measure' type='quantitative'/><column-instance column='[A]' derivation='Sum' name='[sum:A:qk]' pivot='key' type='quantitative'/><column-instance column='[B]' derivation='Sum' name='[sum:B:qk]' pivot='key' type='quantitative'/><column-instance column='[Opt]' derivation='Sum' name='[sum:Opt:qk]' pivot='key' type='quantitative'/></datasource-dependencies></view><rows>${rows}</rows><cols></cols></table></worksheet>`;
+  const slots = [
+    { template_field: 'A', required: true },
+    { template_field: 'B', required: true },
+    { template_field: 'Opt', required: false },
+  ];
+  const d = '[{{DATASOURCE}}]';
+  it.each([
+    [`(${d}.[sum:A:qk] + ${d}.[sum:Opt:qk])`, '[DS].[sum:X:qk]'],
+    [`(${d}.[sum:Opt:qk] / ${d}.[sum:A:qk])`, '[DS].[sum:X:qk]'],
+    [
+      `(${d}.[sum:A:qk] / (${d}.[sum:B:qk] + ${d}.[sum:Opt:qk]))`,
+      '([DS].[sum:X:qk] / [DS].[sum:Y:qk])',
+    ],
+  ])('prunes %s', (rows, expected) => {
+    const result = rewriteFieldReferencesWithDiagnostics(
+      sheet(rows),
+      { A: '[sum:X:qk]', B: '[sum:Y:qk]' },
+      'DS',
+      undefined,
+      { templateSlots: slots },
+    );
+    const out = result.xml.match(/<rows>([^<]*)<\/rows>/)?.[1];
+    expect(out).toBe(expected);
   });
 });

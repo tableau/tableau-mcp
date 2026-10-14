@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseListExtractRefreshTasksResponse } from './tasksApi.js';
+import { parseGetFlowRunTasksResponse, parseListExtractRefreshTasksResponse } from './tasksApi.js';
 
 describe('parseListExtractRefreshTasksResponse', () => {
   it('accepts Tableau empty tasks: {} by normalizing to task: []', () => {
@@ -64,5 +64,28 @@ describe('parseListExtractRefreshTasksResponse', () => {
         },
       ],
     });
+  });
+});
+
+describe('parseGetFlowRunTasksResponse', () => {
+  it('accepts Tableau empty tasks: {} by normalizing to task: []', () => {
+    const data = parseGetFlowRunTasksResponse({ tasks: {} });
+    expect(data.tasks).toEqual({ task: [] });
+  });
+
+  it('does not change responses that already include task as array', () => {
+    const entry = {
+      flowRun: { id: 't1', flow: { id: 'f1', name: 'Flow One' } },
+    };
+    const data = parseGetFlowRunTasksResponse({ tasks: { task: [entry] } });
+    expect(data.tasks).toEqual({ task: [entry] });
+  });
+
+  it('normalizes a single flowRun task object to an array', () => {
+    const entry = {
+      flowRun: { id: 't1', flow: { id: 'f1' } },
+    };
+    const data = parseGetFlowRunTasksResponse({ tasks: { task: entry } });
+    expect(data.tasks).toEqual({ task: [entry] });
   });
 });

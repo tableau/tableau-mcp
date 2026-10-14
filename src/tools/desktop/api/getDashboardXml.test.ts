@@ -6,7 +6,7 @@ import * as getDashboardXmlModule from '../../../desktop/wrappers/getDashboardXm
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -17,6 +17,10 @@ import { getGetDashboardXmlTool } from './getDashboardXml.js';
 
 vi.mock('../../../desktop/wrappers/getDashboardXml.js');
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 describe('getDashboardXmlTool', () => {
   const inlineResultSchema = z.object({

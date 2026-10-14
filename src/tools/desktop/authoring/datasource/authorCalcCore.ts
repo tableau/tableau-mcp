@@ -10,11 +10,8 @@ import {
 import { WithExecutorAndAbortSignal } from '../../../../desktop/externalApi/executorTypes.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveUniqueDatasourceName } from '../../../../desktop/metadata/field-resolver.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import { prettyPrintFormula } from './prettyPrintFormula.js';
 
@@ -884,6 +881,11 @@ function rewriteUnquotedFieldReferences(
   return `${rewritten}${formula.slice(cursor)}`;
 }
 
+// Tableau calc strings escape a double quote by doubling it.
+export function quoteCalcString(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
 function renderFieldReference(token: string): string {
   return `[${token.replaceAll(']', ']]')}]`;
 }
@@ -1168,6 +1170,50 @@ function findColumnTags(xml: string): string[] {
   return [...xml.matchAll(/<column\b[\s\S]*?(?:<\/column>|\/>)/g)].map((match) => match[0]);
 }
 
+/** One parameter defined in the workbook's Parameters datasource. */
+export type WorkbookParameter = {
+  /** Bracketed internal name, e.g. "[Parameter 1]". */
+  name: string;
+  /** Display caption when present, e.g. "p.Period". */
+  caption?: string;
+  /** Datatype from the `<column datatype=...>` tag, e.g. "string", "integer", "real". */
+  datatype?: string;
+};
+
+/**
+ * The parameters already defined in the workbook, read from the Parameters datasource. A
+ * parameter is a `<column param-domain-type=...>` there; the field/schema summary excludes the
+ * Parameters datasource, so callers that need parameters (author-action's parameter mode, its
+ * recovery guidance) read them here. Uses the shared opaque-range-aware datasource parser rather
+ * than a bespoke regex. Empty when the workbook has no Parameters datasource or no parameters.
+ */
+export function findWorkbookParameters(xml: string): WorkbookParameter[] {
+  const parametersDatasource = findDatasourceElements(xml).find(
+    (datasource) => datasource.name === 'Parameters',
+  );
+  if (parametersDatasource === undefined) {
+    return [];
+  }
+  const parameters: WorkbookParameter[] = [];
+  for (const tag of findColumnTags(parametersDatasource.xml)) {
+    if (getAttr(tag, 'param-domain-type') === undefined) {
+      continue;
+    }
+    const name = getAttr(tag, 'name');
+    if (name === undefined) {
+      continue;
+    }
+    const caption = getAttr(tag, 'caption');
+    const datatype = getAttr(tag, 'datatype');
+    parameters.push({
+      name: unescapeXml(name),
+      ...(caption === undefined ? {} : { caption: unescapeXml(caption) }),
+      ...(datatype === undefined ? {} : { datatype: unescapeXml(datatype) }),
+    });
+  }
+  return parameters;
+}
+
 export { resolveCaptionReferences as resolveCaptionReferencesForTest };
 
 function resolveCaptionReferences(
@@ -1181,9 +1227,13 @@ function resolveCaptionReferences(
     const name = getAttr(tag, 'name');
     if (cap === undefined || name === undefined) continue;
     const capText = unescapeXml(cap);
-    const nameText = unescapeXml(name).replace(/^\[|\]$/g, '');
+    const storedName = unescapeXml(name);
+    const nameText = storedName.replace(/^\[|\]$/g, '').replaceAll(']]', ']');
     if (capText !== nameText) {
-      captionToRef.set(capText, renderFieldReference(nameText));
+      captionToRef.set(
+        capText,
+        storedName.startsWith('[') ? storedName : renderFieldReference(nameText),
+      );
     }
   }
   // Parameters live in their own datasource, so caption references must be qualified.
@@ -1199,7 +1249,13 @@ function resolveCaptionReferences(
     }
   }
   if (captionToRef.size === 0) return formula;
-  return rewriteUnquotedFieldReferences(formula, (whole, token) => {
+  return rewriteUnquotedFieldReferences(formula, (whole, token, offset, end) => {
+    if (
+      formula.slice(end, end + 2) === '.[' ||
+      formula.slice(Math.max(0, offset - 2), offset) === '].'
+    ) {
+      return whole;
+    }
     return captionToRef.get(token) ?? whole;
   });
 }
@@ -1275,7 +1331,7 @@ function escapeXml(value: string): string {
     .replaceAll('"', '&quot;');
 }
 
-function unescapeXml(value: string): string {
+export function unescapeXml(value: string): string {
   return value
     .replaceAll('&quot;', '"')
     .replaceAll('&apos;', "'")

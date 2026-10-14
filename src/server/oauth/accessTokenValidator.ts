@@ -8,7 +8,11 @@ import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
-import { buildResourceIdentifier, stripTrailingSlash } from './resourceIdentifier.js';
+import {
+  buildResourceIdentifier,
+  canonicalizeLoopbackHost,
+  stripTrailingSlash,
+} from './resourceIdentifier.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
@@ -16,6 +20,7 @@ import {
   tableauBearerTokenSchema,
 } from './schemas';
 import { parseScopes } from './scopes.js';
+import { checkEmbeddedTokenBinding } from './siteBinding.js';
 import { AUDIENCE } from './token.js';
 
 type AccessTokenValidatorResult = Result<AuthInfo, string>;
@@ -103,6 +108,20 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
 
         const siteName = sessionResult.value.site.contentUrl || '';
 
+        const bindingError = checkEmbeddedTokenBinding(
+          this.config,
+          { tableauServer, tableauSiteContentUrl: siteName },
+          { name: sessionResult.value.site.name, contentUrl: siteName },
+        );
+        if (bindingError) {
+          log({
+            message: `Embedded access token rejected: ${bindingError}`,
+            level: 'error',
+            logger: 'oauth',
+          });
+          return new Err('Invalid or expired access token');
+        }
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
@@ -114,7 +133,22 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           siteName,
         };
       } else {
-        const { tableauUserId, tableauSiteId, tableauServer, sub } = mcpAccessToken.data;
+        const { tableauUserId, tableauSiteId, tableauSiteContentUrl, tableauServer, sub } =
+          mcpAccessToken.data;
+
+        const bindingError = checkEmbeddedTokenBinding(this.config, {
+          tableauServer,
+          tableauSiteContentUrl,
+        });
+        if (bindingError) {
+          log({
+            message: `Embedded access token rejected: ${bindingError}`,
+            level: 'error',
+            logger: 'oauth',
+          });
+          return new Err('Invalid or expired access token');
+        }
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
@@ -180,12 +214,17 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       // identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always accepted; each global
       // resource URL (when configured) is matched as the AS stamps it. Both the allowed values and
       // the token's aud are compared with trailing slashes stripped so a cosmetic `/` difference
-      // (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a mismatch.
+      // (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a mismatch,
+      // and with loopback hosts canonicalized so the interchangeable local-dev forms `localhost`,
+      // `127.0.0.1`, and `[::1]` (the resource URI defaults to `http://127.0.0.1:<port>`) are not a
+      // mismatch either. Both normalizations only collapse equivalent forms; remote hosts are exact.
+      const normalizeAudience = (uri: string): string =>
+        stripTrailingSlash(canonicalizeLoopbackHost(uri));
       const allowedAudiences = [
         buildResourceIdentifier(this.config.oauth.resourceUri),
         ...this.config.oauth.globalResourceUris,
-      ].map(stripTrailingSlash);
-      if (!allowedAudiences.includes(stripTrailingSlash(aud))) {
+      ].map(normalizeAudience);
+      if (!allowedAudiences.includes(normalizeAudience(aud))) {
         log({
           message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog(aud)}'`,
           level: 'error',

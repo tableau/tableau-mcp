@@ -27,13 +27,32 @@ import {
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
+import { buildWebInstructions } from './server.web.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
+const mocks = vi.hoisted(() => ({
+  mockFeatureGate: {
+    isFeatureEnabled: vi.fn((_featureName: string) => false),
+  },
+}));
+
+vi.mock('./features/init.js', () => ({
+  getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
+}));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('DesktopMcpServer', () => {
+  beforeEach(() => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+  });
+
   it('should register tools', async () => {
     // Pin the full surface: this test is about registration mechanics (every tool
     // registered with its title/schema/annotations), independent of the profile
@@ -113,7 +132,19 @@ describe('DesktopMcpServer', () => {
   it('does not override tools/list on a shared McpServer (combined variant)', async () => {
     // The combined variant registers the web half on the same McpServer; a desktop
     // tools/list override there hides every web tool (caught live by the e2e suite).
-    const sharedMcpServer = new McpServer({ name: 'shared', version: '0.0.0' });
+    const config = configModule.getDesktopConfig();
+    const desktopInstructions = buildDesktopInstructions({
+      sessionPinned: config.desktopSessionId !== undefined,
+      profile: config.toolProfile,
+    });
+    const combinedInstructions = `${buildWebInstructions()} ${desktopInstructions}`;
+    const sharedMcpServer = new McpServer(
+      { name: 'shared', version: '0.0.0' },
+      { instructions: combinedInstructions },
+    );
+    // The global McpServer mock records constructor arguments but does not mirror this SDK field.
+    (sharedMcpServer.server as unknown as { _instructions?: string })._instructions =
+      combinedInstructions;
     const server = new DesktopMcpServer({ mcpServer: sharedMcpServer });
     await server.registerTools();
 
@@ -202,10 +233,10 @@ describe('desktop tools/list serialized surface', () => {
       DYNAMIC_AUTHORING_TOOL_PROFILE,
     );
 
-    // Tool search owns discovery; pin the merged filter recovery, dense-scatter repair,
-    // executive-dashboard guidance, rounded-bar build/refine proof route, and dashboard
-    // corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(8_318);
+    // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
+    // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
+    // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(9_328);
   });
 });
 
@@ -270,13 +301,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2576], // remeasured after standardizing the calc datasource selector as internal name or unique caption
     ['add-field', 1396], // ratcheted down 2026-08-12: worksheetName/worksheetFile describes trimmed to fund the sticky edit-buffer nudge while staying under budget
     ['inject-template', 1229], // ratcheted down 2026-08-06 after removing the fork-only output mode; session remains optional
-    ['apply-worksheet', 1579], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
+    ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
-    ['build-worksheets-from-templates', 1150], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
+    ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
-    ['plan-dashboard-creation', 1378], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
-    ['build-and-apply-dashboard', 1423], // ratcheted down in the CODA funding trim; do not grow
-    ['author-action', 1433], // remeasured after preserving URL authoring and standardizing the datasource selector as internal name or unique caption
+    ['plan-dashboard-creation', 1373], // Manual-registration description trim; do not grow.
+    ['build-and-apply-dashboard', 1418], // ratcheted down after removing viewpoint injection; do not grow
+    ['author-action', 2582], // raised 2026-09-30 (+166, signed off): parameter-mode onClear enum distinguishes an empty-string reset from keep-current; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -438,109 +469,117 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 70-tool modern surface with scoped XML fallbacks', () => {
-    const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
-    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(70);
-    // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
-    // knowledge doors the system prompt's "consult the expertise library" law routes to.
-    for (const verb of [
-      'author-calc',
-      'author-set',
-      'author-parameter',
-      'author-action',
-      'format-worksheets',
-      'format-dashboard-zones',
-      'compose-story',
-      'ask-user',
-      'search-commands',
-      'list-templates',
-      'bind-template',
-      'build-worksheets-from-templates',
-      'refine-worksheet',
-      'add-field',
-      'remove-field',
-      'resolve-field',
-      'apply-worksheet',
-      'run-dashboard-batch',
-      'read-knowledge-resource',
-      'search-knowledge',
-      'get-summary-data',
-      'get-workbook-inventory',
-      'list-workbook-datasources',
-      'get-datasource-info',
-      'get-datasource-xml',
-      'apply-datasource',
-      'activate-sheet',
-      'delete-sheet',
-      'rename-sheet',
-      'sort-worksheet',
-      'show-me',
-      'undo-workbook',
-      'redo-workbook',
-      'list-instances',
-      'get-active-dialogs',
-      'invoke-dialog-action',
-      'list-available-fields',
-      'search-workbook-fields',
-      'list-worksheets',
-      'list-dashboards',
-      'list-worksheet-logical-tables',
-      'get-worksheet-underlying-data',
-      'add-worksheet',
-      'add-dashboard',
-      'add-storyboard',
-      'open-file',
-      'set-start-page-visibility',
-      'save-workbook',
-      'workbook-export-as',
-      'publish-workbook',
-      'refresh-auto-updates',
-      'refresh-datasource-data',
-      'refresh-datasource-extract',
-      'get-workbook-xml',
-      'apply-workbook',
-      'apply-workbook-style',
-      'inspect-custom-theme',
-      'export-custom-theme',
-      'get-dashboard-xml',
-      'apply-dashboard',
-      'get-storyboard-xml',
-      'apply-storyboard',
-      // The manual field-edit path's read leg — mints the worksheetFile add-field/
-      // remove-field/apply-worksheet consume.
-      'get-worksheet-xml',
-    ]) {
-      expect(selected.map((t) => t.name)).toContain(verb);
-    }
-    // Keep unrelated info/site/validation and legacy template tools out. The six scoped and
-    // whole-workbook fallbacks above are the complete XML surface added to this profile.
-    for (const banished of [
-      'build-and-apply-worksheet',
-      'validate-workbook-xml',
-      'validate-worksheet-xml',
-      'inject-template',
-      'list-site-datasources',
-      'list-site-workbooks',
-      'get-app-info',
-      'get-health',
-      'get-worksheet-info',
-      'list-storyboards',
-      'get-api-root',
-      'get-site-info',
-      'get-dashboard-info',
-      'get-storyboard-info',
-      'list-knowledge-resources',
-      'plan-dashboard-creation',
-      'batch-create-and-cache-sheets',
-      'build-and-apply-dashboard',
-      'compose-dashboard',
-      'dashboard-auto-apply',
-    ]) {
-      expect(selected.map((t) => t.name)).not.toContain(banished);
-    }
-  });
+  it.each(['', 'dynamic-authoring'])(
+    'TOOL_PROFILE=%j registers exactly the 76-tool modern surface with scoped XML fallbacks',
+    (profile) => {
+      const selected = selectToolsForProfile(allTools(), profile);
+      expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+      expect(selected).toHaveLength(76);
+      // The full dynamic dialect, semantically named — every author-* verb present,
+      // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
+      // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
+      for (const verb of [
+        'author-calc',
+        'author-set',
+        'author-parameter',
+        'author-action',
+        'format-worksheets',
+        'format-dashboard-zones',
+        'compose-story',
+        'ask-user',
+        'search-commands',
+        'list-templates',
+        'bind-template',
+        'build-worksheets-from-templates',
+        'refine-worksheet',
+        'add-field',
+        'remove-field',
+        'resolve-field',
+        'apply-worksheet',
+        'run-dashboard-batch',
+        'read-knowledge-resource',
+        'search-knowledge',
+        'get-summary-data',
+        'get-workbook-inventory',
+        'list-workbook-datasources',
+        'get-datasource-info',
+        'get-datasource-xml',
+        'apply-datasource',
+        'activate-sheet',
+        'delete-sheet',
+        'rename-sheet',
+        'sort-worksheet',
+        'show-me',
+        'undo-workbook',
+        'redo-workbook',
+        'list-instances',
+        'get-desktop-state',
+        'get-diagnostics',
+        'get-active-dialogs',
+        'invoke-dialog-action',
+        'list-available-fields',
+        'search-workbook-fields',
+        'list-worksheets',
+        'get-show-me-options',
+        'list-dashboards',
+        'list-worksheet-logical-tables',
+        'get-worksheet-underlying-data',
+        'capture-window-screenshot',
+        'add-worksheet',
+        'add-dashboard',
+        'add-storyboard',
+        'open-file',
+        'set-start-page-visibility',
+        'save-workbook',
+        'workbook-export-as',
+        'refresh-auto-updates',
+        'refresh-dashboard-auto-updates',
+        'refresh-storyboard-auto-updates',
+        'refresh-datasource-data',
+        'refresh-datasource-extract',
+        'get-workbook-xml',
+        'apply-workbook',
+        'apply-workbook-style',
+        'inspect-custom-theme',
+        'export-custom-theme',
+        'get-dashboard-xml',
+        'apply-dashboard',
+        'get-storyboard-xml',
+        'apply-storyboard',
+        'export-worksheet-image',
+        'export-dashboard-image',
+        'export-storyboard-image',
+        // The manual field-edit path's read leg — mints the worksheetFile add-field/
+        // remove-field/apply-worksheet consume.
+        'get-worksheet-xml',
+      ]) {
+        expect(selected.map((t) => t.name)).toContain(verb);
+      }
+      // Keep unrelated info/validation and legacy template tools out. The six scoped and
+      // whole-workbook fallbacks above are the complete XML surface added to this profile.
+      for (const banished of [
+        'build-and-apply-worksheet',
+        'validate-workbook-xml',
+        'validate-worksheet-xml',
+        'inject-template',
+        'get-app-info',
+        'get-health',
+        'get-worksheet-info',
+        'list-storyboards',
+        'get-api-root',
+        'get-dashboard-info',
+        'get-storyboard-info',
+        'list-knowledge-resources',
+        'plan-dashboard-creation',
+        'batch-create-and-cache-sheets',
+        'build-and-apply-dashboard',
+        'compose-dashboard',
+        'dashboard-auto-apply',
+      ]) {
+        expect(selected.map((t) => t.name)).not.toContain(banished);
+      }
+    },
+  );
 
   it('exposes start-page visibility in dynamic and full surfaces, not specialized profiles', () => {
     const tools = allTools();
@@ -577,6 +616,26 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ).toHaveLength(1);
   });
 
+  it('registers capture-window-screenshot once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+    const captureTool = tools.find((tool) => tool.name === 'capture-window-screenshot');
+
+    expect(captureTool).toBeDefined();
+    expect(captureTool?.paramsSchema).toEqual({ session: expect.any(Object) });
+    expect(captureTool?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('capture-window-screenshot')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'capture-window-screenshot',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('registers each dialog tool once in full and dynamic-authoring profiles', () => {
     const tools = allTools();
     const fullTools = selectToolsForProfile(tools, 'full');
@@ -598,6 +657,36 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(
       selectToolsForProfile(tools, 'dynamic-authoring').filter(
         (tool) => tool.name === 'refresh-auto-updates',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('registers refresh-storyboard-auto-updates once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(
+      desktopToolNames.filter((name) => name === 'refresh-storyboard-auto-updates'),
+    ).toHaveLength(1);
+    expect(tools.filter((tool) => tool.name === 'refresh-storyboard-auto-updates')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-storyboard-auto-updates')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'refresh-storyboard-auto-updates',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('registers refresh-dashboard-auto-updates once in full and dynamic-authoring profiles', () => {
+    const tools = allTools();
+
+    expect(
+      desktopToolNames.filter((name) => name === 'refresh-dashboard-auto-updates'),
+    ).toHaveLength(1);
+    expect(tools.filter((tool) => tool.name === 'refresh-dashboard-auto-updates')).toHaveLength(1);
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('refresh-dashboard-auto-updates')).toBe(true);
+    expect(
+      selectToolsForProfile(tools, 'dynamic-authoring').filter(
+        (tool) => tool.name === 'refresh-dashboard-auto-updates',
       ),
     ).toHaveLength(1);
   });
@@ -720,8 +809,11 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
         .map((factory) => factory(new DesktopMcpServer()))
         .map((tool) => [tool.name, tool.minApiVersion]),
     );
+    expect(floors.get('capture-window-screenshot')).toBe('0.2.17');
     expect(floors.get('pause-auto-updates')).toBe('0.2.5');
     expect(floors.get('refresh-auto-updates')).toBe('0.2.13');
+    expect(floors.get('refresh-storyboard-auto-updates')).toBe('0.2.20');
+    expect(floors.get('refresh-dashboard-auto-updates')).toBe('0.2.19');
     expect(floors.get('resume-auto-updates')).toBe('0.2.5');
     expect(floors.get('open-file')).toBe('0.2.6');
     expect(floors.get('save-workbook')).toBe('0.2.6');
@@ -730,18 +822,31 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('add-storyboard')).toBe('0.2.6');
     expect(floors.get('export-storyboard-image')).toBe('0.2.7');
     expect(floors.get('workbook-export-as')).toBe('0.2.7');
-    expect(floors.get('publish-workbook')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
     expect(floors.get('get-active-dialogs')).toBe('0.2.23');
     expect(floors.get('invoke-dialog-action')).toBe('0.2.23');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
+    expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
     expect(floors.get('get-datasource-xml')).toBe('0.2.10');
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
+  });
+
+  it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const registered = tools.filter((tool) => tool.name === 'get-diagnostics');
+
+    expect(registered).toHaveLength(1);
+    expect(filterToolsByApiVersion(tools, '0.2.15').map((tool) => tool.name)).not.toContain(
+      'get-diagnostics',
+    );
+    expect(filterToolsByApiVersion(tools, '0.2.16').map((tool) => tool.name)).toContain(
+      'get-diagnostics',
+    );
   });
 
   it('gates all individual datasource tools at 0.2.10 and fails open for an unknown version', () => {
@@ -801,19 +906,26 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     }
   });
 
-  it('a connected 0.2.6 Desktop still hides the 0.2.7 export routes', () => {
-    const fullTools = selectToolsForProfile(
-      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
-      'full',
-    );
-    const at26 = filterToolsByApiVersion(fullTools, '0.2.6').map((tool) => tool.name);
-    const at27 = filterToolsByApiVersion(fullTools, '0.2.7').map((tool) => tool.name);
+  it.each(['full', '', 'dynamic-authoring'])(
+    'keeps worksheet and dashboard image exports while gating the 0.2.7 export routes in TOOL_PROFILE=%j',
+    (profile) => {
+      const profileTools = selectToolsForProfile(
+        desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+        profile,
+      );
+      const at26 = filterToolsByApiVersion(profileTools, '0.2.6').map((tool) => tool.name);
+      const at27 = filterToolsByApiVersion(profileTools, '0.2.7').map((tool) => tool.name);
 
-    for (const route of ['export-storyboard-image', 'workbook-export-as']) {
-      expect(at26).not.toContain(route);
-      expect(at27).toContain(route);
-    }
-  });
+      for (const route of ['export-storyboard-image', 'workbook-export-as']) {
+        expect(at26).not.toContain(route);
+        expect(at27).toContain(route);
+      }
+      for (const route of ['export-worksheet-image', 'export-dashboard-image']) {
+        expect(at26).toContain(route);
+        expect(at27).toContain(route);
+      }
+    },
+  );
 
   it('hides Show Me before 0.2.11 and exposes it at its registration floor', () => {
     const fullTools = selectToolsForProfile(
@@ -876,6 +988,25 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt(undefined)).toContain('refresh-auto-updates');
   });
 
+  it('gates dashboard and storyboard refresh at their respective API versions', () => {
+    const profileTools = selectToolsForProfile(
+      desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
+      'dynamic-authoring',
+    );
+    const namesAt = (apiVersion: string | undefined): string[] =>
+      filterToolsByApiVersion(profileTools, apiVersion).map((tool) => tool.name);
+
+    expect(namesAt('0.2.19')).not.toContain('refresh-storyboard-auto-updates');
+    expect(namesAt('0.2.20')).toContain('refresh-storyboard-auto-updates');
+    expect(namesAt('0.3.0')).toContain('refresh-storyboard-auto-updates');
+    expect(namesAt(undefined)).toContain('refresh-storyboard-auto-updates');
+    expect(namesAt('0.2.18')).not.toContain('refresh-dashboard-auto-updates');
+    expect(namesAt('0.2.19')).toContain('refresh-dashboard-auto-updates');
+    expect(namesAt('0.3.0')).toContain('refresh-dashboard-auto-updates');
+    expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
+    expect(namesAt(undefined)).toContain('refresh-dashboard-auto-updates');
+  });
+
   it('gates Show Me option discovery at External Client API 0.2.18', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
@@ -927,6 +1058,39 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
     expect(registeredNames.length).toBe(desktopToolFactories.length);
+  });
+
+  it('keeps published-site content operations out of the Desktop server even with TOOL_PROFILE=full', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    for (const webOwnedOperation of ['open-publish-workbook-dialog', 'publish-workbook']) {
+      expect(registeredNames).not.toContain(webOwnedOperation);
+    }
+  });
+
+  it('advertises the skills extension capability when skills-over-mcp is enabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) => name === 'skills-over-mcp',
+    );
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+  });
+
+  it('does not advertise the skills extension capability when skills-over-mcp is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const server = getServer();
+    await server.registerTools();
+
+    expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 });
 

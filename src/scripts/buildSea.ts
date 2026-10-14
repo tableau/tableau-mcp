@@ -10,6 +10,7 @@ import type { ReadableStream as NodeReadableStream } from 'stream/web';
 import { fileURLToPath } from 'url';
 
 import { buildAssetsMap, DESKTOP_ASSET_DIRS } from './seaAssets.js';
+import { ensureNodeDist } from './seaNodeDist.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,9 +22,7 @@ type SeaVariant = {
   buildVariant: string;
   entry: string;
   binaryBase: string;
-  // Build-relative directories whose files are embedded into the SEA blob as
-  // assets. The desktop server reads these at runtime via node:sea so the
-  // binary is fully self-contained; the default (web) server needs none.
+  // Build-relative directories embedded into the SEA blob as assets (the always-embedded files are added separately).
   assetDirs: readonly string[];
 };
 
@@ -133,6 +132,24 @@ function run(command: string, args: string[], cwd = repoRoot): void {
   }
 }
 
+const freshNodeDists = new Set<string>();
+const shasumsByVersion = new Map<string, Promise<string>>();
+
+function fetchShasums(version: string): Promise<string> {
+  let shasums = shasumsByVersion.get(version);
+  if (!shasums) {
+    const url = `https://nodejs.org/dist/${version}/SHASUMS256.txt`;
+    shasums = fetch(url).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+      }
+      return response.text();
+    });
+    shasumsByVersion.set(version, shasums);
+  }
+  return shasums;
+}
+
 async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Promise<string> {
   const version = process.version;
   const distName =
@@ -143,8 +160,13 @@ async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Pro
   const archivePath = join(downloadDir, `${distName}.${archiveExt}`);
   const distDir = join(downloadDir, distName);
 
-  if (!existsSync(distDir)) {
-    if (!existsSync(archivePath)) {
+  await ensureNodeDist({
+    archivePath,
+    archiveFileName: `${distName}.${archiveExt}`,
+    distDir,
+    distName,
+    shasums: () => fetchShasums(version),
+    download: async (destination) => {
       const url = `https://nodejs.org/dist/${version}/${distName}.${archiveExt}`;
       console.log(`⬇️  Downloading ${url}`);
       const response = await fetch(url);
@@ -153,17 +175,16 @@ async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Pro
       }
       await pipeline(
         Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>),
-        createWriteStream(archivePath),
+        createWriteStream(destination),
       );
-    }
-    console.log(`📦 Extracting ${distName}`);
-    if (platform.os === 'win') {
-      // Stock Windows has no `unzip`; its bundled bsdtar (tar.exe) extracts .zip.
-      run('tar', ['-xf', archivePath, '-C', downloadDir]);
-    } else {
-      run('tar', ['-xzf', archivePath, '-C', downloadDir]);
-    }
-  }
+    },
+    // Stock Windows has no `unzip`; its bundled bsdtar (tar.exe) extracts .zip.
+    extract: (archive, intoDir) => {
+      console.log(`📦 Extracting ${distName}`);
+      run('tar', [platform.os === 'win' ? '-xf' : '-xzf', archive, '-C', intoDir]);
+    },
+    freshDirs: freshNodeDists,
+  });
 
   const nodeBinary =
     platform.os === 'win' ? join(distDir, 'node.exe') : join(distDir, 'bin', 'node');
@@ -236,7 +257,7 @@ async function buildBinary(
 
   const postjectArgs = [
     '-y',
-    'postject',
+    'postject@1.0.0-alpha.6',
     outBinary,
     'NODE_SEA_BLOB',
     blobPath,

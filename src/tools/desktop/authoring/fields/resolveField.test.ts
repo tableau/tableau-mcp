@@ -11,9 +11,17 @@ import { FileNotFoundError, FileReadError } from '../../../../errors/mcpToolErro
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getResolveFieldTool } from './resolveField.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
@@ -71,6 +79,7 @@ const notFoundResolution = {
 
 describe('resolveFieldTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
   });

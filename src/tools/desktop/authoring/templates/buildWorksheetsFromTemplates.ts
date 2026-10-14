@@ -12,32 +12,41 @@ import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
 } from '../../../../desktop/templates/templateArtifactStore.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
-const paramsSchema = {
-  session: z.string().optional().describe('Desktop process ID; omit for the current instance.'),
-  templateName: z.string().trim().min(1).max(128).describe('Worksheet template ID.'),
-  title: z.string().trim().min(1).max(255).describe('Worksheet name to build.'),
-  datasource: z.string().trim().min(1).max(255).describe('Live datasource name.'),
+export const worksheetAggregationSchema = z.enum([
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'cnt',
+  'ctd',
+  'med',
+  'std',
+  'stp',
+  'var',
+  'vrp',
+]);
+
+export const buildWorksheetsFromTemplatesParamsSchema = {
+  session: z.string().optional().describe('Desktop PID.'),
+  templateName: z.string().trim().min(1).max(128).describe('Template ID.'),
+  title: z.string().trim().min(1).max(255).describe('Worksheet name.'),
+  datasource: z.string().trim().min(1).max(255).describe('Live datasource.'),
   fieldMapping: z
     .record(z.string().trim().min(1).max(128), z.string().trim().min(1).max(255))
-    .describe('Map slot ID to exact returned column_ref.'),
-  topN: z
-    .number()
-    .int()
-    .min(1)
-    .max(50)
+    .describe('Slot to column_ref.'),
+  derivationOverrides: z
+    .record(z.string(), worksheetAggregationSchema)
     .optional()
-    .describe(
-      'Limit a simple ranked worksheet to its first N members before storing the artifact.',
-    ),
+    .describe('Aggregation by slot.'),
+  topN: z.number().int().min(1).max(50).optional().describe('Rank limit.'),
 };
+const paramsSchema = buildWorksheetsFromTemplatesParamsSchema;
 
 interface BuildWorksheetsFromTemplatesDependencies {
   store: TemplateArtifactStore;
@@ -53,8 +62,8 @@ export const getBuildWorksheetsFromTemplatesTool = (
   const tool = new DesktopTool({
     server,
     name: 'build-worksheets-from-templates',
-    title: 'Building template worksheet',
-    description: 'Build one worksheet artifact without changing Desktop.',
+    title: 'Building worksheet',
+    description: 'Build worksheet.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -63,12 +72,20 @@ export const getBuildWorksheetsFromTemplatesTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, templateName, title, datasource, fieldMapping, topN },
+      { session, templateName, title, datasource, fieldMapping, derivationOverrides, topN },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, templateName, title, datasource, fieldMapping, topN },
+        args: {
+          session,
+          templateName,
+          title,
+          datasource,
+          fieldMapping,
+          derivationOverrides,
+          topN,
+        },
         getSuccessResult: (payload) => jsonToolResult(payload, { isError: false }),
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -94,6 +111,7 @@ export const getBuildWorksheetsFromTemplatesTool = (
             title,
             datasource,
             fieldMapping,
+            derivationOverrides,
             topN,
           };
           const built = buildTemplateWorksheetArtifact({

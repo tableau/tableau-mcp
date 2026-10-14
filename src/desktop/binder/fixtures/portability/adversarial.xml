@@ -4,8 +4,8 @@
      [Line Items], [Count of Errors], [Average Score]. These masking hazards MUST NOT
      drive chart selection: a field named [Trend] must not hijack trend-line-chart, a
      field named [Waterfall Stage] must not false-trigger the waterfall, and field names
-     containing max/count/average must not force an aggregation override. From the W60
-     portability spike (~/.claude/state/minion/w60-portability-spike.md). NOTE: no temporal
+     containing max/count/average must not force an aggregation override. Retained from the
+     portability investigation that established these regression cases. NOTE: no temporal
      and no geo fields, so line/gantt/choropleth asks fail closed. -->
 <workbook>
   <datasources>

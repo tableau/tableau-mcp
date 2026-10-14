@@ -2,18 +2,25 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
 import * as configModule from '../../../../config.desktop.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import {
   buildInjectedWorkbookXml,
   removeSameNamedWorksheet,
 } from '../../../../desktop/templates/injectTemplateCore.js';
 import * as runtimeCatalogModule from '../../../../desktop/templates/runtimeTemplateCatalog.js';
-import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getInjectTemplateTool } from './injectTemplate.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/templates/templatePath.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/templates/runtimeTemplateCatalog.js');
@@ -29,6 +36,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
 import { listTemplateNames } from '../../../../desktop/templates/templatePath.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
@@ -109,6 +117,7 @@ function mockPinnedSession(desktopSessionId: string | undefined): void {
 
 describe('injectTemplateTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
@@ -143,27 +152,46 @@ describe('injectTemplateTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), INJECTED_XML, 'utf-8');
   });
 
-  it('writes a fingerprint sidecar after updating the workbook cache file', async () => {
+  it('redacts connection credentials in the injected workbook it writes', async () => {
+    const extra = makeExtra();
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: "<workbook><connection password='hunter2'/></workbook>",
+    });
+
+    await getResult(BASE_PARAMS, extra);
+
+    const written = vi.mocked(writeFileSync).mock.calls[0][1];
+    expect(written).not.toContain('hunter2');
+    expect(written).toContain(REDACTED_CREDENTIAL_SENTINEL);
+  });
+
+  it('writes the injected workbook XML to the cache file', async () => {
     await getResult(BASE_PARAMS);
 
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
-      resolve(WORKBOOK_FILE),
-      SESSION,
-    );
+    expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), expect.any(String), 'utf-8');
   });
 
-  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+  it('writes under the pinned session when no session is passed', async () => {
     mockPinnedSession(SESSION);
 
-    await getResult({ ...BASE_PARAMS, session: undefined as unknown as string });
+    const result = await getResult({ ...BASE_PARAMS, session: undefined as unknown as string });
 
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
-      resolve(WORKBOOK_FILE),
-      SESSION,
-    );
+    expect(result.isError).toBeFalsy();
+    expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), expect.any(String), 'utf-8');
   });
 
-  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
+  it('writes nothing when no session is passed, none is pinned and no instance is running', async () => {
+    mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+
+    const result = await getResult({ ...BASE_PARAMS, session: undefined as unknown as string });
+
+    expect(result.isError).toBe(true);
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('rejects and writes nothing when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
       { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],
@@ -175,7 +203,6 @@ describe('injectTemplateTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(SESSION);
     expect(result.content[0].text).toContain('list-instances');
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 

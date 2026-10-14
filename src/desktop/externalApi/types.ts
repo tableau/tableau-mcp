@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.15), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.20), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -23,6 +23,7 @@ export const EXTERNAL_API_ROUTES = {
   appToggleStartPage: '/v0/app:toggleStartPage',
   root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDiagnostics: '/v0/workbook/diagnostics',
   workbookDashboards: '/v0/workbook/dashboards',
   workbookDashboardsNew: '/v0/workbook/dashboards:new',
   workbookDatasources: '/v0/workbook/datasources',
@@ -38,7 +39,6 @@ export const EXTERNAL_API_ROUTES = {
   workbookRedo: '/v0/workbook:redo',
   workbookSave: '/v0/workbook:save',
   workbookExportAs: '/v0/workbook:exportAs',
-  workbookPublish: '/v0/workbook:publish',
   workbookGoToSheet: '/v0/workbook:goToSheet',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
@@ -46,15 +46,18 @@ export const EXTERNAL_API_ROUTES = {
   dashboardDelete: '/v0/workbook/dashboards/{id}:delete',
   dashboardRename: '/v0/workbook/dashboards/{id}:rename',
   dashboardPauseAutoUpdates: '/v0/workbook/dashboards/{id}:pauseAutoUpdates',
+  dashboardRefreshNow: '/v0/workbook/dashboards/{id}:refreshNow',
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
   storyboardImage: '/v0/workbook/storyboards/{id}/image',
   storyboardDelete: '/v0/workbook/storyboards/{id}:delete',
   storyboardRename: '/v0/workbook/storyboards/{id}:rename',
+  storyboardRefreshNow: '/v0/workbook/storyboards/{id}:refreshNow',
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetImage: '/v0/workbook/worksheets/{id}/image',
+  worksheetDiagnostics: '/v0/workbook/worksheets/{id}/diagnostics',
   worksheetShowMeOptions: '/v0/workbook/worksheets/{id}/showMe',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   worksheetLogicalTables: '/v0/workbook/worksheets/{id}/logicalTables',
@@ -66,9 +69,6 @@ export const EXTERNAL_API_ROUTES = {
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
-  site: '/v0/site',
-  siteDatasources: '/v0/site/datasources',
-  siteWorkbooks: '/v0/site/workbooks',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -217,16 +217,61 @@ export type ImageExportQuery = {
 // Concrete `{id}` routes are built here, next to the constants, so the HTTP layer never
 // mentions an endpoint. Ids ride the path segment and must be percent-encoded.
 
+/** Thrown by route builders for an id that would escape its path segment; the executor maps it to an Err. */
+export class ExternalApiRouteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExternalApiRouteError';
+  }
+}
+
+const MAX_SEGMENT_DECODE_PASSES = 8;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+// The one owner of path-segment safety: a dot segment at any decode depth would be collapsed by
+// the URL parser and retarget the route. Slashes stay legal because `encodeURIComponent` keeps them
+// inside the segment (`a%2Fb`), and datasource ids may contain them.
+export function assertSafeRouteSegment(raw: string): void {
+  let value = raw;
+  for (let pass = 0; pass <= MAX_SEGMENT_DECODE_PASSES; pass++) {
+    if (value === '.' || value === '..' || CONTROL_CHARACTERS.test(value)) {
+      throw new ExternalApiRouteError('Refused an unsafe path segment in an External API route.');
+    }
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(value);
+    } catch {
+      break;
+    }
+    if (decoded === value) break;
+    value = decoded;
+  }
+}
+
+function seg(raw: string): string {
+  assertSafeRouteSegment(raw);
+  try {
+    return encodeURIComponent(raw);
+  } catch {
+    throw new ExternalApiRouteError('Refused a malformed path segment in an External API route.');
+  }
+}
+
 export function worksheetRoute(worksheetId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${seg(worksheetId)}`;
+}
+
+export function worksheetDiagnosticsRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}/diagnostics`;
 }
 
 export function dashboardRoute(dashboardId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${seg(dashboardId)}`;
 }
 
 export function storyboardRoute(storyboardId: string): string {
-  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}`;
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${seg(storyboardId)}`;
 }
 
 export function worksheetDocumentRoute(worksheetId: string): string {
@@ -245,19 +290,23 @@ export function storyboardDocumentRoute(storyboardId: string): string {
 // then encode it once for the outbound segment so encoded delimiters stay inside that segment
 // without being double-encoded.
 function canonicalDatasourceSegment(datasourceId: string): string {
-  return encodeURIComponent(decodeURIComponent(datasourceId));
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(datasourceId);
+  } catch {
+    throw new ExternalApiRouteError('Refused a malformed datasource id in an External API route.');
+  }
+  return seg(decoded);
 }
 
 export function workbookDatasourceRoute(datasourceId: string): string {
-  return EXTERNAL_API_ROUTES.workbookDatasource.replace(
-    '{id}',
+  return EXTERNAL_API_ROUTES.workbookDatasource.replace('{id}', () =>
     canonicalDatasourceSegment(datasourceId),
   );
 }
 
 export function workbookDatasourceDocumentRoute(datasourceId: string): string {
-  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace(
-    '{id}',
+  return EXTERNAL_API_ROUTES.workbookDatasourceDocument.replace('{id}', () =>
     canonicalDatasourceSegment(datasourceId),
   );
 }
@@ -310,7 +359,7 @@ const SHEET_ROUTE_PREFIX: Record<SheetKind, string> = {
 };
 
 export function sheetActionRoute(sheet: SheetRef, action: 'rename' | 'delete'): string {
-  return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${encodeURIComponent(sheet.id)}:${action}`;
+  return `${SHEET_ROUTE_PREFIX[sheet.kind]}/${seg(sheet.id)}:${action}`;
 }
 
 // `index` is 0-based; omit it (or pass an out-of-range/negative value) to append the new tab at the end.
@@ -350,8 +399,16 @@ export function worksheetRefreshNowRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
 
+export function storyboardRefreshNowRoute(storyboardId: string): string {
+  return `${storyboardRoute(storyboardId)}:refreshNow`;
+}
+
 export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:pauseAutoUpdates`;
+}
+
+export function dashboardRefreshNowRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:refreshNow`;
 }
 
 export function dashboardResumeAutoUpdatesRoute(dashboardId: string): string {
@@ -385,9 +442,7 @@ export function worksheetLogicalTableDataRoute(
   }
 
   const suffix = search.size > 0 ? `?${search.toString()}` : '';
-  return `${worksheetRoute(worksheetId)}/logicalTables/${encodeURIComponent(
-    logicalTableId,
-  )}/data${suffix}`;
+  return `${worksheetRoute(worksheetId)}/logicalTables/${seg(logicalTableId)}/data${suffix}`;
 }
 
 // Builds the `?filePath=…&mimeType=…` suffix with encodeURIComponent (percent-encoding),
@@ -421,11 +476,11 @@ export function storyboardImageRoute(storyboardId: string, query: ImageExportQue
 const DATASOURCE_ROUTE_PREFIX = '/v0/datasources';
 
 export function datasourceRefreshDataRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshData`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshData`;
 }
 
 export function datasourceRefreshExtractRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${encodeURIComponent(datasourceId)}:refreshExtract`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshExtract`;
 }
 
 /**
@@ -478,15 +533,6 @@ export const healthSchema = z
   })
   .passthrough();
 
-/** Connected Tableau site returned by `GET /v0/site`. */
-export const siteSchema = z
-  .object({
-    siteId: z.string().optional(),
-    authenticatedUserId: z.string().optional(),
-  })
-  .passthrough();
-export type Site = z.infer<typeof siteSchema>;
-
 /** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
 export const protectedResourceMetadataSchema = z
   .object({
@@ -507,7 +553,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.15). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json` (0.2.16). Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -1019,8 +1065,8 @@ export type InvokeDialogActionResult = z.infer<typeof invokeDialogActionResultSc
  * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
  * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
  * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
- * envelope must still parse rather than error. `result` rides only a SUCCEEDED envelope with
- * non-null command output.
+ * envelope must still parse rather than error. `result` normally rides a SUCCEEDED envelope;
+ * a route that explicitly opts into strict aggregate reporting may also retain it on FAILED.
  */
 export const operationEnvelopeSchema = z
   .object({
@@ -1030,6 +1076,7 @@ export const operationEnvelopeSchema = z
     result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
+    diagnostics: z.unknown().optional(),
     blockingWindows: z.array(windowInfoSchema).optional(),
     progressWindows: z.array(windowInfoSchema).optional(),
     createdAt: z.string().optional(),
@@ -1113,6 +1160,34 @@ export const dashboardListSchema = z
   .passthrough();
 export type DashboardList = z.infer<typeof dashboardListSchema>;
 
+/** One worksheet controller that successfully refreshed as part of a dashboard refresh. */
+export const dashboardRefreshTargetSchema = z
+  .object({
+    worksheetId: z.string(),
+    worksheetName: z.string(),
+  })
+  .passthrough();
+
+/** One worksheet controller that failed while the remaining dashboard targets continued. */
+export const dashboardRefreshFailureSchema = dashboardRefreshTargetSchema.extend({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** Strict aggregate outcome returned by dashboard `:refreshNow`. */
+export const dashboardRefreshOutcomeSchema = z
+  .object({
+    outcome: z.enum(['COMPLETE', 'PARTIAL', 'FAILED']),
+    refreshed: z.array(dashboardRefreshTargetSchema),
+    failed: z.array(dashboardRefreshFailureSchema),
+  })
+  .passthrough();
+export type DashboardRefreshOutcome = z.infer<typeof dashboardRefreshOutcomeSchema>;
+
+/** The aggregate outcome for a storyboard's current point uses the same worksheet target shape. */
+export const storyboardRefreshOutcomeSchema = dashboardRefreshOutcomeSchema;
+export type StoryboardRefreshOutcome = z.infer<typeof storyboardRefreshOutcomeSchema>;
+
 /** Storyboard item returned in workbook inventory reads. */
 export const storyboardItemSchema = z
   .object({
@@ -1153,9 +1228,7 @@ export const datasourceItemSchema = z
   .object({
     id: z.string().optional(),
     // Server LUID of the datasource; present only for a published, non-federated datasource and null
-    // otherwise. Same field as the luid on `GET /v0/site/datasources`, but nullable here (["string",
-    // "null"]) because the workbook endpoint emits null for embedded/federated datasources, whereas
-    // the site endpoint's luid is a plain string.
+    // otherwise.
     luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),
@@ -1174,45 +1247,6 @@ export const datasourceListSchema = z
   })
   .passthrough();
 export type DatasourceList = z.infer<typeof datasourceListSchema>;
-
-/** Published workbook item returned by `GET /v0/site/workbooks`. */
-export const siteWorkbookItemSchema = z
-  .object({
-    id: z.string().optional(),
-    luid: z.string().optional(),
-    name: z.string().optional(),
-    project: z.string().optional(),
-  })
-  .passthrough();
-export type SiteWorkbookItem = z.infer<typeof siteWorkbookItemSchema>;
-
-/** Published workbook list returned by `GET /v0/site/workbooks`. */
-export const siteWorkbookListSchema = z
-  .object({
-    workbooks: z.array(siteWorkbookItemSchema).optional(),
-  })
-  .passthrough();
-export type SiteWorkbookList = z.infer<typeof siteWorkbookListSchema>;
-
-/** Published datasource item returned by `GET /v0/site/datasources`. */
-export const siteDatasourceItemSchema = z
-  .object({
-    id: z.string().optional(),
-    luid: z.string().optional(),
-    name: z.string().optional(),
-    caption: z.string().optional(),
-    project: z.string().optional(),
-  })
-  .passthrough();
-export type SiteDatasourceItem = z.infer<typeof siteDatasourceItemSchema>;
-
-/** Published datasource list returned by `GET /v0/site/datasources`. */
-export const siteDatasourceListSchema = z
-  .object({
-    datasources: z.array(siteDatasourceItemSchema).optional(),
-  })
-  .passthrough();
-export type SiteDatasourceList = z.infer<typeof siteDatasourceListSchema>;
 
 /** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
 export const summaryDataSchema = z
@@ -1257,6 +1291,47 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** One invalid field currently used by a worksheet shelf or marks encoding. */
+export const worksheetInvalidFieldSchema = z
+  .object({
+    fieldName: z.string(),
+    fieldCaption: z.string().optional(),
+    shelf: z.string(),
+    marksSpecificationId: z.string(),
+    encodingType: z.string(),
+    reason: z.string(),
+  })
+  .passthrough();
+export type WorksheetInvalidField = z.infer<typeof worksheetInvalidFieldSchema>;
+
+/** Diagnostics reported by Desktop for one worksheet. */
+export const worksheetDiagnosticsSchema = z
+  .object({
+    worksheetId: z.string(),
+    status: z.enum(['complete', 'partial', 'unavailable']),
+    invalidFields: z.array(worksheetInvalidFieldSchema).optional(),
+    message: z.string().optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.status === 'complete' && value.invalidFields === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invalidFields'],
+        message: 'Complete worksheet diagnostics must include invalidFields.',
+      });
+    }
+  });
+export type WorksheetDiagnostics = z.infer<typeof worksheetDiagnosticsSchema>;
+
+/** Aggregate diagnostics returned by workbook and worksheet diagnostic reads and completed writes. */
+export const workbookDiagnosticsSchema = z
+  .object({
+    worksheets: z.array(worksheetDiagnosticsSchema),
+  })
+  .passthrough();
+export type WorkbookDiagnostics = z.infer<typeof workbookDiagnosticsSchema>;
 
 /**
  * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and
@@ -1334,5 +1409,7 @@ export type ExternalApiError =
   // Blocked on a human; a poll can never clear it.
   | { type: 'awaiting-user'; operationId?: string; blockingWindows?: Array<WindowInfo> }
   | { type: 'operation-expired'; operationId?: string }
+  // A mutation was accepted (202) but its poll got 401: the result is unknown and must not be resent.
+  | { type: 'accepted-unauthorized'; operationId?: string }
   // Diagnostic only: unlike blockingWindows, progressWindows never fails fast on its own.
   | { type: 'poll-timeout'; operationId?: string; progressWindows?: Array<WindowInfo> };

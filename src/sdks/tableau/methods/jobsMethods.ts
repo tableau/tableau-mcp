@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { jobsApis } from '../apis/jobsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Job } from '../types/job.js';
@@ -16,7 +15,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class JobsMethods extends AuthenticatedMethods<typeof jobsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, jobsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, jobsApis, { axiosConfig }), creds);
   }
 
   /**

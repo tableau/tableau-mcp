@@ -1,11 +1,7 @@
 import { z } from 'zod';
 
+import { lineageContentSchema } from './lineageContent.js';
 import { tagsSchema } from './tags.js';
-
-const lineageContentSchema = z.object({
-  luid: z.string(),
-  name: z.string(),
-});
 
 export const viewSchema = z.object({
   id: z.string(),

@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import * as configModule from '../../../config.desktop.js';
 import { resetEpisodeEventsForTests } from '../../../desktop/episode-events.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -32,6 +33,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
 describe('episode lifecycle tools', () => {

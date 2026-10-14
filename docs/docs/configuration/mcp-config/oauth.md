@@ -300,6 +300,60 @@ Tableau); only `.well-known` endpoints are exposed and JWE key/redirect URI cons
 
 <hr />
 
+### `SESSION_STORE_PROVIDER`
+
+The session store provider to use for the embedded OAuth authorization server's session state
+(pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
+Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
+enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
+
+- Default: `memory`
+- Possible values:
+  - `memory` - In-memory session store (default). State is process-local and does not survive a
+    restart or a multi-replica deployment.
+  - `custom` - Load a custom session store provider from a user-specified module, backed by
+    external infrastructure (e.g. Redis, a database, or blob storage) so session state survives
+    restarts and is shared across replicas.
+
+:::tip[Custom Provider]
+
+To use a custom session store provider, set `SESSION_STORE_PROVIDER=custom` and provide the module
+path via `SESSION_STORE_PROVIDER_CONFIG`:
+
+```bash
+SESSION_STORE_PROVIDER=custom
+SESSION_STORE_PROVIDER_CONFIG='{"module":"./my-session-store.js"}'
+```
+
+The custom provider module should export a default class or named export `SessionStore` that
+implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
+interface. `consume` must be implemented as a truly atomic operation against the backing store
+(e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
+Redis, or a transaction for a relational store).
+
+:::
+
+<hr />
+
+### `SESSION_STORE_PROVIDER_CONFIG`
+
+Configuration for custom session store providers (JSON string).
+
+- Required when: `SESSION_STORE_PROVIDER` is `custom`
+- Format: `{"module": "<path-to-module>", ...additional-config}`
+
+The `module` field can be:
+- A relative file path (e.g., `./my-provider.js`) - resolved from process working directory
+- An absolute file path (e.g., `/path/to/provider.js`)
+- An npm package name (e.g., `@company/session-store-provider`)
+
+**Example:**
+```bash
+SESSION_STORE_PROVIDER_CONFIG='{"module":"./providers/redis-session-store.js"}'
+```
+
+<hr />
+
 ### `ADVERTISE_API_SCOPES`
 
 Include Tableau API scopes in OAuth metadata and scope challenges.

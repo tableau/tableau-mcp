@@ -7,8 +7,8 @@ import { getWorksheetXml, isRouteMissing } from '../../../desktop/wrappers/getWo
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';
@@ -35,7 +35,9 @@ export const getGetWorksheetXmlTool = (
     server,
     name: 'get-worksheet-xml',
     title,
-    description: 'Get structure for an EXISTING worksheet.',
+    description:
+      'Get structure for an EXISTING worksheet from live Desktop. Resets its active edit buffer. ' +
+      'For pending drafts, read the cached file instead; do not use this tool.',
     paramsSchema,
     annotations: {
       readOnlyHint: false, // Writes to a cache file

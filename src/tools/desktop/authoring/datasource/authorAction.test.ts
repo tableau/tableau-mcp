@@ -1,44 +1,347 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
-
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getAuthorActionTool } from './authorAction.js';
+import {
+  encodeClearValue,
+  getAttr,
+  getAuthorActionTool,
+  parseAuthorActionArgs,
+  resolveClearOption,
+} from './authorAction.js';
+import {
+  appliedDocumentXml,
+  BASE_XML,
+  getToolResult,
+  withActions,
+} from './authorActionTestFixtures.js';
 
-const BASE_XML = [
-  "<?xml version='1.0' encoding='utf-8'?>",
-  "<workbook version='18.1'>",
-  '<datasources>',
-  "<datasource hasconnection='false' inline='true' name='Parameters'>",
-  "<column caption='p.Period' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column>",
-  '</datasource>',
-  "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
-  "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
-  "<group caption='Category Set' name='[Category Set]' user:ui-builder='filter-group' />",
-  "<group caption='Ad Hoc Group' name='[Ad Hoc Group]' />",
-  '</datasource>',
-  '</datasources>',
-  "<worksheets><worksheet name='Profit' /></worksheets>",
-  '</workbook>',
-].join('');
+function rawArgs(overrides: Record<string, unknown>): Parameters<typeof parseAuthorActionArgs>[0] {
+  return {
+    mode: 'parameter',
+    caption: 'A',
+    sourceWorksheet: 'Profit',
+    setMembership: 'assign',
+    clearSelection: 'do-nothing',
+    activation: 'on-select',
+    ...overrides,
+  } as Parameters<typeof parseAuthorActionArgs>[0];
+}
+
+describe('encodeClearValue', () => {
+  // Field-verified against Tableau Desktop and the monolith serializer
+  // (DataValueSerializer::TypeToString): each datatype has its own clear-option value= encoding.
+  // Only string carries the LROOT segment.
+  it('encodes a string with the LROOT prefix, verbatim', () => {
+    const encoded = encodeClearValue('string', 'Month');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('s:LROOT:Month');
+  });
+
+  it('treats an unknown datatype as a string (back-compat with pre-typed callers)', () => {
+    const encoded = encodeClearValue(undefined, 'Month');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('s:LROOT:Month');
+  });
+
+  it('preserves whitespace and empty strings for string parameters', () => {
+    const empty = encodeClearValue('string', '');
+    invariant(empty.isOk());
+    expect(empty.value).toBe('s:LROOT:');
+
+    const padded = encodeClearValue('string', ' Month ');
+    invariant(padded.isOk());
+    expect(padded.value).toBe('s:LROOT: Month ');
+  });
+
+  it('encodes an integer with the i: prefix', () => {
+    const encoded = encodeClearValue('integer', '5');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('i:5');
+  });
+
+  it('encodes a negative integer', () => {
+    const encoded = encodeClearValue('integer', '-42');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('i:-42');
+  });
+
+  it('rejects a non-integer for an integer parameter', () => {
+    const encoded = encodeClearValue('integer', '3.5');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('integer');
+  });
+
+  it('encodes a real as r:<precision>:<scale>:<value>', () => {
+    // 3.5 -> 2 significant digits, 1 after the decimal.
+    const encoded = encodeClearValue('real', '3.5');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('r:2:1:3.5');
+  });
+
+  it('encodes a whole-number real with scale 0', () => {
+    const encoded = encodeClearValue('real', '100');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('r:3:0:100');
+  });
+
+  it('encodes zero as a real', () => {
+    const encoded = encodeClearValue('real', '0');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('r:1:0:0');
+  });
+
+  it('counts the leading zero toward precision for |value| < 1', () => {
+    const encoded = encodeClearValue('real', '-0.5');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('r:2:1:-0.5');
+  });
+
+  it('rejects a non-numeric value for a real parameter', () => {
+    const encoded = encodeClearValue('real', 'abc');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('real');
+  });
+
+  it('encodes booleans as lowercase b:true / b:false', () => {
+    const t = encodeClearValue('boolean', 'true');
+    invariant(t.isOk());
+    expect(t.value).toBe('b:true');
+
+    const f = encodeClearValue('boolean', 'False');
+    invariant(f.isOk());
+    expect(f.value).toBe('b:false');
+  });
+
+  it('rejects a non-boolean value for a boolean parameter', () => {
+    const encoded = encodeClearValue('boolean', 'yes');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('boolean');
+  });
+
+  it('encodes an ISO date with the d: prefix', () => {
+    const encoded = encodeClearValue('date', '2024-06-15');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('d:2024-06-15');
+  });
+
+  it('rejects a non-ISO date value', () => {
+    const encoded = encodeClearValue('date', 'June 15');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('date');
+  });
+
+  it('rejects an impossible calendar date', () => {
+    const encoded = encodeClearValue('date', '2024-13-40');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('date');
+  });
+
+  it('rejects a datetime parameter (encoding not verified)', () => {
+    const encoded = encodeClearValue('datetime', '2024-06-15 12:00:00');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('datetime');
+  });
+});
+
+describe('resolveClearOption', () => {
+  // resolveClearOption owns the "keep current value" vs "set value to" decision Desktop shows as two
+  // radios. It returns undefined for keep-current (do-nothing) or the datatype-encoded value for
+  // set-value. onClear is the explicit selector; when it is absent, a blank clearValue infers
+  // keep-current and a non-blank one infers set-value (back-compat with pre-onClear callers).
+  it('keeps current value when onClear is keep-current, ignoring any clearValue', () => {
+    const kept = resolveClearOption('keep-current', 'string', 'Month');
+    invariant(kept.isOk());
+    expect(kept.value).toBeUndefined();
+  });
+
+  it('sets an explicit empty string on a string parameter when onClear is set-value', () => {
+    // The case one optional field cannot express: set-value + "" is a real empty-string reset,
+    // distinct from keep-current. This is the whole reason onClear exists.
+    const encoded = resolveClearOption('set-value', 'string', '');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('s:LROOT:');
+  });
+
+  it.each([undefined, 'string', 'integer', 'real', 'boolean', 'date', 'datetime'])(
+    'rejects an omitted clearValue with set-value for datatype %s',
+    (datatype) => {
+      const encoded = resolveClearOption('set-value', datatype, undefined);
+      invariant(encoded.isErr());
+      expect(encoded.error.getErrorText()).toContain('onClear=set-value requires clearValue');
+    },
+  );
+
+  it('errors when set-value is asked for on a non-string parameter with a blank clearValue', () => {
+    // "Set value to" with nothing to set is a contradiction; a numeric parameter has no empty value.
+    const encoded = resolveClearOption('set-value', 'integer', '   ');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('clearValue');
+  });
+
+  it('encodes the value per datatype when onClear is set-value', () => {
+    const encoded = resolveClearOption('set-value', 'integer', '5');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('i:5');
+  });
+
+  it('rejects set-value on a datetime parameter (encoding unverified)', () => {
+    const encoded = resolveClearOption('set-value', 'datetime', '2024-06-15 12:00:00');
+    invariant(encoded.isErr());
+    expect(encoded.error.getErrorText()).toContain('datetime');
+  });
+
+  it('infers keep-current from an empty clearValue when onClear is absent', () => {
+    // A client that leaves the optional field blank sends "" rather than omitting it. With no
+    // explicit onClear, "" means keep-current for every datatype — including string, so a blank
+    // never becomes a surprise empty-string reset.
+    for (const datatype of ['string', 'integer', 'real', 'boolean', 'date']) {
+      const empty = resolveClearOption(undefined, datatype, '');
+      invariant(empty.isOk());
+      expect(empty.value).toBeUndefined();
+    }
+  });
+
+  it('treats a whitespace-only clearValue as blank for non-strings but real for strings', () => {
+    // Non-string parameters carry no meaningful surrounding whitespace, so "   " infers keep-current.
+    // A string keeps whitespace verbatim (" Month " is distinct from "Month"), so "   " is a real
+    // set-value — never silently dropped to keep-current.
+    for (const datatype of ['integer', 'real', 'boolean', 'date']) {
+      const blank = resolveClearOption(undefined, datatype, '   ');
+      invariant(blank.isOk());
+      expect(blank.value).toBeUndefined();
+    }
+    const stringWhitespace = resolveClearOption(undefined, 'string', '   ');
+    invariant(stringWhitespace.isOk());
+    expect(stringWhitespace.value).toBe('s:LROOT:   ');
+  });
+
+  it('infers set-value from a non-blank clearValue when onClear is absent', () => {
+    const encoded = resolveClearOption(undefined, 'integer', '5');
+    invariant(encoded.isOk());
+    expect(encoded.value).toBe('i:5');
+  });
+
+  it('keeps current value when both onClear and clearValue are absent', () => {
+    const encoded = resolveClearOption(undefined, 'integer', undefined);
+    invariant(encoded.isOk());
+    expect(encoded.value).toBeUndefined();
+  });
+});
+
+describe('parseAuthorActionArgs', () => {
+  it('narrows a valid parameter input to the parameter branch', () => {
+    const parsed = parseAuthorActionArgs(
+      rawArgs({
+        mode: 'parameter',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      }),
+    );
+
+    expect(parsed.isOk()).toBe(true);
+    invariant(parsed.isOk());
+    const input = parsed.value;
+    expect(input.mode).toBe('parameter');
+    invariant(input.mode === 'parameter');
+    expect(input.sourceField).toBe('[Profit]');
+    expect(input.targetParameter).toBe('[Parameters].[Parameter 1]');
+    expect('targetSet' in input).toBe(false);
+    expect('url' in input).toBe(false);
+    expect('targetSheet' in input).toBe(false);
+  });
+
+  it('rejects a set target in parameter mode', () => {
+    const parsed = parseAuthorActionArgs(rawArgs({ mode: 'parameter', targetSet: 'Category Set' }));
+
+    expect(parsed.isErr()).toBe(true);
+    invariant(parsed.isErr());
+    expect(parsed.error.getErrorText()).toContain('targetSet is not allowed in parameter mode');
+  });
+
+  it('rejects a parameter target in set mode', () => {
+    const parsed = parseAuthorActionArgs(
+      rawArgs({ mode: 'set', targetSet: 'Category Set', targetParameter: '[Parameters].[X]' }),
+    );
+
+    expect(parsed.isErr()).toBe(true);
+    invariant(parsed.isErr());
+    expect(parsed.error.getErrorText()).toContain('targetParameter is not allowed in set mode');
+  });
+
+  it('rejects onClear outside parameter mode', () => {
+    // onClear controls a parameter action's clear behavior; it is meaningless in set/url/filter
+    // mode, so reject it up front rather than silently ignore it.
+    const parsed = parseAuthorActionArgs(
+      rawArgs({ mode: 'set', targetSet: 'Category Set', onClear: 'keep-current' }),
+    );
+
+    expect(parsed.isErr()).toBe(true);
+    invariant(parsed.isErr());
+    expect(parsed.error.getErrorText()).toContain('onClear is only allowed in parameter mode');
+  });
+});
+
+describe('getAttr', () => {
+  it('reads the requested attribute', () => {
+    expect(getAttr("<x name='B' />", 'name')).toBe('B');
+    expect(getAttr('<x name="B" />', 'name')).toBe('B');
+  });
+
+  it('does not match a hyphen- or colon-suffixed decoy attribute', () => {
+    expect(getAttr("<x param-name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<x user:name='A' name='B' />", 'name')).toBe('B');
+    expect(getAttr("<column semantic-role='A' role='B' />", 'role')).toBe('B');
+  });
+
+  it('returns the sole attribute even when it is only a decoy', () => {
+    expect(getAttr("<x param-name='A' />", 'name')).toBeUndefined();
+  });
+});
 
 describe('authorActionTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('describes datasource selection as name or unique caption', async () => {
+  it('describes datasource selection as name or caption', async () => {
     const tool = getAuthorActionTool(new DesktopMcpServer());
     const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
       string,
       { description?: string }
     >;
 
-    expect(paramsSchema['datasource']?.description).toBe(
-      'Internal datasource name or unique caption.',
-    );
+    expect(paramsSchema['datasource']?.description).toBe('Internal name or caption.');
+  });
+
+  it('tells the caller which field each mode requires up front', async () => {
+    const tool = getAuthorActionTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
+      string,
+      { description?: string }
+    >;
+
+    // The tool description tells the caller to pick a mode and pass its required field.
+    expect(tool.description).not.toBe('Add action.');
+    expect(tool.description).toContain('mode');
+
+    // mode is the router: its description names each mode and the field that mode requires,
+    // so the caller can populate it before the first call. This is where the tools/list byte
+    // budget is best spent — one place, all four modes — rather than repeated per param.
+    const modeDescription = paramsSchema['mode']?.description ?? '';
+    for (const modeName of ['parameter', 'set', 'url', 'filter']) {
+      expect(modeDescription).toContain(modeName);
+    }
+    expect(modeDescription).toContain('sourceField');
+    expect(modeDescription).toContain('targetParameter');
+    expect(modeDescription).toContain('targetSet');
+    expect(modeDescription).toContain('targetSheet');
+
+    // The four required mode-routing params each say which mode they belong to and, for the
+    // parameter target, the qualified form — the specifics the mode summary can't carry.
+    expect(paramsSchema['sourceField']?.description).toContain('parameter');
+    expect(paramsSchema['targetParameter']?.description).toContain('[Parameters]');
+    expect(paramsSchema['targetSet']?.description).toContain('set');
+    expect(paramsSchema['targetSheet']?.description).toContain('filter');
   });
 
   it('creates the workbook-level <actions> block and splices an edit-parameter-action, verifying readback', async () => {
@@ -86,13 +389,13 @@ describe('authorActionTool', () => {
     );
     const readbackXml = withOne.replace(
       '</actions>',
-      "<edit-parameter-action caption='Second' name='[Action2]'><params><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
+      "<edit-parameter-action caption='Second' name='[Action2]'><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
     );
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Second',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: '[Parameters].[Parameter 1]',
       },
       initialXml: withOne,
@@ -105,6 +408,79 @@ describe('authorActionTool', () => {
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     // Only one <actions> block — appended, not duplicated.
     expect(loaded.match(/<actions>/g)?.length).toBe(1);
+  });
+
+  // twb_2026.2.0.xsd fixes the child order of <actions>: legacy <action> (url/filter)
+  // -> datasources/deps -> nav -> <edit-group-action> (set) -> <edit-parameter-action>
+  // (parameter). A new action must slot into its family rather than append before </actions>
+  it('inserts a url action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<action caption='Open Details' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const legacyAt = loaded.indexOf("<action caption='Open Details'");
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(legacyAt).toBeGreaterThanOrEqual(0);
+    expect(legacyAt).toBeLessThan(paramAt);
+  });
+
+  it('inserts a set action ahead of an existing parameter action (XSD family order)', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const initialXml = withActions(BASE_XML, existingParam);
+    const added =
+      "<edit-group-action caption='Expand Category' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+      },
+      initialXml,
+      readbackXml: withActions(BASE_XML, added + existingParam),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded).toContain(added);
+    const groupAt = loaded.indexOf('<edit-group-action');
+    const paramAt = loaded.indexOf('<edit-parameter-action');
+    expect(groupAt).toBeGreaterThanOrEqual(0);
+    expect(groupAt).toBeLessThan(paramAt);
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -240,6 +616,36 @@ describe('authorActionTool', () => {
     expect(result.content[0].text).toContain('ambiguous');
     expect(result.content[0].text).toContain('federated.1syzfv90anwuu119p4zra1ga299n');
     expect(result.content[0].text).toContain('federated.duplicate');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('tells the caller to author a set first when the datasource has none', async () => {
+    // The ticket's literal example was "targetSet is required in set mode. Available sets: none".
+    // "none" alone left the agent retrying a set that never existed; name the recovery instead.
+    const noSets = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+      },
+      initialXml: noSets,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetSet is required in set mode');
+    expect(result.content[0].text).toContain('author one first with author-set');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -383,7 +789,7 @@ describe('authorActionTool', () => {
       args: {
         caption: 'Set Period',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: 'Parameter 1',
       },
     });
@@ -394,7 +800,7 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('requires sourceField in parameter mode', async () => {
+  it('requires sourceField in parameter mode and lists the available fields', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Set Period',
@@ -406,6 +812,626 @@ describe('authorActionTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('sourceField is required in parameter mode');
+    // Recovery guidance: enumerate the fields the caller could drive the action from.
+    expect(result.content[0].text).toContain('Available fields');
+    expect(result.content[0].text).toContain('Profit');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or whitespace sourceField instead of applying a no-op action', async () => {
+    // A blank sourceField would render an edit-parameter-action with a target but no
+    // source-field param — a no-op that pushes no value yet passes readback (which only
+    // checks the target survived). Reject it up front, same as an omitted sourceField.
+    for (const sourceField of ['', '   ']) {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          caption: 'Set Period',
+          sourceWorksheet: 'Profit',
+          sourceField,
+          targetParameter: '[Parameters].[Parameter 1]',
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('sourceField is required in parameter mode');
+      expect(result.content[0].text).toContain('Available fields');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    }
+  });
+
+  it('requires targetParameter in parameter mode and lists the existing parameters', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetParameter is required in parameter mode');
+    // Recovery guidance: enumerate the parameters already in the workbook (the Parameters
+    // datasource carries p.Period as [Parameter 1]).
+    expect(result.content[0].text).toContain('Available parameters');
+    expect(result.content[0].text).toContain('p.Period');
+    expect(result.content[0].text).toContain('[Parameters].[Parameter 1]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('tells the caller to author a parameter first when the workbook has none', async () => {
+    // The LangSmith traces show the agent stuck retrying against a target that never existed:
+    // "Available parameters: none" alone was a dead end. When the workbook carries no parameters,
+    // the recovery is to author one first, so the message must name that path, not just "none".
+    const noParameters = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+      },
+      initialXml: noParameters,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetParameter is required in parameter mode');
+    expect(result.content[0].text).toContain('author one first with author-parameter');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a well-formed targetParameter that names no existing parameter', async () => {
+    // [Parameters].[Profit] is correctly qualified but Profit is a data field, not a parameter.
+    // Tableau would persist an action pointing at a phantom parameter that can never fire, so
+    // reject it and list the parameters that do exist — as set mode does for an unknown set.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Profit]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'targetParameter "[Parameters].[Profit]" was not found',
+    );
+    expect(result.content[0].text).toContain('Available parameters');
+    expect(result.content[0].text).toContain('p.Period');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('resolves a targetParameter named by its caption to the internal token', async () => {
+    // A parameter's internal name ([Parameter 1]) is independent of its display caption
+    // (p.Period). A caller who names the parameter by the caption they see in the Parameters
+    // pane must still resolve — and the applied XML must carry the INTERNAL token, because that
+    // is the only form Tableau resolves an action against. Mirrors set mode's caption handling.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[p.Period]',
+        activation: 'on-select',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    // The echo and emit both report the resolved internal token, not the caption input.
+    expect(parsed.target).toBe('[Parameters].[Parameter 1]');
+    expect(parsed.targetParameter).toBe('[Parameters].[Parameter 1]');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(
+      "<param name='target-parameter' value='[Parameters].[Parameter 1]' />",
+    );
+    // The raw caption must never reach the serialized XML.
+    expect(loaded).not.toContain('[Parameters].[p.Period]');
+  });
+
+  it('echoes the default aggregation and clear behavior when neither is set', async () => {
+    // Neither sourceFieldAggregation nor clearValue passed: the emitted XML is byte-identical to
+    // what the tool has always emitted (attr + do-nothing), and the receipt reports those defaults.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.sourceFieldAggregation).toBe('attr');
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<agg-type type='attr' />");
+    expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('passes readback when Desktop rewrites the do-nothing clear value to the param default', async () => {
+    // Field-observed: for clear-option type='do-nothing', Desktop discards the emitted
+    // value='s:LROOT:' and stamps the target parameter's OWN default in its datatype encoding
+    // (here 'i:1' for an integer param). The clear-option value is Desktop-owned; only its type is
+    // author-controlled. Readback must accept the type it authored, not demand the exact value it
+    // sent survive a round-trip — else every default apply falsely reports "did not survive".
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='i:1' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBeUndefined();
+  });
+
+  it('offers sourceFieldAggregation as a fixed set of Tableau aggregations, not a free string', async () => {
+    // The aggregation is a closed set (twb XSD ActionList-Agg-ST), so it is an enum dropdown like
+    // activation/setMembership — the schema rejects a non-token up front. 'none' is NOT offered:
+    // Desktop backfills <agg-type type='attr'/> when the element is omitted (field-observed), so a
+    // 'none' that omits it can never survive readback and would be a value that does nothing.
+    const tool = getAuthorActionTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<
+      string,
+      { safeParse: (value: unknown) => { success: boolean } }
+    >;
+    const agg = paramsSchema['sourceFieldAggregation'];
+    expect(agg.safeParse('attr').success).toBe(true);
+    expect(agg.safeParse('sum').success).toBe(true);
+    expect(agg.safeParse('bogus').success).toBe(false);
+    expect(agg.safeParse('none').success).toBe(false);
+  });
+
+  it('emits the requested source-field aggregation', async () => {
+    // sourceFieldAggregation='sum' overrides the pinned 'attr'; the <agg-type> type attribute
+    // carries it and the receipt echoes it back.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='sum' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        sourceFieldAggregation: 'sum',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.sourceFieldAggregation).toBe('sum');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<agg-type type='sum' />");
+  });
+
+  it('resets the parameter to a fixed value on clear when clearValue is set', async () => {
+    // A clearValue turns the clear-option into assign-fixed-value carrying s:LROOT:<value>, so
+    // deselecting a mark resets the parameter to that value instead of leaving it unchanged.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT:Month' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: 'Month',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe('Month');
+    expect(parsed.onClear).toBe('set-value');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:Month' />");
+  });
+
+  it('resets a string to an empty string when onClear is set-value and clearValue is ""', async () => {
+    // The one case a single optional field cannot express: an explicit empty-string reset, distinct
+    // from keep-current. onClear='set-value' + clearValue='' selects it — assign-fixed-value with an
+    // empty s:LROOT: — mirroring Desktop's "Set value to" radio with a blank value box.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        onClear: 'set-value',
+        clearValue: '',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe('');
+    expect(parsed.onClear).toBe('set-value');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT:' />");
+  });
+
+  it('keeps current value when clearValue is "" and onClear is absent (string parameter)', async () => {
+    // A blank clearValue with no explicit onClear infers keep-current for every datatype — a string
+    // "" is NOT a surprise empty-string reset. This is the behavior a blank-sending client relies on.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('keeps current value when onClear is keep-current even if clearValue is set', async () => {
+    // The explicit keep-current radio wins over any value in the box — do-nothing, value ignored.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        onClear: 'keep-current',
+        clearValue: 'Month',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('rejects set-value without clearValue before applying a parameter action', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        onClear: 'set-value',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('onClear=set-value requires clearValue');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('errors when onClear is set-value on a non-string parameter with a blank clearValue', async () => {
+    // "Set value to" with an empty box makes no sense for a numeric parameter; reject rather than
+    // silently keep-current, so the caller learns their set-value request had no value.
+    const intParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.Count' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Count',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        onClear: 'set-value',
+        clearValue: '',
+      },
+      initialXml: intParamXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('clearValue');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('preserves surrounding whitespace in clearValue instead of trimming it', async () => {
+    // A padded clearValue like " Month " is a distinct reset value from "Month"; trimming it would
+    // apply — and report — a different value than the caller requested.
+    const readbackXml = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='s:LROOT: Month ' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: ' Month ',
+      },
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe(' Month ');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='s:LROOT: Month ' />");
+  });
+
+  it('fails readback when the requested aggregation did not survive', async () => {
+    // The tool authored agg-type='sum' but the readback shows the workbook kept 'attr' — a dropped
+    // setting. Readback must catch it rather than report the requested aggregation as applied.
+    const driftedReadback = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        sourceFieldAggregation: 'sum',
+      },
+      readbackXml: driftedReadback,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('fails readback when the fixed clear value did not survive', async () => {
+    // The tool authored assign-fixed-value but the readback shows do-nothing — the reset behavior
+    // was dropped, so the receipt must not report it as applied.
+    const driftedReadback = withActions(
+      BASE_XML,
+      "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: 'Month',
+      },
+      readbackXml: driftedReadback,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('did not survive readback');
+  });
+
+  it('encodes clearValue for an integer parameter as i:<value>', async () => {
+    // The clear-option value is datatype-specific: an integer parameter takes the i: prefix, not the
+    // string s:LROOT: form. The applied XML must carry i:5 so Desktop keeps the fixed reset value.
+    const intParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.Count' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    // Readback carries the integer-encoded clear-option (type assign-fixed-value) the tool authored.
+    const readbackXml = intParamXml.replace(
+      '</datasources>',
+      "</datasources><actions><edit-parameter-action caption='Set Count' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='assign-fixed-value' value='i:5' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Count',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '5',
+      },
+      initialXml: intParamXml,
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.clearValue).toBe('5');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='assign-fixed-value' value='i:5' />");
+  });
+
+  it('infers keep-current from a blank clearValue on an integer parameter (no onClear)', async () => {
+    // A client that leaves clearValue blank sends "" instead of omitting it. With no explicit
+    // onClear a blank infers keep-current — do-nothing — not an encoding error. The applied XML
+    // must carry do-nothing, and the receipt echoes the blank the caller sent.
+    const intParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.Count' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const readbackXml = intParamXml.replace(
+      '</datasources>',
+      "</datasources><actions><edit-parameter-action caption='Set Count' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Profit]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Count',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '',
+      },
+      initialXml: intParamXml,
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.onClear).toBe('keep-current');
+    expect(parsed).not.toHaveProperty('clearValue');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain("<clear-option type='do-nothing' value='s:LROOT:' />");
+  });
+
+  it('still rejects clearValue against a datetime parameter (encoding unverified)', async () => {
+    // datetime's clear-option encoding was never field-verified, so the tool rejects it rather than
+    // emit a value Desktop would silently rewrite.
+    const dateTimeParamXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'>",
+      '<datasources>',
+      "<datasource hasconnection='false' inline='true' name='Parameters'>",
+      "<column caption='p.When' datatype='datetime' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='#2020-01-01#'><calculation class='tableau' formula='#2020-01-01#' /></column>",
+      '</datasource>',
+      "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
+      "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+      '</datasource>',
+      '</datasources>',
+      "<worksheets><worksheet name='Profit' /></worksheets>",
+      '</workbook>',
+    ].join('');
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set When',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        clearValue: '2020-01-01 00:00:00',
+      },
+      initialXml: dateTimeParamXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('datetime');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sourceWorksheet that names no existing worksheet', async () => {
+    // "Sales Map" looks plausible but the workbook only has "Profit"; a phantom source persists
+    // as an action that can never fire. Reject it and enumerate the real worksheets.
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Sales Map',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceWorksheet "Sales Map" was not found');
+    expect(result.content[0].text).toContain('Available worksheets');
+    expect(result.content[0].text).toContain('Profit');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a set-mode sourceWorksheet that names no existing worksheet', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Sales Map',
+        targetSet: 'Category Set',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceWorksheet "Sales Map" was not found');
+    expect(result.content[0].text).toContain('Available worksheets');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -503,7 +1529,7 @@ describe('authorActionTool', () => {
       args: {
         caption: 'Set Period',
         sourceWorksheet: 'Profit',
-        sourceField: '',
+        sourceField: '[Profit]',
         targetParameter: '[Parameters].[Parameter 1]',
       },
       readbackXml: withActions(BASE_XML, incompleteAction),
@@ -576,7 +1602,7 @@ describe('authorActionTool', () => {
         caption: 'Open Sales Person',
         sourceWorksheet: '',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales', 'OTE'],
+        excludeSourceSheets: ['Sales', 'OTE'],
         url: 'https://www.google.com/search?q=<[Sales Person]>',
       },
       readbackXml: withActions(BASE_XML, expectedAction),
@@ -692,7 +1718,7 @@ describe('authorActionTool', () => {
   it('honors a non-default activation for url actions', async () => {
     const expectedAction =
       "<action caption='On Menu' name='[Action1]'>" +
-      "<activation type='on-menu' />" +
+      '<activation />' +
       "<source type='sheet' worksheet='Profit' />" +
       "<link caption='' expression='https://example.com/' />" +
       '</action>';
@@ -709,7 +1735,7 @@ describe('authorActionTool', () => {
 
     expect(result.isError).toBe(false);
     const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded).toContain("<activation type='on-menu' />");
+    expect(loaded).toContain('<activation />');
   });
 
   it('fails url readback when the action landed as a <command> instead of a <link>', async () => {
@@ -884,21 +1910,39 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects excludeSheets when a worksheet source is present', async () => {
+  it('rejects excludeSourceSheets when a worksheet source is present', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         mode: 'url',
         caption: 'Excludes',
         sourceWorksheet: 'Profit',
         sourceDashboard: 'Commission Model',
-        excludeSheets: ['Sales'],
+        excludeSourceSheets: ['Sales'],
         url: 'https://example.com/',
       },
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('excludeSheets is only allowed');
+    expect(result.content[0].text).toContain('excludeSourceSheets is only allowed');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects excludeTargetSheets in url mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Excludes',
+        sourceWorksheet: '',
+        sourceDashboard: 'Commission Model',
+        excludeTargetSheets: ['Sales'],
+        url: 'https://example.com/',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('excludeTargetSheets is only allowed in filter mode');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -1107,99 +2151,3 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 });
-
-function withActions(baseXml: string, actionXml: string): string {
-  const dsClose = baseXml.indexOf('</datasources>') + '</datasources>'.length;
-  return baseXml.slice(0, dsClose) + `<actions>${actionXml}</actions>` + baseXml.slice(dsClose);
-}
-
-type AuthorActionArgs = {
-  session?: string;
-  mode?: 'parameter' | 'set' | 'url';
-  caption: string;
-  sourceWorksheet: string;
-  sourceField?: string;
-  targetParameter?: string;
-  targetSet?: string;
-  datasource?: string;
-  setMembership?: 'assign' | 'add' | 'remove';
-  clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
-  singleSelect?: boolean;
-  activation?: 'on-select' | 'on-hover' | 'on-menu';
-  url?: string;
-  sourceDashboard?: string;
-  excludeSheets?: string[];
-  urlTarget?: 'default-zone-or-browser' | 'browser' | 'specific-zone';
-  zoneId?: string;
-  urlEncode?: boolean;
-};
-
-async function getToolResult({
-  args,
-  initialXml = BASE_XML,
-  readbackXml,
-}: {
-  args: AuthorActionArgs;
-  initialXml?: string;
-  readbackXml?: string;
-}): Promise<{
-  result: CallToolResult;
-  applyWorkbookDocument: ReturnType<typeof vi.fn>;
-}> {
-  const documents = [initialXml, initialXml, readbackXml ?? initialXml];
-  let readCount = 0;
-  const executeCommand = vi
-    .fn()
-    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
-  const getWorkbookDocument = vi.fn(async () => {
-    return new Ok({
-      xml: documents[Math.min(readCount++, documents.length - 1)],
-      applicationVersion: undefined,
-      xsdPayloadVersion: undefined,
-    });
-  });
-  const applyWorkbookDocument = vi.fn(async () => {
-    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
-  });
-  const extra = {
-    ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({
-      executeCommand,
-      getWorkbookDocument,
-      applyWorkbookDocument,
-    }),
-  };
-  const tool = getAuthorActionTool(new DesktopMcpServer());
-  const callback = await Provider.from(tool.callback);
-
-  const result = await callback(
-    {
-      session: '12345',
-      ...args,
-      mode: args.mode ?? 'parameter',
-      sourceField: args.sourceField,
-      targetParameter: args.targetParameter,
-      targetSet: args.targetSet,
-      datasource: args.datasource,
-      singleSelect: args.singleSelect,
-      activation: args.activation ?? 'on-select',
-      setMembership: args.setMembership ?? 'assign',
-      clearSelection: args.clearSelection ?? 'do-nothing',
-      url: args.url,
-      sourceDashboard: args.sourceDashboard,
-      excludeSheets: args.excludeSheets,
-      urlTarget: args.urlTarget,
-      zoneId: args.zoneId,
-      urlEncode: args.urlEncode,
-    },
-    extra,
-  );
-
-  return { result, applyWorkbookDocument };
-}
-
-function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
-  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
-  invariant(typeof xml === 'string');
-  return xml;
-}
