@@ -402,7 +402,7 @@ export const getApplyWorksheetTool = (
           }
 
           // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
-          // along so the agent can re-check the rendered chart before moving on (W4).
+          // along so the agent can re-check the rendered chart before moving on.
           const readbackWarning = result.isOk()
             ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
             : '';

@@ -115,7 +115,7 @@ export function runApplyPreamble({
     };
   }
 
-  // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
+  // Cross-instance cache-bleed guard: refuse a cache file produced by a
   // different (or restarted) Desktop session before applying it. Now that every
   // apply goes through a cache file, no payload can skip this check.
   const sidecar = checkSidecarInput(readResult.path, resolvedSession, kind, sidecarInput);

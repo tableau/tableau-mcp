@@ -22,9 +22,9 @@ import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 // Primitives in, mark-label format XML server-side, readback out. Turns mark labels
 // ON for a worksheet (labels hug the bars) — the finishing polish over the melody.
-// PROVEN live 2026-07-19 (CODA): <style><style-rule element='mark'><format
-// attr='mark-labels-show' value='true'/></style-rule></style> spliced into a pane
-// MERGES via the document round-trip and survives readback.
+// A <style><style-rule element='mark'><format attr='mark-labels-show' value='true'/>
+// </style-rule></style> block spliced into a pane MERGES via the document round-trip and
+// survives readback.
 const paramsSchema = {
   session: sessionParam(),
   worksheetName: artifactNameParam('worksheet').optional(),

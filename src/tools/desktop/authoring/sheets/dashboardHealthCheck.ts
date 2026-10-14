@@ -1,5 +1,5 @@
 // dashboard-health-check — READ-ONLY drift detector for previously-bound dashboards
-// (W60 self-healing MVP, flag-only mode).
+// in flag-only mode.
 //
 // Diffs a caller-held binding manifest (what a prior bind believed to be true)
 // against the CURRENT live workbook XML and reports per-finding drift classes:

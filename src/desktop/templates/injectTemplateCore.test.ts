@@ -1,10 +1,10 @@
 // Colocated tests for the pure inject core (removeSameNamedWorksheet +
 // buildInjectedWorkbookXml). These exercise the REAL functions (no mocks) — the
 // sibling injectTemplate.test.ts mocks injectTemplate, so a real round-trip can
-// only live here. Cases ported from the W60 adversary probe (P0-3 double-quote,
-// P2-7 attribute-order) plus a reserialization round-trip. The strip is now
-// STRUCTURAL (parse → filter → serialize), so these pin behavior — quote style,
-// attribute order, multi-duplicate convergence (P2-8) — not string mechanics.
+// only live here. Cases cover double-quote and attribute-order variants plus a
+// reserialization round-trip. The strip is now STRUCTURAL (parse → filter → serialize), so
+// these pin behavior — quote style, attribute order, multi-duplicate convergence — not
+// string mechanics.
 import type { SlotSpec } from '../binder/manifest-types.js';
 import { injectTemplate } from './injectTemplate.js';
 import {
@@ -17,7 +17,7 @@ import {
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import { readTemplate } from './templatePath.js';
 
-// Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
+// Pre-existing pile-up fixture: two stale "Sales" copies in MIXED quote
 // styles + attribute orders (what Desktop dedup left behind before the strip was
 // quote-agnostic), one unrelated sheet, and a DASHBOARD-class window that shares
 // the name and must survive any strip.
@@ -109,7 +109,7 @@ describe('buildInjectedWorkbookXml — caller-authored KPI formatting', () => {
   });
 });
 
-describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
+describe('removeSameNamedWorksheet — quote-agnostic strip', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
     const workbookXml = [
       '<workbook><worksheets><worksheet name="Sales">OLD BODY</worksheet></worksheets>',
@@ -153,7 +153,7 @@ describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', (
   });
 });
 
-describe('removeSameNamedWorksheet — attribute-order tolerant window strip (adversary P2-7)', () => {
+describe('removeSameNamedWorksheet — attribute-order tolerant window strip', () => {
   it('strips a <window> whose "active" attribute sorts before "class"', () => {
     const workbookXml = [
       "<workbook><worksheets><worksheet name='Sales'>OLD BODY</worksheet></worksheets>",
@@ -197,7 +197,7 @@ describe('removeSameNamedWorksheet — dashboard-zone fail-safe holds for double
   });
 });
 
-describe('removeSameNamedWorksheet — structural multi-strip of pre-existing duplicates (P2-8)', () => {
+describe('removeSameNamedWorksheet — structural multi-strip of pre-existing duplicates', () => {
   it('removes ALL same-named worksheet nodes and worksheet-window entries, not just the first', () => {
     const out = removeSameNamedWorksheet(DUPLICATED_WORKBOOK_XML, 'Sales');
 
@@ -234,7 +234,7 @@ describe('removeSameNamedWorksheet — structural multi-strip of pre-existing du
   });
 });
 
-describe('buildInjectedWorkbookXml — pre-existing duplicates converge in ONE apply (P2-8)', () => {
+describe('buildInjectedWorkbookXml — pre-existing duplicates converge in ONE apply', () => {
   it('a workbook that already piled up two "Sales" copies ends with exactly one', () => {
     const templateXml = [
       "<?xml version='1.0'?><workbook>",
@@ -353,7 +353,7 @@ describe('injectTemplate — real TBM numeric-entity fidelity', () => {
   });
 });
 
-describe('buildInjectedWorkbookXml — reserialization round-trip (adversary P0-3)', () => {
+describe('buildInjectedWorkbookXml — reserialization round-trip', () => {
   const templateXml = [
     "<?xml version='1.0'?><workbook>",
     "<worksheets><worksheet name='{{TITLE}}'><table/></worksheet></worksheets>",
@@ -418,7 +418,7 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
     slot === TREND_COLOR_SLOT ? { ...slot, required: false } : slot,
   );
 
-  it('injects a DATEPARSE month axis when the temporal slot bound a string month (e4 shape)', () => {
+  it('injects a DATEPARSE month axis when the temporal slot bound a string month', () => {
     const result = buildInjectedWorkbookXml({
       workbookXml: EMPTY_WORKBOOK,
       templateXml: TREND_TEMPLATE,

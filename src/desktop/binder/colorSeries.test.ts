@@ -112,7 +112,7 @@ const activeUsersXml = (
     ].join('\n'),
   );
 
-describe('classifyNoLlm — e4 trend color series', () => {
+describe('classifyNoLlm — trend color series', () => {
   it('auto-colors monthly active users by the sole spare categorical', () => {
     const result = classifyNoLlm(
       'Show me monthly active users over the last 12 months.',

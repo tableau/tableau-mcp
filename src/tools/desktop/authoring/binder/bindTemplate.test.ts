@@ -68,7 +68,7 @@ vi.mock('../../../../desktop/templates/runtimeTemplateCatalog.js', async (import
   return { ...actual, loadRuntimeTemplateCatalogSnapshots: vi.fn() };
 });
 
-// ── Auto-apply / session-default seams (W60) ──────────────────────────────────
+// ── Auto-apply / session-default seams ──────────────────────────────────
 // The auto-apply leg runs the REAL validated apply path (loadWorkbookXml → real
 // runValidation → executor dispatch) so a bind can never silently skip preflight;
 // only the boundaries are mocked. External API discovery is mocked for session-default
@@ -4369,7 +4369,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(typeof body.phase_ms.bind).toBe('number');
     expect(typeof body.phase_ms.inject).toBe('number');
     expect(typeof body.phase_ms.apply).toBe('number');
-    // W60 response-shape trim (P4): the applied:true fast-path drops the args echo — the
+    // Response-shape trim: the applied:true fast-path drops the args echo — the
     // manual second call it enabled never happens on success.
     expect(body.args).toBeUndefined();
 
@@ -4568,7 +4568,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
   });
 
-  it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
+  it('applied:true returns ONLY the trimmed fast-path shape (response-shape trim)', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -5078,8 +5078,8 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('applied:true non-waterfall bind is terminal: guidance says done and nextAction.kind is "done"', async () => {
-    // Blake's spiral: a completed auto-apply (symbol map, no unfilled re-bind slot) must
-    // carry a terminal marker so the agent stops instead of burning 100s on search-commands
+    // A completed auto-apply (symbol map, no unfilled re-bind slot) must carry a terminal
+    // marker so the agent stops calling more tools instead of burning 100s on search-commands
     // over an already-rendered chart. The prose stop-clause works with today's host; the
     // structuredContent.nextAction{kind:'done'} is the durable machine contract.
     const mocks = setupAutoApplyMocks({
@@ -7039,7 +7039,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
 
-  it('Miller World Cup repro: auto_apply ignores telemetry-only Parameter 1/Parameter 2 findings', async () => {
+  it('World Cup workbook repro: auto_apply ignores telemetry-only Parameter 1/Parameter 2 findings', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
     vi.mocked(validationRegistry.runValidation).mockReturnValue({
       valid: false,
@@ -7448,7 +7448,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
   });
 });
 
-describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)', () => {
+describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);

@@ -922,7 +922,7 @@ describe('binder/validate — cardinality advice', () => {
   });
 });
 
-describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
+describe('binder/validate — gate 4: min/max on a temporal field is legal (gantt-task-rollup)', () => {
   const GANTT_SCHEMA: SchemaSummary = {
     datasource: 'Projects',
     fields: [

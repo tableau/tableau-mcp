@@ -103,7 +103,7 @@ export const getBuildAndApplyDashboardTool = (
           }
           const resolvedSession = sessionResult.value;
 
-          // Cross-instance cache-bleed guard (W9): refuse caches produced by a different
+          // Cross-instance cache-bleed guard: refuse caches produced by a different
           // (or restarted) Desktop session before applying either one.
           const wbSidecar = checkSidecar(checkedWorkbook.value, resolvedSession, 'workbook');
           if (!wbSidecar.ok) {

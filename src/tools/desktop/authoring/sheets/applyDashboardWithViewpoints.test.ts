@@ -134,7 +134,7 @@ describe('applyDashboardWithViewpointsTool', () => {
     expect(result.structuredContent).toBeUndefined();
   });
 
-  it('refuses a stale cache sidecar before any Desktop call (W9)', async () => {
+  it('refuses a stale cache sidecar before any Desktop call', async () => {
     const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({
       ok: false,
       message: 'Cache produced by a different Desktop session — re-read in the current session.',

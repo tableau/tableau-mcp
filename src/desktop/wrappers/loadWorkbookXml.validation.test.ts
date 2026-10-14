@@ -95,7 +95,7 @@ describe('loadWorkbookXml validation preflight', () => {
     },
   );
 
-  it('Miller World Cup repro: default-named parameters apply with telemetry warnings', async () => {
+  it('World Cup workbook repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
 <workbook>
   <datasources>
@@ -143,7 +143,7 @@ describe('loadWorkbookXml validation preflight', () => {
     }
   });
 
-  it('Miller-shaped bound ranking template passes whole-workbook preflight', async () => {
+  it('World Cup-shaped bound ranking template passes whole-workbook preflight', async () => {
     const datasource = 'federated.0mkveh20xfko2115afimd1odnzrh';
     const workbookXml = `<?xml version='1.0'?>
 <workbook>

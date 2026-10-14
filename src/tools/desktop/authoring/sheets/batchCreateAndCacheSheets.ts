@@ -154,7 +154,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             }).toErr();
           }
           // Fingerprint the cache with the producing Desktop instance so a Phase-2 apply
-          // can refuse a cache from a different (or restarted) Desktop session (W9).
+          // can refuse a cache from a different (or restarted) Desktop session.
           writeSidecar(workbookFile, resolvedSession, sourceSha256(acceptedWorkbookXml));
 
           // Fetch and cache all worksheet working copies.

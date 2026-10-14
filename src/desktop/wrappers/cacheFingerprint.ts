@@ -1,5 +1,5 @@
 /**
- * Cache-file instance fingerprinting — the cross-instance bleed guard (W9).
+ * Cache-file instance fingerprinting — the cross-instance bleed guard.
  *
  * Cache file names are deterministic (worksheet-<name>.xml, and per-dashboard
  * for-parallel-build workbook files), so with two Desktops running, instance A's cached XML can be

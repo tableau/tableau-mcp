@@ -81,7 +81,7 @@ export function finishXmlRead<K extends string>({
   });
   writeRedactedXmlCacheFile(cacheFile, xml);
   // Stamp the producing session so the apply tool can refuse a cache from a
-  // different (or restarted) Desktop instance — cross-instance bleed guard (W9).
+  // different (or restarted) Desktop instance — cross-instance bleed guard.
   writeSidecar(cacheFile, resolvedSession, sourceSha256(xml));
 
   if (capFired) {

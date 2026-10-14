@@ -338,7 +338,7 @@ describe('applyWorkbookTool', () => {
     sidecarSpy.mockRestore();
   });
 
-  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {
+  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session', async () => {
     const mockFilePath = '/path/to/workbook.twb';
 
     vi.mocked(existsSync).mockReturnValue(true);

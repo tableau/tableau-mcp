@@ -1,9 +1,9 @@
 // src/desktop/binder/route-spec.ts
 //
-// The route layer's typed REGISTRY (Slice B, ported from a2td src/binder/route-spec.ts). A
-// typed table mapping an ask-SHAPE to a route class, plus a schema-free shape classifier that
-// REUSES the binder's own model-free matcher (`selectEligible` in ask-router.ts) for
-// bind-first detection — it NEVER re-derives classification.
+// The route layer's typed REGISTRY. A typed table mapping an ask-SHAPE to a route class,
+// plus a schema-free shape classifier that REUSES the binder's own model-free matcher
+// (`selectEligible` in ask-router.ts) for bind-first detection — it NEVER re-derives
+// classification.
 //
 // The classifier is deterministic + model-free: the route is computed once from the ask/task
 // text, before any live workbook schema is known. It reuses `selectEligible` (keyword /
@@ -31,7 +31,7 @@ export type RouteClass = 'bind-first' | 'scratch-pipeline' | 'refine-op' | 'free
 /**
  * The recognized ask shapes. `refine-*` shapes are the refine taxonomy; only the worksheet
  * adapters that exist route to `refine-op` (the tmcp refine-worksheet fast lane covers
- * refine-top-n / refine-sort — Slice A).
+ * refine-top-n / refine-sort).
  */
 export type AskShape =
   | 'empty'

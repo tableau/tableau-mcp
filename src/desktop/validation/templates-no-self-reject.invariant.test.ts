@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import { runValidation } from './registry.js';
 
-// W60-INVARIANT-TESTS suite 2 — VALIDATOR NEVER SELF-REJECTS A BUNDLED TEMPLATE.
+// VALIDATOR NEVER SELF-REJECTS A BUNDLED TEMPLATE.
 //
 // The invalid-derivation-string rule (src/desktop/validation/rules/invalidDerivationString.ts)
 // is an ERROR-severity preflight: it fires when a <column-instance derivation="..."> uses a
@@ -11,11 +11,11 @@ import { runValidation } from './registry.js';
 // runtime XML derived from each TBM is applied through runValidation(..., 'workbook') on the
 // apply path, so a template that itself trips the rule would be permanently un-appliable.
 //
-// Tonight this was verified by hand (40/40 templates clean). This suite makes that
-// permanent: for EVERY shipped runtime template, runValidation(xml, 'workbook') must report ZERO
-// invalid-derivation-string issues. (Other rules — well-formed-xml, calc-field-names — are
-// out of scope for this invariant; a template legitimately may or may not carry those, and
-// the derivation self-reject is the specific regression being locked.)
+// This suite locks that in: for EVERY shipped runtime template,
+// runValidation(xml, 'workbook') must report ZERO invalid-derivation-string issues.
+// (Other rules — well-formed-xml, calc-field-names — are out of scope for this invariant;
+// a template legitimately may or may not carry those, and the derivation self-reject is
+// the specific regression being locked.)
 
 // Every error-severity issue blocks apply; only the unfilled-token placeholder is expected in raw templates.
 const EXEMPT_RULE_IDS = new Set(['unsubstituted-template-token']);

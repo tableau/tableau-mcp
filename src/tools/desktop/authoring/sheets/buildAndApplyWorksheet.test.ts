@@ -784,7 +784,7 @@ describe('buildAndApplyWorksheetTool', () => {
     });
   });
 
-  it('resolves Miller caption-cased fields in the federated datasource', async () => {
+  it('resolves caption-cased fields in the federated datasource', async () => {
     const extra = makeExtra();
     const actualMetadata = await vi.importActual<
       typeof import('../../../../desktop/metadata/index.js')

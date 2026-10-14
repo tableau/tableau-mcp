@@ -56,8 +56,7 @@ import {
  * API 0.2.16. The dashboard `:refreshNow` path, result component, and 0.2.19 version were
  * projected from the authoritative W-24165695 monolith producer contract. The worksheet
  * `/showMe` path and its response components were projected on 2026-09-12 from
- * the W-23715530 monolith producer branch
- * `dev/michaelyu/w-23715530-get-show-me-options` because the live 0.2.16 artifact did not yet
+ * the W-23715530 monolith producer change because the live 0.2.16 artifact did not yet
  * include that producer addition.
  * The storyboard `:refreshNow` path and 0.2.20 version were projected from the
  * W-24165695 monolith producer contract because no live 0.2.20 capture was available.

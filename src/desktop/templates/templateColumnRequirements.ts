@@ -1,7 +1,7 @@
 /**
  * Parse a template's declared `<column>` requirements (name/role/datatype/type)
  * out of the template XML. Relocated verbatim from the former
- * `replaceFieldReferences.ts` thin wrapper (removed in W14-CM1) so that wrapper
+ * `replaceFieldReferences.ts` thin wrapper (since removed) so that wrapper
  * could be deleted once both rewriter consumers moved onto the shared core
  * (`fieldReferenceRewriter.ts`). Pure regex-based reader — no DOM, no fs, no side
  * effects — used by build-and-apply-worksheet to line template slots up against

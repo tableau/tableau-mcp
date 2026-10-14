@@ -6,13 +6,8 @@ import { createPuppetCompatibilityProjection } from '../templates/puppetCompatib
 import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplateCatalog.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
-// W60-INVARIANT-TESTS suite 1 — CARRIER-UNIQUENESS.
-//
-// Ported from the factory invariant (agent-to-tableau-desktop
-// src/binder/manifest.test.ts, the "every classify.ts CHART_NOUN_KEYWORD is carried
-// by <=1 fast_path_eligible manifest" test). The factory read classify.ts from
-// src/lockstep-core/classify.ts; here the frozen table lives in
-// src/desktop/binder/classify.ts.
+// CARRIER-UNIQUENESS: every classify.ts CHART_NOUN_KEYWORD is carried by <=1
+// fast_path_eligible manifest. The frozen table lives in src/desktop/binder/classify.ts.
 //
 // WHY THIS IS THE REGRESSION LOCK: a CHART_NOUN_KEYWORD is a DETERMINISTIC chart-type
 // selector. classifyNoLlm's lone-winner exemption (selectWithinFamily) auto-binds a
@@ -30,9 +25,9 @@ const CLASSIFY_TS_PATH = path.join(process.cwd(), 'src', 'desktop', 'binder', 'c
 
 /**
  * Regex-extract the CHART_NOUN_KEYWORDS Set members from classify.ts source (the
- * table is a private const — not exported — so it cannot be imported). Mirrors the
- * factory extractor: ANCHOR on `const CHART_NOUN_KEYWORDS` (so PLURALIZABLE_CHART_NOUNS,
- * whose comment mentions CHART_NOUN_KEYWORDS, cannot match) and STRIP `//` comments
+ * table is a private const — not exported — so it cannot be imported). ANCHOR on
+ * `const CHART_NOUN_KEYWORDS` (so PLURALIZABLE_CHART_NOUNS, whose comment mentions
+ * CHART_NOUN_KEYWORDS, cannot match) and STRIP `//` comments
  * (classify.ts's growth-provenance prose quotes example phrases in comments) so only
  * real Set members remain.
  */

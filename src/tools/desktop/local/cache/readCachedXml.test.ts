@@ -201,7 +201,7 @@ describe('readCachedXmlTool', () => {
     });
   });
 
-  describe('ambiguous selector rejection (Andy-lens "please")', () => {
+  describe('ambiguous selector rejection', () => {
     beforeEach(() => {
       vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
         ok: true,

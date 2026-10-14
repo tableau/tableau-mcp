@@ -355,7 +355,7 @@ async function getResult(
   return await callback(params as any, extra);
 }
 
-describe('removeSameNamedWorksheet — demo idempotence (W60)', () => {
+describe('removeSameNamedWorksheet — demo idempotence', () => {
   const wb = `<workbook>
   <worksheets>
     <worksheet name='Keep Me'>

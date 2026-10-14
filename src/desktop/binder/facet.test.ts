@@ -1,4 +1,4 @@
-// OPTIONAL SMALL-MULTIPLES FACET (W23-SM1 / W25-C), ported to tmcp.
+// OPTIONAL SMALL-MULTIPLES FACET.
 //
 // The facet is a PURELY ADDITIVE bind appended to classifyNoLlm's result: after
 // the required slots fill, a spare categorical the ask NAMED is appended to the
@@ -8,11 +8,11 @@
 // no-cue / no-spare ask binds byte-identically to before. Fail-closed cues: a bare
 // "by <dim>" is ambiguous (could be a color encoding) and is EXCLUDED.
 //
-// The inline-fixture tests below prove the classify.ts feature INDEPENDENT of the
-// bundled data state (see the "independent of bundled data" test). As of W27-B the
-// bundled trend-line-chart / ranking-ordered-bar manifests DO carry the optional facet
-// slot (facet_col / facet_row) — copied verbatim from the factory — so a final describe
-// block additionally pins the backward-compatible puppet descriptors end-to-end.
+// The inline-fixture tests below prove the classify.ts feature INDEPENDENT of the bundled
+// data state (see the "independent of bundled data" test). The bundled trend-line-chart /
+// ranking-ordered-bar manifests DO carry the optional facet slot (facet_col / facet_row),
+// so a final describe block additionally pins the backward-compatible puppet descriptors
+// end-to-end.
 
 import { describe, expect, it } from 'vitest';
 
@@ -121,7 +121,7 @@ const rankBar = (): RuntimeTemplateDescriptor =>
     ],
   );
 
-describe('classifyNoLlm — optional small-multiples facet (W23-SM1)', () => {
+describe('classifyNoLlm — optional small-multiples facet', () => {
   it("arms facet_col on trend-line when the ask says 'trellis … by <dim>' + a spare categorical", () => {
     const m = mapOf(trendLine());
     const cls = classifyNoLlm('trellis line chart of Sales over Order Date by Region', m, SUMMARY);

@@ -5,8 +5,6 @@
  * with count/direction attributes is silently stripped by Tableau on apply. The
  * confirmed working form is the nested function="end" -> order -> level-members
  * recipe, plus a matching <slices> entry.
- *
- * Ported from agent-to-tableau-desktop.
  */
 import * as xpath from 'xpath';
 

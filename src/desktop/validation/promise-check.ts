@@ -8,8 +8,6 @@
  * validation issues and readback verification already computed on the apply
  * path. Dashboard/whole-workbook intent is honestly labeled unverified — only
  * worksheet readback proves structural survival.
- *
- * Ported from agent-to-tableau-desktop.
  */
 import type { ExecuteCommandWarning } from '../externalApi/executorTypes.js';
 import {

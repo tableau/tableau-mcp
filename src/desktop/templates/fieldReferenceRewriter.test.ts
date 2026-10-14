@@ -7,7 +7,7 @@ import {
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import type { TemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
-// Ports A's ref-class coverage (W10-E8) onto this repo's TBM-derived runtime snapshots.
+// Ref-class coverage against this repo's TBM-derived runtime snapshots.
 // The shared DOM-structural rewriter must rewrite every reference CLASS a template
 // carries — bare column declarations, base-column-attr rewrites, plain and
 // COMPOUND (table-calc) column-instance names, datasource-qualified refs in text
@@ -786,7 +786,7 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
   });
 });
 
-describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall (W10-E8 port)', () => {
+describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall', () => {
   let snapshot: TemplateRuntimeSnapshot;
   const DS = 'World Indicators';
   const mapping = {

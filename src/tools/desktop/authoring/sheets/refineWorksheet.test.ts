@@ -85,7 +85,7 @@ const ROUND_STACKED_SOURCE = `<worksheet name='Profit by Category' xmlns:user='h
 
 // A source that PLANS fine (one dim, one measure, an anchor) but fails preflight: the extra
 // column-instance carries a non-canonical derivation ("Attr"), which the real
-// invalid-derivation-string rule rejects as an error. tmcp has no a2td-style
+// invalid-derivation-string rule rejects as an error. tmcp has no
 // computed-sort-crash rule, so this exercises the tool's preflight seam against a rule that
 // actually exists here. The planner still refuses the nested computed-sort crash form
 // directly (covered in the planner test).
@@ -971,7 +971,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
   });
 
   it('honors nested sortDirection.direction=DESC on sort_by_field (not a silent ASC default)', async () => {
-    // e5 defect 1: the model's natural shape passes sortDirection:{direction:"DESC"} with no
+    // The model's natural shape passes sortDirection:{direction:"DESC"} with no
     // flat `direction`. Before the fix, that nested direction was dropped, the sort defaulted
     // to ASC, and the tool FALSELY confirmed success on the wrong direction. It must now apply
     // DESC and confirm DESC.
@@ -1015,7 +1015,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
   afterEach(() => vi.useRealTimers());
 
   it('reports refined:false with a precise reason when the sort lands but the direction is wrong', async () => {
-    // e5 defect 2: the sort node lands (right column + using) but with ASC, not the requested
+    // The sort node lands (right column + using) but with ASC, not the requested
     // DESC — Desktop did not honor the direction. This must NOT confirm success; it must
     // refuse with a reason that names both the applied and the requested direction.
     vi.useFakeTimers();

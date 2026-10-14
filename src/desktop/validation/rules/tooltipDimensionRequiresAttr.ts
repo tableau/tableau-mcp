@@ -9,10 +9,10 @@
  * applies "successfully", then the sheet blanks with "cannot be converted to a
  * measure using ATTR()".
  *
- * Confirmed P0 (GUS W-23447711, Lee Graber dogfood 2026-07-14): none: dimension on
- * <tooltip> in an aggregated view → ATTR conversion pill errors + blank sheet, with
- * the agent retrying the same broken shape because nothing rejected it. This rule is
- * the preflight backstop that makes the failure visible BEFORE Desktop renders.
+ * Confirmed P0 (GUS W-23447711): none: dimension on <tooltip> in an aggregated view →
+ * ATTR conversion pill errors + blank sheet, with the agent retrying the same broken shape
+ * because nothing rejected it. This rule is the preflight backstop that makes the failure
+ * visible BEFORE Desktop renders.
  *
  * Severity: error — same class as the other applies-clean-renders-blank rules
  * (aggregate-calc-derivation, undeclared-calc-reference).

@@ -371,7 +371,7 @@ export class XmlModificationError extends McpToolError {
 
 /**
  * Refuse to apply a cache file whose instance fingerprint does not match the current
- * Desktop session (cross-instance cache bleed, W9). `message` carries the recovery recipe.
+ * Desktop session (cross-instance cache bleed). `message` carries the recovery recipe.
  */
 export class CacheSessionMismatchError extends McpToolError {
   constructor(message: string) {

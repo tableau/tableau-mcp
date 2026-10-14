@@ -55,9 +55,9 @@ export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema
 
 // Primitives in, action XML server-side, readback out. An action wires a mark
 // interaction on a source sheet to a target parameter, set, URL, filter, or highlight.
-// PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
-// document round-trip — the action survived readback with the target-parameter link
-// intact. This is the interactivity layer over the key signature.
+// A workbook-level <actions> block MERGES via the document round-trip — the action
+// survived readback with the target-parameter link intact. This is the interactivity
+// layer over the key signature.
 const paramsSchema = {
   session: sessionParam(),
   mode: modeSchema

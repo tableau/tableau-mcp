@@ -11,7 +11,7 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 // Pins the taskSpec → fieldMapping glue in buildAndApplyWorksheet.ts: how provided
 // column refs are grouped by role and assigned, by INDEX, to the template's
 // dimension/measure slots before the rewriter is called; plus how the datasource name
-// is derived. W14-CM1 migrated this consumer OFF the deleted replaceFieldReferences
+// is derived. This consumer was migrated OFF the deleted replaceFieldReferences
 // wrapper and onto the shared core (`rewriteFieldReferences`). The session boundary
 // (executor / loadWorksheetXml) is mocked, and the core is mocked so we can capture
 // the exact (fieldMapping, datasource, metadata) the consumer constructs. The
@@ -168,7 +168,7 @@ function captureCall(): Captured {
 
 // Parse the JSON success payload the tool returns (default getSuccessResult
 // JSON-stringifies the Ok value), so warnings assertions can read the structured
-// `warnings: string[]` field W14-CM1 added.
+// `warnings: string[]` field.
 function parsePayload(result: CallToolResult): { warnings?: string[]; [k: string]: unknown } {
   const first = result.content[0];
   if (first.type !== 'text') throw new Error('expected a text content block');
@@ -196,7 +196,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
   });
 
   it('CONVERGENCE: still index-drops extra role-matched fields, but now WARNS naming each one', async () => {
-    // CONVERGENCE (W14-CM1): the index-based slot assignment is UNCHANGED — the loop
+    // CONVERGENCE: the index-based slot assignment is UNCHANGED — the loop
     // bound is still `i < slots.length && i < fields.length`, so the SECOND dimension
     // (Segment) is still dropped because the template exposes only one dimension slot.
     // What changed: the previously-SILENT drop (pinned by X1) now surfaces a
@@ -216,7 +216,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
   });
 
   it('CONVERGENCE: still drops unknown-role fields, but now WARNS naming each one', async () => {
-    // CONVERGENCE (W14-CM1): a field whose column_ref is unknown to listAvailableFields
+    // CONVERGENCE: a field whose column_ref is unknown to listAvailableFields
     // (so it gets no role) is still not assigned to any slot — but the drop is no
     // longer silent; it surfaces in `warnings[]`.
     const extra = makeExtra();
@@ -341,7 +341,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
   });
 
   it('CONVERGENCE: two applies namespace the template calc with DISTINCT nonces (no calc-name collision)', async () => {
-    // CONVERGENCE (W14-CM1): end-to-end proof through the REAL shared core (not the
+    // CONVERGENCE: end-to-end proof through the REAL shared core (not the
     // capture mock). A template calc column is namespaced per apply; because the
     // consumer mints a fresh nonce each apply, two applies of the SAME template into
     // the SAME workbook produce DISTINCT `_tpl_<suffix>` calc names — so a repeated

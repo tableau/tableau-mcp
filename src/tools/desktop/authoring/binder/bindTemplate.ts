@@ -229,12 +229,12 @@ type RequestCoverage = {
 };
 
 /**
- * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
- * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
- * ~170-token apply_instruction, apply_hint, and used_llm — those exist to enable a manual
- * second call that never happens once the server-side apply succeeds. The FULL shape is
- * preserved on applied:false / propose / escalate / error, except for legacy apply instructions
- * that name tools outside the served profile. Graceful fallback still keeps the safe bound args.
+ * Trimmed shape returned ONLY on applied:true fast-path success. It keeps just what a
+ * rendered success needs and drops the args echo, the ~170-token apply_instruction,
+ * apply_hint, and used_llm — those exist to enable a manual second call that never happens
+ * once the server-side apply succeeds. The FULL shape is preserved on applied:false /
+ * propose / escalate / error, except for legacy apply instructions that name tools outside
+ * the served profile. Graceful fallback still keeps the safe bound args.
  */
 type AppliedFastPathResult = {
   status: 'bound';
@@ -337,19 +337,20 @@ const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 // A P&L/bridge running total is order-dependent and its intended
-// order is usually a non-displayed sequence field; the hint names it so the singer carries it
+// order is usually a non-displayed sequence field; the hint names it so the agent carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
   'Waterfall default sort is DESC by the bound measure (largest values first). After apply, verify and stop; override only with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
-// Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
-// (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
-// bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
+// Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled.
+// It stops the agent from calling more tools after a finished bind: the model reads guidance
+// verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting" + the
+// ambient "search-commands available" pulls.
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 const POST_APPLY_UNCERTAINTY_GUIDANCE =
   'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
-// singer must NOT hand-author another one. These clauses are appended only for splices the
+// agent must NOT hand-author another one. These clauses are appended only for splices the
 // function observed succeeding; requested-but-skipped filters are warnings, not successes.
 const FILTER_APPLIED_GUIDANCE =
   'The requested filter is ALREADY applied. Do NOT add another filter — a second one can change the scoping. The interactive control may not render as a visible card; that is a display detail, not a missing filter.';
@@ -1396,7 +1397,7 @@ function buildWaterfallDiscoveryGuidance(
   if (!hasSortOverride(res, proposal)) {
     const orderCandidates = waterfallOrderCandidates(schemaSummary);
     if (orderCandidates.length > 0) {
-      // Name the sequence column so the singer carries it in the bind instead of failing on
+      // Name the sequence column so the agent carries it in the bind instead of failing on
       // refine (which cannot sort by an off-view field) — the m1 give-up/XML-surgery seam.
       sentences.push(
         `Waterfall step order: schema has ${orderCandidates.join(', ')}; the running total is ` +
@@ -2774,7 +2775,7 @@ async function performAutoApply({
     };
   }
 
-  // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
+  // Response-shape trim: on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const successfulCalcCaptions = [
@@ -2786,10 +2787,11 @@ async function performAutoApply({
     res.status,
   );
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
-  // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
-  // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
-  // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
-  // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
+  // Stop the agent calling more tools after a finished bind: the applied:true receipt is
+  // TERMINAL unless a genuine, named re-bind slot is still unfilled (the m1 waterfall case).
+  // On INCOMPLETE we keep today's steer and attach NO structuredContent (byte-for-byte
+  // identical to the pre-fix code). On COMPLETE we append the stop-clause AND the
+  // machine-readable done marker so nothing re-asserts "keep going".
   // A tool that cannot verify what it wrote must not report success. The binder is the only
   // layer that knows the ask named an encoding it could not bind (a post-apply readback is
   // blind here — the XML it would read back never contained the node), so its own
@@ -3594,7 +3596,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
           }
-          // ── Target-worksheet gate (e1/s7 stray-sheet class) ──────────
+          // ── Target-worksheet gate (stray-sheet class) ──────────
           // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
           // chain): an explicit target must be provably replaceable — a missing name
           // or a dashboard-member sheet would make removeSameNamedWorksheet defer and

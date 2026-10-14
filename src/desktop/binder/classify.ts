@@ -383,7 +383,7 @@ export function matchAvoidWhen(
 }
 
 /**
- * Hazard codes that DEMOTE the no-LLM shortcut unconditionally (W59). avoid_when
+ * Hazard codes that DEMOTE the no-LLM shortcut unconditionally. avoid_when
  * is ask-conditioned; these hazards are DATA-conditioned — the risk (e.g. calcs
  * that SPLIT a specific compound-string shape out of a bound field) is invisible
  * in any natural ask, so the zero-model path can never rule it out. Demote-only:
@@ -472,7 +472,7 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // without it every noun-less trend ask ("trend over time by month") demotes to
   // propose the moment the family gains a second member. Pattern PHRASES
   // ('over-time', 'time-series') stay out — nouns only; the ask-router lane
-  // (W36) is the successor mechanism for phrase-level routing.
+  // is the successor mechanism for phrase-level routing.
   'trend',
   'gantt',
   'histogram',
@@ -509,8 +509,8 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
   // two-member families, collapsing nativity for the incumbent members'
   // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
-  // classified null (live-caught by the drift guard). Each noun below is a
-  // deterministic type selector carried by exactly one template:
+  // classified null. Each noun below is a deterministic type selector carried by exactly
+  // one template:
   // 'arrow-chart' + 'over-under-arrow' (ww-ou-arrow),
   // 'bar-code' + 'strip-plot' + 'dot-strip' (distribution-bar-code-chart).
   'arrow-chart',
@@ -518,13 +518,12 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'bar-code',
   'strip-plot',
   'dot-strip',
-  // Third growth event (W59): the 2026-07-06 stamp wave's remaining fallout —
   // part-to-whole-waterfall and spatial-choropleth-map shipped stamped but their
-  // nouns were never admitted, so both lead exec-demo asks ("waterfall of Profit
-  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose
-  // (live-caught by the W59 proof-value spike). Each noun below is carried by
-  // exactly ONE stamped template (carrier-uniqueness checked across all bundled
-  // manifests; the generic 'map' stays OUT — dual-carrier with spatial-symbol-map):
+  // nouns were never admitted, so both lead demo asks ("waterfall of Profit
+  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose.
+  // Each noun below is carried by exactly ONE stamped template (carrier-uniqueness checked
+  // across all bundled manifests; the generic 'map' stays OUT — dual-carrier with
+  // spatial-symbol-map):
   // 'waterfall' (part-to-whole-waterfall),
   // 'choropleth' + 'filled-map' + 'region-map' (spatial-choropleth-map).
   'waterfall',
@@ -589,7 +588,7 @@ function familyNativeKeywords(
 }
 
 /**
- * FAMILY-LEVEL spatial intent guard vocabulary (W-23447710, Cluster A selection half).
+ * FAMILY-LEVEL spatial intent guard vocabulary (W-23447710).
  * The source of truth is the manifest set itself: any keyword carried by a
  * spatial-family manifest is spatial intent — INCLUDING non-eligible spatial supply,
  * so a lat/lon ask is protected even while spatial-symbol-map-latlon is unproven.
@@ -691,7 +690,7 @@ function askCarriesSpatialIntent(
 }
 
 /**
- * MEASURE-FREE LAT/LONG SYMBOL MAP — coordinate-affinity resolver (Blake wall #2).
+ * MEASURE-FREE LAT/LONG SYMBOL MAP — coordinate-affinity resolver.
  *
  * The `spatial-symbol-map-latlon` template plots real Longitude/Latitude coordinate
  * columns on Cols/Rows (one fixed-size, single-color Circle per detail member) with NO
@@ -712,7 +711,7 @@ const GANTT_TASK_TEMPLATE = 'gantt-task-rollup-chart';
 const HISTOGRAM_TEMPLATE = 'distribution-histogram';
 
 /**
- * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
+ * POINT-LOCATION CUES. Coordinate/point-location intent a user types when
  * they want a map of WHERE things are — plotted points, not a filled/geocoded region map.
  * Matched as WHOLE tokens against the MASKED ask (field names blanked) so a field literally
  * named "Location"/"Office" can't arm the resolver — intent is a phrasing decision, never a
@@ -2140,14 +2139,14 @@ function augmentGeoConceptMatches(
  * coarse phantom like "Region" (a sub-token of "Country/Region") tie the state slot
  * against "Country/Region" and fail closed, rather than being silently mis-bound.
  *
- * W60 GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
+ * GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
  * THAT slot's pool to the schema dimensions not already consumed by another slot and
  * binds the unique name-affine field there — BUT only when at least one OTHER geo slot
  * was satisfied from the ask-named pool (the ask demonstrated geographic intent by
  * naming ≥1 geo field).
  * The unique-max + distinctness rules still hold over the widened pool, so a schema with
  * two country-affine fields (a tie) or none still fails closed; an ask that names NO geo
- * field at all keeps the pre-W60 fail-closed behavior. A `tie` in the ASK-NAMED pool
+ * field at all keeps the fail-closed behavior. A `tie` in the ASK-NAMED pool
  * always fails closed (the ask named ambiguous candidates) and never widens. Slots
  * auto-completed from the widened pool are returned so the caller can surface which
  * field it chose for a slot the ask did not name.
@@ -2241,7 +2240,7 @@ function askHasExplicitTimeIntent(maskedAsk: string): boolean {
 }
 
 /**
- * UNIQUE-DATE TEMPORAL COMPLETION (mirrors the W60 geo-slot completion). When a
+ * UNIQUE-DATE TEMPORAL COMPLETION (mirrors the geo-slot completion). When a
  * chosen template's lone required temporal slot was NOT filled by an ask-named
  * field, complete it with the schema's SINGLE date/datetime field — but only under
  * strict, fail-closed preconditions so it can never introduce ambiguity:
@@ -2469,7 +2468,7 @@ function roleGreedyBind(
         // dimension ("2024-03" month) is ALSO acceptable — the DATEPARSE apply splice
         // (validate.ts + dateparseTemporalAxis) turns it into a continuous truncated axis.
         // Without this the string month never fills the temporal slot, the required-slot
-        // gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
+        // gate fails, and the agent thrashes into a bar-over-strings.
         chosen = take(
           slot,
           (f) =>
@@ -2477,7 +2476,7 @@ function roleGreedyBind(
             (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
           false,
         );
-        // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
+        // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors geo): a
         // lone required temporal slot the ask did not name is completed with the
         // schema's single date field, under the strict preconditions in
         // completeTemporalSlot. `temporalCompletion` is passed ONLY by classifyNoLlm's
@@ -2507,7 +2506,7 @@ function roleGreedyBind(
         // template). Name affinity replaces "first unused dimension", so a geo slot
         // binds only a name-matching field or fails closed — never a silent swap. A
         // required geo slot the ask does not name widens to unused schema dimensions
-        // when another geo slot IS named (W60).
+        // when another geo slot IS named.
         if (!geoResolved) {
           const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
           const availableSchemaDims = schemaDims.filter((f) => !used.has(f));
@@ -2535,7 +2534,7 @@ function roleGreedyBind(
     bindings.push(binding);
   }
 
-  // Surface any geo slot AUTO-COMPLETED from the full schema (W60) as provenance, so the
+  // Surface any geo slot AUTO-COMPLETED from the full schema as provenance, so the
   // caller can tell the agent which field it chose for a slot the ask did not name.
   const provenance: string[] = [];
   for (const [slotId, f] of geoAutoCompleted) {
@@ -2545,7 +2544,7 @@ function roleGreedyBind(
     );
   }
   // Surface a temporal slot AUTO-COMPLETED from the schema's lone date field (unique-
-  // date completion, W60 geo sibling) so the caller can tell the agent which field it
+  // date completion, geo sibling) so the caller can tell the agent which field it
   // chose for a required time axis the ask did not name.
   for (const [slotId, f] of temporalAutoCompleted) {
     provenance.push(
@@ -2675,7 +2674,7 @@ function selectWithinFamily(
 }
 
 /**
- * SMALL-MULTIPLES FACET CUES (W23-SM1). Explicit facet/trellis vocabulary a user
+ * SMALL-MULTIPLES FACET CUES. Explicit facet/trellis vocabulary a user
  * types when they want one chart PER member (side-by-side panes), NOT a color/detail
  * grouping. Deliberately tight: a bare "by <dim>" is ambiguous (could be a color
  * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", which the spec
@@ -2716,7 +2715,7 @@ function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
 }
 
 /**
- * FAIL-CLOSED optional-facet augmentation (W23-SM1). Purely ADDITIVE: called only
+ * FAIL-CLOSED optional-facet augmentation. Purely ADDITIVE: called only
  * AFTER the required slots have bound, it appends ONE categorical facet binding when
  * (a) the ask names/implies a facet, (b) the template declares an optional facet slot
  * not already bound, and (c) a spare categorical the ask NAMED remains after the
@@ -3590,7 +3589,7 @@ interface NoLlmClassification {
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
   top_n?: number;
   filters?: Array<{ field: string; context?: boolean }>;
-  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema). Present only when non-empty. */
   notes?: string[];
   /**
    * Encodings the classifier analyzed, split by what the bind filled. Present whenever
@@ -4217,10 +4216,10 @@ export function classifyNoLlm(
   const filterFields = new Set(filterCandidates);
   const matched = matchFieldsInAsk(ask, summary).filter((field) => !filterFields.has(field));
   // The full dimension pool a required geo slot widens into when the ask names no
-  // affine candidate for it (W60 geo-slot completion).
+  // affine candidate for it (geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
 
-  // MEASURE-FREE LAT/LONG SYMBOL MAP (Blake wall #2): a specialized coordinate-affinity
+  // MEASURE-FREE LAT/LONG SYMBOL MAP: a specialized coordinate-affinity
   // resolver runs BEFORE generic keyword scoring, because a pure "map of <locations>" ask
   // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
   // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
@@ -4408,14 +4407,13 @@ export function classifyNoLlm(
   );
   if (unresolvedAvoidMatches.length > 0) return null;
 
-  // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
+  // DEMOTE on data-shape-parse hazards: avoid_when only fires when the ASK
   // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
   // ask mentions — "over-under arrow chart of Sales by Sub-Category" happily bound
-  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing (live-caught by
-  // the W59 proof-value spike + dual review). A template whose calcs parse a
-  // specific string shape out of a bound field can never prove data fit on the
-  // zero-model path, so it always falls through to propose, where the model sees
-  // the hazard notes + avoid_when and judges the actual schema.
+  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing.
+  // A template whose calcs parse a specific string shape out of a bound field can never
+  // prove data fit on the zero-model path, so it always falls through to propose, where
+  // the model sees the hazard notes + avoid_when and judges the actual schema.
   if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
   // FINAL bind pass — the ONLY place unique-date temporal completion is armed (pass
@@ -4470,7 +4468,7 @@ export function classifyNoLlm(
     matched,
   );
   bindings.push(...symbolMapEncodings.bindings);
-  // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
+  // OPTIONAL small-multiples facet: additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
   // the bound decision, the chosen template, or the required bindings — a no-cue /
@@ -4521,7 +4519,7 @@ export function classifyNoLlm(
     const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
     if (colorSeries) bindings.push(colorSeries);
   }
-  // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
+  // Attach provenance (e.g. geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(
     ask,

@@ -307,7 +307,7 @@ describe('classifyNoLlm — geo slot name affinity', () => {
   });
 });
 
-// ── (6) W60 GEO-SLOT COMPLETION (required geo slot with zero ask-named candidates) ─
+// ── (6) GEO-SLOT COMPLETION (required geo slot with zero ask-named candidates) ─
 // A required geo slot the ask does not name widens THAT slot's candidate pool to the
 // full schema's dimensions and binds the unique name-affine field — but ONLY when the
 // ask named at least one OTHER geo field (i.e. it demonstrated geographic intent). The
@@ -315,7 +315,7 @@ describe('classifyNoLlm — geo slot name affinity', () => {
 // schema with no geo field fails closed, and an ask that names NO geo field at all
 // (section 4's ZERO-candidates test) is unchanged. The auto-completed field is reported
 // in `notes` so the caller can say "using Country/Region".
-describe('classifyNoLlm — geo-slot completion (W60)', () => {
+describe('classifyNoLlm — geo-slot completion', () => {
   it('FAIL-CLOSED: geo completion cannot reuse a field consumed by a categorical slot', () => {
     const countryAndState: SchemaSummary = {
       datasource: 'DS',

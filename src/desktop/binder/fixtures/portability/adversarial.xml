@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<!-- W60 portability CI fixture C — adversarial field-name collisions. Dimensions are
+<!-- Portability CI fixture C — adversarial field-name collisions. Dimensions are
      literally named [Trend] and [Waterfall Stage]; measures are named [Max Temp],
      [Line Items], [Count of Errors], [Average Score]. These masking hazards MUST NOT
      drive chart selection: a field named [Trend] must not hijack trend-line-chart, a

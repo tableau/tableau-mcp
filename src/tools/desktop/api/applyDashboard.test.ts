@@ -142,7 +142,7 @@ describe('applyDashboardTool', () => {
     sidecarSpy.mockRestore();
   });
 
-  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {
+  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<dashboard name="Sales Dashboard"></dashboard>');
     const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecarInput').mockReturnValue({

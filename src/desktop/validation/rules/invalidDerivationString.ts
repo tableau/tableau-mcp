@@ -12,11 +12,6 @@
  *
  * Severity: ERROR. An invalid derivation string is never intentional — it always
  * degrades the render silently.
- *
- * Ported from agent-to-tableau-desktop
- * (src/validation/rules/invalid-derivation-string.ts) into tableau-mcp's rule shape:
- * xmldom + xpath (matching calcFieldNames), plain `validate(xml)` signature, no
- * a2td-specific trigger/context/doc plumbing.
  */
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';

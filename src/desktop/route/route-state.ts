@@ -13,7 +13,7 @@ export type { AskShape, RouteClass };
 /**
  * A deflection issued by the gate. Carries the {tool, ts} receipt shape plus the issued
  * next_route marker, the one-line agent-actionable text, and the normalized ask KEY it was
- * issued for (the per-session one-shot dedup key — a2td used the episode id).
+ * issued for (the per-session one-shot dedup key).
  */
 export interface RouteDeflection {
   /** The scratch-entry tool whose call was deflected. */
