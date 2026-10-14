@@ -127,7 +127,13 @@ describe('SEA release workflow', () => {
     expect(workflow).toContain(
       "if: github.event_name == 'release' && github.event.action == 'published'",
     );
-    expect(workflow.match(/if:\s*github\.event_name == 'release'/g)).toHaveLength(4);
+    const smokeWebSteps = workflow
+      .split(/^ {6}- name: /m)
+      .filter((step) => step.startsWith('Smoke web SEA'));
+    expect(smokeWebSteps).toHaveLength(3);
+    for (const step of smokeWebSteps) {
+      expect(step).toMatch(/^ {8}if: github\.event_name != 'pull_request'$/m);
+    }
     expect(workflow.match(/name:\s*Smoke Desktop SEA/g)).toHaveLength(3);
     expect(workflow).toContain('GH_REPO: ${{ github.repository }}');
     expect(workflow).toContain('gh release upload "$RELEASE_TAG"');

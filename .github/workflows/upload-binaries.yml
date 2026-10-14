@@ -61,7 +61,7 @@ jobs:
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
@@ -114,7 +114,7 @@ jobs:
             throw "tableau-mcp-desktop.exe smoke failed"
           }
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         shell: pwsh
         run: |
           npx tsx src/scripts/seaSmoke.ts .\tableau-mcp.exe
@@ -177,7 +177,7 @@ jobs:
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
