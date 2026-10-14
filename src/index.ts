@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 
 import pkg from '../package.json';
 import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
+import { initializeBlobStorageProvider } from './blobStorage/init.js';
 import { getConfig } from './config.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
@@ -59,6 +60,8 @@ async function startServer(): Promise<void> {
   initializeSessionStore();
   await connectSessionStore();
   registerSessionStoreShutdown();
+
+  initializeBlobStorageProvider();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.

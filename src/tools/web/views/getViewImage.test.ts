@@ -34,9 +34,10 @@ const testProductVersionWithoutSvg: ProductVersion = testProductVersion; // 2026
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockQueryViewImage: vi.fn(),
-  mockUploadImageToS3: vi.fn(),
+  mockUpload: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -51,9 +52,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadImageToS3.js', async (importActual) => ({
-  ...(await importActual<typeof import('../uploadImageToS3.js')>()),
-  uploadImageToS3: mocks.mockUploadImageToS3,
+vi.mock('../../../blobStorage/init.js', () => ({
+  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -300,16 +301,17 @@ describe('getViewImageTool', () => {
     );
   });
 
-  describe('S3 image offload', () => {
+  describe('blob storage image offload', () => {
     beforeEach(() => {
-      // The S3-offload path is gated behind the `view-file-mode` feature flag.
+      // The offload path is gated behind the `view-file-mode` feature flag and
+      // an enabled (successfully-loaded custom) blob storage provider.
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     });
 
-    it('should return a resource_link (no base64) when MCP_S3_BUCKET is configured', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+    it('should return a resource_link (no base64) when blob storage is enabled', async () => {
       mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
+      mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
 
       const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
 
@@ -317,40 +319,22 @@ describe('getViewImageTool', () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toMatchObject({
         type: 'resource_link',
-        uri: 'https://s3.example.com/signed-url',
+        uri: 'https://blob.example.com/signed-url',
         name: 'view-image.png',
         mimeType: 'image/png',
       });
-      // No base64 image block is inlined when offloading to S3.
+      // No base64 image block is inlined when offloading to blob storage.
       expect(result.content.some((c) => c.type === 'image')).toBe(false);
 
-      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(mockPngData, {
-        format: 'PNG',
-        resourceId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
-        config: expect.objectContaining({
-          bucket: 'tableau-images',
-          keyPrefix: 'view-images/',
-        }),
+      expect(mocks.mockUpload).toHaveBeenCalledWith({
+        key: 'images/4d18c547-bbb1-4187-ae5a-7f78b35adf2d.png',
+        data: Buffer.from(mockPngData),
+        contentType: 'image/png',
       });
     });
 
-    it('prefixes the S3 key with the base prefix followed by the view-images segment', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
-      vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
-      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
-
-      await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
-
-      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(
-        mockPngData,
-        expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/view-images/' }),
-        }),
-      );
-    });
-
-    it('should return inline base64 when MCP_S3_BUCKET is not configured', async () => {
+    it('should return inline base64 when blob storage is not enabled', async () => {
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
       mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
 
       const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
@@ -361,13 +345,12 @@ describe('getViewImageTool', () => {
         data: base64PngData,
         mimeType: 'image/png',
       });
-      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
 
-    it('should fall back to inline base64 and warn when the S3 upload fails', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+    it('should fall back to inline base64 and warn when the blob storage upload fails', async () => {
       mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockRejectedValue(new Error('access denied'));
+      mocks.mockUpload.mockRejectedValue(new Error('access denied'));
 
       const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
 
@@ -385,9 +368,8 @@ describe('getViewImageTool', () => {
       );
     });
 
-    it('should return inline base64 (no S3 upload) when view-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
+    it('should return inline base64 (no upload) when view-file-mode is disabled even if blob storage is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
 
       const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
@@ -398,7 +380,7 @@ describe('getViewImageTool', () => {
         data: base64PngData,
         mimeType: 'image/png',
       });
-      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
   });
 });

@@ -7,11 +7,10 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
-import { Config } from '../../../config.js';
+import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -27,8 +26,8 @@ import {
  * modes differ only in transport:
  *  - disk: `filePath` points at the template zip already on the local filesystem — skip download,
  *    then unzip and apply `postUnzip`.
- *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
- *    unzip and apply `postUnzip`.
+ *  - blob storage: `s3URL` is a URL (from the configured BlobStorageProvider) for the
+ *    (un-substituted) template zip — download it first, then unzip and apply `postUnzip`.
  * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
  * app's external origins in it.
  */
@@ -60,11 +59,9 @@ function resolveTemplateZip(): string | undefined {
 export async function createDataAppWorkspace({
   datappName,
   allowedOrigins,
-  config,
 }: {
   datappName: string;
   allowedOrigins: string[];
-  config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
 
@@ -78,28 +75,26 @@ export async function createDataAppWorkspace({
     ).toErr();
   }
 
-  return config.bucketS3.enabled
-    ? await createS3Workspace({ datappName, allowedOrigins, identity, config, zipPath })
+  return isBlobStorageEnabled()
+    ? await createBlobStorageWorkspace({ datappName, allowedOrigins, identity, zipPath })
     : createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
 }
 
-async function createS3Workspace({
+async function createBlobStorageWorkspace({
   datappName,
   allowedOrigins,
   identity,
-  config,
   zipPath,
 }: {
   datappName: string;
   allowedOrigins: string[];
   identity: DataAppIdentity;
-  config: Config;
   zipPath: string;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
-  // Upload the template zip to S3 fresh on every call, then presign a GET URL for exactly those
-  // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
-  // so a fixed key is intentional — concurrent overwrites are harmless. Nothing is published out of
-  // band; the object is always what this code path just wrote.
+  // Upload the template zip to blob storage fresh on every call and return the URL for exactly
+  // those bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip`
+  // varies), so a fixed key is intentional — concurrent overwrites are harmless. Nothing is
+  // published out of band; the object is always what this code path just wrote.
   //
   // Don't "optimize" this into an exists-check-then-skip-upload: the key has no version or content
   // hash in it, so a stale object from a previous deploy (or a different pod on shared storage)
@@ -108,14 +103,12 @@ async function createS3Workspace({
   let s3URL: string;
   try {
     const buffer = await readFile(zipPath);
-    const key = `${joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-templates')}${TEMPLATE_ZIP_FILENAME}`;
-    s3URL = await uploadBufferToS3(buffer, {
-      key,
+    const { url } = await getBlobStorageProvider().upload({
+      key: `data-app-templates/${TEMPLATE_ZIP_FILENAME}`,
+      data: buffer,
       contentType: 'application/zip',
-      bucket: config.bucketS3.bucket,
-      region: config.bucketS3.region,
-      presignTtlSeconds: config.bucketS3.presignTtlSeconds,
     });
+    s3URL = url;
   } catch (error) {
     return new DataAppTemplateUnavailableError(
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
@@ -142,8 +135,8 @@ function createLocalWorkspace({
   identity: DataAppIdentity;
   zipPath: string;
 }): Result<DataAppWorkspaceResult, McpToolError> {
-  // Local mode serves the same static, un-substituted template zip as S3 mode — just from the
-  // local filesystem instead of a presigned URL. Nothing is written per call, so nothing can
+  // Local mode serves the same static, un-substituted template zip as blob storage mode — just
+  // from the local filesystem instead of a URL. Nothing is written per call, so nothing can
   // collide; the client unzips and applies the same `postUnzip` plan to finalize.
   return new Ok({
     datappName,
