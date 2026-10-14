@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { verifyWorksheetReadback } from './readback-verify.js';
+import {
+  isReadbackUnsettled,
+  type ReadbackFinding,
+  verifyWorksheetReadback,
+} from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
@@ -82,6 +86,7 @@ const CATEGORICAL_FILTER_FINDING = {
   readback: 'changed',
   severity: 'error',
 } as const;
+const CATEGORICAL_FILTER_WARNING = { ...CATEGORICAL_FILTER_FINDING, severity: 'warning' } as const;
 
 describe('verifyWorksheetReadback', () => {
   it('flags intended lod encodings that Tableau silently strips on readback', () => {
@@ -239,7 +244,7 @@ describe('verifyWorksheetReadback', () => {
     });
   });
 
-  it('flags a grouped readback whose nested pills were reordered', () => {
+  it('downgrades a grouped readback whose same-class nested pills were reordered to a warning', () => {
     const group = '[DS].[none:group:nk]';
     const country = '[DS].[none:country:nk]';
     const intended = encodedWorksheet().replace(
@@ -261,7 +266,7 @@ describe('verifyWorksheetReadback', () => {
       column: group,
       intended: group,
       readback: 'changed',
-      severity: 'error',
+      severity: 'warning',
     });
   });
 
@@ -462,10 +467,10 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
       'changes a member in the explicit union',
       MEMBER_UNION.replace('member="West"', 'member="Central"'),
     ],
-  ])('fails when Tableau %s', (_, readbackGroupfilter) => {
+  ])('warns when Tableau %s', (_, readbackGroupfilter) => {
     const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
 
-    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_FINDING);
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_WARNING);
   });
 
   it.each([
@@ -475,10 +480,10 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
       'enumeration',
       MEMBER_UNION.replace('user:ui-enumeration="inclusive"', 'user:ui-enumeration="all"'),
     ],
-  ])('fails when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
+  ])('warns when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
     const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
 
-    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_FINDING);
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_WARNING);
   });
 
   it('tolerates attribute order, quote, whitespace, and non-semantic user attribute noise', () => {
@@ -591,5 +596,145 @@ describe('verifyWorksheetReadback — filter column-instance co-dependency', () 
 
   it('does not require a filter column-instance that the intended XML never declared', () => {
     expect(verifyWorksheetReadback(filterWithDeps(''), filterWithDeps(''))).toEqual([]);
+  });
+});
+
+describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
+  const CITY = '[DS].[none:City:nk]';
+  const shelfFindings = (
+    intendedRows: string,
+    readbackRows: string,
+    shelf = 'rows',
+  ): ReadbackFinding[] =>
+    verifyWorksheetReadback(
+      worksheet(`<${shelf}>${intendedRows}</${shelf}>`),
+      worksheet(readbackRows ? `<${shelf}>${readbackRows}</${shelf}>` : ''),
+    ).filter((f) => f.kind === 'shelf');
+
+  it('warns when the same categorical fields are reordered', () => {
+    const findings = shelfFindings(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`);
+
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((f) => f.severity === 'warning')).toBe(true);
+  });
+
+  it('warns when the derivation changes but the field and class are the same', () => {
+    const findings = shelfFindings(SALES_FIELD, '[DS].[avg:Sales:qk]');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('warning');
+  });
+
+  it('errors when a field is dropped from the shelf', () => {
+    const findings = shelfFindings(`${GEO_FIELD} / ${CITY}`, GEO_FIELD);
+
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('errors when the whole shelf is missing from the readback', () => {
+    const findings = shelfFindings(GEO_FIELD, '');
+
+    expect(findings).toEqual([expect.objectContaining({ readback: 'missing', severity: 'error' })]);
+  });
+
+  it('errors when a different field replaces the intended one', () => {
+    expect(shelfFindings(GEO_FIELD, CITY).every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('errors when a quantitative pill moves before a categorical pill', () => {
+    const findings = shelfFindings(
+      `${GEO_FIELD} / ${SALES_FIELD}`,
+      `${SALES_FIELD} / ${GEO_FIELD}`,
+    );
+
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('errors when a field changes between quantitative and categorical', () => {
+    const findings = shelfFindings(SALES_FIELD, '[DS].[none:Sales:nk]');
+
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('errors when the readback pill is a none-derivation reference absent from the intended shelf', () => {
+    const findings = shelfFindings(SALES_FIELD, '[DS].[none:Sales:qk]');
+
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('errors when the readback pill is an unparseable reference', () => {
+    const findings = shelfFindings(GEO_FIELD, '[DS].[Calculation_123]');
+
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+  });
+
+  it('warns on a reordered cols shelf as well', () => {
+    const findings = shelfFindings(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`, 'cols');
+
+    expect(findings.every((f) => f.severity === 'warning')).toBe(true);
+  });
+});
+
+describe('verifyWorksheetReadback - filter severity (W-24366132)', () => {
+  const filterAttributes = `class="categorical" column="${CATEGORICAL_COLUMN}"`;
+  const intended = categoricalWorksheet(filterAttributes, MEMBER_UNION);
+
+  it('warns when a same-column categorical filter survives with different members', () => {
+    const readback = categoricalWorksheet(filterAttributes, EAST_MEMBER);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([
+      { ...CATEGORICAL_FILTER_WARNING },
+    ]);
+  });
+
+  it('errors when the categorical filter is missing from the readback', () => {
+    const readback = categoricalWorksheet('class="categorical" column="[DS].[none:Other:nk]"', '');
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(
+      expect.objectContaining({ node: 'filter', severity: 'error' }),
+    );
+  });
+
+  it('errors when the surviving filter has a different class', () => {
+    const readback = categoricalWorksheet(
+      `class="quantitative" column="${CATEGORICAL_COLUMN}"`,
+      EAST_MEMBER,
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(
+      expect.objectContaining({ node: 'filter', severity: 'error' }),
+    );
+  });
+
+  it('errors when a Top-N filter changes', () => {
+    const topN = topNWorksheet(topNGroupfilter('10', 'user:ui-marker="a"'));
+    const readback = topNWorksheet(topNGroupfilter('50', 'user:ui-marker="a"'));
+
+    expect(verifyWorksheetReadback(topN, readback)).toContainEqual(
+      expect.objectContaining({ node: 'filter', severity: 'error' }),
+    );
+  });
+});
+
+describe('isReadbackUnsettled', () => {
+  const base = { column: 'c', intended: 'i', readback: 'changed' } as const;
+
+  it.each([
+    ['an error', { ...base, kind: 'mark', node: 'mark', severity: 'error' }, true],
+    ['a shelf warning', { ...base, kind: 'shelf', node: 'rows', severity: 'warning' }, true],
+    ['a filter warning', { ...base, kind: 'filter', node: 'filter', severity: 'warning' }, true],
+    [
+      'a sort warning',
+      { ...base, kind: 'sort', node: 'computed-sort', severity: 'warning' },
+      false,
+    ],
+  ] as const)('treats %s correctly', (_, finding, expected) => {
+    expect(isReadbackUnsettled([finding])).toBe(expected);
+  });
+
+  it('treats no findings as settled', () => {
+    expect(isReadbackUnsettled([])).toBe(false);
   });
 });

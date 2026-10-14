@@ -423,6 +423,83 @@ function sortRelated(a: SortSignature, b: SortSignature): boolean {
   return a.tag === b.tag && a.column === b.column;
 }
 
+interface ShelfPill {
+  /** Datasource plus underlying column, so derivation and type-suffix changes still match. */
+  field: string;
+  derivation: string;
+  column: string;
+  /** 'q' for qk, 'c' for nk/ok; null when the suffix is not recognized. */
+  klass: 'q' | 'c' | null;
+}
+
+/** Parses "[ds].[deriv:Column:suffix]"; null when the pill is not a plain column instance. */
+function parseShelfPill(pill: string): ShelfPill | null {
+  const m = /^(.*)\.\[([^:\]]+):(.+):([a-z]{2})\]$/.exec(pill.trim());
+  if (!m) return null;
+  const [, datasource, derivation, column, suffix] = m;
+  const klass = suffix === 'qk' ? 'q' : suffix === 'nk' || suffix === 'ok' ? 'c' : null;
+  return { field: `${datasource}|${column}`, derivation, column, klass };
+}
+
+/**
+ * W-24366132: a shelf mismatch is only a warning when Tableau kept the same fields and the
+ * quantitative/categorical sequence, because a changed sequence changes the chart type.
+ */
+function isBenignShelfChange(intendedPills: string[], readbackPills: string[]): boolean {
+  if (readbackPills.length === 0 || intendedPills.length !== readbackPills.length) return false;
+  const intendedParsed = intendedPills.map(parseShelfPill);
+  const readbackParsed = readbackPills.map(parseShelfPill);
+  if (intendedParsed.includes(null) || readbackParsed.includes(null)) return false;
+  const intendedFields = intendedParsed.map((pill) => pill!.field).sort();
+  const readbackFields = readbackParsed.map((pill) => pill!.field).sort();
+  if (intendedFields.some((field, i) => field !== readbackFields[i])) return false;
+
+  const intendedSet = new Set(intendedPills);
+  const looksUnresolved = readbackPills.some((raw, i) => {
+    const pill = readbackParsed[i]!;
+    return (
+      !intendedSet.has(raw) &&
+      (pill.derivation.toLowerCase() === 'none' || pill.column.startsWith('Calculation_'))
+    );
+  });
+  if (looksUnresolved) return false;
+
+  return intendedParsed.every(
+    (pill, i) => pill!.klass !== null && pill!.klass === readbackParsed[i]!.klass,
+  );
+}
+
+function shelfSeverity(intendedPills: string[], readbackPills: string[]): ReadbackFindingSeverity {
+  return isBenignShelfChange(intendedPills, readbackPills) ? 'warning' : 'error';
+}
+
+/** W-24366132: only a categorical filter that survived with the same context and different members. */
+function filterSeverity(
+  filter: FilterSignature,
+  readback: FilterSignature[],
+): ReadbackFindingSeverity {
+  if (filter.klass !== 'categorical' || filter.topN) return 'error';
+  const survivor = readback.some(
+    (candidate) =>
+      candidate.klass === 'categorical' &&
+      candidate.column === filter.column &&
+      candidate.context === filter.context &&
+      !candidate.topN,
+  );
+  return survivor ? 'warning' : 'error';
+}
+
+/**
+ * Whether polling should keep re-reading. Shelf and filter warnings can be a transient
+ * pre-apply read, so they must not settle the poll the way a terminal sort warning does.
+ */
+export function isReadbackUnsettled(findings: ReadbackFinding[]): boolean {
+  return findings.some(
+    (finding) =>
+      finding.severity === 'error' || finding.kind === 'shelf' || finding.kind === 'filter',
+  );
+}
+
 export function verifyWorksheetReadback(
   intendedXml: string,
   readbackXml: string,
@@ -482,7 +559,7 @@ export function verifyWorksheetReadback(
         column: value,
         intended: value,
         readback: readbackPills.length > 0 ? 'changed' : 'missing',
-        severity: 'error',
+        severity: shelfSeverity(intendedPills, readbackPills),
       });
     }
   }
@@ -531,7 +608,7 @@ export function verifyWorksheetReadback(
         column: filter.column || undefined,
         intended: filterIntended(filter),
         readback: matchingFilter || related ? 'changed' : 'missing',
-        severity: 'error',
+        severity: missingTopNSlice ? 'error' : filterSeverity(filter, readback.filters),
       });
       continue;
     }

@@ -1850,6 +1850,57 @@ describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
     expect(verification.status).toBe('failed');
     expect(verification.findings.some((f) => f.severity === 'error')).toBe(true);
   });
+
+  describe('shelf reorder warnings (W-24366132)', () => {
+    const CITY = '[DS].[none:City:nk]';
+    const reorderable = (rows: string): { xml: string } => ({
+      xml: `<workbook><worksheets><worksheet name="Blank Map"><table><rows>${rows}</rows></table></worksheet></worksheets></workbook>`,
+    });
+    const intendedRows = `${GEO} / ${CITY}`;
+    const intended = `<worksheet name="Blank Map"><table><rows>${intendedRows}</rows></table></worksheet>`;
+
+    it('keeps polling past a same-field reorder and passes once the apply settles', async () => {
+      const getWorksheetDocument = vi
+        .fn()
+        .mockResolvedValueOnce(Ok(reorderable(`${CITY} / ${GEO}`)))
+        .mockResolvedValue(Ok(reorderable(intendedRows)));
+      const executor = makeExecutorMock({
+        listWorksheets: vi.fn().mockResolvedValue(listOk()),
+        getWorksheetDocument,
+      });
+
+      const verification = await verifyPostApplyWorksheetReadback(
+        'Blank Map',
+        intended,
+        executor,
+        signal,
+      );
+
+      expect(verification.status).toBe('passed');
+      expect(getWorksheetDocument.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('reports a durable same-field reorder as a warning after exhausting the poll budget', async () => {
+      vi.useFakeTimers();
+      try {
+        const getWorksheetDocument = vi.fn().mockResolvedValue(Ok(reorderable(`${CITY} / ${GEO}`)));
+        const executor = makeExecutorMock({
+          listWorksheets: vi.fn().mockResolvedValue(listOk()),
+          getWorksheetDocument,
+        });
+
+        const pending = verifyPostApplyWorksheetReadback('Blank Map', intended, executor, signal);
+        await vi.runAllTimersAsync();
+        const verification = await pending;
+
+        expect(verification.status).toBe('warning');
+        expect(verification.ok).toBe(true);
+        expect(getWorksheetDocument.mock.calls.length).toBeGreaterThan(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
 
 describe('resolveCanonicalWorksheetName entity-like names', () => {

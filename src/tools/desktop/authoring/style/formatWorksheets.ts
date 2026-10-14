@@ -5,7 +5,10 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { verifyWorksheetReadback } from '../../../../desktop/validation/readback-verify.js';
+import {
+  isReadbackUnsettled,
+  verifyWorksheetReadback,
+} from '../../../../desktop/validation/readback-verify.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
@@ -188,9 +191,7 @@ export const getFormatWorksheetsTool = (
               read: async () => await executor.getWorksheetDocument(worksheetId, extra.signal),
               settled: (value) =>
                 hasRequestedFormatting(value.xml, xml) &&
-                !verifyWorksheetReadback(xml, value.xml).some(
-                  (finding) => finding.severity === 'error',
-                ),
+                !isReadbackUnsettled(verifyWorksheetReadback(xml, value.xml)),
               signal: extra.signal,
             });
             if (!readback.ok) {
