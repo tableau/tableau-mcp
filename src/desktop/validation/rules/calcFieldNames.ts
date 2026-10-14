@@ -37,6 +37,7 @@ import type { ValidationIssue, ValidationRule } from '../types.js';
  * or false negatives emerge.
  */
 const DATASOURCE_CALC_NAME_HEURISTIC = /^\[Calculation_[A-Za-z0-9_]+\]$/;
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 function isDatasourceLevel(node: Element): boolean {
   // A column is datasource-level if its closest <datasource> ancestor
@@ -60,6 +61,37 @@ function isDatasourceLevel(node: Element): boolean {
   }
 
   return !insideDatasourceDeps;
+}
+
+function isNativeFixedWidthBin(column: Element): boolean {
+  const calculations = xpath.select('./calculation', column) as Element[];
+  if (calculations.length !== 1) return false;
+  const calculation = calculations[0];
+  const formula = calculation?.getAttribute('formula')?.trim();
+  const peg = calculation?.getAttribute('peg')?.trim();
+  const size = calculation?.getAttribute('size')?.trim();
+  const parent = column.parentNode as Element | null;
+  const referencedField = formula?.match(/^\[[^\]]+\]$/)?.[0];
+  const siblingMatches =
+    parent &&
+    (parent.nodeName === 'datasource' || parent.nodeName === 'datasource-dependencies') &&
+    referencedField
+      ? (xpath.select('./column', parent) as Element[]).filter(
+          (sibling) => sibling !== column && sibling.getAttribute('name') === referencedField,
+        )
+      : [];
+  return (
+    column.getAttribute('role') === 'dimension' &&
+    calculation?.getAttribute('class') === 'bin' &&
+    siblingMatches.length === 1 &&
+    !!peg &&
+    !!size &&
+    DECIMAL_NUMBER.test(peg) &&
+    DECIMAL_NUMBER.test(size) &&
+    Number.isFinite(Number(peg)) &&
+    Number.isFinite(Number(size)) &&
+    Number(size) > 0
+  );
 }
 
 export const calcFieldNamesRule: ValidationRule = {
@@ -88,6 +120,7 @@ export const calcFieldNamesRule: ValidationRule = {
     for (const col of columns) {
       const name = col.getAttribute('name');
       if (!name) continue;
+      if (isNativeFixedWidthBin(col)) continue;
 
       if (isDatasourceLevel(col)) {
         if (!DATASOURCE_CALC_NAME_HEURISTIC.test(name)) {

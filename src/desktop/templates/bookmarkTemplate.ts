@@ -162,6 +162,8 @@ export interface InferredCalc {
 
 export interface Inference {
   slots: InferredSlot[];
+  /** Authored mark classes across all relevant panes, preserving pane count. */
+  markClasses?: string[];
   /** Placed calcs, decomposed to their base-input leaf slots. Empty when the bookmark places none. */
   calcs: InferredCalc[];
   unknownCount: number;

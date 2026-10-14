@@ -850,6 +850,29 @@ export class SessionRouteStateStore {
     });
   }
 
+  /**
+   * Undo one reservation: drop only the attempt that carries `reservationId`, and delete the
+   * record only when no attempts remain, so a concurrent call's outcome on the same ask survives.
+   */
+  releaseBindRecoveryReservation(
+    sessionId: string | undefined,
+    ask: string,
+    reservationId: number | undefined,
+  ): boolean {
+    if (reservationId === undefined) return false;
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !record) return false;
+    const attempts = record.attempts.filter((attempt) => attempt.reservationId !== reservationId);
+    if (attempts.length === record.attempts.length) return false;
+    if (attempts.length === 0) {
+      state.bindRecoveryByAsk.delete(ask);
+    } else {
+      state.bindRecoveryByAsk.set(ask, { ...record, attempts });
+    }
+    return true;
+  }
+
   clearBindRecovery(sessionId: string | undefined, ask: string): boolean {
     const state = this.get(sessionId);
     if (!state) return false;

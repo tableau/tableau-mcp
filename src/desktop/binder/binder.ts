@@ -16,6 +16,8 @@
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
+import { createHash } from 'crypto';
+
 import { CANONICAL_DERIVATION_SHORT_FORMS } from '../derivations.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
@@ -27,6 +29,7 @@ import {
   type LlmProposeInput as CoreLlmProposeInput,
   type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  provesCompleteSingleSheetRequest,
   resolveEncodingFieldInAsk,
   resolveLooseFieldReference,
 } from './classify.js';
@@ -185,6 +188,12 @@ export type BinderResult =
        * completion while `unfilled` is non-empty.
        */
       encodings?: EncodingReport;
+      requestCoverage?: {
+        version: 1;
+        kind: 'complete_single_sheet_binding';
+        template: string;
+        askSha256: string;
+      };
     }
   | {
       status: 'propose';
@@ -577,6 +586,19 @@ function validateAndBuild(
   };
 }
 
+function requestNotCovered(): Extract<BinderResult, { status: 'escalate' }> {
+  return {
+    status: 'escalate',
+    reason: 'request-not-covered',
+    blockers: [
+      {
+        code: 'request-not-covered',
+        detail: 'The deterministic bind did not account for the complete original request',
+      },
+    ],
+  };
+}
+
 /**
  * Bind a template for `ask`, implementing the two-call protocol.
  * `llmPropose` is the EVAL-ONLY seam; omit it for the model-free (Call 1 →
@@ -590,12 +612,16 @@ export async function bindTemplate(args: {
   llmPropose?: LlmProposeFn;
   minConfidence?: number;
   datasource?: string;
+  requireCompleteRequest?: boolean;
 }): Promise<BinderResult> {
   const summary = summarizeSchema(args.workbookXml, args.datasource);
   const minConfidence = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
   // ── Call 2: validate the agent-produced proposal ─────────────────
   if (args.proposal) {
+    if (args.requireCompleteRequest) {
+      return requestNotCovered();
+    }
     return validateAndBuild(args.proposal, args.manifests, summary, minConfidence, true, args.ask);
   }
 
@@ -621,7 +647,7 @@ export async function bindTemplate(args: {
   }
 
   // ── Call 1: no-LLM fast path ─────────────────────────────────────
-  const cls = classifyNoLlm(args.ask, args.manifests, summary);
+  const cls = classifyNoLlm(args.ask, args.manifests, summary, args.requireCompleteRequest);
   let declineReason: DeclineReason = {
     code: 'no_llm_classifier_declined',
     detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
@@ -649,6 +675,22 @@ export async function bindTemplate(args: {
       if (cls.encodings) {
         res.encodings = cls.encodings;
       }
+      if (args.requireCompleteRequest) {
+        const manifest = args.manifests.get(cls.template);
+        if (
+          manifest === undefined ||
+          res.warnings !== undefined ||
+          !provesCompleteSingleSheetRequest(args.ask, cls, summary, manifest)
+        ) {
+          return requestNotCovered();
+        }
+        res.requestCoverage = {
+          version: 1,
+          kind: 'complete_single_sheet_binding',
+          template: cls.template,
+          askSha256: createHash('sha256').update(args.ask, 'utf8').digest('hex'),
+        };
+      }
       return res;
     }
     declineReason = {
@@ -660,6 +702,8 @@ export async function bindTemplate(args: {
     };
     // else fall through — the no-LLM guess didn't validate.
   }
+
+  if (args.requireCompleteRequest) return requestNotCovered();
 
   // ── Miss. Eval-only injected LLM closes the loop in-process ───────
   if (args.llmPropose) {

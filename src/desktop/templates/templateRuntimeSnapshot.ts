@@ -17,6 +17,8 @@ export interface TemplateRuntimeSnapshot {
   template: string;
   sourceHash: string;
   descriptor: TemplateBindingDescriptor;
+  /** Mark classes authored across every relevant bookmark pane, preserving pane count. */
+  markClasses?: string[];
   fit?: TemplateFitFacts;
   xml: string;
   eligibility: TemplatePass1Eligibility;
@@ -25,14 +27,16 @@ export interface TemplateRuntimeSnapshot {
 export function createTemplateRuntimeSnapshot(
   template: string,
   bookmarkXml: string,
+  options: { plainTemporalLineColorOptional?: boolean } = {},
 ): TemplateRuntimeSnapshot {
-  const inference = inferFromBookmark(bookmarkXml);
+  const inference = inferFromBookmark(bookmarkXml, options);
   const converted = bookmarkToTemplateWorkbook(bookmarkXml, inference);
   const descriptor = inferBindingDescriptor(template, inference);
   return {
     template,
     sourceHash: createHash('sha256').update(bookmarkXml).digest('hex'),
     descriptor,
+    markClasses: inference.markClasses?.slice() ?? [],
     fit: deriveTemplateFitFacts(inference, descriptor),
     xml: converted.xml,
     eligibility: deriveTemplatePass1Eligibility(converted),

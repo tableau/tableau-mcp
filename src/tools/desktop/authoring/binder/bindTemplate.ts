@@ -143,6 +143,7 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply now'),
+  requireCompleteRequest: z.boolean().optional().describe('Prove full ask or decline, no writes'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
@@ -205,6 +206,28 @@ type AppliedDefault = Pick<
   'measure' | 'top_n' | 'reason' | 'context_measures'
 >;
 
+type CompletionCaveat =
+  | 'unconverted_currency'
+  | 'field_validation_unverified'
+  | 'query_render_unverified'
+  | 'summary_preview_unavailable';
+
+type CompletionEvidence = {
+  version: 2;
+  kind: 'single_sheet_apply';
+  askSha256: string;
+  coverage: 'complete_request' | 'applied_operation';
+  application: { status: 'applied'; template: string; sheetName: string };
+  caveats: CompletionCaveat[];
+};
+
+type RequestCoverage = {
+  version: 1;
+  kind: 'complete_single_sheet_binding';
+  askSha256: string;
+  template: string;
+};
+
 /**
  * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
  * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
@@ -223,6 +246,8 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
+  completionEvidence?: CompletionEvidence;
+  requestCoverage?: RequestCoverage;
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
@@ -261,7 +286,12 @@ type BlockedBindTemplateResult = {
     | 'fallback_required'
     | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
-    | 'proposal_filter_resolution_failed';
+    | 'proposal_filter_resolution_failed'
+    | 'request_not_covered';
+  applied?: false;
+  may_have_applied?: false;
+  writeAttempts?: 0;
+  requestCoverage?: { version: 1; kind: 'declined'; askSha256: string };
   guidance: string;
   call_2_contract?: Call2Contract;
   mismatches?: ProposalContractMismatch[];
@@ -332,6 +362,8 @@ const SUMMARY_ROWS_MAX_ROWS = 20;
 const EMPTY_SUMMARY_ROWS_ERROR = 'empty readback — verify with get-summary-data';
 const EMPTY_SUMMARY_ROWS_GUIDANCE =
   'Summary readback returned zero rows; check the sheet and its filters before claiming the chart is complete.';
+const SETTLED_SUMMARY_PREVIEW_GUIDANCE =
+  'Summary preview unavailable; do not claim values or replay the apply.';
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
@@ -378,8 +410,8 @@ function refMatchesSchemaField(ref: CanonicalColumnRef, field: SchemaField): boo
 function currencyHeterogeneityCaveat(
   schemaSummary: SchemaSummary,
   worksheetXml: string | null,
-): string {
-  if (!worksheetXml) return '';
+): { guidance: string; completionCaveat: 'unconverted_currency' | null } | null {
+  if (!worksheetXml) return null;
 
   const displayedRefs = canonicalRefsIn(xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']));
   const summedMeasure = schemaSummary.fields.find(
@@ -389,7 +421,7 @@ function currencyHeterogeneityCaveat(
         (ref) => ref.derivation.toLowerCase() === 'sum' && refMatchesSchemaField(ref, field),
       ),
   );
-  if (!summedMeasure) return '';
+  if (!summedMeasure) return null;
 
   // Detail/LOD, shape, and text partition marks per member just like rows/cols do,
   // so a currency column on any of them means the sum is NOT cross-currency.
@@ -405,11 +437,14 @@ function currencyHeterogeneityCaveat(
       ) &&
       !visibleDimensionRefs.some((ref) => refMatchesSchemaField(ref, field)),
   );
-  if (!omittedUnitDimension) return '';
+  if (!omittedUnitDimension) return null;
 
   const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.columnName);
   const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.columnName);
-  return `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`;
+  return {
+    guidance: `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`,
+    completionCaveat: /^currency([ _-]?code)?$/i.test(unitName) ? 'unconverted_currency' : null,
+  };
 }
 
 type SummaryRowsEnrichment = Pick<
@@ -571,6 +606,26 @@ function blockedResult(
       ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
     },
     prefillNextAction(nextActionLabel),
+  );
+}
+
+function completeRequestDecline(ask: string): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'request_not_covered',
+      applied: false,
+      may_have_applied: false,
+      writeAttempts: 0,
+      requestCoverage: {
+        version: 1,
+        kind: 'declined',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      },
+      guidance:
+        'The complete request was not proven safe for a direct bind. Continue with the ordinary authoring path without replaying this bind.',
+    },
+    prefillNextAction('Continue with ordinary authoring'),
   );
 }
 
@@ -1598,7 +1653,7 @@ function buildGuidance(
       guidance =
         'Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs ' +
         'to exact compatible field names, and make Call 2 with the same ask/target, proposal, and ' +
-        `auto_apply:true. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
+        `top-level auto_apply:true. top_n ranks; filters[].context scopes filters. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
         'Do not call other authoring tools between calls.';
       break;
     case 'escalate':
@@ -2758,6 +2813,7 @@ async function performAutoApply({
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
+  const summaryPreviewUnavailable = summaryRows.summary_rows === undefined;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2776,12 +2832,9 @@ async function performAutoApply({
       usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const needsFollowUp =
-    incomplete ||
-    (injected.warnings?.length ?? 0) > 0 ||
-    emptySummaryReadback ||
-    summaryReadbackTimedOut ||
-    postApplyUncertain;
+  const coreNeedsFollowUp =
+    incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2796,7 +2849,8 @@ async function performAutoApply({
   const defaultGuidance = appliedDefault
     ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default, offer to change the measure or top_n${contextMeasureGuidance}.`
     : '';
-  const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const heterogeneityCaveat = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const currencyGuidance = heterogeneityCaveat?.guidance ?? '';
   const guidance = `${
     promiseOutcome === 'failed' || postApplyUncertain
       ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
@@ -2814,12 +2868,83 @@ async function performAutoApply({
             ? receiptText
             : `${receiptText} ${terminalGuidance}`
   }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  const nativeFindings = verificationReport.findings ?? [];
+  const nativeFieldUnverified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'skipped' &&
+    nativeFindings.length === 1 &&
+    nativeFindings[0].severity === 'warning' &&
+    nativeFindings[0].source === 'used-field-validity' &&
+    nativeFindings[0].reason === 'unsupported-api';
+  const nativeFieldVerified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'passed' &&
+    nativeFindings.length === 0;
+  const completionEligible =
+    res.requestCoverage !== undefined &&
+    !trustedDeterministicApply &&
+    args.sheet_type === 'worksheet' &&
+    !coreNeedsFollowUp &&
+    documentWarnings.length === 0 &&
+    !emptySummaryReadback &&
+    !summaryReadbackTimedOut &&
+    !appliedDefault &&
+    successfulCalcCaptions.length === 0 &&
+    args.top_n === undefined &&
+    args.sort === undefined &&
+    (args.filters?.length ?? 0) === 0 &&
+    spliced.appliedFilterCount === 0 &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified) &&
+    res.encodings !== undefined &&
+    res.encodings.unfilled.length === 0 &&
+    (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
+    readbackEvidence === '';
+  const caveats: CompletionCaveat[] = [];
+  if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
+  if (nativeFieldUnverified) caveats.push('field_validation_unverified');
+  caveats.push('query_render_unverified');
+  if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
+  const operationEligible =
+    !trustedDeterministicApply &&
+    res.requestCoverage === undefined &&
+    args.sheet_type === 'worksheet' &&
+    !coreNeedsFollowUp &&
+    documentWarnings.length === 0 &&
+    !emptySummaryReadback &&
+    !summaryReadbackTimedOut &&
+    readbackRan &&
+    encodingAnalysisComplete &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified);
+  const evidenceEligible = completionEligible || operationEligible;
+  const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
+  const settledGuidance =
+    documentWarnings.length > 0
+      ? guidance
+      : completionEvidenceWithheld
+        ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+        : evidenceEligible && summaryPreviewUnavailable
+          ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+          : guidance;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
     ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
-    guidance,
+    guidance: settledGuidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
@@ -2835,6 +2960,23 @@ async function performAutoApply({
       : { bind: bindMs, inject: injectMs, apply: applyMs },
     verification: receiptInput.readback,
     ...summaryRows,
+    ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
+    ...(evidenceEligible
+      ? {
+          completionEvidence: {
+            version: 2,
+            kind: 'single_sheet_apply',
+            askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+            coverage: completionEligible ? 'complete_request' : 'applied_operation',
+            application: {
+              status: 'applied',
+              template: args.template_name,
+              sheetName: literalTitle,
+            },
+            caveats,
+          } as const,
+        }
+      : {}),
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
   if (documentWarnings.length > 0) {
@@ -2857,7 +2999,7 @@ async function performAutoApply({
       ),
     };
   }
-  return needsFollowUp
+  return (needsFollowUp || completionEvidenceWithheld) && !evidenceEligible
     ? { incomplete: true, result: applied }
     : {
         result: withNextAction(
@@ -3143,6 +3285,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         proposal,
         minConfidence,
         auto_apply,
+        requireCompleteRequest,
         target_worksheet,
         datasource,
         calcs,
@@ -3158,6 +3301,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           proposal,
           minConfidence,
           auto_apply,
+          requireCompleteRequest,
           target_worksheet,
           datasource,
           calcs,
@@ -3173,6 +3317,17 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          if (
+            requireCompleteRequest === true &&
+            (auto_apply !== true ||
+              proposal !== undefined ||
+              calcs !== undefined ||
+              skip_validation !== undefined ||
+              target_worksheet !== undefined ||
+              datasource !== undefined)
+          ) {
+            return new Ok(completeRequestDecline(ask));
+          }
           const trustedDeterministicApply =
             extra.config.allowSkipValidation === true &&
             skip_validation === true &&
@@ -3187,6 +3342,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
           const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+          if (requireCompleteRequest === true && priorRecovery !== undefined) {
+            // An open recovery record would read this as a bare resubmit; decline and leave it alone.
+            return new Ok(completeRequestDecline(ask));
+          }
           const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
           const retainedDatasource = retainedCall2Contract?.arguments.datasource;
           const requestedDatasource = datasource ?? retainedDatasource;
@@ -3347,6 +3506,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+              if (requireCompleteRequest === true) return new Ok(completeRequestDecline(ask));
               return new IncompleteOperationError(
                 ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
               ).toErr();
@@ -3406,6 +3566,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
             ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
             automaticOnly: true,
+            ...(requireCompleteRequest === true ? { completeRequestLineColorOptional: true } : {}),
           });
           const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
           const manifests =
@@ -3473,12 +3634,14 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               workbookXml,
               manifests,
               datasource: effectiveDatasource,
+              ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
               proposal === undefined &&
               auto_apply === true &&
+              requireCompleteRequest !== true &&
               res.status === 'propose' &&
               res.llm_input.recommended &&
               requiredFilterFields === undefined
@@ -3545,6 +3708,29 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const bindMs = Date.now() - bindStart;
           schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
+          if (
+            requireCompleteRequest === true &&
+            (res.status !== 'bound' ||
+              res.requestCoverage === undefined ||
+              res.used_llm ||
+              (res.warnings?.length ?? 0) > 0 ||
+              res.encodings === undefined ||
+              res.encodings.unfilled.length > 0 ||
+              appliedDefault !== undefined)
+          ) {
+            // The decline wrote nothing and returned no proposal, so release this call's admission.
+            try {
+              sessionRouteState.releaseBindRecoveryReservation(
+                resolvedSession,
+                askKey,
+                bindRecoveryReservationId,
+              );
+              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+            } catch {
+              /* fail-open */
+            }
+            return new Ok(completeRequestDecline(ask));
+          }
 
           // ── One structured correction boundary ─────────────────────────
           // Only `propose` earns a structured Call 2. Every escalation closes the fast path.

@@ -25,7 +25,7 @@ import {
 // closed instead of being quietly accepted with the extra dropped.
 export const bindingSchema = z
   .object({
-    slot_id: z.string().describe(''),
+    slot_id: z.string(),
     field: z.string().describe('Exact llm_input.fields[].name'),
     derivation: z.enum(DERIVATION_SHORT_FORMS).optional(),
   })
@@ -83,6 +83,4 @@ export const proposalSchema = z
     template_parameters: z.record(z.string(), z.string()).optional(),
   })
   .strict()
-  .describe(
-    'Call 2: reuse ask/target and returned template/slots. top-level auto_apply:true; top_n ranks; context scopes filters.',
-  );
+  .describe('Use call_2_contract.');

@@ -391,6 +391,41 @@ describe('SessionRouteStateStore', () => {
       expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toBeUndefined();
     });
 
+    it('releases only the given reservation and keeps a concurrent call outcome', () => {
+      const store = new SessionRouteStateStore();
+      const first = store.reserveBindRecoveryAdmission('S1', 'ask A', {});
+      const second = store.reserveBindRecoveryAdmission('S1', 'ask A', {});
+      store.recordBindRecoveryTerminal('S1', 'ask A', {
+        outcome: 'escalate',
+        reservationId: second,
+      });
+
+      expect(store.releaseBindRecoveryReservation('S1', 'ask A', first)).toBe(true);
+
+      const record = store.getBindRecovery('S1', 'ask A');
+      expect(record?.phase).toBe('terminal');
+      expect(record?.attempts).toHaveLength(1);
+      expect(record?.attempts[0].reservationId).toBe(second);
+    });
+
+    it('deletes the record when the released reservation was the only attempt', () => {
+      const store = new SessionRouteStateStore();
+      const only = store.reserveBindRecoveryAdmission('S1', 'ask A', {});
+
+      expect(store.releaseBindRecoveryReservation('S1', 'ask A', only)).toBe(true);
+      expect(store.getBindRecovery('S1', 'ask A')).toBeUndefined();
+    });
+
+    it('ignores an unknown or missing reservation id', () => {
+      const store = new SessionRouteStateStore();
+      const only = store.reserveBindRecoveryAdmission('S1', 'ask A', {});
+
+      expect(store.releaseBindRecoveryReservation('S1', 'ask A', undefined)).toBe(false);
+      expect(store.releaseBindRecoveryReservation('S1', 'ask A', (only ?? 0) + 99)).toBe(false);
+      expect(store.releaseBindRecoveryReservation('S1', 'other ask', only)).toBe(false);
+      expect(store.getBindRecovery('S1', 'ask A')?.attempts).toHaveLength(1);
+    });
+
     it('clears a recovery entry when the bind reaches terminal done', () => {
       const store = new SessionRouteStateStore();
       store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });

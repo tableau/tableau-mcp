@@ -105,6 +105,7 @@ async function call(
     {
       session: '1',
       ask: ASK,
+      requireCompleteRequest: undefined,
       minConfidence: undefined,
       target_worksheet: undefined,
       datasource: undefined,
