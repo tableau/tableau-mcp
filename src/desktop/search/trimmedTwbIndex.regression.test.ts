@@ -21,13 +21,13 @@ const source = readSourceEntries(DEFAULT_IN);
 const trimmed = JSON.parse(readFileSync(DEFAULT_OUT, 'utf8')) as Entry[];
 const suite = buildQuerySuite(source);
 
-const paths = (entries: Entry[]): string[] => entries.map((e) => e.relativePath).sort();
+const ids = (entries: Entry[]): string[] => entries.map((e) => e.id).sort();
 
 function overlap(query: string): { src: string[]; trim: string[]; hits: number } {
-  const src = paths(topKForQuery(source, query));
-  const trim = paths(topKForQuery(trimmed, query));
+  const src = ids(topKForQuery(source, query));
+  const trim = ids(topKForQuery(trimmed, query));
   const trimSet = new Set(trim);
-  return { src, trim, hits: src.filter((p) => trimSet.has(p)).length };
+  return { src, trim, hits: src.filter((id) => trimSet.has(id)).length };
 }
 
 // TR2's six regression cases. The source simply does not contain 15 scored hits
@@ -85,10 +85,8 @@ describe('trimmed twb-example-index.json retrieval regression (oracle-seeded)', 
     // identically to topKForQuery for the seeded smoke queries.
     const { searchWorkbookExamples } = await import('./searchLibrary.js');
     for (const query of SMOKE_QUERIES) {
-      const real = (searchWorkbookExamples(query).twbExamples as Entry[])
-        .map((e) => e.relativePath)
-        .sort();
-      const replicated = paths(topKForQuery(trimmed, query));
+      const real = (searchWorkbookExamples(query).twbExamples as Entry[]).map((e) => e.id).sort();
+      const replicated = ids(topKForQuery(trimmed, query));
       expect(real, `production vs replicated mismatch for "${query}"`).toEqual(replicated);
     }
   });

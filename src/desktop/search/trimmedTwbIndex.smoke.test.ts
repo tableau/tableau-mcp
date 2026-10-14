@@ -13,7 +13,7 @@ interface TwbSnippet {
 }
 interface TwbEntry {
   name: string;
-  relativePath: string;
+  id: string;
   features: string[];
   snippets: Record<string, TwbSnippet>;
 }
