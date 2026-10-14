@@ -49,12 +49,12 @@ describe('requestStagedDatasourceUpload', () => {
       expect(result.datasourceUploadId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
-      expect(MAX_STAGED_DATASOURCE_BYTES).toBe(100 * 1024 * 1024);
+      expect(MAX_STAGED_DATASOURCE_BYTES).toBe(5 * 1000 * 1000 * 1000);
       expect(result).toEqual({
         datasourceUploadId: result.datasourceUploadId,
         uploadUrl: 'https://s3.example.com/signed-put',
         expiresAt: '2026-10-14T18:05:00.000Z',
-        maxSizeBytes: 100 * 1024 * 1024,
+        maxSizeBytes: 5 * 1000 * 1000 * 1000,
         requiredHeaders: { 'Content-Type': contentType },
       });
       expect(mocks.createPresignedPutUrlToS3).toHaveBeenCalledExactlyOnceWith({
@@ -95,7 +95,7 @@ describe('resolveStagedDatasourceUpload', () => {
 
   function expectedDownload(
     fileType: 'tds' | 'tdsx',
-    maxBytes = 100 * 1024 * 1024,
+    maxBytes = 5 * 1000 * 1000 * 1000,
   ): { key: string; bucket: string; region: string; maxBytes: number } {
     return {
       key: `mcp/datasource-uploads/${uploadId}/datasource.${fileType}`,
@@ -136,25 +136,7 @@ describe('resolveStagedDatasourceUpload', () => {
     );
   });
 
-  it('propagates the provided cancellation signal to both lookup attempts', async () => {
-    const abortSignal = new AbortController().signal;
-    mocks.downloadObjectFromS3IfExists
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(Buffer.from('PK\x03\x04'));
-
-    await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config, abortSignal });
-
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(1, {
-      ...expectedDownload('tds'),
-      abortSignal,
-    });
-    expect(mocks.downloadObjectFromS3IfExists).toHaveBeenNthCalledWith(2, {
-      ...expectedDownload('tdsx'),
-      abortSignal,
-    });
-  });
-
-  it('clamps an oversized requested download limit to the publishing limit', async () => {
+  it('preserves a caller-supplied limit above 100 MiB', async () => {
     await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
       config,
@@ -162,7 +144,7 @@ describe('resolveStagedDatasourceUpload', () => {
     });
 
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledExactlyOnceWith(
-      expectedDownload('tds'),
+      expectedDownload('tds', 200 * 1024 * 1024),
     );
   });
 

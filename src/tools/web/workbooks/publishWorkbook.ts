@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
 import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
@@ -26,7 +27,6 @@ import {
   notInPersonalSpaceError,
   resolvePersonalSpace,
 } from '../utils/personalSpaceUtils.js';
-import { readPublishingFile } from '../utils/readPublishingFile.js';
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
@@ -206,7 +206,6 @@ export const getPublishWorkbookTool = (
                 config: extra.config.bucketS3,
                 workbookUploadId,
                 workbookFilePath,
-                abortSignal: extra.signal,
               });
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
@@ -389,12 +388,10 @@ async function resolveWorkbookInput({
   config,
   workbookUploadId,
   workbookFilePath,
-  abortSignal,
 }: {
   config: BucketS3Config & { enabled: boolean };
   workbookUploadId?: string;
   workbookFilePath?: string;
-  abortSignal?: AbortSignal;
 }): Promise<ResolvedWorkbook> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
@@ -406,7 +403,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged S3 uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath, abortSignal);
+    return await resolveLocalWorkbookFile(workbookFilePath);
   }
 
   if (!workbookUploadId) {
@@ -422,20 +419,16 @@ async function resolveWorkbookInput({
   return await resolveStagedWorkbookUpload({
     workbookUploadId,
     config,
-    ...(abortSignal ? { abortSignal } : {}),
   });
 }
 
-async function resolveLocalWorkbookFile(
-  workbookFilePath: string,
-  abortSignal?: AbortSignal,
-): Promise<ResolvedWorkbook> {
+async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
   if (!getWorkbookFileType(fileName)) {
     throw new ArgsValidationError('workbookFilePath must point to a .twb or .twbx file.');
   }
 
-  const bytes = await readPublishingFile(workbookFilePath, { abortSignal });
+  const bytes = await readFile(workbookFilePath);
   if (bytes.byteLength === 0) {
     throw new ArgsValidationError('workbookFilePath must not point to an empty workbook file.');
   }

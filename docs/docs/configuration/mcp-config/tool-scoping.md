@@ -140,29 +140,18 @@ results of the tools. This variable is site and request overridable, see
 
 Example: `sales,marketing`
 
-## Publishing bounds and local files
+## Data source publishing
 
-For `publish-datasource` and project-based `publish-workbook`, `INCLUDE_PROJECT_IDS` limits the
-destination project, including when `overwrite` is true. `INCLUDE_DATASOURCE_IDS`,
-`INCLUDE_WORKBOOK_IDS`, and `INCLUDE_TAGS` constrain queries and listings; they do not restrict
-which same-name item can be replaced by publishing in an allowed project. Tableau's publish and
-overwrite permissions still apply. Use project bounds and Tableau permissions to control publishing
-access. The caller's own Personal Space follows the separate rules in
-[Publish Workbook](../../tools/workbooks/publish-workbook.md#personalspace).
+`publish-datasource` uses `INCLUDE_PROJECT_IDS` to limit the destination project, including when
+`overwrite` is true. Datasource-ID and tag bounds constrain queries and listings; they do not
+restrict replacing a same-name datasource within an allowed project. Tableau publish and overwrite
+permissions still apply.
 
-Local publish paths use the MCP process's filesystem permissions. They are intended for trusted
-clients or a separate server process and filesystem for each caller; they are not a per-caller
-filesystem sandbox. Shared HTTP deployments must configure staged S3 uploads (`MCP_S3_BUCKET`)
-before enabling authoring. With S3 enabled, both publishers reject local paths and accept only
-staged upload IDs. Use OAuth or server-side authentication for staged uploads; Passthrough sessions
-do not advertise the staged-upload tools, or the publish tools when S3 is enabled.
-
-Both local and staged publishing accept at most **100 MiB (104857600 bytes)** per file. Publishing
-still buffers the file, and S3 buffering and multipart upload can hold additional copies. Allow
-several hundred MiB of process memory per concurrent publish, plus the server's normal memory, and
-limit concurrency to fit the deployment's memory budget. This per-file cap is not a global memory
-limit. Cancelling a request stops local/S3 file resolution; it does not undo a completed Tableau
-publication.
+`datasourceFilePath` refers to the MCP server's filesystem and uses the process's file permissions.
+Use it with trusted clients or a filesystem isolated to the caller. Hosted clients can instead use
+`request-datasource-upload` and pass its staged upload ID. When `MCP_S3_BUCKET` is configured, the
+publisher rejects local paths. Staged datasource uploads retain the **5 GB (5000000000 bytes)**
+limit. Files are buffered in server memory before the chunked Tableau upload.
 
 ## Data source permissions
 

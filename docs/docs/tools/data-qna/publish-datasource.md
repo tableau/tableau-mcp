@@ -30,12 +30,12 @@ Project bounds apply before file access or upload, including on overwrite. Datas
 bounds constrain queries/listings and do not restrict replacement of a same-name datasource within
 an allowed project. Tableau permissions still govern the mutation.
 
-Local files are for trusted clients or a separate server process and filesystem per caller. Shared
-HTTP deployments must configure staged S3 uploads so local paths are rejected. Both local and staged
-files are limited to **100 MiB (104857600 bytes)**. See
-[Publishing bounds and local files](../../configuration/mcp-config/tool-scoping.md#publishing-bounds-and-local-files)
-for the trust boundary and memory/concurrency budget. Passthrough sessions do not advertise this
-tool when S3 is configured.
+Local paths use the MCP server's filesystem permissions and are intended for trusted clients or
+filesystems isolated to the caller. Hosted clients can use staged S3 uploads instead. Staged uploads
+retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server memory before uploading
+to Tableau. See
+[Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing) for
+the input and project bounds. Passthrough sessions do not advertise this tool when S3 is configured.
 
 ## Example
 

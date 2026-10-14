@@ -325,7 +325,7 @@ describe('server', () => {
     }
   });
 
-  describe('publishing discovery', () => {
+  describe('datasource publishing discovery', () => {
     const publishingNames = [
       'request-workbook-upload',
       'request-datasource-upload',
@@ -351,23 +351,30 @@ describe('server', () => {
         { ...mode, s3: false },
         { ...mode, s3: true },
       ]),
-    )('advertises usable tools for $label with S3=$s3', async ({ auth, s3 }) => {
-      vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
-      vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (featureName: string) => featureName === 'authoring-tools',
-      );
-      const server = getServer();
-      await server.registerTools(auth);
-      const registered = vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
-      const expected =
-        auth?.type === 'Passthrough'
-          ? s3
-            ? []
-            : ['publish-workbook', 'publish-datasource']
-          : publishingNames;
-      expect(registered.sort()).toEqual([...expected].sort());
-    });
+    )(
+      'filters datasource tools without changing workbook tools for $label with S3=$s3',
+      async ({ auth, s3 }) => {
+        vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
+        vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
+        mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+          (featureName: string) => featureName === 'authoring-tools',
+        );
+        const server = getServer();
+        await server.registerTools(auth);
+        const registered = vi
+          .mocked(server.mcpServer.registerTool)
+          .mock.calls.map((call) => call[0]);
+        const expectedDatasources =
+          auth?.type === 'Passthrough'
+            ? s3
+              ? []
+              : ['publish-datasource']
+            : ['request-datasource-upload', 'publish-datasource'];
+        expect(registered.sort()).toEqual(
+          ['request-workbook-upload', 'publish-workbook', ...expectedDatasources].sort(),
+        );
+      },
+    );
   });
 
   it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {

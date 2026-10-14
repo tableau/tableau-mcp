@@ -9,8 +9,8 @@ Publishes a TWB or TWBX workbook from a local file path or staged upload id to T
 with `capability: "Write"` to discover the projects you can publish to). When the `data-apps`
 feature flag is enabled and `projectId` is omitted, the workbook is published into your Personal
 Space (`personalSpace` defaults to `true`) when the site supports direct-to-personal-space
-publishing. `projectId` always takes precedence over `personalSpace`; `personalSpace: false` without
-`projectId` returns an error before any file is uploaded.
+publishing. `projectId` always takes precedence over `personalSpace`; `personalSpace: false`
+without `projectId` returns an error before any file is uploaded.
 
 TWB workbooks are validated up front and uploaded only when validation succeeds, with any blocking
 errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau
@@ -18,10 +18,10 @@ as part of publishing, since Tableau cannot pre-validate extracts packaged insid
 
 :::warning[Disabled by Default]
 
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in
-`features.json`. It is unavailable unless an administrator enables `authoring-tools`. See
-[Feature Flags](../../developers/feature-flags.md). Slack clients additionally require the
-`authoring-with-slack` feature flag.
+This tool is gated behind the `authoring-tools` feature flag, which
+defaults to `false` in `features.json`. It is unavailable unless an administrator enables
+`authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
+Slack clients additionally require the `authoring-with-slack` feature flag.
 
 :::
 
@@ -39,8 +39,8 @@ After changing file-based flags, restart the MCP server and reconnect clients to
 
 :::info[Minimum REST API version]
 
-Requires Tableau REST API version 3.29 or later (Tableau Server 2026.2+). Calling this tool against
-an older server returns an error instead of publishing.
+Requires Tableau REST API version 3.29 or later (Tableau Server
+2026.2+). Calling this tool against an older server returns an error instead of publishing.
 
 :::
 
@@ -87,12 +87,6 @@ S3 uploads are not configured (i.e. `MCP_S3_BUCKET` is unset).
 
 Example: `/path/to/Superstore.twbx`
 
-Local paths require trusted clients or a separate server process and filesystem per caller. On
-shared HTTP hosts, configure staged S3 uploads so local paths are rejected. Both input types are
-limited to 100 MiB (104857600 bytes). See
-[Publishing bounds and local files](../../configuration/mcp-config/tool-scoping.md#publishing-bounds-and-local-files)
-for filesystem isolation and memory budgeting.
-
 ## Destination: `projectId` or Personal Space
 
 ### `projectId`
@@ -100,9 +94,9 @@ for filesystem isolation and memory budgeting.
 The Tableau project LUID to publish the workbook into. Use
 [List Projects](../projects/list-projects.md) with
 [`capability: "Write"`](../projects/list-projects.md#capability) to discover the projects you can
-publish to. If this MCP server is configured with a bounded project context, publishing to a project
-outside that context returns an error instead of publishing. When provided, it is always used and
-`personalSpace` is ignored.
+publish to. If this MCP server is configured with a bounded project context,
+publishing to a project outside that context returns an error instead of publishing. When
+provided, it is always used and `personalSpace` is ignored.
 
 Example: `cbec32db-a4a2-4308-b5f0-4fc67322f359`
 
@@ -150,9 +144,6 @@ unwanted, or republish by passing an explicit `projectId`.
 
 Whether to overwrite an existing workbook with the same name in the selected destination.
 
-For project publishes, project bounds apply to the destination; workbook-ID and tag bounds do not
-restrict replacement of an existing same-name workbook. Tableau permissions still apply.
-
 Default: `false`
 
 ## Response behavior
@@ -167,27 +158,27 @@ The tool returns one of two result shapes:
 
 ### Permissions after a project publish
 
-A successful project publish attempts an optional permissions read and returns `permissions`: the
-workbook's configured user/group permission rules. These rules are returned unchanged in both
-`structuredContent` and the JSON text content. The tool does not select an access message or append
-a published-data-source reminder; the authoring skill interprets the output using existing task
-context.
+A successful project publish attempts an optional permissions read and returns
+`permissions`: the workbook's configured user/group permission rules. These rules are returned
+unchanged in both `structuredContent` and the JSON text content. The tool does not select an
+access message or append a published-data-source reminder; the authoring skill interprets the
+output using existing task context.
 
-If the optional read fails, publishing still succeeds and `permissionsNote` explains that the rules
-could not be retrieved. Personal Space publishes skip the read and omit both permission fields.
-Project permission disclosure is independent of the `data-apps` flag. See
+If the optional read fails, publishing still succeeds and `permissionsNote` explains that the
+rules could not be retrieved. Personal Space publishes skip the read and omit both permission
+fields. Project permission disclosure is independent of the `data-apps` flag. See
 [Feature Flags](../../developers/feature-flags.md).
 
-| Publish outcome                                                  | Permission fields                                                                          |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Project publish; permission read succeeds                        | `permissions` contains the returned rules, including an empty array if none were returned. |
-| Project publish; permission read fails or consent is unavailable | `permissionsNote` explains the unavailable read; `permissions` is absent.                  |
-| Project publish; `data-apps` disabled                            | Same permission read and fields as any other project publish.                              |
-| Personal Space publish                                           | Neither field is returned; no permission read occurs.                                      |
+| Publish outcome | Permission fields |
+| --- | --- |
+| Project publish; permission read succeeds | `permissions` contains the returned rules, including an empty array if none were returned. |
+| Project publish; permission read fails or consent is unavailable | `permissionsNote` explains the unavailable read; `permissions` is absent. |
+| Project publish; `data-apps` disabled | Same permission read and fields as any other project publish. |
+| Personal Space publish | Neither field is returned; no permission read occurs. |
 
-An omitted capability is not rewritten as a denial. An empty array means no configured rules were
-returned, not that nobody has access. The rules do not determine each viewer's effective access, and
-successful publishing does not verify permissions on a published parent data source.
+An omitted capability is not rewritten as a denial. An empty array means no configured rules
+were returned, not that nobody has access. The rules do not determine each viewer's effective
+access, and successful publishing does not verify permissions on a published parent data source.
 
 ## Example result (published)
 

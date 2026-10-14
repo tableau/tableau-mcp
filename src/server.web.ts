@@ -264,13 +264,11 @@ export class WebMcpServer extends Server {
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
-      // Passthrough cannot authorize presigned uploads; with S3 enabled it has no publish input.
+      // Passthrough cannot authorize datasource presigned uploads.
       if (
         tableauAuthInfo?.type === 'Passthrough' &&
-        (tool.name === 'request-workbook-upload' ||
-          tool.name === 'request-datasource-upload' ||
-          (config.bucketS3.enabled &&
-            (tool.name === 'publish-workbook' || tool.name === 'publish-datasource')))
+        (tool.name === 'request-datasource-upload' ||
+          (config.bucketS3.enabled && tool.name === 'publish-datasource'))
       ) {
         continue;
       }

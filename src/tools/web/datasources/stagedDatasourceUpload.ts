@@ -7,9 +7,9 @@ import {
   downloadObjectFromS3IfExists,
   joinS3Prefix,
 } from '../s3Client.js';
-import { MAX_PUBLISH_FILE_BYTES } from '../utils/readPublishingFile.js';
 
-export const MAX_STAGED_DATASOURCE_BYTES = MAX_PUBLISH_FILE_BYTES;
+// Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
+export const MAX_STAGED_DATASOURCE_BYTES = 5 * 1000 * 1000 * 1000;
 export const DATASOURCE_UPLOAD_PREFIX_SEGMENT = 'datasource-uploads';
 
 export type DatasourceFileType = 'tds' | 'tdsx';
@@ -37,7 +37,6 @@ type ResolveDatasourceUploadOptions = {
   datasourceUploadId: string;
   config: BucketS3Config;
   maxBytes?: number;
-  abortSignal?: AbortSignal;
 };
 
 export async function requestStagedDatasourceUpload({
@@ -69,7 +68,6 @@ export async function resolveStagedDatasourceUpload({
   datasourceUploadId,
   config,
   maxBytes = MAX_STAGED_DATASOURCE_BYTES,
-  abortSignal,
 }: ResolveDatasourceUploadOptions): Promise<ResolvedDatasource> {
   assertDatasourceUploadId(datasourceUploadId);
 
@@ -78,8 +76,7 @@ export async function resolveStagedDatasourceUpload({
       key: buildDatasourceUploadS3Key(config.keyPrefix, datasourceUploadId, fileType),
       bucket: config.bucket,
       region: config.region,
-      maxBytes: Math.min(maxBytes, MAX_STAGED_DATASOURCE_BYTES),
-      ...(abortSignal ? { abortSignal } : {}),
+      maxBytes,
     });
 
     if (bytes === undefined) {

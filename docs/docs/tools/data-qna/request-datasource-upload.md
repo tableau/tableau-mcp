@@ -27,16 +27,15 @@ before issuing a signed URL for Passthrough authentication.
   "datasourceUploadId": "123e4567-e89b-42d3-a456-426614174000",
   "uploadUrl": "https://s3.example.com/signed-put",
   "expiresAt": "2026-10-14T18:05:00.000Z",
-  "maxSizeBytes": 104857600,
+  "maxSizeBytes": 5000000000,
   "requiredHeaders": {
     "Content-Type": "application/octet-stream"
   }
 }
 ```
 
-The content type is `application/xml` for TDS and `application/octet-stream` for TDSX. Both staged
-and local publishing enforce the advertised **100 MiB** limit. The signed URL does not constrain the
-PUT size; oversized staged objects are rejected before uploading to Tableau. Configure S3 lifecycle
-rules for staged-file expiry. Publishing buffers the file; see
-[Publishing bounds and local files](../../configuration/mcp-config/tool-scoping.md#publishing-bounds-and-local-files)
-for memory and concurrency guidance.
+The content type is `application/xml` for TDS and `application/octet-stream` for TDSX. Staged
+publishing retains the advertised **5 GB (5000000000 bytes)** limit. The signed URL does not
+constrain the PUT size; oversized staged objects are rejected before uploading to Tableau. Configure
+S3 lifecycle rules for staged-file expiry. Publishing buffers the file in server memory; see
+[Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing).

@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
 import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -18,7 +19,6 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
-import { readPublishingFile } from '../utils/readPublishingFile.js';
 import {
   getDatasourceFileType,
   type ResolvedDatasource,
@@ -106,7 +106,6 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
                 config: extra.config.bucketS3,
                 datasourceUploadId,
                 datasourceFilePath,
-                abortSignal: extra.signal,
               });
               const fileType = getDatasourceFileType(resolvedDatasourceFile.fileName);
               if (!fileType) {
@@ -157,12 +156,10 @@ async function resolveDatasourceInput({
   config,
   datasourceUploadId,
   datasourceFilePath,
-  abortSignal,
 }: {
   config: BucketS3Config & { enabled: boolean };
   datasourceUploadId?: string;
   datasourceFilePath?: string;
-  abortSignal?: AbortSignal;
 }): Promise<ResolvedDatasource> {
   if (datasourceUploadId && datasourceFilePath) {
     throw new ArgsValidationError(
@@ -176,7 +173,7 @@ async function resolveDatasourceInput({
         'datasourceFilePath is only supported when staged S3 uploads are not configured. Call request-datasource-upload first and pass datasourceUploadId.',
       );
     }
-    return await resolveLocalDatasourceFile(datasourceFilePath, abortSignal);
+    return await resolveLocalDatasourceFile(datasourceFilePath);
   }
 
   if (!datasourceUploadId) {
@@ -192,20 +189,16 @@ async function resolveDatasourceInput({
   return await resolveStagedDatasourceUpload({
     datasourceUploadId,
     config,
-    ...(abortSignal ? { abortSignal } : {}),
   });
 }
 
-async function resolveLocalDatasourceFile(
-  datasourceFilePath: string,
-  abortSignal?: AbortSignal,
-): Promise<ResolvedDatasource> {
+async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {
   const fileName = basename(datasourceFilePath);
   if (!getDatasourceFileType(fileName)) {
     throw new ArgsValidationError('datasourceFilePath must point to a .tds or .tdsx file.');
   }
 
-  const bytes = await readPublishingFile(datasourceFilePath, { abortSignal });
+  const bytes = await readFile(datasourceFilePath);
   if (bytes.byteLength === 0) {
     throw new ArgsValidationError(
       'datasourceFilePath must not point to an empty data source file.',
