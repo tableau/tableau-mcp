@@ -86,6 +86,8 @@ interface FilterSignature {
   column: string;
   context: boolean;
   groupfilters: string;
+  /** Top-level groupfilter function and enumeration, e.g. "union|inclusive". */
+  shapes: string[];
   topN: TopNFilterSignature | null;
 }
 
@@ -284,6 +286,10 @@ function collectFilters(worksheet: XmlRecord): FilterSignature[] {
       column: attr(element, 'column'),
       context: attr(element, 'context').toLowerCase() === 'true',
       groupfilters: nestedGroupfilterSignature(element),
+      shapes: directChildren(element, 'groupfilter').map(
+        (groupfilter) =>
+          `${attr(groupfilter, 'function')}|${attr(groupfilter, 'user:ui-enumeration')}`,
+      ),
       topN: topNFilterSignature(element),
     });
   });
@@ -434,7 +440,7 @@ interface ShelfPill {
 
 /** Parses "[ds].[deriv:Column:suffix]"; null when the pill is not a plain column instance. */
 function parseShelfPill(pill: string): ShelfPill | null {
-  const m = /^(.*)\.\[([^:\]]+):(.+):([a-z]{2})\]$/.exec(pill.trim());
+  const m = /^(\[(?:[^\]]|\]\])+\])\.\[([^:\]]+):(.+):([a-z]{2})\]$/.exec(pill.trim());
   if (!m) return null;
   const [, datasource, derivation, column, suffix] = m;
   const klass = suffix === 'qk' ? 'q' : suffix === 'nk' || suffix === 'ok' ? 'c' : null;
@@ -445,7 +451,12 @@ function parseShelfPill(pill: string): ShelfPill | null {
  * W-24366132: a shelf mismatch is only a warning when Tableau kept the same fields and the
  * quantitative/categorical sequence, because a changed sequence changes the chart type.
  */
-function isBenignShelfChange(intendedPills: string[], readbackPills: string[]): boolean {
+function isBenignShelfChange(intendedShelf: string[], readbackShelf: string[]): boolean {
+  // Shared-axis pills ("[a] + [b]") arrive as one shelf entry, so compare their members.
+  const splitSharedAxis = (pills: string[]): string[] =>
+    pills.flatMap((pill) => pill.split(/(?<=\])\s*\+\s*(?=\[)/));
+  const intendedPills = splitSharedAxis(intendedShelf);
+  const readbackPills = splitSharedAxis(readbackShelf);
   if (readbackPills.length === 0 || intendedPills.length !== readbackPills.length) return false;
   const intendedParsed = intendedPills.map(parseShelfPill);
   const readbackParsed = readbackPills.map(parseShelfPill);
@@ -464,8 +475,21 @@ function isBenignShelfChange(intendedPills: string[], readbackPills: string[]): 
   });
   if (looksUnresolved) return false;
 
-  return intendedParsed.every(
-    (pill, i) => pill!.klass !== null && pill!.klass === readbackParsed[i]!.klass,
+  // Pairing class with field catches a swap that keeps the positional q/c sequence intact.
+  const classesByField = (pills: Array<ShelfPill | null>): Map<string, string> => {
+    const grouped = new Map<string, string[]>();
+    for (const pill of pills) {
+      grouped.set(pill!.field, [...(grouped.get(pill!.field) ?? []), pill!.klass ?? '?']);
+    }
+    return new Map([...grouped].map(([field, classes]) => [field, classes.sort().join(',')]));
+  };
+  const intendedClasses = classesByField(intendedParsed);
+  const readbackClasses = classesByField(readbackParsed);
+  const fieldClassesMatch = [...intendedClasses].every(
+    ([field, classes]) => !classes.includes('?') && readbackClasses.get(field) === classes,
+  );
+  return (
+    fieldClassesMatch && intendedParsed.every((pill, i) => pill!.klass === readbackParsed[i]!.klass)
   );
 }
 
@@ -478,15 +502,30 @@ function filterSeverity(
   filter: FilterSignature,
   readback: FilterSignature[],
 ): ReadbackFindingSeverity {
-  if (filter.klass !== 'categorical' || filter.topN) return 'error';
+  if (filter.klass !== 'categorical' || filter.topN || filter.shapes.length === 0) return 'error';
   const survivor = readback.some(
     (candidate) =>
       candidate.klass === 'categorical' &&
       candidate.column === filter.column &&
       candidate.context === filter.context &&
-      !candidate.topN,
+      !candidate.topN &&
+      filter.shapes.every((shape) => candidate.shapes.includes(shape)),
   );
   return survivor ? 'warning' : 'error';
+}
+
+/** True when the intended column-instance declaration for a filter did not survive readback. */
+function declarationMissing(
+  filter: FilterSignature,
+  intended: WorksheetSignature,
+  readback: WorksheetSignature,
+): boolean {
+  const instanceName = instanceNameFromColumnRef(filter.column);
+  return (
+    !!instanceName &&
+    intended.declaredInstances.has(instanceName) &&
+    !readback.declaredInstances.has(instanceName)
+  );
 }
 
 /**
@@ -608,15 +647,17 @@ export function verifyWorksheetReadback(
         column: filter.column || undefined,
         intended: filterIntended(filter),
         readback: matchingFilter || related ? 'changed' : 'missing',
-        severity: missingTopNSlice ? 'error' : filterSeverity(filter, readback.filters),
+        severity:
+          missingTopNSlice || declarationMissing(filter, intended, readback)
+            ? 'error'
+            : filterSeverity(filter, readback.filters),
       });
       continue;
     }
 
     // A surviving filter is inert when Tableau drops its intended column-instance declaration.
     const instanceName = instanceNameFromColumnRef(filter.column);
-    if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
-    if (readback.declaredInstances.has(instanceName)) continue;
+    if (!instanceName || !declarationMissing(filter, intended, readback)) continue;
     findings.push({
       kind: 'filter',
       node: 'column-instance',

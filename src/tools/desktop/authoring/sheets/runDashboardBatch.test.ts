@@ -600,6 +600,64 @@ describe('runDashboardBatchTool', () => {
     expect(JSON.stringify(bodyOf(result))).toContain('filter');
   });
 
+  describe('same-field shelf reorder readback (W-24366132)', () => {
+    const ROWS =
+      '<rows>[Sample - Superstore].[none:A:nk] / [Sample - Superstore].[none:B:nk]</rows>';
+    const SWAPPED =
+      '<rows>[Sample - Superstore].[none:B:nk] / [Sample - Superstore].[none:A:nk]</rows>';
+    const worksheetXmls = { a1: `<worksheet name="New A"><table>${ROWS}</table></worksheet>` };
+
+    it('keeps polling past a transient reordered read and reports a passed worksheet', async () => {
+      vi.useFakeTimers();
+      let reads = 0;
+      const harness = statefulExecutor({
+        readbackTransform: (xml) => (reads++ < 2 ? xml.replace(ROWS, SWAPPED) : xml),
+      });
+
+      const resultPromise = callBatch(['a1'], {
+        store: artifactStore(['a1'], { worksheetXmls }),
+        existingWorksheetNames: [],
+        executor: harness.executor,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(bodyOf(result)).toMatchObject({
+        applied: true,
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'worksheet',
+            verification: { ok: true, status: 'passed' },
+          }),
+        ]),
+      });
+      expect(reads).toBeGreaterThan(2);
+    });
+
+    it('accepts a persistent reorder as a warning after the poll budget', async () => {
+      vi.useFakeTimers();
+      const harness = statefulExecutor({ readbackTransform: (xml) => xml.replace(ROWS, SWAPPED) });
+
+      const resultPromise = callBatch(['a1'], {
+        store: artifactStore(['a1'], { worksheetXmls }),
+        existingWorksheetNames: [],
+        executor: harness.executor,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(bodyOf(result)).toMatchObject({
+        applied: true,
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'worksheet',
+            verification: expect.objectContaining({ status: 'warning' }),
+          }),
+        ]),
+      });
+    });
+  });
+
   it('keeps seven-artifact warning and failure receipts below the SDK truncation limit', async () => {
     const ids = Array.from({ length: 7 }, (_, index) => `${index}-${'i'.repeat(250)}`);
     const titles = Object.fromEntries(ids.map((id, index) => [id, `${index}-${'t'.repeat(250)}`]));
