@@ -57,9 +57,6 @@
           <strip size='31'>
             <card type='rows' />
           </strip>
-          <strip size='31'>
-            <card type='title' />
-          </strip>
         </edge>
       </cards>
       <simple-id uuid='{5CCC5EFE-BD3C-4B06-B427-3A22F445F324}' />
