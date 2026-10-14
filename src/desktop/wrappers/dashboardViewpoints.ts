@@ -317,7 +317,7 @@ function expandedName(element: Element): string {
  * Desktop to add defaults/metadata that were not authored (for example a new simple-id).
  * Never allow added/removed/reordered zones or device layouts inside authored collections.
  */
-function containsAuthoredContent(expected: Element, actual: Element): boolean {
+export function containsAuthoredContent(expected: Element, actual: Element): boolean {
   if (expandedName(expected) !== expandedName(actual)) return false;
   for (const attribute of Array.from(expected.attributes)) {
     if (attribute.namespaceURI === 'http://www.w3.org/2000/xmlns/') continue;
