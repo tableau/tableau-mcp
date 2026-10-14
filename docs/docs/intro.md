@@ -153,6 +153,8 @@ Slack channel in the Tableau #DataDev workspace.
 
 Prompts orchestrate multiple tools into a guided admin workflow. They are gated behind the `ADMIN_TOOLS_ENABLED` site setting.
 
+Prompts are user-invoked (for example, as a slash command). So that the model can also reach a workflow on its own, each enabled prompt is also served as a read-only MCP resource at `tableau-mcp://admin-workflows/<prompt-name>`, whose text is the prompt rendered with its default arguments. Destructive `-apply` workflows keep their dry-run and human-in-the-loop confirmation steps either way.
+
 | **Prompt**                                                                    | **Description**                                                                                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | [stale-content-cleanup-inform](prompts/stale-content-cleanup-inform.md)       | Admin-only. Read-only. Generates a stale-content report by calling `query-admin-insights` with `kind: "stale-content"`. |

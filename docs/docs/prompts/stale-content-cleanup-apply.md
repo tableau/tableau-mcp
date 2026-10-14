@@ -6,6 +6,8 @@ sidebar_position: 2
 
 `stale-content-cleanup-apply`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/stale-content-cleanup-apply` (default arguments).
+
 A guided, **destructive** Tableau Cloud admin workflow that identifies stale workbooks and published data sources, reports their owners to notify, and — only after explicit human approval — tags the approved items and deletes them to the recycle bin.
 
 :::warning[Admin Only · Destructive]
