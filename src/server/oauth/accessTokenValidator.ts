@@ -4,7 +4,7 @@ import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig } from '../../config.js';
+import { Config, getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
@@ -31,6 +31,34 @@ function truncateForLog(value: string): string {
   return value.length > MAX_LOGGED_CLAIM_LENGTH
     ? `${value.slice(0, MAX_LOGGED_CLAIM_LENGTH)}... (truncated)`
     : value;
+}
+
+// The pod-specific resource identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always
+// accepted; each global resource URL (when configured) is matched as the AS stamps it. Both the
+// allowed values and the token's aud are compared with trailing slashes stripped so a cosmetic `/`
+// difference (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a
+// mismatch, and with loopback hosts canonicalized so the interchangeable local-dev forms
+// `localhost`, `127.0.0.1`, and `[::1]` (the resource URI defaults to `http://127.0.0.1:<port>`)
+// are not a mismatch either. Both normalizations only collapse equivalent forms; remote hosts are
+// exact.
+export function matchAudience({
+  aud,
+  config,
+}: {
+  aud: string | string[];
+  config: Pick<Config, 'oauth'>;
+}): { allowedAudiences: string[]; matches: boolean } {
+  const normalizeAudience = (uri: string): string =>
+    stripTrailingSlash(canonicalizeLoopbackHost(uri));
+  const allowedAudiences = [
+    buildResourceIdentifier(config.oauth.resourceUri),
+    ...config.oauth.globalResourceUris,
+  ].map(normalizeAudience);
+  const audiences = Array.isArray(aud) ? aud : [aud];
+  return {
+    allowedAudiences,
+    matches: audiences.some((value) => allowedAudiences.includes(normalizeAudience(value))),
+  };
 }
 
 export abstract class AccessTokenValidator {
@@ -210,21 +238,9 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       // RFC 9068 audience validation: reject tokens not minted for this MCP server's resource
       // URL. Without this, a token issued for one deployment (same shared SSO issuer) passes
-      // validation against another, surfacing later as an opaque 500. The pod-specific resource
-      // identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always accepted; each global
-      // resource URL (when configured) is matched as the AS stamps it. Both the allowed values and
-      // the token's aud are compared with trailing slashes stripped so a cosmetic `/` difference
-      // (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a mismatch,
-      // and with loopback hosts canonicalized so the interchangeable local-dev forms `localhost`,
-      // `127.0.0.1`, and `[::1]` (the resource URI defaults to `http://127.0.0.1:<port>`) are not a
-      // mismatch either. Both normalizations only collapse equivalent forms; remote hosts are exact.
-      const normalizeAudience = (uri: string): string =>
-        stripTrailingSlash(canonicalizeLoopbackHost(uri));
-      const allowedAudiences = [
-        buildResourceIdentifier(this.config.oauth.resourceUri),
-        ...this.config.oauth.globalResourceUris,
-      ].map(normalizeAudience);
-      if (!allowedAudiences.includes(normalizeAudience(aud))) {
+      // validation against another, surfacing later as an opaque 500.
+      const { allowedAudiences, matches } = matchAudience({ aud, config: this.config });
+      if (!matches) {
         log({
           message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog(aud)}'`,
           level: 'error',

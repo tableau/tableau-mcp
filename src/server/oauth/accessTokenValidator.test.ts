@@ -2,9 +2,12 @@ import { generateKeyPairSync } from 'crypto';
 import { CompactEncrypt } from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
+import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   EmbeddedAccessTokenValidator,
+  matchAudience,
   TableauAccessTokenValidator,
 } from './accessTokenValidator.js';
 
@@ -563,5 +566,36 @@ describe('EmbeddedAccessTokenValidator site binding', () => {
       const result = await new EmbeddedAccessTokenValidator(privateKey).validate(token);
       expect(result.isErr()).toBe(true);
     });
+  });
+});
+
+describe('matchAudience', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  it('lists the normalized resource identifier and global resource URIs', () => {
+    expect(matchAudience({ aud: EXPECTED_AUD, config: getConfig() })).toEqual({
+      allowedAudiences: [EXPECTED_AUD, MOCK_GLOBAL_RESOURCE_URI],
+      matches: true,
+    });
+  });
+
+  it.each([
+    [[EXPECTED_AUD], true],
+    [['https://other.example.com', `${MOCK_GLOBAL_RESOURCE_URI}/`], true],
+    [['https://other.example.com', 'my-client-id'], false],
+    [[], false],
+    ['https://other-pod.example.com/tableau-mcp', false],
+  ])('matches aud %j: %s', (aud, matches) => {
+    expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
   });
 });
