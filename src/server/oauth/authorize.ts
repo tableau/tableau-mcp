@@ -170,6 +170,7 @@ export function authorize(
       tableauClientId,
       tableauCodeVerifier,
       scopes: scopesToGrant,
+      expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
     });
 
     // Redirect to Tableau OAuth
