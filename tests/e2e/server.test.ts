@@ -98,7 +98,7 @@ describe('server', () => {
       }
 
       // Filter out flow tools unless both the env switch and the feature flag are on
-      if ((process.env.FLOW_TOOLS_ENABLED ?? 'true') !== 'true' || !flowToolsEnabled) {
+      if (process.env.FLOW_TOOLS_ENABLED === 'false' || !flowToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -121,8 +121,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // getDefaultEnv() forwards an empty string when the write setting is unset.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Filter out content-mutating flow tools when explicitly disabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED === 'false') {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
@@ -300,7 +300,7 @@ describe('server', () => {
       }
 
       // Filter out flow tools unless both the env switch and the feature flag are on
-      if ((process.env.FLOW_TOOLS_ENABLED ?? 'true') !== 'true' || !flowToolsEnabled) {
+      if (process.env.FLOW_TOOLS_ENABLED === 'false' || !flowToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -327,8 +327,8 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // getDefaultEnv() forwards an empty string when the write setting is unset.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Filter out content-mutating flow tools when explicitly disabled.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED === 'false') {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),
         );

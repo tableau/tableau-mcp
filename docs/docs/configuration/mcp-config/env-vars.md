@@ -467,10 +467,11 @@ Controls the base setting for the Tableau Prep flow tool family. It applies to r
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- Leave unset to use the enabled default, or set to `false` to disable all flow tools.
-  When set, only the exact value `true` enables them.
-- This setting is necessary but not sufficient: the `flow-tools` feature flag must also be
-  enabled. It ships as `false` in `features.json`; deployments use it to control rollout per environment.
+- Set to the exact value `false` to disable all flow tools. Any other value, including unset
+  or empty, leaves this setting enabled.
+- The `flow-tools` feature flag must also be enabled. The default provider reads the bundled
+  `features.json`, where it ships as `false`, including for self-hosted deployments. A custom
+  provider can supply a different value.
 - The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled),
   which defaults to `true`.
 - When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
@@ -506,8 +507,8 @@ Enables admin-only tools that require site administrator permissions.
 Controls the content-**mutating** Tableau Prep flow run tools. A confirmed run consumes Tableau Prep Conductor capacity and can overwrite outputs. These tools still require a preview followed by explicit human approval and a matching single-use confirmation token.
 
 - Default: `true`
-- Leave unset to use the enabled default, or set to `false` to disable the mutating tools.
-  When set, only the exact value `true` enables them.
+- Set to the exact value `false` to disable the mutating tools. Any other value, including unset
+  or empty, leaves this setting enabled.
 - The base `FLOW_TOOLS_ENABLED` setting is also required. If `FLOW_TOOLS_ENABLED=false`, the
   mutating tools remain disabled even when this setting is `true`.
 - Applies to:

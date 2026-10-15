@@ -305,8 +305,8 @@ describe('Config', () => {
   it.each([
     ['true', true],
     ['false', false],
-    ['', false],
-    ['yes', false],
+    ['', true],
+    ['yes', true],
   ])('FLOW_TOOLS_ENABLED=%s sets flowToolsEnabled to %s', (value, expected) => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', value);
 
@@ -335,8 +335,8 @@ describe('Config', () => {
   it.each([
     ['true', true],
     ['false', false],
-    ['', false],
-    ['yes', false],
+    ['', true],
+    ['yes', true],
   ])('FLOW_WRITE_TOOLS_ENABLED=%s sets flowWriteToolsEnabled to %s', (value, expected) => {
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', value);
 
