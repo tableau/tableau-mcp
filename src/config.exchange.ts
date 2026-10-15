@@ -1,3 +1,6 @@
+import { homedir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
+
 import { BaseConfig } from './config.shared.js';
 import { ExchangeRuntimeOptions } from './exchange/types.js';
 
@@ -65,6 +68,10 @@ export class ExchangeConfig extends BaseConfig {
     const source = env.EXCHANGE_CATALOG_SOURCE ?? 'gallery-api';
     if (source !== 'gallery-api' && source !== 'declared-fixture')
       throw new Error('EXCHANGE_CATALOG_SOURCE must be gallery-api or declared-fixture.');
+    const downloadDir =
+      env.EXCHANGE_DOWNLOAD_DIR ?? join(homedir(), 'Downloads', 'tableau-exchange');
+    if (!isAbsolute(downloadDir))
+      throw new Error('EXCHANGE_DOWNLOAD_DIR must be an absolute path.');
     this.apiBaseUrl = url('GALLERY_API_BASE_URL');
     this.options = {
       webBaseUrl: url('EXCHANGE_WEB_BASE_URL'),
@@ -77,6 +84,7 @@ export class ExchangeConfig extends BaseConfig {
       maxPagesPerType: integer('MAX_CATALOG_PAGES_PER_TYPE', 100, 1, 100),
       maxCatalogAssets: integer('MAX_CATALOG_ASSETS', 10_000, 1, 10_000),
       detailCacheMaxEntries: integer('DETAIL_CACHE_MAX_ENTRIES', 500, 1, 500),
+      downloadDir,
     };
   }
 }

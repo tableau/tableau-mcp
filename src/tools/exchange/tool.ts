@@ -15,6 +15,14 @@ export const exchangeAnnotations: Required<ToolAnnotations> = {
   openWorldHint: true,
 };
 
+export const downloadAnnotations: Required<ToolAnnotations> = {
+  title: 'Download Tableau Exchange package',
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
 export class ExchangeTool<Args extends ZodRawShape> extends Tool<
   ExchangeMcpServer,
   ExchangeToolName,

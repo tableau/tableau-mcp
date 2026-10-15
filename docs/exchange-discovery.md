@@ -1,9 +1,10 @@
 # Tableau Exchange discovery
 
-The Exchange build provides read-only discovery of published Gallery catalog listings through four
-MCP tools. It supports AI Skills (`skill`), dashboard extensions (`extension`), viz extensions
-(`viz`), connectors (`connector`) and accelerators (`accelerator`). It runs over stdio independently
-of Tableau Server authentication and Tableau Desktop discovery.
+The Exchange build provides discovery of published Gallery catalog listings through four read-only
+MCP tools, plus one tool that downloads a listing's package file. It supports AI Skills (`skill`),
+dashboard extensions (`extension`), viz extensions (`viz`), connectors (`connector`) and
+accelerators (`accelerator`). It runs over stdio independently of Tableau Server authentication and
+Tableau Desktop discovery.
 
 ## Build and configuration
 
@@ -58,22 +59,50 @@ the environment you are using:
 | `get-exchange-asset`       | One positive integer `productId` returned by the catalog. Reads the listing and safe typed details; membership in the published catalog is required.                                                                                                                                                                        |
 | `compare-exchange-assets`  | Two to four distinct `productIds`, preserving input order. Compares reported listing metadata and leaves unknown values null.                                                                                                                                                                                               |
 | `list-exchange-categories` | Optional `assetType` and `tagType`. Returns canonical tags and asset counts with scope `published-used`; unused configured categories are omitted.                                                                                                                                                                          |
+| `download-exchange-asset`  | One catalog `productId`. Saves the listing's package to `EXCHANGE_DOWNLOAD_DIR/{id}/` and returns the path, size and SHA-256. Not read-only: it is annotated `readOnlyHint: false`, so clients ask before running it.                                                                                                       |
 
 Results contain `structuredContent` and readable text, each with `data` and `meta`. Metadata
 identifies the source, cache age, catalog size, partial/missing/stale product types and warnings.
 `Free` and `Viz Free` are different canonical tags even when their display labels both say Free. Use
 canonical names from the category tool as search filters.
 
-Catalog text is untrusted listing data. These tools do not download, install or execute assets.
-Current Gallery Skill details do not supply package versions, permissions, executable tools, model
-support, evaluations or verified compatibility: Skill `technicalMetadataStatus` is `unavailable`. A
-reported minimum Tableau version is a listing field, not a runtime compatibility certification.
-Connectors, accelerators and extensions may expose available allowlisted descriptive details;
-package manifests, signed download URLs and driver artifacts are excluded.
+Catalog text is untrusted listing data. No tool installs, opens or executes assets. Current Gallery
+Skill details do not supply package versions, permissions, executable tools, model support,
+evaluations or verified compatibility: Skill `technicalMetadataStatus` is `unavailable`. A reported
+minimum Tableau version is a listing field, not a runtime compatibility certification. Connectors,
+accelerators and extensions may expose available allowlisted descriptive details; package manifests,
+signed download URLs and driver artifacts are excluded.
 
 API discovery does not depend on the website feature flag. Skill listing links render only when the
 matching Exchange website enables `skillsExchange`; pointing to a different website or a website
 with the flag disabled does not establish that a Skill page works.
+
+## Downloads
+
+`download-exchange-asset` calls Gallery's existing anonymous route `POST /products/{id}:download`,
+the same one Exchange uses, which streams the file and records one download (a row in `download` and
+an incremented download count). The request is not retried, so a failure never counts twice.
+
+| Type                | Package   | Check before saving      |
+| ------------------- | --------- | ------------------------ |
+| Skill               | `.tskill` | ZIP signature            |
+| Dashboard extension | `.trex`   | XML `<manifest>` element |
+| Viz extension       | `.trex`   | XML `<manifest>` element |
+| Connector           | `.taco`   | ZIP signature            |
+| Accelerator         | `.twbx`   | ZIP signature            |
+
+- Only catalog members can be downloaded. Files are capped at 200 MB and saved as
+  `{id}/{listing-name}.{extension}`; the listing name is reduced to `a-z0-9-` and never chooses the
+  directory. A file that does not match its type's format is not saved.
+- Files go to `EXCHANGE_DOWNLOAD_DIR`, an absolute path that defaults to
+  `~/Downloads/tableau-exchange`. They are written to a `.part` file first, then renamed.
+- Each response includes `nextStep`, a fixed instruction for the package type (for example, open a
+  `.twbx` in Desktop or copy a `.taco` into `My Tableau Repository/Connectors`), plus the listing's
+  `installationInstructions` when Gallery has them (currently connectors only; Skill listing text
+  stays withheld with other Skill technical details).
+- The tool never opens, extracts, installs or runs a package. A `.trex` is a manifest pointing to
+  the publisher's hosted extension, and most connectors also need a database driver from the
+  publisher's site (`driver_download_url`), which is not downloaded.
 
 ## Declared fixture demo
 
@@ -119,9 +148,10 @@ listings use them; this does not prove that every category has a published listi
 environment. IDs, names, counts and links in this section are declared fixtures.
 
 The demo reads only `scripts/fixtures/exchange-products.json` and binds to loopback. It serves
-`GET /products`, `GET /products/{id}` and `GET /tags`, rejecting mutations and other routes. Its
-list responses use Gallery's `items` envelope and select the global type page before the community
-partition. The request history keeps only the last 1,000 requests. Stop the demo with Ctrl+C.
+`GET /products`, `GET /products/{id}`, `GET /tags` and `POST /products/{id}:download` (a generated
+`.tskill` for Skills, 404 for other types), rejecting other mutations and routes. Its list responses
+use Gallery's `items` envelope and select the global type page before the community partition. The
+request history keeps only the last 1,000 requests. Stop the demo with Ctrl+C.
 
 ### Catalog snapshot with seeded Skills
 
@@ -145,14 +175,18 @@ Then launch the MCP with `GALLERY_API_BASE_URL=http://127.0.0.1:3928/`,
 - Catalog files are reread when they change on disk, so adding a listing to the seed file
   "publishes" it at the next MCP catalog refresh (within `CATALOG_CACHE_TTL_SECONDS`).
 - Skill technical metadata stays `unavailable` by design until Gallery reports Skill details.
+- Downloads of snapshot listings are forwarded to the Gallery API recorded in the snapshot's
+  `snapshotOf` (dev in the example above), which returns the real file and records a download there.
+  Seeded Skills get a generated demo `.tskill`: a ZIP holding one `SKILL.md` built from the listing.
+  Other fixture listings have no file.
 
 ## Backend reuse, ranking and cache
 
-The MCP reuses the existing Gallery GET routes without new API endpoints or backend edits. It
-requests both community partitions at each page offset because `include_community` selects a
-partition. Digest `total` and `next` are not reliable completion signals; ingestion uses merged page
-cardinality, bounded pages/assets and duplicate/no-progress guards. Catalog members gate detail
-reads.
+The MCP reuses existing Gallery routes (catalog GETs and the download POST) without new API
+endpoints or backend edits. It requests both community partitions at each page offset because
+`include_community` selects a partition. Digest `total` and `next` are not reliable completion
+signals; ingestion uses merged page cardinality, bounded pages/assets and duplicate/no-progress
+guards. Catalog members gate detail reads.
 
 Normalization, hard filters, stable weighted text scores, factual match reasons and caching reside
 in MCP. Results sort by score, downloads, normalized name and numeric ID.
@@ -181,15 +215,16 @@ The process-memory catalog loads when the server starts and refreshes in the bac
 bounded cache. Failed refreshes may retain prior data with explicit stale/partial metadata; no
 persistent cache is required.
 
-| Setting                      | Default | Allowed range |
-| ---------------------------- | ------- | ------------- |
-| `CATALOG_CACHE_TTL_SECONDS`  | 300     | 1–3,600       |
-| `GALLERY_API_TIMEOUT_MS`     | 5,000   | 1–60,000      |
-| `PRODUCT_PAGE_SIZE`          | 1,000   | 2–1,000       |
-| `MAX_SEARCH_RESULTS`         | 10      | 1–10          |
-| `MAX_CATALOG_PAGES_PER_TYPE` | 100     | 1–100         |
-| `MAX_CATALOG_ASSETS`         | 10,000  | 1–10,000      |
-| `DETAIL_CACHE_MAX_ENTRIES`   | 500     | 1–500         |
+| Setting                      | Default                        | Allowed range |
+| ---------------------------- | ------------------------------ | ------------- |
+| `CATALOG_CACHE_TTL_SECONDS`  | 300                            | 1–3,600       |
+| `GALLERY_API_TIMEOUT_MS`     | 5,000                          | 1–60,000      |
+| `PRODUCT_PAGE_SIZE`          | 1,000                          | 2–1,000       |
+| `MAX_SEARCH_RESULTS`         | 10                             | 1–10          |
+| `MAX_CATALOG_PAGES_PER_TYPE` | 100                            | 1–100         |
+| `MAX_CATALOG_ASSETS`         | 10,000                         | 1–10,000      |
+| `DETAIL_CACHE_MAX_ENTRIES`   | 500                            | 1–500         |
+| `EXCHANGE_DOWNLOAD_DIR`      | `~/Downloads/tableau-exchange` | Absolute path |
 
 The fixture path demonstrates the local contract and MCP interoperability. A live Gallery run,
 published Skill census, matching website rendering and selected Agent client smoke require separate

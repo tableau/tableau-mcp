@@ -58,6 +58,7 @@ export interface ExchangeRuntimeOptions {
   maxCatalogAssets: number;
   detailCacheMaxEntries: number;
   source: 'gallery-api' | 'declared-fixture';
+  downloadDir: string;
 }
 
 export interface SearchInput {
@@ -99,6 +100,19 @@ export interface CompareData {
 export interface FacetData {
   scope: 'published-used';
   groups: Array<{ type: string; tags: Array<ExchangeTag & { assetCount: number }> }>;
+}
+
+export interface DownloadData {
+  productId: number;
+  type: AssetType;
+  name: string;
+  fileName: string;
+  path: string;
+  bytes: number;
+  sha256: string;
+  listingUrl: string;
+  nextStep: string;
+  installationInstructions?: string;
 }
 
 export interface CatalogMeta {

@@ -135,3 +135,20 @@ export const categoryOutputSchema = {
     .strict(),
   meta: metaSchema,
 };
+export const downloadOutputSchema = {
+  data: z
+    .object({
+      productId: z.number().int().positive(),
+      type: assetTypeSchema,
+      name: z.string(),
+      fileName: z.string(),
+      path: z.string(),
+      bytes: z.number().int().nonnegative(),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      listingUrl: z.string().url(),
+      nextStep: z.string(),
+      installationInstructions: z.string().max(20_000).optional(),
+    })
+    .strict(),
+  meta: metaSchema,
+};
