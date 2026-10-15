@@ -264,6 +264,39 @@ describe('buildAuthConfig uat outer-token username', () => {
   });
 });
 
+describe('buildAuthConfig external authorization server identity', () => {
+  it.each(['direct-trust', 'uat'] as const)(
+    'uses the external username as the %s username (the JWT sub)',
+    (auth) => {
+      const extra = getMockRequestHandlerExtra();
+      extra.config.auth = auth;
+      extra.config.siteName = 'test-site';
+      extra.config.jwtUsername = '{OAUTH_USERNAME}';
+      extra.config.connectedAppClientId = 'client-id';
+      extra.config.connectedAppSecretId = 'secret-id';
+      extra.config.connectedAppSecretValue = 'secret';
+
+      // The shape ExternalAccessTokenValidator produces: no user, site, or Tableau token.
+      const result = buildAuthConfig({
+        config: extra.config,
+        tableauAuthInfo: {
+          type: 'X-Tableau-Auth',
+          username: 'jdoe@example.com',
+          server: extra.config.server,
+          siteName: extra.config.siteName,
+        },
+        scopes: new Set(['tableau:content:read']),
+      });
+
+      expect(result).toMatchObject({
+        type: auth,
+        siteName: 'test-site',
+        username: 'jdoe@example.com',
+      });
+    },
+  );
+});
+
 describe('buildAuthConfig {OAUTH_USERNAME} substitution is literal', () => {
   function buildDirectTrust({
     username,

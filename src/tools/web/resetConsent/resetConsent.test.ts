@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { WebMcpServer } from '../../../server.web.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -55,6 +56,26 @@ describe('resetConsentTool', () => {
       vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
       const tool = getResetConsentTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
+    });
+
+    describe('with an external authorization server', () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+        stubDefaultEnvVars();
+      });
+
+      it('should be disabled when an external authorization server is configured', async () => {
+        vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+        vi.stubEnv('AUTH', 'direct-trust');
+        vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
+        const tool = getResetConsentTool(new WebMcpServer());
+        expect(await Provider.from(tool.disabled)).toBe(true);
+      });
     });
   });
 

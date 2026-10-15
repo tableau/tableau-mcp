@@ -660,6 +660,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
+      external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -680,6 +681,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
+        external: null,
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -918,6 +920,191 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
+
+    describe('external authorization server', () => {
+      function stubExternalEnvVars(): void {
+        vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+        vi.stubEnv('AUTH', 'direct-trust');
+        vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'client-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_ID', 'secret-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'secret-value');
+      }
+
+      function stubIntrospectionEnvVars(): void {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', '');
+        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_URI', 'https://idp.example.com/introspect');
+        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID', 'mcp-resource-server');
+        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET', 'introspection-secret');
+      }
+
+      const enableError =
+        'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"';
+      const authError =
+        'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI is set, AUTH must be "direct-trust" or "uat"';
+
+      it('parses a JWKS configuration with the default username claim', () => {
+        stubExternalEnvVars();
+
+        expect(new Config().oauth.external).toEqual({
+          jwksUri: 'https://idp.example.com/keys',
+          introspectionUri: '',
+          introspectionClientId: '',
+          introspectionClientSecret: '',
+          usernameClaimName: 'sub',
+        });
+      });
+
+      it('parses an introspection configuration with a custom username claim', () => {
+        stubIntrospectionEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
+
+        expect(new Config().oauth.external).toEqual({
+          jwksUri: '',
+          introspectionUri: 'https://idp.example.com/introspect',
+          introspectionClientId: 'mcp-resource-server',
+          introspectionClientSecret: 'introspection-secret',
+          usernameClaimName: 'tableau_username',
+        });
+      });
+
+      it.each([
+        ['   ', 'sub'],
+        [' tableau_username ', 'tableau_username'],
+      ])('trims OAUTH_EXTERNAL_USERNAME_CLAIM_NAME %j to %j', (claimName, expected) => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', claimName);
+
+        expect(new Config().oauth.external?.usernameClaimName).toBe(expected);
+      });
+
+      it('accepts AUTH "uat" when UAT_USERNAME_CLAIM contains {OAUTH_USERNAME}', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('AUTH', 'uat');
+        vi.stubEnv('JWT_SUB_CLAIM', '');
+        vi.stubEnv('UAT_TENANT_ID', 'tenant-id');
+        vi.stubEnv('UAT_ISSUER', 'uat-issuer');
+        vi.stubEnv('UAT_USERNAME_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('UAT_PRIVATE_KEY', 'private-key');
+
+        expect(new Config().oauth.external?.jwksUri).toBe('https://idp.example.com/keys');
+      });
+
+      it.each(['http://localhost:8080/keys', 'http://127.0.0.1/keys', 'http://[::1]:8080/keys'])(
+        'allows http for the loopback URI %s',
+        (uri) => {
+          stubExternalEnvVars();
+          vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', uri);
+
+          expect(new Config().oauth.external?.jwksUri).toBe(uri);
+        },
+      );
+
+      it('throws when OAUTH_ISSUER is not set', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_ISSUER', '');
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it('throws when DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it('throws when OAUTH_EMBEDDED_AUTHZ_SERVER is not "false"', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', undefined);
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it.each([
+        [
+          'neither URI is set',
+          { OAUTH_EXTERNAL_JWKS_URI: '', OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: 'sub' },
+        ],
+        [
+          'both URIs are set',
+          { OAUTH_EXTERNAL_INTROSPECTION_URI: 'https://idp.example.com/introspect' },
+        ],
+      ])('throws when %s', (_, env) => {
+        stubExternalEnvVars();
+        Object.entries(env).forEach(([name, value]) => vi.stubEnv(name, value));
+
+        expect(() => new Config()).toThrow(
+          'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI must be set',
+        );
+      });
+
+      it.each([
+        'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID',
+        'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET',
+      ])('throws when %s is missing for introspection', (name) => {
+        stubIntrospectionEnvVars();
+        vi.stubEnv(name, '');
+
+        expect(() => new Config()).toThrow(
+          'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID and OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET must be set when OAUTH_EXTERNAL_INTROSPECTION_URI is set',
+        );
+      });
+
+      it.each([
+        ['OAUTH_EXTERNAL_JWKS_URI', stubExternalEnvVars],
+        ['OAUTH_EXTERNAL_INTROSPECTION_URI', stubIntrospectionEnvVars],
+      ])('throws when %s uses http on a non-loopback host', (name, stub) => {
+        stub();
+        vi.stubEnv(name, 'http://idp.example.com/endpoint');
+
+        expect(() => new Config()).toThrow(
+          `The environment variable ${name} must use https unless its host is loopback`,
+        );
+      });
+
+      it('throws when OAUTH_EXTERNAL_JWKS_URI is not a valid URL', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'not a url');
+
+        expect(() => new Config()).toThrow(
+          'The environment variable OAUTH_EXTERNAL_JWKS_URI is not a valid URL',
+        );
+      });
+
+      it.each([
+        ['"oauth"', 'oauth'],
+        ['"pat"', 'pat'],
+        ['unset (defaults to "oauth")', undefined],
+      ])('throws when AUTH is %s', (_, auth) => {
+        stubExternalEnvVars();
+        vi.stubEnv('AUTH', auth);
+
+        expect(() => new Config()).toThrow(authError);
+      });
+
+      it('throws when JWT_SUB_CLAIM does not contain {OAUTH_USERNAME} for direct-trust', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('JWT_SUB_CLAIM', 'shared-user@example.com');
+
+        expect(() => new Config()).toThrow(
+          'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
+        );
+      });
+
+      it('throws when UAT_USERNAME_CLAIM does not contain {OAUTH_USERNAME} for uat', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('AUTH', 'uat');
+        vi.stubEnv('UAT_USERNAME_CLAIM', 'shared-user@example.com');
+
+        expect(() => new Config()).toThrow(
+          'When OAUTH_EXTERNAL_* is set and AUTH is "uat", UAT_USERNAME_CLAIM (or JWT_SUB_CLAIM) must contain {OAUTH_USERNAME}',
+        );
+      });
     });
   });
 

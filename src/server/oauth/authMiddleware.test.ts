@@ -1,8 +1,9 @@
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
 import { stubDefaultEnvVars } from '../../testShared.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
-import { AccessTokenValidator } from './accessTokenValidator.js';
+import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
 import { getSupportedScopes, PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -203,6 +204,80 @@ describe('initialize with optional post-publish permission disclosure', () => {
         expect(res.headers['WWW-Authenticate']).not.toContain(
           PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE,
         );
+      }
+    },
+  );
+});
+
+describe('external authorization server token scopes', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('AUTH', 'direct-trust');
+    vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+    vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
+    vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+    vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+    vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  it.each([
+    [['openid', 'profile'], false],
+    [['openid', 'tableau:mcp:datasource:read'], true],
+  ])(
+    'checks tableau:mcp:datasource:read on an external token with scopes %j',
+    async (scopes, authorized) => {
+      const { privateKey, publicKey } = await generateKeyPair('RS256');
+      const getKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(publicKey)), alg: 'RS256' }],
+      });
+      const token = await new SignJWT({
+        aud: 'https://mcp.example.com/tableau-mcp',
+        client_id: 'mcp-client',
+        scope: scopes.join(' '),
+        sub: 'jdoe@example.com',
+      })
+        .setProtectedHeader({ alg: 'RS256', typ: 'at+jwt' })
+        .setIssuer('https://idp.example.com')
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(privateKey);
+      const middleware = authMiddleware(new ExternalAccessTokenValidator({ getKey }));
+      const req = {
+        headers: { authorization: `Bearer ${token}` },
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'list-datasources', arguments: {} },
+        },
+      } as unknown as AuthenticatedRequest;
+      const res = makeRes();
+      const next = vi.fn();
+
+      await middleware(req, res, next);
+
+      if (authorized) {
+        expect(next).toHaveBeenCalledOnce();
+        expect(req.auth?.extra).toMatchObject({
+          type: 'X-Tableau-Auth',
+          username: 'jdoe@example.com',
+        });
+        expect(res.statusCode).toBeUndefined();
+      } else {
+        expect(next).not.toHaveBeenCalled();
+        expect(res.statusCode).toBe(403);
+        expect(res.body.error).toBe('insufficient_scope');
+        expect(res.headers['WWW-Authenticate']).toContain('scope="tableau:mcp:datasource:read"');
       }
     },
   );
