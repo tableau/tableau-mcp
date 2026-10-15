@@ -14,6 +14,8 @@
 export const TEMPLATE_ROOT_DIRNAME = 'Data App Name';
 export const TEMPLATE_TWB_FILENAME = 'Data App Name.twb';
 export const TEMPLATE_PACKAGE_DIRNAME = 'TODO-MANIFEST-ID';
+/** Root-level folder for agent context docs; ships with only a README and needs no edits. */
+export const AGENT_DOCS_DIRNAME = '.agents';
 
 /** POSIX paths (relative to the template root dir) of the files carrying identity tokens. */
 export const TWB_RELPATH = TEMPLATE_TWB_FILENAME;
@@ -70,6 +72,13 @@ export interface PostUnzipPlan {
 export interface RequestedOriginsGuide {
   /** The finalized manifest.json, relative to the unzip directory (i.e. after `postUnzip`). */
   file: string;
+  instructions: string;
+}
+
+/** Where the app's agent context docs live once the workspace is finalized. */
+export interface AgentDocsGuide {
+  /** The finalized `.agents` folder, relative to the unzip directory (i.e. after `postUnzip`). */
+  dir: string;
   instructions: string;
 }
 
@@ -196,5 +205,17 @@ export function buildRequestedOriginsGuide(identity: DataAppIdentity): Requested
     file: `${identity.displayName}/Packages/${identity.packageId}/manifest.json`,
     instructions:
       '`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. "https://api.example.com https://cdn.example.com"). Each one should also be in `allowedOrigins`.',
+  };
+}
+
+/**
+ * Pointer to the workspace's `.agents/` folder, returned beside `requestedOrigins` for the same
+ * reason: it's authoring guidance, not part of the mechanical finalize step.
+ */
+export function buildAgentDocsGuide(identity: DataAppIdentity): AgentDocsGuide {
+  return {
+    dir: `${identity.displayName}/${AGENT_DOCS_DIRNAME}`,
+    instructions:
+      'Read README.md in this folder for how to keep spec, design, and memory docs here; they ship inside the packaged .twbx, so include this folder when packaging.',
   };
 }

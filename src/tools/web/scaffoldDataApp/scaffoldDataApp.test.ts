@@ -165,6 +165,7 @@ describe('getScaffoldDataAppTool', () => {
       expect(payload.requestedOrigins.file).toBe(
         'Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json',
       );
+      expect(payload.agentDocs.dir).toBe('Sales Demo/.agents');
     });
 
     it('includes allowedOrigins when the site policy is empty', async () => {

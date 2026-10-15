@@ -1,4 +1,5 @@
 import {
+  buildAgentDocsGuide,
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
   buildTextReplacements,
@@ -150,5 +151,25 @@ describe('buildRequestedOriginsGuide', () => {
     const { instructions } = buildRequestedOriginsGuide(deriveIdentity('Sales Demo'));
     expect(instructions).toContain('space-separated');
     expect(instructions).toContain('allowedOrigins');
+  });
+});
+
+describe('buildAgentDocsGuide', () => {
+  it('points at the .agents folder under the renamed root, which no rename touches', () => {
+    const identity = deriveIdentity('Sales Demo');
+    const guide = buildAgentDocsGuide(identity);
+
+    expect(guide.dir).toBe('Sales Demo/.agents');
+    let finalized = 'Data App Name/.agents';
+    for (const { from, to } of buildPostUnzipPlan(identity).renames) {
+      if (finalized.startsWith(`${from}/`)) finalized = to + finalized.slice(from.length);
+    }
+    expect(finalized).toBe(guide.dir);
+  });
+
+  it('points agents at the README and reminds them to package the folder', () => {
+    const { instructions } = buildAgentDocsGuide(deriveIdentity('Sales Demo'));
+    expect(instructions).toContain('README.md');
+    expect(instructions).toContain('.twbx');
   });
 });

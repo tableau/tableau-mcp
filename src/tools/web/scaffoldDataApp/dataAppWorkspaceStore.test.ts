@@ -11,6 +11,7 @@ import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
 import {
+  buildAgentDocsGuide,
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
   deriveIdentity,
@@ -65,6 +66,7 @@ describe('createDataAppWorkspace', () => {
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
+      expect(value.agentDocs).toEqual(buildAgentDocsGuide(deriveIdentity('Sales Demo')));
       invariant(value.filePath);
       expect(existsSync(value.filePath)).toBe(true);
       expect(statSync(value.filePath).size).toBeGreaterThan(0);
@@ -165,6 +167,13 @@ describe('createDataAppWorkspace', () => {
         expect(existsSync(libPath)).toBe(true);
         expect(statSync(libPath).size).toBe(291737);
 
+        // The .agents/ README ships at the template root (dot-folders survive archiving), so the
+        // root rename alone lands it at `<displayName>/.agents/README.md`.
+        const agentsReadme = await readFile(join(root, '.agents', 'README.md'), 'utf8');
+        expect(agentsReadme).toContain('spec.md');
+        expect(agentsReadme).toContain('Never put secrets here');
+        expect(agentsReadme).not.toContain('TODO');
+
         // Starter app.js left untouched with its authoring marker.
         const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
         expect(appJs).toContain('AUTHOR YOUR APP HERE');
@@ -201,6 +210,7 @@ describe('createDataAppWorkspace', () => {
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
+      expect(value.agentDocs).toEqual(buildAgentDocsGuide(deriveIdentity('Sales Demo')));
 
       // The server uploads its own build artifact fresh: exactly one PutObjectCommand carrying the
       // real on-disk template bytes under a fixed, prefix-namespaced key.
