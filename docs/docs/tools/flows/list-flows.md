@@ -1,10 +1,13 @@
 ---
-sidebar_position: 1
+sidebar_position: 4
 ---
 
 # List Flows
 
 Retrieves a list of Tableau Prep flows on a site.
+
+Only published flows are returned. Flow drafts are excluded, so Tableau's flow page may show a
+higher count.
 
 ## APIs called
 
