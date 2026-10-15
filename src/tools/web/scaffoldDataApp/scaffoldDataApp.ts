@@ -12,9 +12,9 @@ import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
 
-// Data apps are hosted extension packages, which Tableau can only host on 2026.3.1+.
+// Data apps are hosted extension packages, which Tableau can only host on 2026.3.0+.
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
+const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.0';
 
 const paramsSchema = {
   datappName: z
