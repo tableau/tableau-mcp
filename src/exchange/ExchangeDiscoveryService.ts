@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -217,6 +217,15 @@ export class ExchangeDiscoveryService {
           throw new ExchangeDownloadError(
             `The file exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB download size limit.`,
           );
+        // Gallery records a download only once the file is served, so a failure here never counted.
+        if (error instanceof GalleryApiClientError && error.kind === 'unavailable')
+          throw new ExchangeDownloadError(
+            "The Exchange couldn't provide this listing's file right now; nothing was saved. Retry later.",
+          );
+        if (error instanceof GalleryApiClientError && error.kind === 'invalid-response')
+          throw new ExchangeDownloadError(
+            'The Exchange returned an unexpected response for this file; nothing was saved.',
+          );
         throw error;
       }
       if (!format.matches(file))
@@ -228,9 +237,11 @@ export class ExchangeDiscoveryService {
       const path = join(directory, fileName);
       await mkdir(directory, { recursive: true });
       // Write beside the target and rename so an interrupted write never leaves a partial package.
-      const partial = `${path}.part`;
+      // A unique, exclusively created name never follows a planted symlink or collides with a
+      // concurrent download of the same listing.
+      const partial = `${path}.${randomUUID()}.part`;
       try {
-        await writeFile(partial, file);
+        await writeFile(partial, file, { flag: 'wx' });
         await rename(partial, path);
       } catch (error) {
         await rm(partial, { force: true });

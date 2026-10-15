@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -393,6 +393,28 @@ describe('ExchangeDiscoveryService', () => {
       expect(download).not.toHaveBeenCalled();
     });
 
+    it('does not write through a symlink planted at the temporary file name', async () => {
+      const { service } = downloadSetup(zip);
+      const outside = join(downloadDir, 'outside.txt');
+      await writeFile(outside, 'untouched');
+      await mkdir(join(downloadDir, '1'));
+      await symlink(outside, join(downloadDir, '1', 'workbook-skill-1.tskill.part'));
+      (await service.download({ productId: 1 })).unwrap();
+      expect(await readFile(outside, 'utf8')).toBe('untouched');
+      expect(await readFile(join(downloadDir, '1', 'workbook-skill-1.tskill'))).toEqual(zip);
+    });
+
+    it('lets concurrent downloads of the same listing each finish with an intact file', async () => {
+      const { service } = downloadSetup(zip);
+      const results = await Promise.all([
+        service.download({ productId: 1 }),
+        service.download({ productId: 1 }),
+      ]);
+      expect(results.every((result) => result.isOk())).toBe(true);
+      expect(await readFile(join(downloadDir, '1', 'workbook-skill-1.tskill'))).toEqual(zip);
+      expect(await readdir(join(downloadDir, '1'))).toEqual(['workbook-skill-1.tskill']);
+    });
+
     it('refuses to save a file that is not the package format for its type', async () => {
       const { service } = downloadSetup(Buffer.from('<html>login</html>'));
       const error = (await service.download({ productId: 1 })).unwrapErr();
@@ -404,6 +426,8 @@ describe('ExchangeDiscoveryService', () => {
     it.each([
       [new GalleryApiClientError('not-found'), 'no downloadable file'],
       [new GalleryApiClientError('too-large'), 'size limit'],
+      [new GalleryApiClientError('unavailable'), "couldn't provide this listing's file"],
+      [new GalleryApiClientError('invalid-response'), 'unexpected response for this file'],
     ])('explains a %s download failure', async (failure, message) => {
       const { service } = downloadSetup(failure);
       const error = (await service.download({ productId: 1 })).unwrapErr();
