@@ -601,10 +601,9 @@ describe('runDashboardBatchTool', () => {
   });
 
   describe('same-field shelf reorder readback (W-24366132)', () => {
-    const ROWS =
-      '<rows>[Sample - Superstore].[none:A:nk] / [Sample - Superstore].[none:B:nk]</rows>';
+    const ROWS = '<rows>[Sample - Superstore].[sum:A:qk] + [Sample - Superstore].[sum:B:qk]</rows>';
     const SWAPPED =
-      '<rows>[Sample - Superstore].[none:B:nk] / [Sample - Superstore].[none:A:nk]</rows>';
+      '<rows>[Sample - Superstore].[sum:B:qk] + [Sample - Superstore].[sum:A:qk]</rows>';
     const worksheetXmls = { a1: `<worksheet name="New A"><table>${ROWS}</table></worksheet>` };
 
     it('keeps polling past a transient reordered read and reports a passed worksheet', async () => {

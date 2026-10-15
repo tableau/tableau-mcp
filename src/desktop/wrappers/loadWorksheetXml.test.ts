@@ -1852,17 +1852,18 @@ describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
   });
 
   describe('shelf reorder warnings (W-24366132)', () => {
-    const CITY = '[DS].[none:City:nk]';
+    const PROFIT = '[DS].[sum:Profit:qk]';
+    const SALES = '[DS].[sum:Sales:qk]';
     const reorderable = (rows: string): { xml: string } => ({
       xml: `<workbook><worksheets><worksheet name="Blank Map"><table><rows>${rows}</rows></table></worksheet></worksheets></workbook>`,
     });
-    const intendedRows = `${GEO} / ${CITY}`;
+    const intendedRows = `${SALES} + ${PROFIT}`;
     const intended = `<worksheet name="Blank Map"><table><rows>${intendedRows}</rows></table></worksheet>`;
 
     it('keeps polling past a same-field reorder and passes once the apply settles', async () => {
       const getWorksheetDocument = vi
         .fn()
-        .mockResolvedValueOnce(Ok(reorderable(`${CITY} / ${GEO}`)))
+        .mockResolvedValueOnce(Ok(reorderable(`${PROFIT} + ${SALES}`)))
         .mockResolvedValue(Ok(reorderable(intendedRows)));
       const executor = makeExecutorMock({
         listWorksheets: vi.fn().mockResolvedValue(listOk()),
@@ -1883,7 +1884,9 @@ describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
     it('reports a durable same-field reorder as a warning after exhausting the poll budget', async () => {
       vi.useFakeTimers();
       try {
-        const getWorksheetDocument = vi.fn().mockResolvedValue(Ok(reorderable(`${CITY} / ${GEO}`)));
+        const getWorksheetDocument = vi
+          .fn()
+          .mockResolvedValue(Ok(reorderable(`${PROFIT} + ${SALES}`)));
         const executor = makeExecutorMock({
           listWorksheets: vi.fn().mockResolvedValue(listOk()),
           getWorksheetDocument,

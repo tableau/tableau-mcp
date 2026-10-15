@@ -429,72 +429,30 @@ function sortRelated(a: SortSignature, b: SortSignature): boolean {
   return a.tag === b.tag && a.column === b.column;
 }
 
-interface ShelfPill {
-  /** Datasource plus underlying column, so derivation and type-suffix changes still match. */
-  field: string;
-  derivation: string;
-  column: string;
-  /** 'q' for qk, 'c' for nk/ok; null when the suffix is not recognized. */
-  klass: 'q' | 'c' | null;
-}
-
-/** Parses "[ds].[deriv:Column:suffix]"; null when the pill is not a plain column instance. */
-function parseShelfPill(pill: string): ShelfPill | null {
-  const m = /^(\[(?:[^\]]|\]\])+\])\.\[([^:\]]+):(.+):([a-z]{2})\]$/.exec(pill.trim());
-  if (!m) return null;
-  const [, datasource, derivation, column, suffix] = m;
-  const klass = suffix === 'qk' ? 'q' : suffix === 'nk' || suffix === 'ok' ? 'c' : null;
-  return { field: `${datasource}|${column}`, derivation, column, klass };
+/** True for a plain quantitative column instance such as "[ds].[sum:Sales:qk]". */
+function isQuantitativePill(pill: string): boolean {
+  return /^\[(?:[^\]]|\]\])+\]\.\[[^:\]]+:.+:qk\]$/.test(pill.trim());
 }
 
 /**
- * W-24366132: a shelf mismatch is only a warning when Tableau kept the same fields and the
- * quantitative/categorical sequence, because a changed sequence changes the chart type.
+ * W-24366132: the only shelf change downgraded to a warning is a pure reorder of quantitative
+ * pills on a shared axis ("a + b"). Any other reorder changes nesting or pane order, and a
+ * derivation change alters the numbers shown.
  */
-function isBenignShelfChange(intendedShelf: string[], readbackShelf: string[]): boolean {
-  // Shared-axis pills ("[a] + [b]") arrive as one shelf entry, so compare their members.
-  const splitSharedAxis = (pills: string[]): string[] =>
-    pills.flatMap((pill) => pill.split(/(?<=\])\s*\+\s*(?=\[)/));
-  const intendedPills = splitSharedAxis(intendedShelf);
-  const readbackPills = splitSharedAxis(readbackShelf);
-  if (readbackPills.length === 0 || intendedPills.length !== readbackPills.length) return false;
-  const intendedParsed = intendedPills.map(parseShelfPill);
-  const readbackParsed = readbackPills.map(parseShelfPill);
-  if (intendedParsed.includes(null) || readbackParsed.includes(null)) return false;
-  const intendedFields = intendedParsed.map((pill) => pill!.field).sort();
-  const readbackFields = readbackParsed.map((pill) => pill!.field).sort();
-  if (intendedFields.some((field, i) => field !== readbackFields[i])) return false;
-
-  const intendedSet = new Set(intendedPills);
-  const looksUnresolved = readbackPills.some((raw, i) => {
-    const pill = readbackParsed[i]!;
-    return (
-      !intendedSet.has(raw) &&
-      (pill.derivation.toLowerCase() === 'none' || pill.column.startsWith('Calculation_'))
-    );
-  });
-  if (looksUnresolved) return false;
-
-  // Pairing class with field catches a swap that keeps the positional q/c sequence intact.
-  const classesByField = (pills: Array<ShelfPill | null>): Map<string, string> => {
-    const grouped = new Map<string, string[]>();
-    for (const pill of pills) {
-      grouped.set(pill!.field, [...(grouped.get(pill!.field) ?? []), pill!.klass ?? '?']);
-    }
-    return new Map([...grouped].map(([field, classes]) => [field, classes.sort().join(',')]));
-  };
-  const intendedClasses = classesByField(intendedParsed);
-  const readbackClasses = classesByField(readbackParsed);
-  const fieldClassesMatch = [...intendedClasses].every(
-    ([field, classes]) => !classes.includes('?') && readbackClasses.get(field) === classes,
-  );
-  return (
-    fieldClassesMatch && intendedParsed.every((pill, i) => pill!.klass === readbackParsed[i]!.klass)
-  );
-}
-
-function shelfSeverity(intendedPills: string[], readbackPills: string[]): ReadbackFindingSeverity {
-  return isBenignShelfChange(intendedPills, readbackPills) ? 'warning' : 'error';
+function shelfSeverity(
+  intended: WorksheetSignature,
+  readback: WorksheetSignature,
+  shelf: 'rows' | 'cols',
+): ReadbackFindingSeverity {
+  const intendedPills = intended.shelves[shelf];
+  const readbackPills = readback.shelves[shelf];
+  const sharedAxis =
+    intended.shelfShapes[shelf] === readback.shelfShapes[shelf] &&
+    intended.shelfShapes[shelf].startsWith('+(');
+  const sameMembers =
+    intendedPills.length === readbackPills.length &&
+    [...intendedPills].sort().join('\n') === [...readbackPills].sort().join('\n');
+  return sharedAxis && sameMembers && intendedPills.every(isQuantitativePill) ? 'warning' : 'error';
 }
 
 /** W-24366132: only a categorical filter that survived with the same context and different members. */
@@ -598,7 +556,7 @@ export function verifyWorksheetReadback(
         column: value,
         intended: value,
         readback: readbackPills.length > 0 ? 'changed' : 'missing',
-        severity: shelfSeverity(intendedPills, readbackPills),
+        severity: shelfSeverity(intended, readback, shelf),
       });
     }
   }

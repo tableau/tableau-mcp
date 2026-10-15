@@ -473,8 +473,8 @@ describe('format-worksheets tool', () => {
 
   it('returns a persistent same-field shelf reorder as a readback warning instead of failing', async () => {
     const ds = '[Sample - Superstore]';
-    const intendedRows = `<rows>${ds}.[none:Category:nk] / ${ds}.[none:Region:nk]</rows>`;
-    const swappedRows = `<rows>${ds}.[none:Region:nk] / ${ds}.[none:Category:nk]</rows>`;
+    const intendedRows = `<rows>${ds}.[sum:Sales:qk] + ${ds}.[sum:Profit:qk]</rows>`;
+    const swappedRows = `<rows>${ds}.[sum:Profit:qk] + ${ds}.[sum:Sales:qk]</rows>`;
     vi.useFakeTimers();
     const resultPromise = callTool(
       { worksheets: [{ name: 'Sales by Category', showLabels: true }] },

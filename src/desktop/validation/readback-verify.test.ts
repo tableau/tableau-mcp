@@ -244,7 +244,7 @@ describe('verifyWorksheetReadback', () => {
     });
   });
 
-  it('downgrades a grouped readback whose same-class nested pills were reordered to a warning', () => {
+  it('keeps a grouped readback whose nested categorical pills were reordered as an error', () => {
     const group = '[DS].[none:group:nk]';
     const country = '[DS].[none:country:nk]';
     const intended = encodedWorksheet().replace(
@@ -266,7 +266,7 @@ describe('verifyWorksheetReadback', () => {
       column: group,
       intended: group,
       readback: 'changed',
-      severity: 'warning',
+      severity: 'error',
     });
   });
 
@@ -627,28 +627,58 @@ describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
       .filter((f) => f.kind === 'shelf')
       .map((f) => f.severity);
 
-  it('warns when the same categorical fields are reordered', () => {
-    expect(severities(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`)).toEqual([
-      'warning',
-      'warning',
-    ]);
-  });
-
-  it('warns on a reordered cols shelf as well', () => {
-    expect(severities(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`, 'cols')).toEqual([
-      'warning',
-      'warning',
-    ]);
-  });
-
-  it('warns when the derivation changes but the field and class are the same', () => {
-    expect(severities(SALES_FIELD, '[DS].[avg:Sales:qk]')).toEqual(['warning']);
-  });
-
   it('warns when two quantitative fields on a shared axis are reordered', () => {
     expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} + ${SALES_FIELD}`)).toEqual([
       'warning',
+      'warning',
     ]);
+  });
+
+  it('warns on a reordered shared axis on the cols shelf as well', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} + ${SALES_FIELD}`, 'cols')).toEqual([
+      'warning',
+      'warning',
+    ]);
+  });
+
+  it('keeps a datasource name containing a dot in the pill match', () => {
+    expect(
+      severities(
+        '[My.DS].[sum:A:qk] + [My.DS].[sum:B:qk]',
+        '[My.DS].[sum:B:qk] + [My.DS].[sum:A:qk]',
+      ),
+    ).toEqual(['warning', 'warning']);
+  });
+
+  it('errors when categorical fields are reordered, since the order sets the nesting', () => {
+    expect(severities(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when quantitative fields on separate panes are reordered', () => {
+    expect(severities(`${SALES_FIELD} / ${PROFIT}`, `${PROFIT} / ${SALES_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when a shared-axis reorder comes with an operator change', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} * ${SALES_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when a derivation changes, even on a shared axis', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `[DS].[avg:Sales:qk] + ${PROFIT}`)).toEqual([
+      'error',
+    ]);
+  });
+
+  it('errors when a derivation changes on a single pill', () => {
+    expect(severities(SALES_FIELD, '[DS].[avg:Sales:qk]')).toEqual(['error']);
   });
 
   it('errors when a field is dropped from the shelf', () => {
@@ -673,36 +703,6 @@ describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
       'error',
       'error',
     ]);
-  });
-
-  it('errors when a field changes between quantitative and categorical', () => {
-    expect(severities(SALES_FIELD, '[DS].[none:Sales:nk]')).toEqual(['error']);
-  });
-
-  it('errors when classes are swapped between fields but the positional sequence is unchanged', () => {
-    expect(
-      severities(
-        '[DS].[none:Region:nk] / [DS].[sum:Sales:qk]',
-        '[DS].[attr:Sales:nk] / [DS].[cnt:Region:qk]',
-      ),
-    ).toEqual(['error', 'error']);
-  });
-
-  it('errors when the readback pill is a none-derivation reference absent from the intended shelf', () => {
-    expect(severities(SALES_FIELD, '[DS].[none:Sales:qk]')).toEqual(['error']);
-  });
-
-  it('errors when the readback pill has the same field but an unparseable form', () => {
-    expect(severities(SALES_FIELD, '[DS].[sum:Sales]')).toEqual(['error']);
-  });
-
-  it('keeps a datasource name containing a dot out of the column match', () => {
-    expect(
-      severities(
-        '[My.DS].[none:A:nk] / [My.DS].[none:B:nk]',
-        '[My.DS].[none:B:nk] / [My.DS].[none:A:nk]',
-      ),
-    ).toEqual(['warning', 'warning']);
   });
 });
 
