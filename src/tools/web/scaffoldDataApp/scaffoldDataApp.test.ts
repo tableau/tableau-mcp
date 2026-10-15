@@ -32,12 +32,11 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.1, or a 2026.3.0 patch build at or after 20263.26.1013.1554 (see scaffoldDataApp.ts).
-const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.1', build: '' };
+// Floor is 2026.3.0 (see scaffoldDataApp.ts).
+const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
 const VERSION_UNKNOWN: ProductVersion = { value: 'garbage', build: '' };
-const PATCH_BUILD_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '20263.26.1013.1554' };
 
 function makeTool(
   productVersion: ProductVersion = VERSION_AT_FLOOR,
@@ -141,54 +140,6 @@ describe('getScaffoldDataAppTool', () => {
     it('is disabled below the floor even when the flag is on and above when off', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
       expect(await Provider.from(makeTool(VERSION_ABOVE).disabled)).toBe(true);
-    });
-
-    describe('2026.3.0 patch builds', () => {
-      it.each([
-        PATCH_BUILD_AT_FLOOR.build,
-        '20263.26.1013.2324',
-        '20263.26.1014.0016',
-        '20263.27.0101.0000',
-      ])('is enabled for patch build %s', async (build) => {
-        const tool = makeTool({ value: '2026.3.0', build });
-        expect(await Provider.from(tool.disabled)).toBe(false);
-      });
-
-      it.each([
-        '20263.26.1013.1553',
-        '20263.26.1013.0903',
-        '20263.26.0814.1200',
-        '20263.25.1231.2359',
-      ])(
-        'is disabled for patch build %s, before the first build with data-app hosting',
-        async (build) => {
-          const tool = makeTool({ value: '2026.3.0', build });
-          expect(await Provider.from(tool.disabled)).toBe(true);
-        },
-      );
-
-      it.each(['', '20263.26.1013', '20263.26.1013.2324.f26b1fa', '20263.26.10x3.2324'])(
-        'is disabled for unparseable build %j',
-        async (build) => {
-          const tool = makeTool({ value: '2026.3.0', build });
-          expect(await Provider.from(tool.disabled)).toBe(true);
-        },
-      );
-
-      it('is disabled for a late build of another release', async () => {
-        const tool = makeTool({ value: '2026.3.0', build: '20262.26.1014.0016' });
-        expect(await Provider.from(tool.disabled)).toBe(true);
-      });
-
-      it('does not apply the build allowance to other versions below the floor', async () => {
-        const tool = makeTool({ value: '2026.2.0', build: '20263.26.1014.0016' });
-        expect(await Provider.from(tool.disabled)).toBe(true);
-      });
-
-      it('is disabled for a qualifying build when the data-apps flag is off', async () => {
-        mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-        expect(await Provider.from(makeTool(PATCH_BUILD_AT_FLOOR).disabled)).toBe(true);
-      });
     });
   });
 
