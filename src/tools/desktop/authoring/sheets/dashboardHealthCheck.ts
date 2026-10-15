@@ -17,7 +17,7 @@
 // parameter that unlocks a write. The colocated test pins the import list so a
 // future edit that pulls in a mutating path fails CI.
 //
-// Hash reuse (NOT a third mechanism — see w60-self-healing-mvp-spec.md §2):
+// Hash reuse (it reuses the two memo.ts hashes and adds none):
 //   1. raw workbook-XML sha256 (`sha256Hex`, memo.ts — same digest SchemaCache
 //      keys by) as the cheap byte-identical short-circuit, and
 //   2. the schema-summary content hash (`hashSchemaSummary`, memo.ts) as the
@@ -67,8 +67,8 @@ export type DriftClass =
   | 'D2_sheet_deleted'
   | 'D3_field_removed'
   | 'D4_field_retyped'
-  // Spec'd report vocabulary; the MVP classifier never emits D5 (name-stability
-  // heuristic unresolved — spec §1 D5 caveat).
+  // Reserved in the report vocabulary; the classifier never emits D5 yet, because a
+  // rename can't yet be told apart from a remove plus an add.
   | 'D5_field_renamed_suspected'
   | 'D7_orphan_zone'
   | 'D10_primary_datasource_changed';

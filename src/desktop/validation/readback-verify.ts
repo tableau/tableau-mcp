@@ -450,7 +450,7 @@ export function verifyWorksheetReadback(
 
   // An encoding tag can survive while its column-instance declaration is dropped —
   // the encoding is then inert (LOD encodings and their CIs are co-dependent; see
-  // tactics/viz/marks-and-encodings.md). Require the declaration too. (RT finding RB-03)
+  // tactics/viz/marks-and-encodings.md). Require the declaration too.
   for (const enc of intended.encodings) {
     if (!enc.column) continue;
     const instanceName = instanceNameFromColumnRef(enc.column);

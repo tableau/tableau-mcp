@@ -812,7 +812,7 @@ describe('appliedSortByFieldDirection — distinguishes wrong-direction from nev
   });
 });
 
-describe('planSortByField — nested sortDirection.direction is honored (defect 1 unit)', () => {
+describe('planSortByField — nested sortDirection.direction is honored', () => {
   const WATERFALL = BASE.replace(
     /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
     `<datasource-dependencies datasource='Superstore'>${LINE_ITEM_COL}${DISPLAY_ORDER_COL}${LINE_ITEM_CI}${DISPLAY_ORDER_CI}</datasource-dependencies>`,

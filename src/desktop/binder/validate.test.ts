@@ -447,7 +447,7 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
     expect(validateBinding(m, p, SUMMARY).ok).toBe(true);
   });
 
-  // Gate 3b (red-team GEO-02): geo slots must respect the field's Tableau
+  // Gate 3b: geo slots must respect the field's Tableau
   // semantic-role concept, mirroring pickGeoField on the deterministic path.
   const geoSummary = (regionSemanticRole?: string): SchemaSummary => ({
     datasource: 'Superstore',
@@ -1970,7 +1970,7 @@ describe('binder/validate — XML escaping in the emitted payload', () => {
   });
 });
 
-describe('binder/validate — geo mirror parity with lockstep classify.ts (GEO-02 port)', () => {
+describe('binder/validate — geo mirror parity with classify.ts', () => {
   // The geo tables here MIRROR private tables in hash-gated classify.ts (not
   // exported so lockstep-core bytes stay unchanged) — pin them token-identical
   // at the source level so classifier table edits can't silently drift the gate.

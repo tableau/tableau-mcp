@@ -1,4 +1,4 @@
-// Tier-1 fast-path binder — the deterministic validation gate (design doc §2.4).
+// Tier-1 fast-path binder — the deterministic validation gate.
 //
 // `validateBinding(manifest, proposal, schema)` is PURE (no I/O): it takes a
 // proposed slot→field mapping and either returns the exact `field_mapping` the
@@ -95,7 +95,7 @@ export interface BindingProposal {
   confidence?: number;
 }
 
-/** The gate-specific escalation reasons (design §3.2). */
+/** The gate-specific escalation reasons. */
 export type EscalateReason =
   | 'template-not-found'
   | 'not-fast-path'
@@ -183,7 +183,7 @@ const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 // MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
-// Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
+// Geo semantic-role concept check. MIRRORS the private
 // tables in hash-gated src/desktop/binder/classify.ts (geoConceptFromSlotId /
 // GEO_SEMANTIC_ROLE_CONCEPT) — they are intentionally not exported because this
 // port must keep lockstep-core bytes unchanged.
@@ -392,7 +392,7 @@ export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   return { kind: 'not_found', candidates: fuzzy };
 }
 
-/** Does the resolved field satisfy the slot's kind? (design §2.4 gate 3.) */
+/** Does the resolved field satisfy the slot's kind? */
 function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   switch (kind) {
     case 'quantitative':
@@ -689,7 +689,7 @@ export function validateBinding(
       continue;
     }
 
-    // Gate 3b: geo semantic-role concept (red-team GEO-02) — the deterministic
+    // Gate 3b: geo semantic-role concept — the deterministic
     // path already enforces this in pickGeoField; the validate leg must too or
     // a City-tagged field can bind a state slot via Call-2.
     const geoMismatch = geoConceptMismatch(slot, f);

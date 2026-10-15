@@ -93,7 +93,7 @@ describe('addFieldTool', () => {
     expect(tool.description).toBe(
       'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
     );
-    // Live incident (v11 bundle): the old wording ("the manual path when no template binds")
+    // Live incident: the old wording ("the manual path when no template binds")
     // ruled this tool out of the exact case it is for — changing the encoding of a sheet a
     // template already built.
     expect(tool.description).not.toContain('when no template binds');

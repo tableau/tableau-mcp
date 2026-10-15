@@ -1,7 +1,7 @@
 import { DesktopToolName } from '../tools/desktop/toolName.js';
 
 // WHY: product routing used to live as free prose in DESKTOP_INSTRUCTIONS and drifted
-// silently (the A1 dashboard-row incident); routes are data here so tests can pin each
+// silently (a dashboard-row routing incident); routes are data here so tests can pin each
 // route's tool sequence and stop conditions and any edit shows up as a reviewable diff.
 export type DesktopInstructionRoute = {
   readonly kind: 'route';

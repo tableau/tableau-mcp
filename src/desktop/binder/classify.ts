@@ -1,5 +1,4 @@
-// Tier-1 fast-path binder — no-LLM classification + LLM-input construction
-// (design doc §3.3, §3.5).
+// Tier-1 fast-path binder — no-LLM classification + LLM-input construction.
 //
 // `classifyNoLlm` is the zero-latency path: it picks a single clearly-winning
 // `fast_path_eligible` template by keyword match, then does role-greedy field
@@ -113,7 +112,7 @@ export interface LlmProposeInput {
     label?: string;
   }>;
   /**
-   * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
+   * FIELD-NARROWING signal: present ONLY when
    * `fields` was capped — `count` is how many relevant-but-lower-ranked fields
    * were withheld, and `note` tells the caller to re-query with a field-name hint
    * if the field it needs is not in `fields`. Absent ⇒ every schema field is here.
@@ -121,7 +120,7 @@ export interface LlmProposeInput {
   more_available?: { count: number; note: string };
 }
 
-/** Default field cap for the propose prompt (stage 2B). See buildLlmInput opts. */
+/** Default field cap for the propose prompt. See buildLlmInput opts. */
 export const DEFAULT_MAX_FIELDS = 20;
 
 /**
@@ -555,7 +554,7 @@ function chartNounSpecificity(ask: string, keywords: string[]): number {
 }
 
 /**
- * FAMILY-NATIVE vocabulary (stage 2b sole-wrong-matcher guard). Derived from the
+ * FAMILY-NATIVE vocabulary (sole-wrong-matcher guard). Derived from the
  * family's OWN fast-path-eligible manifests: a keyword is native to `family` when
  * it is carried by a STRICT MAJORITY of that family's eligible templates (for a
  * single-template family that is all of its keywords). This separates a family's
@@ -1681,7 +1680,7 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       // "categories") as well as the trailing-`s` case.
       const plural = naivePlural(lower);
       const pluralToken = plural && !exactNames.has(plural) ? plural : null;
-      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
+      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING: phraseIndexInAsk
       // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
       // matches "waterfall chart"), so masking must blank that same span — a literal
       // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
@@ -1757,8 +1756,8 @@ function fieldContentTokens(f: SchemaField): Set<string> {
 }
 
 /**
- * Bindable+required slot kinds across the shortlisted candidates (stage 2B
- * rank-2). A field is "kind-compatible" for narrowing if it fits ANY of these.
+ * Bindable+required slot kinds across the shortlisted candidates
+ * (rank-2). A field is "kind-compatible" for narrowing if it fits ANY of these.
  */
 function requiredSlotKinds(candidates: TemplateManifest[]): Set<SlotKind> {
   const kinds = new Set<SlotKind>();
@@ -1771,7 +1770,7 @@ function requiredSlotKinds(candidates: TemplateManifest[]): Set<SlotKind> {
 }
 
 /**
- * Narrowing kind-fit (stage 2B): quantitative fields for quantitative slots,
+ * Narrowing kind-fit: quantitative fields for quantitative slots,
  * date/datetime for temporal, dimensions for categorical/geo. Intentionally
  * broader than validate.ts's gate-3 `kindCompatible` (which the deterministic
  * gate still enforces later) — narrowing must not prematurely drop a field a
@@ -1795,7 +1794,7 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
 }
 
 /**
- * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
+ * Field-narrowing for the propose prompt. A wide
  * schema (300–1000 fields) would blow the prompt, so rank and cap:
  *   rank 0 — fields the ask names exactly/normalizes to (never evicted by the cap);
  *   rank 1 — business-synonym candidates when that noun was not literally resolved;
@@ -2267,7 +2266,7 @@ function completeTemporalSlot(
 }
 
 /**
- * Role-greedy field assignment (design §3.5 step 2): fill each required, bindable
+ * Role-greedy field assignment: fill each required, bindable
  * slot with the first still-unused matched field of the compatible role/kind —
  * measures → quantitative, dimensions → categorical/temporal. GEO slots are the
  * exception: they do NOT take "the first unused dimension" (that silently swaps
@@ -2412,7 +2411,7 @@ function roleGreedyBind(
   const temporalSlots = m.slots.filter((s) => isActive(s) && s.kind === 'temporal');
   const temporalAutoCompleted = new Map<string, SchemaField>();
 
-  // CLS-003 GUARD: unique-date completion must not paper over an ask-NAMED
+  // NAMED-DIMENSION GUARD: unique-date completion must not paper over an ask-NAMED
   // non-temporal dimension no remaining slot can consume ("trend of Actual Amount
   // by Fiscal Period" on a temporal+measure template must escalate, never silently
   // drop Fiscal Period and chart a date axis the user did not ask for). Capacity =
@@ -2555,7 +2554,7 @@ function roleGreedyBind(
 }
 
 /**
- * WITHIN-FAMILY template selection (stage 2b). Given the keyword-argmax `top`
+ * WITHIN-FAMILY template selection. Given the keyword-argmax `top`
  * (all sharing the max keyword score) plus the ask's recognizable fields, pick a
  * single template to auto-bind or return null to fall through to the propose leg.
  * Two regimes, driven by the measured scale breakpoints:
@@ -2676,8 +2675,8 @@ function selectWithinFamily(
  * SMALL-MULTIPLES FACET CUES. Explicit facet/trellis vocabulary a user
  * types when they want one chart PER member (side-by-side panes), NOT a color/detail
  * grouping. Deliberately tight: a bare "by <dim>" is ambiguous (could be a color
- * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", which the spec
- * names for per-category facets) arm a facet bind. Matched as WHOLE tokens against the
+ * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", used for
+ * per-category facets) arm a facet bind. Matched as WHOLE tokens against the
  * MASKED ask (field names blanked) so a field literally named "per…"/"facet…" can't
  * arm it, and so faceting is a phrasing decision, never a field-name accident.
  */
@@ -4165,7 +4164,7 @@ function attachAskModifiers(
 }
 
 /**
- * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
+ * No-LLM classification with within-family disambiguation.
  * Keyword-scores the eligible fast-path templates, selects a single template via
  * `selectWithinFamily` (sole-wrong-matcher guard for a lone winner; intra-family
  * tiebreak for a same-family tie; fail-closed for a cross-family tie), then
@@ -4173,8 +4172,8 @@ function attachAskModifiers(
  * Returns null (fall through to the LLM propose path) whenever no template is
  * selected, avoid_when demotes, or a required slot is left unfilled.
  *
- * `summary` is required to assign by kind (the design's §3.2 signature omitted it,
- * but §3.5 step 2 needs the field roles to map measures→quantitative etc.).
+ * `summary` is required to assign by kind: the field roles map
+ * measures→quantitative etc.
  */
 export function classifyNoLlm(
   ask: string,
@@ -4534,7 +4533,7 @@ export function classifyNoLlm(
 }
 
 /**
- * Build the compact LLM input (design §3.3): keyword-ranked fast-path candidates
+ * Build the compact LLM input: keyword-ranked fast-path candidates
  * (Fuse fallback when no exact hit), each with its BINDABLE slots only, plus the
  * field schema. The model only picks a template + maps slot_id→field name.
  */
@@ -4547,9 +4546,9 @@ export function buildLlmInput(
   const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
   const routable = [...manifests.values()].filter((m) => m.fast_path_eligible);
 
-  // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
-  // CLS-001): the propose shortlist must not let a field literally named "Pie"
-  // surface the pie family — the same leak masking exists to stop on the fast path.
+  // Mask field names before scoring, in lockstep with classifyNoLlm: the propose
+  // shortlist must not let a field literally named "Pie" surface the pie family —
+  // the same leak masking exists to stop on the fast path.
   const maskedAsk = maskFieldNames(ask, summary);
 
   let candidates = routable
@@ -4593,7 +4592,7 @@ export function buildLlmInput(
   }
   top.sort((a, b) => b.score - a.score || a.m.template.localeCompare(b.m.template));
 
-  // FIELD-NARROWING (stage 2B): rank the schema against the shortlisted
+  // FIELD-NARROWING: rank the schema against the shortlisted
   // candidates' required slot kinds + the ask, and cap at maxFields so a wide
   // schema can't blow the propose prompt. classifyNoLlm is untouched — it still
   // resolves against the full schema.

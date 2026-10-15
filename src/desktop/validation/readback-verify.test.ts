@@ -508,7 +508,7 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
   });
 });
 
-describe('verifyWorksheetReadback — column-instance co-dependency (RT finding RB-03)', () => {
+describe('verifyWorksheetReadback — column-instance co-dependency', () => {
   const withDeps = (deps: string): string =>
     `<worksheet name="Map"><table>
       <view><datasource-dependencies datasource="DS">${deps}</datasource-dependencies></view>

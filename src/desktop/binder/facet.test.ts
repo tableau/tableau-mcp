@@ -134,7 +134,7 @@ describe('classifyNoLlm — optional small-multiples facet', () => {
     ]);
   });
 
-  it("arms facet on the 'per <dim>' phrasing the spec names (per-category facets)", () => {
+  it("arms facet on the 'per <dim>' phrasing (per-category facets)", () => {
     const m = mapOf(trendLine());
     const cls = classifyNoLlm('line chart of Sales over Order Date per Region', m, SUMMARY);
     expect(cls).not.toBeNull();

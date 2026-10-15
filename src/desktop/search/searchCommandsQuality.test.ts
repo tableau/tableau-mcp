@@ -1,6 +1,6 @@
 // Search result quality — the agent must never be offered a command it cannot invoke.
 //
-// Live incident (v11 bundle): after a chart came out wrong the user said "warmer should be
+// Live incident: after a chart came out wrong the user said "warmer should be
 // with color". The agent called search-commands ~10 times and was handed
 // publish-workbook-to-workgroup, export-as-version, save-as, cell-size,
 // launch-worksheet-title-rich-text-editor, copy-worksheet-formatting and three COLOR dialogs

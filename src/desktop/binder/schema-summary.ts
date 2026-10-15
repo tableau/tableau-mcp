@@ -1,4 +1,4 @@
-// Tier-1 fast-path binder — schema summary (design doc §3.1, §3.2).
+// Tier-1 fast-path binder — schema summary.
 //
 // `summarizeSchema(workbookXml)` is the "cached schema summary" the binder
 // needs: a thin wrapper over `listAvailableFields` (src/metadata/field-builder.ts)

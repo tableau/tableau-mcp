@@ -1,14 +1,13 @@
-// Tier-1 fast-path binder — the orchestrator (design doc §3, with the two-call
-// protocol correction).
+// Tier-1 fast-path binder — the orchestrator.
 //
 // TWO-CALL PROTOCOL (the MCP server stays model-free):
 //   • Call 1 — `bindTemplate({ ask, ... })`: run classifyNoLlm + role-greedy
 //     binding. If it fully binds AND passes the gate → `{status:"bound"}` with
 //     `used_llm:false`. On a miss → `{status:"propose"}` carrying the compact
-//     `LlmProposeInput` (§3.3) and the strict JSON `output_schema`, so the
+//     `LlmProposeInput` and the strict JSON `output_schema`, so the
 //     CALLING agent produces the BindingProposal itself.
 //   • Call 2 — `bindTemplate({ ask, proposal, ... })`: validate the agent's
-//     proposal through `validateBinding` (§2.4 gates 1–7) → `{status:"bound"}`
+//     proposal through `validateBinding` (gates 1–7) → `{status:"bound"}`
 //     or `{status:"escalate", reason, blockers}`.
 //
 // EVAL-ONLY seam: the pure core still accepts an optional `llmPropose` injection.
@@ -216,7 +215,7 @@ export const DERIVATION_OVERRIDE_INSTRUCTION =
   'set derivation ONLY when the ask explicitly requests an aggregation/date grain different from the template default';
 
 /**
- * The strict JSON output schema the small-LLM is constrained to (design §3.3).
+ * The strict JSON output schema the small-LLM is constrained to.
  * The model picks a template, maps slot_id→field name, titles the sheet, and MAY
  * set an optional per-slot `derivation` override — the ONLY derivation surface it
  * controls. Datasource, instance syntax, and (in the absence of an override) the
