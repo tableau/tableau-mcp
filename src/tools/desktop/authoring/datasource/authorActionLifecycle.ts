@@ -5,7 +5,7 @@ import { ArgsValidationError, XmlModificationError } from '../../../../errors/mc
 
 const actionTags = new Set(['action', 'nav-action', 'edit-group-action', 'edit-parameter-action']);
 
-export type WorkbookAction = { name: string; caption: string; xml: string };
+export type WorkbookAction = { name: string; caption: string; enabled: boolean; xml: string };
 
 function parseActions(xml: string): {
   document: Document;
@@ -35,6 +35,7 @@ function parseActions(xml: string): {
     return {
       name: element.getAttribute('name') ?? '',
       caption: element.getAttribute('caption') ?? '',
+      enabled: element.getAttribute('enabled') !== 'false',
       xml: serializer.serializeToString(element),
     };
   });
@@ -92,6 +93,8 @@ export function editedActionSettingsMatch(actualXml: string, expectedXml: string
     );
   const attr = (element: Element | undefined, name: string): string =>
     element?.getAttribute(name) ?? '';
+  if ((attr(actual, 'enabled') === 'false') !== (attr(expected, 'enabled') === 'false'))
+    return false;
   const source = child(actual, 'source');
   const expectedSource = child(expected, 'source');
   if (!source || !expectedSource) return false;

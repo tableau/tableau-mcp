@@ -35,8 +35,9 @@ deterministic gate.
 `operation: "edit"`, pass the exact `actionName` returned by creation and a complete replacement
 definition: `mode`, `caption`, `sourceWorksheet`, the mode's target, and every nondefault option you
 want to keep. Omitted options use the creation defaults; edits do not merge individual settings. The
-internal action name stays the same, including when the mode changes. For a dashboard-only source,
-pass `sourceWorksheet: ""` and `sourceDashboard`.
+internal action name and enabled state stay the same, including when the mode changes. URL actions
+can share a destination when their triggers, destination options, encoding, or source exclusions
+differ. For a dashboard-only source, pass `sourceWorksheet: ""` and `sourceDashboard`.
 
 For example, this edits a URL action:
 

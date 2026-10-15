@@ -17,6 +17,7 @@ import {
   editedActionSettingsMatch,
   readWorkbookActions,
   removeWorkbookAction,
+  WorkbookAction,
 } from './authorActionLifecycle.js';
 import {
   DatasourceElement,
@@ -571,10 +572,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // Size guards compare the retained document: the removed definition can be large.
           // The apply still uses the original live document for its stale-state check.
           let xmlWithoutSelectedAction = liveXml;
+          let actionEnabled = true;
           if (input.operation !== 'create') {
             const removed = removeWorkbookAction(liveXml, input.actionName!);
             if (removed.isErr()) return removed.error.toErr();
             xmlWithoutSelectedAction = removed.value.xml;
+            actionEnabled = removed.value.action.enabled;
             if (input.operation === 'delete') {
               const validation = validateWorkbookDocumentApply(
                 xmlWithoutSelectedAction,
@@ -878,19 +881,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           if (
-            input.mode === 'url' &&
-            hasUrlActionDuplicate(
-              xmlWithoutSelectedAction,
-              input.url.trim(),
-              effectiveSourceSheet,
-              effectiveSourceDashboard,
-            )
-          ) {
-            return new ArgsValidationError(
-              'an identical URL action (same url and same source) already exists',
-            ).toErr();
-          }
-          if (
             input.mode === 'filter' &&
             hasFilterActionDuplicate(xmlWithoutSelectedAction, filterAction!)
           ) {
@@ -954,6 +944,18 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               aggregation: effectiveAggregation,
               encodedClearValue,
             });
+          }
+          // Enabled state isn't an authoring option; editing must retain it.
+          if (!actionEnabled) {
+            actionXml = actionXml.replace(/^<([\w-]+)/, "<$1 enabled='false'");
+          }
+          if (
+            input.mode === 'url' &&
+            hasUrlActionDuplicate(baselineActions.value, actionName, actionXml, target)
+          ) {
+            return new ArgsValidationError(
+              'an identical URL action (same source, URL, and behavior) already exists',
+            ).toErr();
           }
           const editResult = spliceActionIntoWorkbook(
             xmlWithoutSelectedAction,
@@ -1868,46 +1870,19 @@ function hasUrlActionWithLink(xml: string, caption: string, expression: string):
   });
 }
 
-// Shared skeleton for the action-dedup guards: iterate every <action> block and report a
-// duplicate when the block's <source> worksheet/dashboard match (attribute-order-independent,
-// via getAttr) AND the type-specific predicate accepts the block's non-source content.
-function hasDuplicateActionForSource(
-  xml: string,
-  sourceWorksheet: string,
-  sourceDashboard: string,
-  matchesTypeSpecific: (block: string) => boolean,
-): boolean {
-  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
-    const block = match[0];
-    if (!matchesTypeSpecific(block)) {
-      return false;
-    }
-    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
-    const existingWorksheet =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
-    const existingDashboard =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
-    return existingWorksheet === sourceWorksheet && existingDashboard === sourceDashboard;
-  });
-}
-
-// Dedup guard: the document-apply path appends, so a same-url + same-source action
-// authored under a different caption would silently double. Caption collision is
-// handled separately by hasActionCaption.
+// Reuse readback's semantic checks so distinct URL interactions can share a destination.
 function hasUrlActionDuplicate(
-  xml: string,
+  actions: WorkbookAction[],
+  actionName: string,
+  actionXml: string,
   expression: string,
-  sourceWorksheet: string,
-  sourceDashboard: string,
 ): boolean {
-  return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
-    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
-    if (linkTag === undefined) {
-      return false;
-    }
-    const linkExpression = getAttr(linkTag, 'expression');
-    return linkExpression !== undefined && unescapeXml(linkExpression) === expression;
-  });
+  return actions.some(
+    (action) =>
+      action.name !== actionName &&
+      hasUrlActionWithLink(action.xml, action.caption, expression) &&
+      editedActionSettingsMatch(action.xml, actionXml),
+  );
 }
 
 type HighlightAction = {

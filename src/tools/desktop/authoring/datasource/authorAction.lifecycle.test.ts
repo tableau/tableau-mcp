@@ -128,6 +128,209 @@ describe('author-action edit/delete', () => {
     },
   );
 
+  it.each(CASES)(
+    'preserves disabled state when editing a $mode action',
+    async ({ mode, definition, args }) => {
+      const disabled = definition.replace(' name=', " enabled='false' name=");
+      const replacement = disabled.replace('Original', 'Edited');
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          operation: 'edit',
+          actionName: '[Action7]',
+          mode,
+          caption: 'Edited',
+          sourceWorksheet: 'Profit',
+          ...args,
+        },
+        initialXml: withActions(WORKBOOK, UNRELATED + disabled),
+        readbackXml: withActions(WORKBOOK, UNRELATED + replacement),
+      });
+      expect(result.isError).toBe(false);
+      const submitted = actions(appliedDocumentXml(applyWorkbookDocument));
+      expect(submitted.find((action) => action.name === '[Action7]')?.xml).toMatch(
+        /enabled=['"]false['"]/,
+      );
+      expect(submitted.find((action) => action.name === '[Action3]')).toEqual(
+        actions(withActions(WORKBOOK, UNRELATED))[0],
+      );
+    },
+  );
+
+  it.each(CASES)(
+    'rejects a $mode edit readback that enabled a disabled action',
+    async ({ mode, definition, args }) => {
+      const { result } = await getToolResult({
+        args: {
+          operation: 'edit',
+          actionName: '[Action7]',
+          mode,
+          caption: 'Edited',
+          sourceWorksheet: 'Profit',
+          ...args,
+        },
+        initialXml: withActions(WORKBOOK, definition.replace(' name=', " enabled='false' name=")),
+        readbackXml: withActions(WORKBOOK, definition.replace('Original', 'Edited')),
+      });
+      expect(result.isError).toBe(true);
+    },
+  );
+
+  it('accepts explicit enabled=true when Desktop saves the default enabled state', async () => {
+    const definition = CASES[2].definition;
+    const { result } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action7]',
+        mode: 'url',
+        caption: 'Edited',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/selected',
+      },
+      initialXml: withActions(WORKBOOK, definition),
+      readbackXml: withActions(
+        WORKBOOK,
+        definition.replace('Original', 'Edited').replace(' name=', " enabled='true' name="),
+      ),
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  describe.each(['create', 'edit'] as const)('URL %s duplicate detection', (operation) => {
+    const variants = [
+      {
+        setting: 'hover trigger',
+        args: { activation: 'on-hover' },
+        from: "type='on-select'",
+        to: "type='on-hover'",
+      },
+      {
+        setting: 'menu trigger',
+        args: { activation: 'on-menu' },
+        from: "type='on-select'",
+        to: '',
+      },
+      {
+        setting: 'browser destination',
+        args: { urlTarget: 'browser' },
+        from: ' /></action>',
+        to: '><url-action-type>browser</url-action-type></link></action>',
+      },
+      {
+        setting: 'specific zone destination',
+        args: { urlTarget: 'specific-zone', zoneId: '2' },
+        from: ' /></action>',
+        to: '><url-action-type>specific-zone</url-action-type><url-action-target>2</url-action-target></link></action>',
+      },
+      {
+        setting: 'URL encoding',
+        args: { urlEncode: true },
+        from: "<link caption=''",
+        to: "<link url-escape='true' caption=''",
+      },
+    ] satisfies { setting: string; args: Partial<AuthorActionArgs>; from: string; to: string }[];
+
+    it.each(variants)(
+      'allows the same URL with a different $setting',
+      async ({ args, from, to }) => {
+        const selectedName = operation === 'create' ? '[Action1]' : '[Action7]';
+        const original = CASES[2].definition;
+        const sibling = original.replace('[Action7]', '[Action8]').replace('Original', 'Sibling');
+        const replacement = original
+          .replace('[Action7]', selectedName)
+          .replace('Original', 'Edited')
+          .replace(from, to);
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: {
+            operation,
+            actionName: operation === 'edit' ? selectedName : undefined,
+            mode: 'url',
+            caption: 'Edited',
+            sourceWorksheet: 'Profit',
+            url: 'https://example.com/selected',
+            ...args,
+          },
+          initialXml: withActions(WORKBOOK, sibling + (operation === 'edit' ? original : '')),
+          readbackXml: withActions(WORKBOOK, sibling + replacement),
+        });
+        expect(result.isError).toBe(false);
+        const submitted = actions(appliedDocumentXml(applyWorkbookDocument));
+        expect(submitted.map((action) => action.name).sort()).toEqual(
+          [selectedName, '[Action8]'].sort(),
+        );
+        expect(submitted.find((action) => action.name === '[Action8]')).toEqual(
+          actions(withActions(WORKBOOK, sibling))[0],
+        );
+      },
+    );
+
+    it('allows the same URL with different source exclusions', async () => {
+      const workbook = WORKBOOK.replace(
+        '</workbook>',
+        "<dashboards><dashboard name='D'><zones><zone name='Profit'/><zone name='Details'/></zones></dashboard></dashboards></workbook>",
+      );
+      const original = CASES[2].definition.replace("worksheet='Profit'", "dashboard='D'");
+      const sibling = original
+        .replace('[Action7]', '[Action8]')
+        .replace('Original', 'Sibling')
+        .replace("dashboard='D' />", "dashboard='D'><exclude-sheet name='Profit'/></source>");
+      const selectedName = operation === 'create' ? '[Action1]' : '[Action7]';
+      const replacement = original
+        .replace('[Action7]', selectedName)
+        .replace('Original', 'Edited')
+        .replace("dashboard='D' />", "dashboard='D'><exclude-sheet name='Details'/></source>");
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          operation,
+          actionName: operation === 'edit' ? selectedName : undefined,
+          mode: 'url',
+          caption: 'Edited',
+          sourceWorksheet: '',
+          sourceDashboard: 'D',
+          excludeSourceSheets: ['Details'],
+          url: 'https://example.com/selected',
+        },
+        initialXml: withActions(workbook, sibling + (operation === 'edit' ? original : '')),
+        readbackXml: withActions(workbook, sibling + replacement),
+      });
+      expect(result.isError).toBe(false);
+      const submitted = actions(appliedDocumentXml(applyWorkbookDocument));
+      expect(submitted.find((action) => action.name === '[Action8]')).toEqual(
+        actions(withActions(workbook, sibling))[0],
+      );
+      expect(submitted.find((action) => action.name === selectedName)?.xml).toContain(
+        'name="Details"',
+      );
+    });
+
+    it('still rejects an identical URL interaction before applying', async () => {
+      const original = CASES[2].definition.replace(
+        'https://example.com/selected',
+        'https://example.com/other',
+      );
+      const sibling = CASES[2].definition
+        .replace('[Action7]', '[Action8]')
+        .replace('Original', 'Sibling');
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          operation,
+          actionName: operation === 'edit' ? '[Action7]' : undefined,
+          mode: 'url',
+          caption: 'Edited',
+          sourceWorksheet: 'Profit',
+          url: 'https://example.com/selected',
+        },
+        initialXml: withActions(WORKBOOK, sibling + (operation === 'edit' ? original : '')),
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ text: expect.stringContaining('identical URL action') }),
+        ]),
+      );
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+  });
+
   it.each([
     ...CASES,
     {
@@ -214,6 +417,27 @@ describe('author-action edit/delete', () => {
     expect(submitted.map((action) => action.name)).toEqual(['[Action3]', '[Action7]']);
     expect(submitted[0].xml).toContain('<action ');
     expect(submitted[1].xml).toContain('<edit-parameter-action ');
+  });
+
+  it('keeps a disabled action disabled when its mode changes', async () => {
+    const disabled = CASES[1].definition.replace(' name=', " enabled='false' name=");
+    const replacement = CASES[2].definition.replace(' name=', " enabled='false' name=");
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action7]',
+        mode: 'url',
+        caption: 'Original',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/selected',
+      },
+      initialXml: withActions(WORKBOOK, disabled),
+      readbackXml: withActions(WORKBOOK, replacement),
+    });
+    expect(result.isError).toBe(false);
+    expect(actions(appliedDocumentXml(applyWorkbookDocument))[0].xml).toMatch(
+      /enabled=['"]false['"]/,
+    );
   });
 
   it('preserves shared field dependencies when deleting an action', async () => {
