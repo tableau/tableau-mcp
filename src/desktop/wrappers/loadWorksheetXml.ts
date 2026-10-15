@@ -22,6 +22,7 @@ import {
 import type { ParsedWorksheet } from '../metadata/types.js';
 import {
   isPromisedSortLossWarning,
+  isReadbackUnsettled,
   type ReadbackFinding,
   type ReadbackVerificationResult,
   type VerificationFinding,
@@ -209,7 +210,7 @@ export async function verifyPostApplyWorksheetReadback(
     const polled = await pollReadback({
       read: () => getWorksheetXml({ worksheetName, executor, signal }),
       settled: (fragment) =>
-        !verifyWorksheetReadback(intendedXml, fragment.xml).some((f) => f.severity === 'error'),
+        !isReadbackUnsettled(verifyWorksheetReadback(intendedXml, fragment.xml)),
       signal,
     });
 
@@ -260,10 +261,7 @@ async function verifyPostApplyArtifactReadback(
       settled: (workbookXml) => {
         const fragment = extractSheetXml(workbookXml, worksheetName);
         return (
-          fragment !== null &&
-          !verifyWorksheetReadback(intendedXml, fragment).some(
-            (finding) => finding.severity === 'error',
-          )
+          fragment !== null && !isReadbackUnsettled(verifyWorksheetReadback(intendedXml, fragment))
         );
       },
       signal,

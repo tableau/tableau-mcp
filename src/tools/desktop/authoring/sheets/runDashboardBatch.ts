@@ -28,6 +28,7 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  isReadbackUnsettled,
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
@@ -164,6 +165,8 @@ type WorksheetVerification = {
 
 type BatchReadbackVerification = {
   ok: boolean;
+  /** True while a shelf/filter warning may still be a pre-apply read worth re-polling. */
+  pending: boolean;
   worksheets: WorksheetVerification[];
   dashboardIssues: string[];
 };
@@ -582,9 +585,16 @@ export const getRunDashboardBatchTool = (
 
             const polled = await pollReadback({
               read: () => getWorkbookXml({ executor, signal: extra.signal }),
-              settled: (xml) =>
-                verifyBatchReadback(xml, candidateXml, reservations, dashboardName, worksheetNames)
-                  .ok,
+              settled: (xml) => {
+                const attempt = verifyBatchReadback(
+                  xml,
+                  candidateXml,
+                  reservations,
+                  dashboardName,
+                  worksheetNames,
+                );
+                return attempt.ok && !attempt.pending;
+              },
               signal: extra.signal,
             });
             if (!polled.ok) {
@@ -604,7 +614,7 @@ export const getRunDashboardBatchTool = (
               dashboardName,
               worksheetNames,
             );
-            if (!polled.settled || !verification.ok) {
+            if (!verification.ok) {
               return unknownBatch({
                 artifactIds: orderedArtifactIds,
                 reservations,
@@ -705,6 +715,7 @@ function verifyBatchReadback(
   dashboardName: string,
   worksheetNames: string[],
 ): BatchReadbackVerification {
+  let pending = false;
   const worksheets = reservations.map((reservation): WorksheetVerification => {
     const { id: artifactId, title: worksheetTitle, worksheetXml } = reservation.artifact;
     const fragment = extractSheetXml(workbookXml, worksheetTitle);
@@ -720,6 +731,7 @@ function verifyBatchReadback(
       };
     }
     const findings = verifyWorksheetReadback(worksheetXml, fragment);
+    pending ||= isReadbackUnsettled(findings);
     if (findings.some((finding) => finding.severity === 'error')) {
       return {
         artifactId,
@@ -754,6 +766,7 @@ function verifyBatchReadback(
   ];
   return {
     ok: worksheets.every(({ verification }) => verification.ok) && dashboardIssues.length === 0,
+    pending,
     worksheets,
     dashboardIssues,
   };

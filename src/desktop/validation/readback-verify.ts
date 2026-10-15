@@ -423,6 +423,40 @@ function sortRelated(a: SortSignature, b: SortSignature): boolean {
   return a.tag === b.tag && a.column === b.column;
 }
 
+/** True for a plain quantitative column instance such as "[ds].[sum:Sales:qk]". */
+function isQuantitativePill(pill: string): boolean {
+  return /^\[(?:[^\]]|\]\])+\]\.\[[^:\]]+:.+:qk\]$/.test(pill.trim());
+}
+
+/**
+ * W-24366132: the only shelf change downgraded to a warning is a pure reorder of quantitative
+ * pills on a shared axis ("a + b"). Any other reorder changes nesting or pane order, and a
+ * derivation change alters the numbers shown.
+ */
+function shelfSeverity(
+  intended: WorksheetSignature,
+  readback: WorksheetSignature,
+  shelf: 'rows' | 'cols',
+): ReadbackFindingSeverity {
+  const intendedPills = intended.shelves[shelf];
+  const readbackPills = readback.shelves[shelf];
+  const sharedAxis =
+    intended.shelfShapes[shelf] === readback.shelfShapes[shelf] &&
+    intended.shelfShapes[shelf].startsWith('+(');
+  const sameMembers =
+    intendedPills.length === readbackPills.length &&
+    [...intendedPills].sort().join('\n') === [...readbackPills].sort().join('\n');
+  return sharedAxis && sameMembers && intendedPills.every(isQuantitativePill) ? 'warning' : 'error';
+}
+
+/**
+ * Whether polling should keep re-reading. A shelf warning can be a transient pre-apply read,
+ * so it must not settle the poll the way a terminal sort warning does.
+ */
+export function isReadbackUnsettled(findings: ReadbackFinding[]): boolean {
+  return findings.some((finding) => finding.severity === 'error' || finding.kind === 'shelf');
+}
+
 export function verifyWorksheetReadback(
   intendedXml: string,
   readbackXml: string,
@@ -482,7 +516,7 @@ export function verifyWorksheetReadback(
         column: value,
         intended: value,
         readback: readbackPills.length > 0 ? 'changed' : 'missing',
-        severity: 'error',
+        severity: shelfSeverity(intended, readback, shelf),
       });
     }
   }

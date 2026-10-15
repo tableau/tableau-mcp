@@ -471,6 +471,27 @@ describe('format-worksheets tool', () => {
     expect(result.content[0].text).toContain('1 earlier worksheet may already be updated.');
   });
 
+  it('returns a persistent same-field shelf reorder as a readback warning instead of failing', async () => {
+    const ds = '[Sample - Superstore]';
+    const intendedRows = `<rows>${ds}.[sum:Sales:qk] + ${ds}.[sum:Profit:qk]</rows>`;
+    const swappedRows = `<rows>${ds}.[sum:Profit:qk] + ${ds}.[sum:Sales:qk]</rows>`;
+    vi.useFakeTimers();
+    const resultPromise = callTool(
+      { worksheets: [{ name: 'Sales by Category', showLabels: true }] },
+      {
+        sourceTransform: (xml) =>
+          xml.replace(`<rows>${ds}.[none:Category:nk]</rows>`, intendedRows),
+        readbackTransform: (xml) => xml.replace(intendedRows, swappedRows),
+      },
+    );
+    await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+    const { result } = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('readbackWarning');
+  });
+
   it('does not post a worksheet that drifts from Bar to Line after preparation', async () => {
     const { result, applyWorksheetDocument } = await callTool(
       {

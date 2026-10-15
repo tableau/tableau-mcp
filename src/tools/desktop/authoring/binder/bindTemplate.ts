@@ -79,6 +79,7 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  isReadbackUnsettled,
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
@@ -2374,9 +2375,7 @@ async function verifyTrustedWorkbookReadback({
         return (
           calculationsPresent &&
           fragment !== null &&
-          !verifyWorksheetReadback(intendedWorksheetXml, fragment).some(
-            (finding) => finding.severity === 'error',
-          )
+          !isReadbackUnsettled(verifyWorksheetReadback(intendedWorksheetXml, fragment))
         );
       },
       signal,
