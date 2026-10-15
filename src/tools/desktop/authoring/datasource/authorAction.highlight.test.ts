@@ -20,7 +20,7 @@ const ARGS: AuthorActionArgs = {
 };
 const ALL_FIELDS =
   "<action caption='Highlight Details' name='[Action1]'>" +
-  "<activation type='on-select' /><source type='sheet' worksheet='Profit' />" +
+  "<activation auto-clear='true' type='on-select' /><source type='sheet' worksheet='Profit' />" +
   "<command command='tsc:brush'><param name='special-fields' value='all' />" +
   "<param name='target' value='Details' /></command></action>";
 const SPECIFIC_FIELDS = ALL_FIELDS.replace(
@@ -62,7 +62,7 @@ describe('author-action highlight mode', () => {
       sourceDashboard: '',
       highlightBy: 'all-fields',
       highlightFields: [],
-      clearSelection: 'do-nothing',
+      clearSelection: 'show-all',
       activation: 'on-select',
     });
     expect(appliedDocumentXml(applyWorkbookDocument)).not.toContain('tsc:tsl-filter');
@@ -71,10 +71,10 @@ describe('author-action highlight mode', () => {
   });
 
   it.each([
-    ['on-hover', "<activation type='on-hover' />"],
-    ['on-menu', '<activation />'],
+    ['on-hover', "<activation auto-clear='true' type='on-hover' />"],
+    ['on-menu', "<activation auto-clear='true' />"],
   ] as const)('supports %s activation', async (activation, xml) => {
-    const action = ALL_FIELDS.replace("<activation type='on-select' />", xml);
+    const action = ALL_FIELDS.replace("<activation auto-clear='true' type='on-select' />", xml);
     const { result, applyWorkbookDocument } = await getToolResult({
       args: { ...ARGS, activation },
       initialXml: WORKBOOK,
@@ -85,17 +85,20 @@ describe('author-action highlight mode', () => {
     expect(receipt(result).activation).toBe(activation);
   });
 
-  it('accepts an omitted activation element for a tooltip-menu action', async () => {
+  it('rejects missing auto-clear behavior for a tooltip-menu action', async () => {
     const { result } = await getToolResult({
       args: { ...ARGS, activation: 'on-menu' },
       initialXml: WORKBOOK,
-      readbackXml: withActions(WORKBOOK, ALL_FIELDS.replace("<activation type='on-select' />", '')),
+      readbackXml: withActions(
+        WORKBOOK,
+        ALL_FIELDS.replace("<activation auto-clear='true' type='on-select' />", ''),
+      ),
     });
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
   });
 
   it('restores all marks on clearing selection when requested', async () => {
-    const action = ALL_FIELDS.replace('<activation ', "<activation auto-clear='true' ");
+    const action = ALL_FIELDS;
     const { result, applyWorkbookDocument } = await getToolResult({
       args: { ...ARGS, clearSelection: 'show-all' },
       initialXml: WORKBOOK,
@@ -304,7 +307,8 @@ describe('author-action highlight mode', () => {
     [{ highlightFields: [] }, 'nonempty field names'],
     [{ highlightFields: [' '] }, 'nonempty field names'],
     [{ highlightFields: ['Category'], highlightBy: 'all-fields' }, 'mutually exclusive'],
-    [{ clearSelection: 'exclude-all' }, 'do-nothing or show-all'],
+    [{ clearSelection: 'exclude-all' }, 'only clearSelection show-all'],
+    [{ clearSelection: 'do-nothing' }, 'only clearSelection show-all'],
     [{ targetParameter: '[Parameters].[Parameter 1]' }, 'not allowed'],
     [{ targetSet: 'Category Set' }, 'not allowed'],
     [{ url: 'https://example.com' }, 'not allowed'],
@@ -330,7 +334,7 @@ describe('author-action highlight mode', () => {
     ['command', SPECIFIC_FIELDS.replace('tsc:brush', 'tsc:tsl-filter')],
     ['source', SPECIFIC_FIELDS.replace("worksheet='Profit'", "worksheet='Other'")],
     ['activation', SPECIFIC_FIELDS.replace('on-select', 'on-hover')],
-    ['clearing', SPECIFIC_FIELDS.replace('<activation ', "<activation auto-clear='true' ")],
+    ['clearing', SPECIFIC_FIELDS.replace("auto-clear='true' ", '')],
     ['target', SPECIFIC_FIELDS.replace("value='Details'", "value='Profit'")],
     ['fields', SPECIFIC_FIELDS.replace('Category,Sub-Category', 'Category')],
     ['all-fields rewrite', ALL_FIELDS],

@@ -71,7 +71,7 @@ function renderDashboard({ name, zones }: WorkbookDashboard): string {
 
 export const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
-  "<workbook version='18.1'>",
+  "<workbook version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>",
   '<datasources>',
   "<datasource hasconnection='false' inline='true' name='Parameters'>",
   "<column caption='p.Period' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column>",
@@ -94,9 +94,11 @@ export function withActions(baseXml: string, actionXml: string): string {
 
 export type AuthorActionArgs = {
   session?: string;
+  operation?: 'create' | 'edit' | 'delete';
+  actionName?: string;
   mode?: 'parameter' | 'set' | 'url' | 'filter' | 'highlight';
-  caption: string;
-  sourceWorksheet: string;
+  caption?: string;
+  sourceWorksheet?: string;
   sourceField?: string;
   targetParameter?: string;
   targetSet?: string;
@@ -164,6 +166,10 @@ export async function getToolResult({
     {
       session: '12345',
       ...args,
+      operation: args.operation,
+      actionName: args.actionName,
+      caption: args.caption,
+      sourceWorksheet: args.sourceWorksheet,
       mode: args.mode ?? 'parameter',
       sourceField: args.sourceField,
       targetParameter: args.targetParameter,
@@ -176,7 +182,7 @@ export async function getToolResult({
       singleSelect: args.singleSelect,
       activation: args.activation ?? 'on-select',
       setMembership: args.setMembership ?? 'assign',
-      clearSelection: args.clearSelection ?? 'do-nothing',
+      clearSelection: args.clearSelection,
       sourceFieldAggregation: args.sourceFieldAggregation,
       clearValue: args.clearValue,
       onClear: args.onClear,
