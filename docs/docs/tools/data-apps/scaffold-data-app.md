@@ -26,10 +26,6 @@ This tool is gated behind the `data-apps` feature flag, which defaults to `false
 - **API scope**: `tableau:packages:read` is required. When API-scope enforcement is enabled,
   callers with older tokens missing this scope must reauthorize to request it.
 - **Server feature**: The experimental packages API requires the Tableau `Packages` feature flag.
-- **Tableau version**: 2026.3.1 or later, where data apps can be hosted. Patch builds of 2026.3
-  report `2026.3.0` until the release freeze promotes them, so a `2026.3.0` server is also
-  accepted when its build number (`productVersion.build` from `serverinfo`) is
-  `20263.26.1013.1554` or later. On older servers the tool is not registered.
 
 ## APIs called
 
