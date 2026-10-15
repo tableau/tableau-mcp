@@ -68,6 +68,34 @@ function receipt(
 describe('author-action edit/delete', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  describe.each([undefined, 'create'] as const)('create operation %s', (operation) => {
+    it.each([undefined, '', ' ', '\t\r\n '])(
+      'accepts a cleared actionName (%j) as omitted',
+      async (actionName) => {
+        const created = CASES[2].definition.replace('[Action7]', '[Action1]');
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: {
+            operation,
+            actionName,
+            mode: 'url',
+            caption: 'Original',
+            sourceWorksheet: 'Profit',
+            url: 'https://example.com/selected',
+          },
+          initialXml: withActions(WORKBOOK, UNRELATED),
+          readbackXml: withActions(WORKBOOK, UNRELATED + created),
+        });
+        expect(result.isError).toBe(false);
+        expect(receipt(result)).toMatchObject({ actionName: '[Action1]', mode: 'url' });
+        expect(
+          actions(appliedDocumentXml(applyWorkbookDocument))
+            .map((action) => action.name)
+            .sort(),
+        ).toEqual(['[Action1]', '[Action3]']);
+      },
+    );
+  });
+
   it.each(CASES)(
     'replaces a $mode definition under the same internal name',
     async ({ mode, definition, args }) => {
@@ -203,7 +231,9 @@ describe('author-action edit/delete', () => {
 
   it.each([
     { operation: 'edit', actionName: undefined },
+    { operation: 'edit', actionName: ' \t\r\n ' },
     { operation: 'delete', actionName: '' },
+    { operation: 'delete', actionName: ' \t\r\n ' },
     { operation: 'create', actionName: '[Action7]' },
     { operation: 'edit', actionName: '[Action7]', caption: undefined },
     { operation: 'edit', actionName: '[Action7]', sourceWorksheet: undefined },

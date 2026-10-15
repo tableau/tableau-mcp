@@ -237,13 +237,13 @@ export function parseAuthorActionArgs(
   args: AuthorActionRawArgs,
 ): Result<AuthorActionInput, ArgsValidationError> {
   const operation = args.operation ?? 'create';
-  const actionName = args.actionName?.trim();
+  const actionName = args.actionName?.trim() || undefined;
   if (operation !== 'create' && !actionName) {
     return new ArgsValidationError(
       'actionName is required for edit/delete; use the exact internal name returned by author-action',
     ).toErr();
   }
-  if (operation === 'create' && args.actionName !== undefined) {
+  if (operation === 'create' && actionName !== undefined) {
     return new ArgsValidationError('actionName is only allowed for edit/delete').toErr();
   }
   if (operation === 'delete') {
