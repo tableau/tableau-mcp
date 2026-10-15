@@ -81,7 +81,7 @@ describe('cancelFlowRunTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is disabled when the flow write flag is off (state-mutating tool is opt-in)', async () => {
+  it('is disabled when flow writes are explicitly disabled', async () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       flowToolsEnabled: true,
       flowWriteToolsEnabled: false,

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MockedFunction } from 'vitest';
 
+import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
@@ -341,7 +342,6 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // The rollout flag keeps both reads and writes unavailable with default config.
     expect(registeredToolNames).not.toContain('list-flows');
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
@@ -351,15 +351,14 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('run-flow');
     expect(registeredToolNames).not.toContain('run-flow-task');
     expect(registeredToolNames).not.toContain('cancel-flow-run');
-    // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register all nine flow tools with default config when the flow-tools flag is ON', async () => {
+  it('should register all nine flow tools with shipped defaults', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'flow-tools',
+      (featureName: string) => features[featureName as keyof typeof features] ?? false,
     );
     const server = getServer();
     await server.registerTools();
@@ -368,7 +367,6 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // No environment opt-in is required for reads or writes.
     expect(registeredToolNames).toContain('list-flows');
     expect(registeredToolNames).toContain('get-flow');
     expect(registeredToolNames).toContain('list-flow-runs');
@@ -378,7 +376,6 @@ describe('server', () => {
     expect(registeredToolNames).toContain('run-flow');
     expect(registeredToolNames).toContain('run-flow-task');
     expect(registeredToolNames).toContain('cancel-flow-run');
-    // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });
 

@@ -457,10 +457,10 @@ Enables product telemetry for tool usage tracking.
 
 ## `FLOW_TOOLS_ENABLED`
 
-Controls the base setting for the Tableau Prep flow tool family. It applies to read-only tools and is also required for the mutating tools.
+Controls the Tableau Prep flow tool family, including reads, runs, and cancellation.
 
 - Default: `true`
-- Applies to these read-only tools:
+- Read-only tools:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
@@ -469,9 +469,8 @@ Controls the base setting for the Tableau Prep flow tool family. It applies to r
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
 - Set to the exact value `false` to disable all flow tools. Any other value, including unset
   or empty, leaves this setting enabled.
-- The `flow-tools` feature flag must also be enabled. The default provider reads the bundled
-  `features.json`, where it ships as `false`, including for self-hosted deployments. A custom
-  provider can supply a different value.
+- The `flow-tools` feature flag also defaults to `true` in the bundled `features.json`.
+  Deployments can disable it through their feature-gate provider.
 - The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled),
   which defaults to `true`.
 - When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
@@ -504,7 +503,7 @@ Enables admin-only tools that require site administrator permissions.
 
 ## `FLOW_WRITE_TOOLS_ENABLED`
 
-Controls the content-**mutating** Tableau Prep flow run tools. A confirmed run consumes Tableau Prep Conductor capacity and can overwrite outputs. These tools still require a preview followed by explicit human approval and a matching single-use confirmation token.
+Controls flow runs and cancellation. A confirmed run consumes Tableau Prep Conductor capacity and can overwrite outputs. Each mutation requires a preview followed by explicit human approval and a matching single-use confirmation token.
 
 - Default: `true`
 - Set to the exact value `false` to disable the mutating tools. Any other value, including unset
@@ -524,8 +523,6 @@ Controls the content-**mutating** Tableau Prep flow run tools. A confirmed run c
 | `false` | `false` or `true` | none |
 | `true` | `false` | read-only flow tools |
 | `true` | `true` | read-only and mutating flow tools |
-
-Unset values use `true` for both settings. Tableau permissions, licensing, and site settings still apply.
 
 <hr />
 
