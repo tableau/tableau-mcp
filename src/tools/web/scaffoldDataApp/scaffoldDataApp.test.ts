@@ -32,8 +32,8 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.1 (see scaffoldDataApp.ts).
-const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.1', build: '' };
+// Floor is 2026.3.0 (see scaffoldDataApp.ts).
+const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
 const VERSION_UNKNOWN: ProductVersion = { value: 'garbage', build: '' };
