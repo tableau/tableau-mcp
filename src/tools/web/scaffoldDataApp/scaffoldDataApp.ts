@@ -16,6 +16,30 @@ import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspa
 // Below this floor the scaffolded app can never be published, so the tool is not registered.
 const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.1';
 
+// Patch builds of 2026.3 keep reporting 2026.3.0 until the release freeze promotes them, even once
+// they carry data-app hosting. Accept those by build number: `<release>.<yy>.<mmdd>.<hhmm>`, where
+// this is the first 2026.3 patch build with every change data apps need.
+const DATA_APP_MIN_PATCH_PRODUCT_VERSION = '2026.3.0';
+const DATA_APP_MIN_PATCH_BUILD = '20263.26.1013.1554';
+
+function parseReleaseBuild(build: string): { release: number; stamp: number } | undefined {
+  const parts = build.split('.');
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) {
+    return undefined;
+  }
+  const [release, yy, mmdd, hhmm] = parts.map(Number);
+  return { release, stamp: yy * 1e8 + mmdd * 1e4 + hhmm };
+}
+
+function isDataAppPatchBuild({ value, build }: ProductVersion): boolean {
+  if (value !== DATA_APP_MIN_PATCH_PRODUCT_VERSION) {
+    return false;
+  }
+  const actual = parseReleaseBuild(build);
+  const min = parseReleaseBuild(DATA_APP_MIN_PATCH_BUILD);
+  return !!actual && !!min && actual.release === min.release && actual.stamp >= min.stamp;
+}
+
 const paramsSchema = {
   datappName: z
     .string()
@@ -51,10 +75,11 @@ export const getScaffoldDataAppTool = (
     },
     disabled: new Provider(async () => {
       const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      const versionAllowed = getResultForTableauVersion({
-        productVersion,
-        mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-      });
+      const versionAllowed =
+        getResultForTableauVersion({
+          productVersion,
+          mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
+        }) || isDataAppPatchBuild(productVersion);
       return !(flagOn && versionAllowed);
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
