@@ -68,6 +68,12 @@ export class ExchangeNotFoundError extends McpToolError {
   }
 }
 
+export class ExchangeDownloadError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'exchange-download', message, statusCode: 422 });
+  }
+}
+
 export class ExchangeUnavailableError extends McpToolError {
   constructor() {
     super({

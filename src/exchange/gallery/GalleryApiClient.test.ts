@@ -130,6 +130,49 @@ describe('GalleryApiClient', () => {
     expect(JSON.stringify(product)).not.toMatch(/private|unsupported|instructions_fr_fr/);
   });
 
+  describe('downloadProduct', () => {
+    it('POSTs the anonymous download route once and returns the file bytes', async () => {
+      const fetchFn = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(new Uint8Array([80, 75, 3, 4])));
+      const bytes = await create(fetchFn).downloadProduct({ productId: 932, maxBytes: 10 });
+      expect([...bytes]).toEqual([80, 75, 3, 4]);
+      expect(fetchFn).toHaveBeenCalledOnce();
+      const [url, options] = fetchFn.mock.calls[0];
+      expect(String(url)).toBe('https://gallery.example/api/products/932:download');
+      expect(options).toMatchObject({
+        method: 'POST',
+        redirect: 'manual',
+        credentials: 'omit',
+        body: '{}',
+      });
+    });
+
+    it('does not retry, since each request records a download', async () => {
+      const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 503 }));
+      await expect(
+        create(fetchFn).downloadProduct({ productId: 1, maxBytes: 10 }),
+      ).rejects.toMatchObject({ kind: 'unavailable' });
+      expect(fetchFn).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['a missing file', new Response('', { status: 404 }), 'not-found'],
+      ['a redirect', new Response('', { status: 302 }), 'invalid-response'],
+      [
+        'a declared oversized body',
+        new Response('', { headers: { 'content-length': '11' } }),
+        'too-large',
+      ],
+      ['a streamed oversized body', new Response(new Uint8Array(11)), 'too-large'],
+    ])('rejects %s', async (_, response, kind) => {
+      const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(response);
+      await expect(
+        create(fetchFn).downloadProduct({ productId: 1, maxBytes: 10 }),
+      ).rejects.toMatchObject({ kind });
+    });
+  });
+
   it.each([undefined, null, '', '   ', 123, { text: 'Malformed' }])(
     'falls back to English when localized instructions are unavailable: %j',
     async (localized) => {

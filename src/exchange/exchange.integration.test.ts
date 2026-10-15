@@ -1,4 +1,6 @@
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -9,7 +11,14 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { exchangeToolNames } from '../tools/exchange/toolName.js';
-import { CompareData, ExchangeAsset, FacetData, SearchData, ToolResponse } from './types.js';
+import {
+  CompareData,
+  DownloadData,
+  ExchangeAsset,
+  FacetData,
+  SearchData,
+  ToolResponse,
+} from './types.js';
 
 type FixtureGallery = {
   url: string;
@@ -18,11 +27,12 @@ type FixtureGallery = {
   close: () => Promise<void>;
 };
 describe('Exchange MCP stdio interoperability', () => {
-  it('discovers all five types, reads/compares Skills, exposes used categories and invokes only existing GET routes', async () => {
+  it('discovers all five types, reads/compares/downloads Skills, exposes used categories and invokes only existing Gallery routes', async () => {
     const module = (await import(
       pathToFileURL(resolve('docs/scripts/demo-exchange-gallery.mjs')).href
     )) as { startFixtureGallery: () => Promise<FixtureGallery> };
     const gallery = await module.startFixtureGallery();
+    const downloadDir = await mkdtemp(join(tmpdir(), 'exchange-integration-'));
     // Exercise reachable upstream fields without changing the reusable fixture file.
     const artifactUrl = `${gallery.url}products/2000:download`;
     const extension = gallery.fixture.products.find((product) => product.id === 2000)!;
@@ -57,6 +67,7 @@ describe('Exchange MCP stdio interoperability', () => {
         EXCHANGE_LOCALE: 'fr-FR',
         GALLERY_API_TIMEOUT_MS: '1000',
         PRODUCT_PAGE_SIZE: '2',
+        EXCHANGE_DOWNLOAD_DIR: downloadDir,
       },
     });
     const call = async <T>(
@@ -86,7 +97,7 @@ describe('Exchange MCP stdio interoperability', () => {
       for (const tool of tools) {
         expect(tool.outputSchema).toBeDefined();
         expect(tool.annotations).toMatchObject({
-          readOnlyHint: true,
+          readOnlyHint: tool.name !== 'download-exchange-asset',
           destructiveHint: false,
           idempotentHint: true,
         });
@@ -169,8 +180,27 @@ describe('Exchange MCP stdio interoperability', () => {
             request.method === 'GET' && /^(?:\/products(?:\/\d+)?|\/tags)$/.test(request.pathname),
         ),
       ).toBe(true);
+      const downloaded = await call<DownloadData>('download-exchange-asset', { productId: 1003 });
+      expect(downloaded.data).toMatchObject({ productId: 1003, type: 'skill' });
+      expect(downloaded.data.path).toBe(join(downloadDir, '1003', downloaded.data.fileName));
+      expect(downloaded.data.fileName).toMatch(/\.tskill$/);
+      expect((await readFile(downloaded.data.path)).subarray(0, 2).toString()).toBe('PK');
+      expect(gallery.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        pathname: '/products/1003:download',
+      });
+      const noFile = await client.callTool({
+        name: 'download-exchange-asset',
+        arguments: { productId: 2000 },
+      });
+      expect(noFile.isError).toBe(true);
+      expect(JSON.stringify(noFile.content)).toContain('no downloadable file');
       expect(gallery.requests.some((request) => request.pathname === '/tags')).toBe(true);
-      expect(gallery.requests.every((request) => request.query.lang === 'fr_fr')).toBe(true);
+      expect(
+        gallery.requests
+          .filter((request) => request.method === 'GET')
+          .every((request) => request.query.lang === 'fr_fr'),
+      ).toBe(true);
       const invalid = await client.callTool({
         name: 'compare-exchange-assets',
         arguments: { productIds: [1003, 1003] },
@@ -179,6 +209,7 @@ describe('Exchange MCP stdio interoperability', () => {
     } finally {
       await client.close();
       await gallery.close();
+      await rm(downloadDir, { recursive: true, force: true });
     }
   }, 30_000);
 });

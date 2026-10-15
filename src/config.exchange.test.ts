@@ -1,3 +1,6 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { getExchangeConfig } from './config.exchange.js';
 
 const settings = {
@@ -30,6 +33,18 @@ describe('Exchange config', () => {
     { GALLERY_API_BASE_URL: 'https://user:password@example.test/' },
   ])('rejects unsupported or unsafe config %j', (invalid) => {
     expect(() => getExchangeConfig({ ...settings, ...invalid })).toThrow();
+  });
+  it('saves downloads under the user Downloads folder unless an absolute directory is set', () => {
+    expect(getExchangeConfig(settings).options.downloadDir).toBe(
+      join(homedir(), 'Downloads', 'tableau-exchange'),
+    );
+    expect(
+      getExchangeConfig({ ...settings, EXCHANGE_DOWNLOAD_DIR: '/tmp/exchange' }).options
+        .downloadDir,
+    ).toBe('/tmp/exchange');
+    expect(() => getExchangeConfig({ ...settings, EXCHANGE_DOWNLOAD_DIR: 'relative/dir' })).toThrow(
+      'EXCHANGE_DOWNLOAD_DIR must be an absolute path.',
+    );
   });
   it('requires both API and matching website configuration', () => {
     expect(() =>

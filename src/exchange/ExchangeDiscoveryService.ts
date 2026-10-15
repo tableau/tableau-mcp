@@ -1,7 +1,12 @@
+import { createHash } from 'node:crypto';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
+  ExchangeDownloadError,
   ExchangeInputError,
   ExchangeNotFoundError,
   ExchangeUnavailableError,
@@ -16,6 +21,7 @@ import {
   AssetType,
   CatalogMeta,
   CompareData,
+  DownloadData,
   ExchangeAsset,
   ExchangeRuntimeOptions,
   ExchangeTag,
@@ -24,6 +30,57 @@ import {
   SearchInput,
   ToolResponse,
 } from './types.js';
+
+const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
+const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const isZip = (file: Buffer): boolean => file.subarray(0, 4).equals(ZIP_SIGNATURE);
+// .tskill, .taco and .twbx are ZIP archives; .trex is an XML manifest.
+const packageFormats: Record<
+  AssetType,
+  { extension: string; matches: (file: Buffer) => boolean; nextStep: string }
+> = {
+  skill: {
+    extension: 'tskill',
+    matches: isZip,
+    nextStep:
+      'The .tskill file is a ZIP archive; review its SKILL.md, then follow the listing for how to add the Skill in Tableau.',
+  },
+  connector: {
+    extension: 'taco',
+    matches: isZip,
+    nextStep:
+      'Copy the .taco file into My Tableau Repository/Connectors and restart Tableau. Most connectors also need a database driver from the publisher, linked on the listing page.',
+  },
+  accelerator: {
+    extension: 'twbx',
+    matches: isZip,
+    nextStep:
+      'Open the .twbx packaged workbook in Tableau Desktop, or publish it to Tableau Server or Tableau Cloud.',
+  },
+  extension: {
+    extension: 'trex',
+    matches: (file) => isManifest(file),
+    nextStep:
+      'In a dashboard, add an Extension object, choose Access Local Extensions and select the .trex file. The extension itself runs from the web address in its manifest.',
+  },
+  viz: {
+    extension: 'trex',
+    matches: (file) => isManifest(file),
+    nextStep:
+      'On a worksheet, open the mark type menu on the Marks card, choose Add Extension, then pick the local .trex file. The extension itself runs from the web address in its manifest.',
+  },
+};
+const isManifest = (file: Buffer): boolean =>
+  /<manifest[\s>]/.test(file.subarray(0, 4_096).toString('utf8'));
+/** The listing name only shapes the file name; it never chooses the directory. */
+const fileStem = (asset: ExchangeAsset): string =>
+  asset.name
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/, '') || `product-${asset.id}`;
 
 const productIdSchema = z.number().int().positive().safe();
 const searchSchema = z.object({
@@ -133,6 +190,71 @@ export class ExchangeDiscoveryService {
         communityContribution: asset.communityContribution,
       }));
       return { data: { assets, dimensions }, meta: this.meta(snapshot) };
+    });
+  }
+
+  async download(input: {
+    productId: number;
+  }): Promise<Result<ToolResponse<DownloadData>, McpToolError>> {
+    return this.execute(async () => {
+      if (!productIdSchema.safeParse(input.productId).success)
+        throw new ExchangeInputError('A positive integer productId is required.');
+      const snapshot = await this.snapshot();
+      // The detail read also carries the listing's installation instructions, where Gallery has them.
+      const asset = await this.detail(input.productId, snapshot);
+      const format = packageFormats[asset.type];
+      const installationInstructions =
+        asset.details?.kind === 'connector' ? asset.details.installationInstructions : undefined;
+      let file: Buffer;
+      try {
+        file = Buffer.from(
+          await this.client.downloadProduct({ productId: asset.id, maxBytes: MAX_DOWNLOAD_BYTES }),
+        );
+      } catch (error) {
+        if (error instanceof GalleryApiClientError && error.kind === 'not-found')
+          throw new ExchangeDownloadError('This listing has no downloadable file on the Exchange.');
+        if (error instanceof GalleryApiClientError && error.kind === 'too-large')
+          throw new ExchangeDownloadError(
+            `The file exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB download size limit.`,
+          );
+        throw error;
+      }
+      if (!format.matches(file))
+        throw new ExchangeDownloadError(
+          `The Exchange returned a file that is not a .${format.extension} package; nothing was saved.`,
+        );
+      const fileName = `${fileStem(asset)}.${format.extension}`;
+      const directory = join(this.options.downloadDir, String(asset.id));
+      const path = join(directory, fileName);
+      await mkdir(directory, { recursive: true });
+      // Write beside the target and rename so an interrupted write never leaves a partial package.
+      const partial = `${path}.part`;
+      try {
+        await writeFile(partial, file);
+        await rename(partial, path);
+      } catch (error) {
+        await rm(partial, { force: true });
+        throw error;
+      }
+      return {
+        data: {
+          productId: asset.id,
+          type: asset.type,
+          name: asset.name,
+          fileName,
+          path,
+          bytes: file.length,
+          sha256: createHash('sha256').update(file).digest('hex'),
+          listingUrl: asset.listingUrl,
+          nextStep: installationInstructions
+            ? "Follow the publisher's installation instructions below. If they don't say where the .taco file goes, it belongs in My Tableau Repository/Connectors."
+            : format.nextStep,
+          ...(installationInstructions ? { installationInstructions } : {}),
+        },
+        meta: this.meta(snapshot, [
+          'The file was saved but not opened, extracted or installed. It is third-party content; review it and the listing before installing.',
+        ]),
+      };
     });
   }
 

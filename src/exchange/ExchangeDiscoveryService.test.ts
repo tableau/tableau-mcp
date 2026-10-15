@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { MockInstance } from 'vitest';
 
 import { getExchangeConfig } from '../config.exchange.js';
@@ -289,5 +294,121 @@ describe('ExchangeDiscoveryService', () => {
       ),
     ).toBe(true);
     expect(JSON.stringify(comparison)).not.toMatch(/driver|instructions_fr_fr|private/);
+  });
+  describe('download', () => {
+    const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+    let downloadDir: string;
+    beforeEach(async () => {
+      downloadDir = await mkdtemp(join(tmpdir(), 'exchange-download-'));
+    });
+    afterEach(async () => {
+      await rm(downloadDir, { recursive: true, force: true });
+    });
+    const downloadSetup = (
+      bytes: Uint8Array | Error,
+      catalog = products,
+    ): {
+      service: ExchangeDiscoveryService;
+      download: MockInstance<GalleryApiClient['downloadProduct']>;
+    } => {
+      const { client, list, detail } = setup();
+      list.mockImplementation(async ({ type, page, community, perPage }) => ({
+        products: page === 1 && !community ? catalog.filter((p) => p.product_type === type) : [],
+        page,
+        per_page: perPage,
+        total: null,
+        next: null,
+      }));
+      detail.mockImplementation(
+        async ({ productId }) => catalog.find((product) => product.id === productId) ?? catalog[0],
+      );
+      const download = vi.spyOn(client, 'downloadProduct');
+      if (bytes instanceof Error) download.mockRejectedValue(bytes);
+      else download.mockResolvedValue(bytes);
+      return {
+        download,
+        service: new ExchangeDiscoveryService({
+          client,
+          options: { ...config.options, downloadDir },
+        }),
+      };
+    };
+
+    it('saves a catalog member under its ID with a name derived from the listing and reports a hash', async () => {
+      const { service, download } = downloadSetup(zip);
+      const result = (await service.download({ productId: 1 })).unwrap();
+      const path = join(downloadDir, '1', 'workbook-skill-1.tskill');
+      expect(result.data).toEqual({
+        productId: 1,
+        type: 'skill',
+        name: 'Workbook Skill 1',
+        fileName: 'workbook-skill-1.tskill',
+        path,
+        bytes: zip.length,
+        sha256: createHash('sha256').update(zip).digest('hex'),
+        listingUrl: 'https://exchange.example/products/1',
+        nextStep: expect.stringContaining('SKILL.md'),
+      });
+      expect(await readFile(path)).toEqual(zip);
+      expect(await readdir(join(downloadDir, '1'))).toEqual(['workbook-skill-1.tskill']);
+      expect(download).toHaveBeenCalledExactlyOnceWith({
+        productId: 1,
+        maxBytes: expect.any(Number),
+      });
+      expect(result.meta.warnings.join(' ')).toContain('not opened, extracted or installed');
+    });
+
+    it("adds the type's next step and the listing's own installation instructions", async () => {
+      const connector = galleryProductSchema.parse({
+        id: 7,
+        product_type: 'connector',
+        name: 'Fixture Connector',
+        publisher_name: 'Vendor',
+        typed_tags: [],
+        community_contribution: false,
+        details: { installation_instructions: '<p>Install the ODBC driver first.</p>' },
+      });
+      const { service } = downloadSetup(zip, [connector]);
+      const { data } = (await service.download({ productId: 7 })).unwrap();
+      expect(data.fileName).toBe('fixture-connector.taco');
+      expect(data.nextStep).toMatch(/^Follow the publisher's installation instructions/);
+      expect(data.nextStep).toContain('My Tableau Repository/Connectors');
+      expect(data.installationInstructions).toBe('Install the ODBC driver first.');
+
+      const bare = galleryProductSchema.parse({ ...connector, id: 8, details: {} });
+      const fallback = (
+        await downloadSetup(zip, [bare]).service.download({ productId: 8 })
+      ).unwrap();
+      expect(fallback.data.nextStep).toMatch(/^Copy the \.taco file/);
+      expect(fallback.data.nextStep).toContain('database driver');
+      expect(fallback.data.installationInstructions).toBeUndefined();
+    });
+
+    it('rejects IDs outside the catalog without contacting the download route', async () => {
+      const { service, download } = downloadSetup(zip);
+      expect((await service.download({ productId: 99 })).unwrapErr().type).toBe(
+        'exchange-not-found',
+      );
+      expect((await service.download({ productId: 0 })).unwrapErr().type).toBe('exchange-input');
+      expect(download).not.toHaveBeenCalled();
+    });
+
+    it('refuses to save a file that is not the package format for its type', async () => {
+      const { service } = downloadSetup(Buffer.from('<html>login</html>'));
+      const error = (await service.download({ productId: 1 })).unwrapErr();
+      expect(error.type).toBe('exchange-download');
+      expect(error.message).toContain('.tskill');
+      expect(await readdir(downloadDir)).toEqual([]);
+    });
+
+    it.each([
+      [new GalleryApiClientError('not-found'), 'no downloadable file'],
+      [new GalleryApiClientError('too-large'), 'size limit'],
+    ])('explains a %s download failure', async (failure, message) => {
+      const { service } = downloadSetup(failure);
+      const error = (await service.download({ productId: 1 })).unwrapErr();
+      expect(error.type).toBe('exchange-download');
+      expect(error.message).toContain(message);
+    });
   });
 });
