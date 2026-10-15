@@ -6,6 +6,8 @@ sidebar_position: 3
 
 `job-optimization-inform`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/job-optimization-inform` (default arguments).
+
 A read-only Tableau Cloud admin workflow that analyzes Admin Insights job performance and surfaces optimization signals.
 
 :::warning[Admin Only]
