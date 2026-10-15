@@ -114,10 +114,13 @@ const BASE_INSTRUCTIONS =
 // so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
 // (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
 const ADMIN_INSTRUCTIONS =
-  'This server also has site-administration capabilities, exposed as named MCP prompts (retrieve them ' +
-  'by name via prompts/get) that package multi-step admin workflows with their built-in safety ' +
-  'scaffolding. For general admin/site-health, governance, cleanup, or cost/license questions, invoke ' +
-  'the matching prompt by name rather than reconstructing the workflow from raw tool calls. Each ' +
+  'This server also has site-administration capabilities, exposed as named MCP prompts that package ' +
+  'multi-step admin workflows with their built-in safety scaffolding. Each workflow is also readable ' +
+  'as an MCP resource at tableau-mcp://admin-workflows/<prompt-name>. For general admin/site-health, ' +
+  'governance, cleanup, or cost/license questions, read the matching workflow resource and follow it ' +
+  'rather than reconstructing the workflow from raw tool calls; users can also run it as the ' +
+  'slash-command prompt of the same name. If you cannot read MCP resources, tell the user which ' +
+  'prompt to run as a slash command instead. Each ' +
   'concern has an "-inform" prompt (read-only report) and, where changes can be applied, an "-apply" ' +
   'prompt (destructive: dry-run by default, requires explicit human-in-the-loop confirmation before ' +
   'any write or delete). The exact prompt names are: stale-content-cleanup-inform and ' +
