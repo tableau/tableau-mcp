@@ -54,11 +54,11 @@ describe('flows tool descriptions (eval)', () => {
   afterAll(resetEnv);
 
   beforeEach(async () => {
-    // Flow tools are gated off by default behind both FLOW_TOOLS_ENABLED and the flow-tools
-    // feature flag; opt in to both for this eval.
+    // Keep read-only evals from invoking mutations now that product defaults allow writes.
     mcpServer = await getMcpServer({
       ...getDefaultEnv(),
       FLOW_TOOLS_ENABLED: 'true',
+      FLOW_WRITE_TOOLS_ENABLED: 'false',
       FEATURE_GATE_PROVIDER: 'custom',
       FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
         module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',

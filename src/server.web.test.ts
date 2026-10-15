@@ -331,7 +331,9 @@ describe('server', () => {
     }
   });
 
-  it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {
+  it('should not register any flow tools when the flow-tools flag is OFF with default config', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     const server = getServer();
     await server.registerTools();
 
@@ -339,19 +341,23 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // Flow tools are gated off by default...
+    // The rollout flag keeps both reads and writes unavailable with default config.
     expect(registeredToolNames).not.toContain('list-flows');
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
     expect(registeredToolNames).not.toContain('describe-flow');
     expect(registeredToolNames).not.toContain('get-flow-task');
+    expect(registeredToolNames).not.toContain('run-flow');
+    expect(registeredToolNames).not.toContain('run-flow-task');
+    expect(registeredToolNames).not.toContain('cancel-flow-run');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register flow tools when FLOW_TOOLS_ENABLED is "true" and the flow-tools flag is ON', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+  it('should register all nine flow tools with default config when the flow-tools flag is ON', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (featureName: string) => featureName === 'flow-tools',
     );
@@ -362,13 +368,16 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // Both switches on turns on every flow tool...
+    // No environment opt-in is required for reads or writes.
     expect(registeredToolNames).toContain('list-flows');
     expect(registeredToolNames).toContain('get-flow');
     expect(registeredToolNames).toContain('list-flow-runs');
     expect(registeredToolNames).toContain('list-flow-tasks');
     expect(registeredToolNames).toContain('describe-flow');
     expect(registeredToolNames).toContain('get-flow-task');
+    expect(registeredToolNames).toContain('run-flow');
+    expect(registeredToolNames).toContain('run-flow-task');
+    expect(registeredToolNames).toContain('cancel-flow-run');
     // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -410,22 +419,36 @@ describe('server', () => {
     expect(registeredToolNames).toContain('cancel-flow-run');
   });
 
-  it('should not register mutating flow tools when only the write gate is enabled', async () => {
-    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
-    const server = getServer();
-    await server.registerTools();
+  it.each(['true', 'false'])(
+    'should not register any flow tools when FLOW_TOOLS_ENABLED is false and FLOW_WRITE_TOOLS_ENABLED is %s',
+    async (writeEnabled) => {
+      vi.stubEnv('FLOW_TOOLS_ENABLED', 'false');
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', writeEnabled);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'flow-tools',
+      );
+      const server = getServer();
+      await server.registerTools();
 
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
+      const registeredToolNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0 /* tool name */]);
 
-    expect(registeredToolNames).not.toContain('run-flow');
-    expect(registeredToolNames).not.toContain('run-flow-task');
-    expect(registeredToolNames).not.toContain('cancel-flow-run');
-  });
+      expect(registeredToolNames).not.toContain('list-flows');
+      expect(registeredToolNames).not.toContain('get-flow');
+      expect(registeredToolNames).not.toContain('list-flow-runs');
+      expect(registeredToolNames).not.toContain('list-flow-tasks');
+      expect(registeredToolNames).not.toContain('describe-flow');
+      expect(registeredToolNames).not.toContain('get-flow-task');
+      expect(registeredToolNames).not.toContain('run-flow');
+      expect(registeredToolNames).not.toContain('run-flow-task');
+      expect(registeredToolNames).not.toContain('cancel-flow-run');
+    },
+  );
 
-  it('should register read-only flow tools but not mutating flow tools when FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+  it('should register only read-only flow tools when FLOW_WRITE_TOOLS_ENABLED is false', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'false');
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (featureName: string) => featureName === 'flow-tools',
     );
@@ -440,6 +463,7 @@ describe('server', () => {
     expect(registeredToolNames).toContain('get-flow');
     expect(registeredToolNames).toContain('list-flow-runs');
     expect(registeredToolNames).toContain('list-flow-tasks');
+    expect(registeredToolNames).toContain('describe-flow');
     expect(registeredToolNames).toContain('get-flow-task');
 
     expect(registeredToolNames).not.toContain('run-flow');

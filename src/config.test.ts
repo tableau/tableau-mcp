@@ -296,23 +296,22 @@ describe('Config', () => {
     expect(config.breakGlassDisableGlobally).toBe(true);
   });
 
-  it('should set flowToolsEnabled to false by default', () => {
-    const config = new Config();
-    expect(config.flowToolsEnabled).toBe(false);
-  });
-
-  it('should set flowToolsEnabled to true when FLOW_TOOLS_ENABLED is "true"', () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
-
+  it('should set flowToolsEnabled to true by default', () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
     const config = new Config();
     expect(config.flowToolsEnabled).toBe(true);
   });
 
-  it('should keep flowToolsEnabled false for values other than "true"', () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'yes');
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['', true],
+    ['yes', true],
+  ])('FLOW_TOOLS_ENABLED=%s sets flowToolsEnabled to %s', (value, expected) => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', value);
 
     const config = new Config();
-    expect(config.flowToolsEnabled).toBe(false);
+    expect(config.flowToolsEnabled).toBe(expected);
   });
 
   it('should default insightsToolsEnabled to false', () => {
@@ -327,16 +326,22 @@ describe('Config', () => {
     expect(config.insightsToolsEnabled).toBe(true);
   });
 
-  it('should set flowWriteToolsEnabled to false by default', () => {
-    const config = new Config();
-    expect(config.flowWriteToolsEnabled).toBe(false);
-  });
-
-  it('should set flowWriteToolsEnabled to true when specified', () => {
-    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
-
+  it('should set flowWriteToolsEnabled to true by default', () => {
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     const config = new Config();
     expect(config.flowWriteToolsEnabled).toBe(true);
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['', true],
+    ['yes', true],
+  ])('FLOW_WRITE_TOOLS_ENABLED=%s sets flowWriteToolsEnabled to %s', (value, expected) => {
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', value);
+
+    const config = new Config();
+    expect(config.flowWriteToolsEnabled).toBe(expected);
   });
 
   describe('HTTP server config parsing', () => {

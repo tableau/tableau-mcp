@@ -391,15 +391,13 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
-    // while flow rollouts are staged into production. Registering them requires both
-    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
-    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // Environment settings are opt-outs; the flow-tools feature flag still controls rollout.
+    this.flowToolsEnabled = flowToolsEnabled !== 'false';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled !== 'false';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
