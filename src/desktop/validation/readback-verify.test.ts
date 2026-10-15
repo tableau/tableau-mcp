@@ -86,7 +86,6 @@ const CATEGORICAL_FILTER_FINDING = {
   readback: 'changed',
   severity: 'error',
 } as const;
-const CATEGORICAL_FILTER_WARNING = { ...CATEGORICAL_FILTER_FINDING, severity: 'warning' } as const;
 
 describe('verifyWorksheetReadback', () => {
   it('flags intended lod encodings that Tableau silently strips on readback', () => {
@@ -467,18 +466,18 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
       'changes a member in the explicit union',
       MEMBER_UNION.replace('member="West"', 'member="Central"'),
     ],
-  ])('warns when Tableau %s', (_, readbackGroupfilter) => {
+  ])('fails when Tableau %s', (_, readbackGroupfilter) => {
     const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
 
-    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_WARNING);
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_FINDING);
   });
 
   it.each([
     ['level', MEMBER_UNION.replace(`level="${CATEGORICAL_LEVEL}"`, 'level="[none:State:nk]"')],
-  ])('warns when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
+  ])('fails when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
     const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
 
-    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_WARNING]);
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
   });
 
   it.each([
@@ -706,72 +705,12 @@ describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
   });
 });
 
-describe('verifyWorksheetReadback - filter severity (W-24366132)', () => {
-  const filterAttributes = `class="categorical" column="${CATEGORICAL_COLUMN}"`;
-  const intended = categoricalWorksheet(filterAttributes, MEMBER_UNION);
-
-  it('warns when a same-column categorical filter survives with different members', () => {
-    const readback = categoricalWorksheet(filterAttributes, MEMBER_UNION.replace(WEST_MEMBER, ''));
-
-    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_WARNING]);
-  });
-
-  it('errors when the categorical filter is missing from the readback', () => {
-    const readback = categoricalWorksheet('class="categorical" column="[DS].[none:Other:nk]"', '');
-
-    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
-  });
-
-  it('errors when the surviving filter has a different class', () => {
-    const readback = categoricalWorksheet(
-      `class="quantitative" column="${CATEGORICAL_COLUMN}"`,
-      MEMBER_UNION,
-    );
-
-    expect(verifyWorksheetReadback(intended, readback)).toEqual([
-      { ...CATEGORICAL_FILTER_FINDING, readback: 'missing' },
-    ]);
-  });
-
-  it('errors when only the context flag changes', () => {
-    const readback = categoricalWorksheet(`${filterAttributes} context="true"`, MEMBER_UNION);
-
-    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
-  });
-
-  it('errors when a Top-N filter changes', () => {
-    const topN = topNWorksheet(topNGroupfilter('10', 'user:ui-marker="a"'));
-    const readback = topNWorksheet(topNGroupfilter('50', 'user:ui-marker="a"'));
-
-    expect(verifyWorksheetReadback(topN, readback)).toContainEqual(
-      expect.objectContaining({ node: 'filter', severity: 'error' }),
-    );
-  });
-
-  it('errors when members differ and the intended column-instance declaration was dropped', () => {
-    const withDeps = (deps: string, groupfilter: string): string =>
-      `<worksheet name="Regions" xmlns:user="http://www.tableausoftware.com/xml/user"><table><view>
-        <datasource-dependencies datasource="Sample - Superstore">${deps}</datasource-dependencies>
-        <filter ${filterAttributes}>${groupfilter}</filter>
-      </view></table></worksheet>`;
-    const ci = `<column-instance column="[Region]" derivation="None" name="${CATEGORICAL_LEVEL}" pivot="key" type="nominal"/>`;
-
-    const findings = verifyWorksheetReadback(
-      withDeps(ci, MEMBER_UNION),
-      withDeps('', MEMBER_UNION.replace(WEST_MEMBER, '')),
-    );
-
-    expect(findings).toEqual([CATEGORICAL_FILTER_FINDING]);
-  });
-});
-
 describe('isReadbackUnsettled', () => {
   const base = { column: 'c', intended: 'i', readback: 'changed' } as const;
 
   it.each([
     ['an error', { ...base, kind: 'mark', node: 'mark', severity: 'error' }, true],
     ['a shelf warning', { ...base, kind: 'shelf', node: 'rows', severity: 'warning' }, true],
-    ['a filter warning', { ...base, kind: 'filter', node: 'filter', severity: 'warning' }, true],
     [
       'a sort warning',
       { ...base, kind: 'sort', node: 'computed-sort', severity: 'warning' },

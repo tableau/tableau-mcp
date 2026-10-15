@@ -86,8 +86,6 @@ interface FilterSignature {
   column: string;
   context: boolean;
   groupfilters: string;
-  /** Top-level groupfilter function and enumeration, e.g. "union|inclusive". */
-  shapes: string[];
   topN: TopNFilterSignature | null;
 }
 
@@ -286,10 +284,6 @@ function collectFilters(worksheet: XmlRecord): FilterSignature[] {
       column: attr(element, 'column'),
       context: attr(element, 'context').toLowerCase() === 'true',
       groupfilters: nestedGroupfilterSignature(element),
-      shapes: directChildren(element, 'groupfilter').map(
-        (groupfilter) =>
-          `${attr(groupfilter, 'function')}|${attr(groupfilter, 'user:ui-enumeration')}`,
-      ),
       topN: topNFilterSignature(element),
     });
   });
@@ -455,46 +449,12 @@ function shelfSeverity(
   return sharedAxis && sameMembers && intendedPills.every(isQuantitativePill) ? 'warning' : 'error';
 }
 
-/** W-24366132: only a categorical filter that survived with the same context and different members. */
-function filterSeverity(
-  filter: FilterSignature,
-  readback: FilterSignature[],
-): ReadbackFindingSeverity {
-  if (filter.klass !== 'categorical' || filter.topN || filter.shapes.length === 0) return 'error';
-  const survivor = readback.some(
-    (candidate) =>
-      candidate.klass === 'categorical' &&
-      candidate.column === filter.column &&
-      candidate.context === filter.context &&
-      !candidate.topN &&
-      filter.shapes.every((shape) => candidate.shapes.includes(shape)),
-  );
-  return survivor ? 'warning' : 'error';
-}
-
-/** True when the intended column-instance declaration for a filter did not survive readback. */
-function declarationMissing(
-  filter: FilterSignature,
-  intended: WorksheetSignature,
-  readback: WorksheetSignature,
-): boolean {
-  const instanceName = instanceNameFromColumnRef(filter.column);
-  return (
-    !!instanceName &&
-    intended.declaredInstances.has(instanceName) &&
-    !readback.declaredInstances.has(instanceName)
-  );
-}
-
 /**
- * Whether polling should keep re-reading. Shelf and filter warnings can be a transient
- * pre-apply read, so they must not settle the poll the way a terminal sort warning does.
+ * Whether polling should keep re-reading. A shelf warning can be a transient pre-apply read,
+ * so it must not settle the poll the way a terminal sort warning does.
  */
 export function isReadbackUnsettled(findings: ReadbackFinding[]): boolean {
-  return findings.some(
-    (finding) =>
-      finding.severity === 'error' || finding.kind === 'shelf' || finding.kind === 'filter',
-  );
+  return findings.some((finding) => finding.severity === 'error' || finding.kind === 'shelf');
 }
 
 export function verifyWorksheetReadback(
@@ -605,17 +565,15 @@ export function verifyWorksheetReadback(
         column: filter.column || undefined,
         intended: filterIntended(filter),
         readback: matchingFilter || related ? 'changed' : 'missing',
-        severity:
-          missingTopNSlice || declarationMissing(filter, intended, readback)
-            ? 'error'
-            : filterSeverity(filter, readback.filters),
+        severity: 'error',
       });
       continue;
     }
 
     // A surviving filter is inert when Tableau drops its intended column-instance declaration.
     const instanceName = instanceNameFromColumnRef(filter.column);
-    if (!instanceName || !declarationMissing(filter, intended, readback)) continue;
+    if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
+    if (readback.declaredInstances.has(instanceName)) continue;
     findings.push({
       kind: 'filter',
       node: 'column-instance',
