@@ -111,16 +111,21 @@ class ResourceAccessChecker {
   async isDatasourceAllowed({
     datasourceLuid,
     workbookLuid,
+    supportsWorkbookLuid,
     extra,
   }: {
     datasourceLuid: string;
     // The parent workbook of an embedded datasource; it can't be resolved from the datasource LUID.
     workbookLuid?: string;
+    // Whether the calling tool exposes a workbookLuid parameter. Only such callers get the hint to
+    // retry with workbookLuid; others get a plain denial for an unreachable embedded datasource.
+    supportsWorkbookLuid?: boolean;
     extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult<DataSource>> {
     const result = await this._isDatasourceAllowed({
       datasourceLuid,
       workbookLuid,
+      supportsWorkbookLuid,
       extra,
     });
 
@@ -193,10 +198,12 @@ class ResourceAccessChecker {
   private async _isDatasourceAllowed({
     datasourceLuid,
     workbookLuid,
+    supportsWorkbookLuid,
     extra,
   }: {
     datasourceLuid: string;
     workbookLuid?: string;
+    supportsWorkbookLuid?: boolean;
     extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult<DataSource>> {
     const allowedDatasourceIds = await this.getAllowedDatasourceIds({ extra });
@@ -205,9 +212,13 @@ class ResourceAccessChecker {
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
 
     // Embedded datasources can't be allowlisted by LUID, so they are admitted via their workbook,
-    // and only when a scope that restricts workbooks is configured.
+    // and only when a scope that restricts workbooks is configured. INCLUDE_DATASOURCE_IDS is an
+    // absolute ceiling: when it is set, nothing outside it is admitted, embedded datasources
+    // included.
     const canAdmitViaWorkbook =
-      !!workbookLuid && !!(allowedWorkbookIds || allowedProjectIds || allowedTags);
+      !allowedDatasourceIds &&
+      !!workbookLuid &&
+      !!(allowedWorkbookIds || allowedProjectIds || allowedTags);
 
     // If INCLUDE_DATASOURCE_IDS is defined, check if datasource is in that allowlist.
     const isOutsideAllowedDatasourceIds =
@@ -345,9 +356,24 @@ class ResourceAccessChecker {
       datasourceTags = datasource.tags?.tag?.map((tag) => tag.label) ?? [];
     } catch (error) {
       // Query Data Source can fail for an embedded datasource (e.g. 403 when the user can't see the
-      // workbook's project). Workbook connection datasource IDs are only ever embedded LUIDs, so
-      // membership proves the datasource is embedded without Query Data Source.
-      if (workbookLuid) {
+      // workbook's project, or 404 on some servers). Only these two statuses are treated as a
+      // possible embedded datasource; any other failure (500, timeout, 401) is inconclusive and
+      // falls through to the published path, failing closed rather than admitting via the workbook.
+      const httpStatus = error instanceof Error ? getHttpStatus(error) : undefined;
+      const canClassifyAsEmbedded = httpStatus === '403' || httpStatus === '404';
+
+      // The Metadata API's publishedDatasourcesConnection only returns published datasources, so a
+      // hit proves this LUID is published. It serves two purposes: a guard against admitting a
+      // published datasource through its workbook, and (on 403 only, preserving prior behavior) the
+      // name/tags fallback when Query Data Source 403s on project visibility.
+      const publishedMetadata = canClassifyAsEmbedded
+        ? await getNameAndTagsFromMetadataApi()
+        : undefined;
+
+      // Workbook connection datasource IDs are only ever embedded LUIDs, so membership proves the
+      // datasource is embedded without Query Data Source. Skip when the Metadata API shows the LUID
+      // is published.
+      if (workbookLuid && canClassifyAsEmbedded && !publishedMetadata) {
         const connectionDatasourceIds = await this.getWorkbookConnectionDatasourceIds({
           workbookLuid,
           extra,
@@ -384,10 +410,7 @@ class ResourceAccessChecker {
       // Query Data Source returns 403 when the user can't see the data source's parent project,
       // even if they can query the data source itself.
       // The Metadata API isn't subject to that check, so fall back to it.
-      const metadata =
-        error instanceof Error && getHttpStatus(error) === '403'
-          ? await getNameAndTagsFromMetadataApi()
-          : undefined;
+      const metadata = httpStatus === '403' ? publishedMetadata : undefined;
       if (!metadata) {
         log(
           {
@@ -417,11 +440,16 @@ class ResourceAccessChecker {
 
     if (datasource && isEmbeddedDatasource(datasource)) {
       if (!workbookLuid) {
+        // Only tools that accept workbookLuid should be told to retry with it; others can't, so
+        // they get a plain denial instead of a hint for an argument they don't support.
+        const hint = supportsWorkbookLuid
+          ? `The datasource with LUID ${datasourceLuid} is an embedded (workbook) data source, so it can only be queried by also providing the workbookLuid of the workbook it belongs to.`
+          : `The datasource with LUID ${datasourceLuid} is an embedded (workbook) data source, which cannot be accessed under the current server configuration.`;
         return {
           allowed: false,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `The datasource with LUID ${datasourceLuid} is an embedded (workbook) data source, so it can only be queried by also providing the workbookLuid of the workbook it belongs to.`,
+            hint,
           ].join(' '),
         };
       }
@@ -562,10 +590,11 @@ class ResourceAccessChecker {
 
     const workbookResult = await this._isWorkbookAllowed({ workbookId: workbookLuid, extra });
     if (!workbookResult.allowed) {
+      // workbookResult.message already carries a "limited by the server configuration" sentence, so
+      // baseMessage is omitted here to avoid repeating it.
       return {
         allowed: false,
         message: [
-          baseMessage,
           `The embedded datasource with LUID ${datasourceLuid} cannot be queried because its workbook is not allowed:`,
           workbookResult.message,
         ].join(' '),

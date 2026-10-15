@@ -108,6 +108,7 @@ export const getQueryDatasourceTool = (
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
             workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 

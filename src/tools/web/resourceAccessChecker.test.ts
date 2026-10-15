@@ -222,11 +222,12 @@ describe('ResourceAccessChecker', () => {
         { scope: 'projectIds', projectIds: new Set([workbookProjectId]) },
         { scope: 'tags', tags: new Set([workbookTag]) },
       ])(
-        'should deny an embedded datasource under $scope when no workbookLuid is provided',
+        'should deny an embedded datasource under $scope with a workbookLuid hint when the caller supports it',
         async ({ projectIds, tags }) => {
           expect(
             await createChecker({ projectIds, tags }).isDatasourceAllowed({
               datasourceLuid: mockDatasource.id,
+              supportsWorkbookLuid: true,
               extra,
             }),
           ).toEqual({
@@ -237,30 +238,77 @@ describe('ResourceAccessChecker', () => {
         },
       );
 
+      // Callers that don't expose a workbookLuid parameter (e.g. delete-content) must not be told
+      // to retry with it; they get a plain denial instead.
+      it('should deny an embedded datasource with a plain message when the caller does not support workbookLuid', async () => {
+        expect(
+          await createChecker({ projectIds: new Set([workbookProjectId]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: `${baseMessage} The datasource with LUID ${mockDatasource.id} is an embedded (workbook) data source, which cannot be accessed under the current server configuration.`,
+        });
+        expect(mocks.mockQueryWorkbookConnections).not.toHaveBeenCalled();
+      });
+
       test.each([
         { scope: 'projectIds', projectIds: new Set([workbookProjectId]) },
         { scope: 'tags', tags: new Set([workbookTag]) },
         { scope: 'workbookIds', workbookIds: new Set([workbookLuid]) },
-        {
-          scope: 'datasourceIds and projectIds',
-          datasourceIds: new Set(['some-other-datasource-id']),
-          projectIds: new Set([workbookProjectId]),
-        },
       ])(
         'should allow an embedded datasource when its workbook is allowed by $scope',
-        async ({ projectIds, tags, workbookIds, datasourceIds }) => {
+        async ({ projectIds, tags, workbookIds }) => {
           expect(
             await createChecker({
               projectIds,
               tags,
               workbookIds,
-              datasourceIds,
             }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, workbookLuid, extra }),
           ).toEqual({ allowed: true, content: embeddedDatasource });
           expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
             siteId: 'test-site-id',
             workbookId: workbookLuid,
           });
+        },
+      );
+
+      // INCLUDE_DATASOURCE_IDS is an absolute ceiling: an embedded datasource outside it stays
+      // closed even when another scope would otherwise admit it via its workbook, and no REST
+      // calls are made.
+      test.each([
+        {
+          scope: 'projectIds',
+          datasourceIds: new Set(['some-other-datasource-id']),
+          projectIds: new Set([workbookProjectId]),
+        },
+        {
+          scope: 'tags',
+          datasourceIds: new Set(['some-other-datasource-id']),
+          tags: new Set([workbookTag]),
+        },
+        {
+          scope: 'workbookIds',
+          datasourceIds: new Set(['some-other-datasource-id']),
+          workbookIds: new Set([workbookLuid]),
+        },
+      ])(
+        'should deny an embedded datasource outside datasourceIds even under $scope',
+        async ({ datasourceIds, projectIds, tags, workbookIds }) => {
+          expect(
+            await createChecker({
+              datasourceIds,
+              projectIds,
+              tags,
+              workbookIds,
+            }).isDatasourceAllowed({ datasourceLuid: mockDatasource.id, workbookLuid, extra }),
+          ).toEqual({
+            allowed: false,
+            message: `${baseMessage} Querying the datasource with LUID ${mockDatasource.id} is not allowed.`,
+          });
+          expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+          expect(mocks.mockQueryWorkbookConnections).not.toHaveBeenCalled();
         },
       );
 
@@ -292,7 +340,6 @@ describe('ResourceAccessChecker', () => {
           ).toEqual({
             allowed: false,
             message: [
-              baseMessage,
               `The embedded datasource with LUID ${mockDatasource.id} cannot be queried because its workbook is not allowed:`,
               'The set of allowed workbooks that can be queried is limited by the server configuration.',
               workbookMessage,
@@ -374,10 +421,14 @@ describe('ResourceAccessChecker', () => {
       });
 
       describe('when Query Data Source fails', () => {
-        test.each([403, 404, 500])(
+        test.each([403, 404])(
           'should gate on the workbook when Query Data Source returns %s and the datasource belongs to it',
           async (status) => {
             mocks.mockQueryDatasource.mockRejectedValue(httpError(status));
+            // The Metadata API guard runs first; an empty result means the LUID isn't published.
+            mocks.mockGraphql.mockResolvedValue({
+              data: { publishedDatasourcesConnection: { nodes: [] } },
+            });
 
             expect(
               await createChecker({ projectIds: new Set([workbookProjectId]) }).isDatasourceAllowed(
@@ -385,9 +436,58 @@ describe('ResourceAccessChecker', () => {
               ),
             ).toEqual({ allowed: true, content: undefined });
             expect(mocks.mockGetWorkbook).toHaveBeenCalled();
-            expect(mocks.mockGraphql).not.toHaveBeenCalled();
           },
         );
+
+        // Only 403/404 are treated as a possible embedded datasource. Any other failure is
+        // inconclusive and falls through to the published path, failing closed without consulting
+        // the workbook.
+        it('should fail closed and not gate on the workbook when Query Data Source returns 500', async () => {
+          mocks.mockQueryDatasource.mockRejectedValue(httpError(500));
+
+          expect(
+            await createChecker({ projectIds: new Set([workbookProjectId]) }).isDatasourceAllowed({
+              datasourceLuid: mockDatasource.id,
+              workbookLuid,
+              extra,
+            }),
+          ).toEqual({
+            allowed: false,
+            message: `${baseMessage} An error occurred while checking if the datasource with LUID ${mockDatasource.id} is in an allowed project: Request failed with status code 500`,
+          });
+          expect(mocks.mockQueryWorkbookConnections).not.toHaveBeenCalled();
+          expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+        });
+
+        // Defense in depth: the Metadata API's publishedDatasourcesConnection only returns published
+        // datasources, so a hit means the LUID is published and must not be admitted via a workbook
+        // even if it appears in that workbook's connections.
+        it('should not gate on the workbook when the Metadata API shows the LUID is published', async () => {
+          mocks.mockQueryDatasource.mockRejectedValue(httpError(403));
+          mocks.mockQueryWorkbookConnections.mockResolvedValue(connections(mockDatasource.id));
+          mocks.mockGraphql.mockResolvedValue({
+            data: {
+              publishedDatasourcesConnection: {
+                nodes: [
+                  { luid: mockDatasource.id, name: 'published', tags: [{ name: 'other-tag' }] },
+                ],
+              },
+            },
+          });
+
+          expect(
+            await createChecker({ tags: new Set(['allowed-tag']) }).isDatasourceAllowed({
+              datasourceLuid: mockDatasource.id,
+              workbookLuid,
+              extra,
+            }),
+          ).toEqual({
+            allowed: false,
+            message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
+          });
+          expect(mocks.mockQueryWorkbookConnections).not.toHaveBeenCalled();
+          expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+        });
 
         // Not shown to be embedded, so the published datasource checks apply.
         test.each([
@@ -459,8 +559,10 @@ describe('ResourceAccessChecker', () => {
             case: 'apply the project check',
             projectIds: new Set([mockDatasource.project.id]),
             expected: { allowed: true, content: mockDatasource },
+            queryDatasourceCalls: 1,
           },
           {
+            // The datasourceIds ceiling denies with no REST calls, so Query Data Source isn't hit.
             case: 'deny one outside datasourceIds even when a workbook scope is set',
             projectIds: new Set([mockDatasource.project.id]),
             datasourceIds: new Set(['some-other-datasource-id']),
@@ -468,15 +570,17 @@ describe('ResourceAccessChecker', () => {
               allowed: false,
               message: `${baseMessage} Querying the datasource with LUID ${mockDatasource.id} is not allowed.`,
             },
+            queryDatasourceCalls: 0,
           },
           {
             case: 'allow one when only workbookIds is configured',
             workbookIds: new Set(['some-workbook-id']),
             expected: { allowed: true, content: mockDatasource },
+            queryDatasourceCalls: 1,
           },
         ])(
           'should ignore the workbookLuid and $case',
-          async ({ projectIds, datasourceIds, workbookIds, expected }) => {
+          async ({ projectIds, datasourceIds, workbookIds, expected, queryDatasourceCalls }) => {
             expect(
               await createChecker({ projectIds, datasourceIds, workbookIds }).isDatasourceAllowed({
                 datasourceLuid: mockDatasource.id,
@@ -484,7 +588,7 @@ describe('ResourceAccessChecker', () => {
                 extra,
               }),
             ).toEqual(expected);
-            expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+            expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(queryDatasourceCalls);
             expect(mocks.mockQueryWorkbookConnections).not.toHaveBeenCalled();
             expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
           },

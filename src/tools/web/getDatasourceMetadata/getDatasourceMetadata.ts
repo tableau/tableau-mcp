@@ -166,6 +166,7 @@ export const getGetDatasourceMetadataTool = (
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
             workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 

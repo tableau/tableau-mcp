@@ -73,7 +73,8 @@ be included in the results of the tools. This variable is site and request overr
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
   scoping is disabled).
 - Has no impact on tools that return information about workbooks or views.
-- Embedded (workbook) data sources are not matched against this list. See
+- This is an absolute allowlist: when set, data sources outside it cannot be queried, and embedded
+  (workbook) data sources, which have no stable ID to list, cannot be queried at all. See
   [Embedded data sources](#embedded-data-sources).
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
@@ -165,10 +166,12 @@ enabled they are scoped by the workbook they belong to. To query an embedded dat
 metadata, a client must also pass the ID of that workbook as `workbookLuid`. The server confirms the
 data source belongs to the workbook, then applies the workbook's scoping:
 
-- [`INCLUDE_WORKBOOK_IDS`](#include_workbook_ids): the workbook must be in the list.
 - [`INCLUDE_PROJECT_IDS`](#include_project_ids): the workbook must be in an allowed project.
 - [`INCLUDE_TAGS`](#include_tags): the workbook must have an allowed tag.
+- [`INCLUDE_WORKBOOK_IDS`](#include_workbook_ids): when `workbookLuid` is passed, the workbook must
+  be in the list. On its own this variable does not restrict which data sources can be queried, so
+  it only gates an embedded data source when `workbookLuid` is provided.
 
-If none of these are set but [`INCLUDE_DATASOURCE_IDS`](#include_datasource_ids) is, embedded data
-sources cannot be queried. Without `workbookLuid`, an embedded data source cannot be queried when
-`INCLUDE_PROJECT_IDS` or `INCLUDE_TAGS` is set.
+Under `INCLUDE_PROJECT_IDS` or `INCLUDE_TAGS`, an embedded data source cannot be queried without
+`workbookLuid`. If [`INCLUDE_DATASOURCE_IDS`](#include_datasource_ids) is set, embedded data sources
+cannot be queried at all: it is an absolute allowlist, and `workbookLuid` does not widen it.
