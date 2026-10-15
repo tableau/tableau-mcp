@@ -178,10 +178,10 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
-      FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      FLOW_TOOLS_ENABLED: flowToolsEnabled = 'true',
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled = 'true',
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -391,13 +391,13 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Environment settings are opt-outs; the flow-tools feature flag still controls rollout.
-    this.flowToolsEnabled = flowToolsEnabled !== 'false';
+    // The flow-tools feature flag still controls rollout independently of these defaults.
+    this.flowToolsEnabled = flowToolsEnabled === 'true';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled !== 'false';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
