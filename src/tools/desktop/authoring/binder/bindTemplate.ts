@@ -1398,7 +1398,8 @@ function buildWaterfallDiscoveryGuidance(
     const orderCandidates = waterfallOrderCandidates(schemaSummary);
     if (orderCandidates.length > 0) {
       // Name the sequence column so the agent carries it in the bind instead of failing on
-      // refine (which cannot sort by an off-view field) — the m1 give-up/XML-surgery seam.
+      // refine (which cannot sort by an off-view field); without it the agent gives up or
+      // hand-edits the XML.
       sentences.push(
         `Waterfall step order: schema has ${orderCandidates.join(', ')}; the running total is ` +
           `order-dependent, so re-call bind-template with proposal.sort:{by:${JSON.stringify(
@@ -1624,13 +1625,11 @@ function appliedDefaultFrom(
 }
 
 /**
- * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an anchor
- * category candidate or an explicit order column) — the m1 genuine-unfilled case that MUST
- * keep steering a re-bind. It is the exact complement of "terminal": the applied:true receipt
- * is only marked done when this is false. Built from the SAME four helpers the steer uses so
- * the two sides cannot drift. The gray-zone waterfall whose only emission would be the bare
- * WATERFALL_SORT_HINT (no named order column) is deliberately NOT unfilled here — matching the
- * cartographer's boundary: steer ⟺ a named candidate field is actually fillable.
+ * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an order
+ * column exists and no sort is set) — the genuine-unfilled case that MUST keep steering a
+ * re-bind. While it is true, the receipt is never marked done. The gray-zone waterfall
+ * whose only emission would be the bare WATERFALL_SORT_HINT (no named order column) is
+ * deliberately NOT unfilled here: steer ⟺ a named candidate field is actually fillable.
  */
 function waterfallReBindSlotUnfilled(res: BinderResult, schemaSummary?: SchemaSummary): boolean {
   if (!isWaterfallResult(res)) {
@@ -1979,7 +1978,7 @@ function ensureSortByColumnDependency(
 
 /**
  * Declare a FILTER field's column + column-instance in <datasource-dependencies> — the mirror
- * of {@link ensureSortByColumnDependency} for an m7 context filter. A <filter column='[DS].[CI]'>
+ * of {@link ensureSortByColumnDependency} for a context filter. A <filter column='[DS].[CI]'>
  * references a phantom CI unless both the base <column> and the <column-instance> exist in the
  * dependency block, so this ensures them (idempotent: skips whichever is already declared).
  * Returns the parsed CI parts the caller needs to emit the filter node (`instanceName`, `role`).
@@ -2055,7 +2054,7 @@ function ensureFilterColumnDependency(
 }
 
 /**
- * Emit an interactive dimension filter node (m7). A `context:true` filter carries
+ * Emit an interactive dimension filter node. A `context:true` filter carries
  * `context='true'` — Tableau order-of-operations step 3, which runs BEFORE the Top-N
  * dimension filter (step 4), so a top-N within this dimension ranks WITHIN the selection.
  * With no member `values`, emit the enumerate-all interactive control
@@ -2284,7 +2283,7 @@ function applyProposalSplices({
     if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
     out = filtered.xml;
   }
-  // Declarative interactive filters (m7). CRITICAL ORDERING: this runs AFTER the top_n splice
+  // Declarative interactive filters. CRITICAL ORDERING: this runs AFTER the top_n splice
   // so planTopN sees the clean single-dimension sheet and never trips its >1-dimension refusal
   // (a filter-only CI would otherwise look like a second rankable dimension). A context:true
   // filter is Tableau OoO step 3 (before the top-N dimension filter at step 4), so a "top N
@@ -2787,11 +2786,10 @@ async function performAutoApply({
     res.status,
   );
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
-  // Stop the agent calling more tools after a finished bind: the applied:true receipt is
-  // TERMINAL unless a genuine, named re-bind slot is still unfilled (the m1 waterfall case).
-  // On INCOMPLETE we keep today's steer and attach NO structuredContent (byte-for-byte
-  // identical to the pre-fix code). On COMPLETE we append the stop-clause AND the
-  // machine-readable done marker so nothing re-asserts "keep going".
+  // Stop the agent calling more tools after a finished bind: the applied:true receipt gets
+  // the stop-clause and the machine-readable done marker only when `incomplete` (below) is
+  // false. `incomplete` is true for a waterfall with an unfilled order slot, an unfilled
+  // encoding, a splice warning or a failed promise check.
   // A tool that cannot verify what it wrote must not report success. The binder is the only
   // layer that knows the ask named an encoding it could not bind (a post-apply readback is
   // blind here — the XML it would read back never contained the node), so its own

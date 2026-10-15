@@ -66,11 +66,11 @@ import { inferStringTemporal } from './stringTemporal.js';
  * default, and emitted in the field_mapping value on success (gate 7).
  */
 /**
- * A declarative interactive dimension filter (m7 order-of-operations). `field` is a
+ * A declarative interactive dimension filter. `field` is a
  * NAME from SchemaSummary.fields. `context: true` marks it a CONTEXT filter — Tableau
  * order-of-operations step 3, which runs BEFORE a Top-N dimension filter (step 4), so a
  * "top N of A within an interactively-selected B" bind ranks WITHIN the selected B rather
- * than globally-then-filtering. `values` is OPTIONAL: when the ask names no member (m7:
+ * than globally-then-filtering. `values` is OPTIONAL: when the ask names no member (for example:
  * "let me filter down to one region"), the apply path emits an enumerate-all interactive
  * control (function="level-members" + user:ui-enumeration="all"), not a member list.
  */
@@ -111,7 +111,7 @@ export type EscalateReason =
   | 'calc-dependency-unmet'
   | 'low-confidence'
   | 'request-not-covered'
-  // M10 Finding 3: the ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
+  // The ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
   // classifier fails closed (never classifies a truncated subset) and escalates to
   // the general authoring flow rather than risk a silent wrong bind.
   | 'schema-too-large';
@@ -1208,7 +1208,7 @@ export function validateBinding(
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    // SECURITY (M10 Finding 1): the VALUE is substituted verbatim into a template XML
+    // SECURITY: the VALUE is substituted verbatim into a template XML
     // attribute, and both datasource + column name are workbook-controlled — escape the
     // five XML metachars EXACTLY ONCE, here at production. The KEY is the manifest's
     // template_field (trusted, shape-validated) and is NOT escaped. Tableau field-ref

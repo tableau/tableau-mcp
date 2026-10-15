@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { bindingSchema, proposalSchema } from './proposalSchema.js';
 
-// The shared proposal contract is `.strict()` (Finding 4): the advertised JSON schema
+// The shared proposal contract is `.strict()`: the advertised JSON schema
 // declares `additionalProperties: false`, so runtime must REJECT an unknown key rather
 // than silently strip it (fail-closed, matching the promise). One test per schema.
 
@@ -54,8 +54,8 @@ describe('proposalSchema — strict object contract', () => {
     expect(proposalSchema.safeParse({ ...valid, top_n: 0 }).success).toBe(false);
   });
 
-  it('accepts declarative filters — values optional, context optional (m7)', () => {
-    // The m7 case: a context filter with no member list (interactive enumerate-all control).
+  it('accepts declarative filters — values optional, context optional', () => {
+    // A context filter with no member list (interactive enumerate-all control).
     expect(
       proposalSchema.safeParse({ ...valid, filters: [{ field: 'Region', context: true }] }).success,
     ).toBe(true);
@@ -77,7 +77,7 @@ describe('proposalSchema — strict object contract', () => {
   });
 });
 
-describe('proposalSchema — title control-char rejection (M10 Finding 2)', () => {
+describe('proposalSchema — title control-char rejection', () => {
   const base = {
     template: 'ranking-ordered-bar',
     bindings: [{ slot_id: 'cat', field: 'Region' }],

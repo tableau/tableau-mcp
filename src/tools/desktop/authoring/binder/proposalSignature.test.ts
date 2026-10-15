@@ -76,7 +76,7 @@ describe('proposalSignature', () => {
     );
   });
 
-  it('changes when a declarative filter is added (m7 — so an add-filter re-bind is not blocked as unchanged)', () => {
+  it('changes when a declarative filter is added (so an add-filter re-bind is not blocked as unchanged)', () => {
     // The recovery gate blocks a retry whose signature is unchanged. Adding an interactive
     // context filter is a real semantic change and MUST produce a distinct signature, else the
     // "add the Region context filter" re-bind would be refused as a duplicate.

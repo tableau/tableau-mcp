@@ -6,10 +6,10 @@ import { tooltipDimensionRequiresAttrRule } from './tooltipDimensionRequiresAttr
 /**
  * P0 (GUS W-23447711): a none:/derivation="None" dimension on <tooltip> in an aggregated
  * view applies "successfully", then the sheet renders blank with "cannot be converted to a
- * measure using ATTR()" — the only confirmed green-trace/failed-outcome shape. Tooltip is
- * grain-neutral, so Tableau must ATTR()-wrap raw dimensions there; the authored
- * none: instance defeats that. The rule fires ONLY on tooltip (text/label join the
- * view grain, so none: is legitimate there) and ONLY in aggregated views.
+ * measure using ATTR()". Tooltip is grain-neutral, so Tableau must ATTR()-wrap raw
+ * dimensions there; the authored none: instance defeats that. The rule fires ONLY on
+ * tooltip (text/label join the view grain, so none: is legitimate there) and ONLY in
+ * aggregated views.
  */
 
 function ws({

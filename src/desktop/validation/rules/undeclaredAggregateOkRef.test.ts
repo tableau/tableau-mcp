@@ -8,7 +8,7 @@ import { undeclaredAggregateOkRefRule } from './undeclaredAggregateOkRef.js';
  *
  * Source of truth: tactics/tree/column-instance-prefixes.md — aggregate measure
  * instances are `:qk`; a `:ok` aggregate is valid only when deliberately declared.
- * Live incident: 21× "Unknown column [sum:Sales:ok]" (Laulima day-1, 2026-07-09).
+ * Live incident: 21× "Unknown column [sum:Sales:ok]".
  */
 function worksheetWith(shelf: string, deps = ''): string {
   return `<?xml version='1.0' encoding='utf-8' ?>

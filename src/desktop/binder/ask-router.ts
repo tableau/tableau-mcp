@@ -3,7 +3,7 @@
 // The route layer's SELECTOR. SELECTOR-ONLY by design: it turns a masked ask into the
 // single eligible template the binder's own model-free matcher would pick, and NOTHING
 // more. It never executes, never binds fields, never touches a live schema — the
-// tier-ladder / validateBinding disposer (routeAsk) is deliberately not part of this layer
+// tier-ladder / validateBinding disposer is deliberately not part of this layer
 // (that is the binder's job). `route-spec.ts` reuses this exact seam for schema-free
 // ask-SHAPE detection so the route layer never re-derives classification.
 //

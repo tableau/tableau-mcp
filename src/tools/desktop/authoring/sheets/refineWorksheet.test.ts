@@ -85,10 +85,9 @@ const ROUND_STACKED_SOURCE = `<worksheet name='Profit by Category' xmlns:user='h
 
 // A source that PLANS fine (one dim, one measure, an anchor) but fails preflight: the extra
 // column-instance carries a non-canonical derivation ("Attr"), which the real
-// invalid-derivation-string rule rejects as an error. tmcp has no
-// computed-sort-crash rule, so this exercises the tool's preflight seam against a rule that
-// actually exists here. The planner still refuses the nested computed-sort crash form
-// directly (covered in the planner test).
+// invalid-derivation-string rule rejects as an error. That exercises the tool's
+// preflight seam. The planner still refuses the nested computed-sort crash form directly
+// (covered in the planner test).
 const PREFLIGHT_FAIL_SOURCE = SOURCE.replace(
   '</datasource-dependencies>',
   "<column-instance column='[Sales]' derivation='Attr' name='[attr:Sales:xk]' pivot='key' type='ordinal' /></datasource-dependencies>",

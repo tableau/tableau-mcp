@@ -871,10 +871,10 @@ describe('rewriteFieldReferences — calc caption rewrite (synthetic; no shipped
   });
 });
 
-describe('rewriteFieldReferences — calc caption derivation when formula inputs are remapped (Ben regression)', () => {
-  // Live defect (Ben, 2026-07-09 test1.twbx): correlation-scatter calc kept its
-  // human caption "Profit Ratio" after its formula was rebound to SUM([Profit])/
-  // SUM([Discount]), creating a second, wrong "Profit Ratio" beside the real one.
+describe('rewriteFieldReferences — calc caption derivation when formula inputs are remapped', () => {
+  // Live defect: a correlation-scatter calc kept its human caption "Profit Ratio" after its
+  // formula was rebound to SUM([Profit])/SUM([Discount]), creating a second, wrong
+  // "Profit Ratio" beside the real one.
   // Fix: derive an honest caption when the formula field refs change.
   const xml =
     '<workbook><worksheets><worksheet><table><view>' +

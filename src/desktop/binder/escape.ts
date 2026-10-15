@@ -1,4 +1,4 @@
-// XML-attribute escaping for the bind OUTPUT pipeline (Lane M10, Finding 1).
+// XML-attribute escaping for the bind OUTPUT pipeline.
 //
 // `bindTemplate()` returns `title` (proposal/caller-controlled), the
 // `template_parameters.DATASOURCE`, and every `field_mapping` VALUE (both

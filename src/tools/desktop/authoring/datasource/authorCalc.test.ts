@@ -282,8 +282,8 @@ describe('authorCalcTool', () => {
   });
 
   it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', async () => {
-    // Every author-calc bug tonight was invisible to synthetic fixtures and cost a
-    // live verse to find. This replays the tool against a real saved document.
+    // Author-calc bugs were invisible to synthetic fixtures and cost a live run to find.
+    // This replays the tool against a real saved document.
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const realXml = readFileSync(
       join(

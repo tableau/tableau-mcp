@@ -126,7 +126,7 @@ export const DEFAULT_MAX_FIELDS = 20;
 
 /**
  * Hard cap on the schema size the no-LLM classifier / propose-payload builder will
- * process (M10 Finding 3). `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
+ * process. `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
  * `narrowFields` (buildLlmInput) each run ONE regex PER schema field; a synthetic
  * ~50,000-field datasource costs ~2.9s of synchronous event-loop block per call — an
  * unbounded per-call CPU DoS. Over this cap the classifier FAILS CLOSED (returns null —
@@ -455,13 +455,13 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'bubble',
   'heatmap',
   'highlight-table',
-  // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
+  // Growth (per the table's own contract — grow as new distinct-shape
   // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
   // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
   // vocabulary ("line chart of X over Y" classified null — the exact sibling-scaling
   // regression this table exists to prevent). Each noun below deterministically names
   // a chart type and equals a real intent_keyword of its (stamped or imminently
-  // stamped, evidence-earned 2026-07-06) template: 'line' (trend-line-chart),
+  // stamped) template: 'line' (trend-line-chart),
   // 'gantt' (gantt-task-rollup-chart), 'histogram' (distribution-histogram),
   // 'bullet' (quota-attainment-bullet), 'funnel' (funnel-chart),
   // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
@@ -505,9 +505,8 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // eligible time-series template ever carries 'timeline', the TIE path's chart-noun
   // specificity ranking governs, so admitting it cannot create a cross-template flip.
   'timeline',
-  // Second growth event same night: the 13th-15th stamps made deviation
-  // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
-  // two-member families, collapsing nativity for the incumbent members'
+  // Deviation (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
+  // became two-member families, collapsing nativity for the incumbent members'
   // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
   // classified null. Each noun below is a deterministic type selector carried by exactly
   // one template:
@@ -4183,7 +4182,7 @@ export function classifyNoLlm(
   summary: SchemaSummary,
   requireCompleteRequest = false,
 ): NoLlmClassification | null {
-  // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
+  // FAIL-CLOSED cost guard: over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
   // return null so the orchestrator escalates rather than risk a silent wrong bind on a
   // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
@@ -4480,8 +4479,8 @@ export function classifyNoLlm(
     : null;
   if (requireCompleteRequest && completeRequestParse === null) return null;
   // A facet cue wins over series color. Otherwise inspect the full datasource, not
-  // only `matched` (which contains ask-named fields): e4 intentionally does not name
-  // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
+  // only `matched` (which contains ask-named fields): the ask need not name the spare
+  // series dimension (e.g. a lone Product field). Exact-one cardinality keeps this fail-closed.
   if (requireCompleteRequest) {
     const lineSlots = optionalLineSeriesSlots(chosen);
     if (lineSlots) {
@@ -4599,7 +4598,7 @@ export function buildLlmInput(
   // schema can't blow the propose prompt. classifyNoLlm is untouched — it still
   // resolves against the full schema.
   const kinds = requiredSlotKinds(top.map((c) => c.m));
-  // FAIL-CLOSED cost guard (M10 Finding 3): narrowFields runs one regex per field
+  // FAIL-CLOSED cost guard: narrowFields runs one regex per field
   // (askNamesField) — the same unbounded hot loop classifyNoLlm caps. Over the cap, rank
   // only a bounded prefix so a pathological wide schema can't block the event loop for
   // seconds; `withheld` below is computed against the TRUE total so more_available stays

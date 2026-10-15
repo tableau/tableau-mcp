@@ -1212,10 +1212,9 @@ function rewriteFormulaFieldRefs(formula: string, baseTarget: Record<string, str
 /**
  * Derive an honest caption for a calc column whose FORMULA field refs were
  * remapped to different base fields while its human caption still names the
- * template's original fields. Live defect (Ben, 2026-07-09 test1.twbx): the
- * correlation-scatter calc kept caption "Profit Ratio" after its formula was
- * rebound to SUM([Profit])/SUM([Discount]) — a second, wrong "Profit Ratio"
- * beside the datasource's real one. Strategy, first hit wins:
+ * template's original fields. Live defect: the correlation-scatter calc kept caption
+ * "Profit Ratio" after its formula was rebound to SUM([Profit])/SUM([Discount]) — a
+ * second, wrong "Profit Ratio" beside the datasource's real one. Strategy, first hit wins:
  *   1. whole-word-replace remapped old field names inside the caption;
  *   2. humanize the rewritten formula (AGG([X]) → X) when the result is a
  *      short, plain field expression;

@@ -648,7 +648,7 @@ const boundWithSortAndTopNResult: BinderResult = {
     top_n: 10,
   },
 };
-// m7 declarative-filter (order-of-operations) fixtures. READ workbook carries product/region/sales
+// Declarative-filter (order-of-operations) fixtures. READ workbook carries product/region/sales
 // so the filter splice can resolve "Region" → its CI; the injected sheet ranks PRODUCT (top-10),
 // with a worksheet window so the shown filter card has a home.
 const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
@@ -5372,8 +5372,8 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('applied waterfall with an unfilled order slot still steers a re-bind and is NOT terminal', async () => {
-    // WATERFALL GUARD (non-negotiable): the m1 demo. A genuine unfilled sequence slot MUST
-    // still emit the imperative re-bind steer and MUST NOT carry the terminal marker. A naive
+    // WATERFALL GUARD (non-negotiable): a genuine unfilled sequence slot MUST still emit the
+    // imperative re-bind steer and MUST NOT carry the terminal marker. A naive
     // blanket-terminate of every applied:true fails this test.
     const { getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallResult,
@@ -5666,7 +5666,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
   });
 
-  it('m7: splices a context Region filter AFTER top_n, declares its CI, adds it to <slices>, and shows a filter card', async () => {
+  it('splices a context Region filter AFTER top_n, declares its CI, adds it to <slices>, and shows a filter card', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundM7TopNContextFilterResult,
       inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
@@ -5715,7 +5715,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("<filter class='categorical' column='[M7].[none:product:nk]'>");
   });
 
-  it('m7: a context filter with explicit member values emits an inclusive member union', async () => {
+  it('a context filter with explicit member values emits an inclusive member union', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: {
         ...boundM7TopNContextFilterResult,
@@ -5766,7 +5766,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
   });
 
-  it('m7: leaves non-string categorical members unquoted', async () => {
+  it('leaves non-string categorical members unquoted', async () => {
     const integerRegionWorkbook = M7_WORKBOOK_XML.replace(
       "<column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />",
       "<column caption='Region' name='[region]' role='dimension' type='ordinal' datatype='integer' />",
@@ -5801,7 +5801,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).not.toContain("member='&quot;42&quot;'");
   });
 
-  it('m7: escapes special characters in string categorical members', async () => {
+  it('escapes special characters in string categorical members', async () => {
     const values = ["O'Brien", 'A "quoted" member', 'Path\\Name', 'A&B <Team>', ''];
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: {
@@ -5836,7 +5836,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain("member='&quot;&quot;'");
   });
 
-  it('m7: filter values holding replacement-string metacharacters reach the workbook verbatim', async () => {
+  it('filter values holding replacement-string metacharacters reach the workbook verbatim', async () => {
     const values = ['US$', "a$'b", 'c$`d', 'e$$f'];
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: {
@@ -7745,7 +7745,7 @@ describe('bindTemplateTool route-state recording', () => {
     expect(result.isError).toBe(true);
     // ...and the classification recorded BEFORE the throw is gone: a bind WAS attempted,
     // so a pending "no bind attempt yet" record would let the scratch gate deflect a
-    // second time for an ask the agent already tried (review finding, 2026-07-11).
+    // second time for an ask the agent already tried.
     expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
   });
 

@@ -8,9 +8,6 @@
  * declared. An UNDECLARED aggregate `:ok` ref makes Desktop log "Unknown column
  * [sum:Sales:ok]" and render the pill wrong or blank, with no load error.
  *
- * Desktop logs the unknown-column error during an agent-built dashboard whose heatmap
- * renders wrong values.
- *
  * Severity: WARNING — a declared discrete aggregate instance is legitimate, and
  * Tableau tolerates some undeclared shelf refs by deriving the instance; only the
  * undeclared shape is flagged, as the strong "Unknown column" predictor. Declarations

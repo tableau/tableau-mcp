@@ -75,7 +75,7 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // A waterfall's running total is order-dependent, and its intended P&L order almost always
 // lives in a non-displayed sequence column (display_order / sort_order / …). Left to the
 // template default (DESC by the bound measure) the bridge is wrong; and asking the model to
-// ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
+// ADD the sort in a later step is fragile (live receipts: it lands the sort only ~1/3 of
 // runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
 // fragile follow-up. The shared constants live in waterfall.ts so classification and apply
@@ -139,7 +139,7 @@ export interface InjectTemplateArgs {
   top_n?: number;
   /** Histogram-only positive bin width; undefined preserves the authored default. */
   bin_size?: number;
-  /** Declarative interactive dimension filters (m7). A context:true filter is emitted at
+  /** Declarative interactive dimension filters. A context:true filter is emitted at
    * Tableau OoO step 3 so a Top-N within that dimension ranks within the selection. */
   filters?: FilterSpec[];
   /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
@@ -265,10 +265,10 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       type: 'number',
       exclusiveMinimum: 0,
     },
-    // Declarative interactive dimension filters (m7 order-of-operations). Set context:true to
+    // Declarative interactive dimension filters. Set context:true to
     // make a filter a CONTEXT filter (Tableau OoO step 3) so a Top-N within that dimension
     // ranks WITHIN the selected member, not globally-then-filtered. Omit `values` for an
-    // interactive enumerate-all control (the m7 case: "let me filter down to one region").
+    // interactive enumerate-all control (for example: "let me filter down to one region").
     filters: {
       type: 'array',
       items: {
@@ -312,8 +312,8 @@ function sanitizeTemplateParameters(
  * (U+0000–U+001F) and DEL (U+007F). A title carrying one — NUL especially, which cannot
  * appear in XML at all — would make the substituted worksheet fragment unparseable
  * downstream. The tool boundary (proposalSchema) REJECTS these and the Call-1 generator
- * (makeTitle) STRIPS them; one shared definition so the two surfaces cannot drift
- * (M10 Finding 2). NON-global so `.test()` is stateless (no lastIndex hazard).
+ * (makeTitle) STRIPS them; one shared definition so the two surfaces cannot drift.
+ * NON-global so `.test()` is stateless (no lastIndex hazard).
  *
  * The character class is assembled at runtime (String.fromCharCode) rather than written
  * as a regex literal so the intentional control chars do not trip eslint no-control-regex
@@ -448,8 +448,9 @@ function validateAndBuild(
 
   // Waterfall step-order default: if no usable sort was proposed and the schema carries a
   // sequence/order column, sort the bridge by it ascending in THIS bind — see the note on
-  // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
-  // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
+  // WATERFALL_ORDER_FIELD_RE. No order field: keep the template default. One: sort by it if it
+  // resolves. Several: escalate and ask for an explicit proposal.sort.
+  // Deterministic, unlike asking the model to add the sort later (it lands ~1/3 of runs).
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
     const orderFields = boundSummary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
     if (orderFields.length > 1) {
@@ -488,7 +489,7 @@ function validateAndBuild(
     };
   }
 
-  // Declarative interactive filters (m7). Every requested filter must resolve to one real
+  // Declarative interactive filters. Every requested filter must resolve to one real
   // dimension. Applying the chart after dropping one would silently change the user's ask.
   // The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the accepted field
   // to its CI, declares the dependency, and emits the context filter + shown card.
@@ -558,7 +559,7 @@ function validateAndBuild(
 
   const args: InjectTemplateArgs = {
     template_name: m.template,
-    // SECURITY (M10 Finding 1): the title is proposal/caller-controlled and substituted
+    // SECURITY: the title is proposal/caller-controlled and substituted
     // verbatim into an XML attribute — escape it here, at the single point it enters the
     // returned payload. datasource + field_mapping arrive PRE-escaped from validateBinding
     // (escaped exactly once at their production), so they are NOT re-escaped here.
@@ -625,7 +626,7 @@ export async function bindTemplate(args: {
     return validateAndBuild(args.proposal, args.manifests, summary, minConfidence, true, args.ask);
   }
 
-  // ── FAIL-CLOSED cost guard (M10 Finding 3) ───────────────────────
+  // ── FAIL-CLOSED cost guard ───────────────────────
   // classifyNoLlm + buildLlmInput run one regex PER schema field (maskFieldNames /
   // matchFieldsInAsk / narrowFields), uncapped — a pathological wide schema (~50k fields
   // ≈ 2.9s of synchronous event-loop block) is a per-call DoS. Over the cap we do NOT

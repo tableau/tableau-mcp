@@ -1847,7 +1847,7 @@ describe('binder/validate — gate 7: full scatter emission', () => {
   });
 });
 
-describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1)', () => {
+describe('binder/validate — XML escaping in the emitted payload', () => {
   const HOSTILE_DS = "Evil'/><datasource name='pwn";
   const ESCAPED_DS = 'Evil&apos;/&gt;&lt;datasource name=&apos;pwn';
 

@@ -185,7 +185,7 @@ describe('classifyNoLlm — optional small-multiples facet', () => {
   it('inline-fixture proof: facet_col binds via an inline manifest carrying a facet slot (independent of bundled data)', () => {
     // tmcp's bundled manifests may not yet carry facet slots. Build the manifest
     // INLINE here so the classify.ts facet feature is proven regardless of the
-    // bundled data state — this is the SM3 fixture-bind analog for tmcp.
+    // bundled data state.
     const m = mapOf(trendLine());
     const cls = classifyNoLlm(
       'small multiples line chart of Sales over Order Date by Region',
