@@ -160,12 +160,13 @@ function scoreAsset(
   const description = asset.shortDescription;
   const tags = asset.tags.flatMap((tag) => [tag.name, tag.canonicalName]);
 
+  // Exact and phrase name matches are the same signal at two strictness levels (an exact match
+  // is always a phrase match), so take the stronger tier rather than summing both.
   if (name === normalizedQuery) {
     score += 120;
     reasons.push('Exact name match');
     matched.add('name');
-  }
-  if (hasPhrase(asset.name, normalizedQuery)) {
+  } else if (hasPhrase(asset.name, normalizedQuery)) {
     score += 80;
     reasons.push('Name phrase match');
     matched.add('name');

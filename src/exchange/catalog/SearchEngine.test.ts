@@ -25,9 +25,29 @@ describe('SearchEngine', () => {
   const engine = new SearchEngine();
   it('adds the independent design weights exactly and supplies factual match fields', () => {
     const result = engine.search([asset], { query: 'export' }, 10).results[0];
-    expect(result.score).toBe(368); // 120+80+60+45+20+15+8+5+15
+    expect(result.score).toBe(288); // 120+60+45+20+15+8+5+15 (exact name 120 only; no additive phrase bonus)
     expect(result.matchedFields).toEqual(['name', 'description', 'tag', 'publisher']);
     expect(result.reasons).toContain('Exact name match');
+    // An exact name match is also a phrase match; it must score the stronger tier once, not both.
+    expect(result.reasons).not.toContain('Name phrase match');
+  });
+  it('scores an exact name match one tier above a non-exact phrase match, counting it once', () => {
+    const bare = (name: string): ExchangeAsset => ({
+      ...asset,
+      name,
+      shortDescription: '',
+      publisher: { id: 1, name: 'Vendor' },
+      tags: [],
+    });
+    const exact = engine.search([bare('export')], { query: 'export' }, 10).results[0];
+    const phrase = engine.search([bare('export tables')], { query: 'export' }, 10).results[0];
+    expect(exact.reasons).toContain('Exact name match');
+    expect(exact.reasons).not.toContain('Name phrase match');
+    expect(phrase.reasons).toContain('Name phrase match');
+    expect(phrase.reasons).not.toContain('Exact name match');
+    // 120 (exact tier) vs 80 (phrase tier): the name signal is scored once at the stronger tier,
+    // so the exact match leads by exactly 40 rather than 120 (= 40 + a double-counted 80).
+    expect(exact.score - phrase.score).toBe(40);
   });
   it('requires an exact tag phrase and token boundaries, avoiding AI in paid', () => {
     const candidate = {
@@ -89,7 +109,7 @@ describe('SearchEngine', () => {
       { query: 'export' },
       10,
     ).results[0];
-    expect(repeated.score).toBe(368);
+    expect(repeated.score).toBe(288);
     expect(repeated.score).toBe(single.score);
     expect(repeated.reasons).toEqual(single.reasons);
     expect(repeated.matchedFields).toEqual(single.matchedFields);
@@ -218,7 +238,7 @@ describe('SearchEngine', () => {
     });
 
     it('leaves scores unchanged for queries without related terms', () => {
-      expect(engine.search([asset], { query: 'export' }, 10).results[0].score).toBe(368);
+      expect(engine.search([asset], { query: 'export' }, 10).results[0].score).toBe(288);
     });
   });
 
