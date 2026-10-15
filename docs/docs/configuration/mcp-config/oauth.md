@@ -11,6 +11,10 @@ These docs are for enabling OAuth for Tableau Server only.
 Tableau Cloud customers should refer to
 [OAuth: Tableau Cloud](../mcp-config/authentication/oauth.md).
 
+A self-hosted MCP server can instead use
+[your own identity provider](#use-your-own-identity-provider-self-hosted-only) with Tableau Server
+or Tableau Cloud, signing in with Direct Trust or UAT (UAT is Tableau Cloud only).
+
 :::
 
 ## How to Enable OAuth
@@ -37,6 +41,48 @@ For more information, please see the
 
 <hr />
 
+## Use your own identity provider (self-hosted only)
+
+A self-hosted MCP server can accept access tokens from your own OAuth or OpenID Connect identity
+provider (IdP) instead of Tableau. The MCP server checks each token, reads the Tableau username from
+one claim, and signs in to Tableau as that user with [Direct Trust](authentication/direct-trust.md)
+or [UAT](authentication/uat.md). This mode is not available for hosted Tableau MCP.
+
+To set it up:
+
+- Set [`OAUTH_ISSUER`](#oauth_issuer) to your IdP's issuer and
+  [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) to `false`. Tokens with any other
+  `iss` are rejected.
+- Set exactly one of [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWT access tokens) or
+  [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) (opaque tokens).
+- Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`, or to `uat` with
+  `{OAUTH_USERNAME}` in `UAT_USERNAME_CLAIM`.
+- Have your IdP set the token's `aud` to this server's resource identifier: the
+  [`OAUTH_RESOURCE_URI`](#oauth_resource_uri) origin with the `/tableau-mcp` path, or a value in
+  [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris). Clients request it with the
+  `resource` parameter ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)). The MCP server accepts
+  any token with a matching `aud`, so use a value unique to this server: never a client ID or a
+  shared default audience such as Okta's `api://default`.
+- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. In this mode the
+  scopes also keep out ID tokens and tokens meant for other apps, so setting
+  [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) to `true` removes that check.
+
+:::warning
+
+Pick a [username claim](#oauth_external_username_claim_name) that never changes and that users can't
+edit, such as `sub` (the default). Avoid `email` or `preferred_username` unless your IdP guarantees
+them: whoever controls the claim value signs in to Tableau as that user.
+
+:::
+
+Also note:
+
+- Passthrough auth (`ENABLE_PASSTHROUGH_AUTH`) runs first. A request with a valid Tableau session is
+  accepted without checking a bearer token.
+- The token's `client_id` (or `azp`) claim is used as the client ID, which is sent to telemetry.
+
+<hr />
+
 ## Environment Variables
 
 The following environment variables configure OAuth behavior:
@@ -59,6 +105,9 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 **Setting this environment variable enables OAuth.** This should be the origin of your MCP server
 (the issuer of access tokens).
+
+When you [use your own identity provider](#use-your-own-identity-provider-self-hosted-only), set it
+to the provider's issuer exactly as it appears in the token's `iss` claim. A trailing slash matters.
 
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
@@ -166,8 +215,10 @@ pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 - Accepts a single URL or a comma-separated list of URLs.
 - Each value is matched against `aud`, so set it to the global resource URL the
   authorization server stamps into the claim (for example `https://mcp.tableau.com`).
-- Applies only when using an external Tableau authorization server
+- Applies only when using a Tableau authorization server or
+  [your own identity provider](#use-your-own-identity-provider-self-hosted-only)
   ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
+- Each value must be unique to this MCP server: any token whose `aud` matches is accepted.
 
 <hr />
 
@@ -293,10 +344,55 @@ References:
 ### `OAUTH_EMBEDDED_AUTHZ_SERVER`
 
 A hint that `OAUTH_ISSUER` points at the embedded OAuth authorization server (authorize, token,
-callback, register routes). When `false`, the issuer is an external authorization server (e.g.
-Tableau); only `.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
+callback, register routes). When `false`, the issuer is an external authorization server (Tableau,
+or [your own identity provider](#use-your-own-identity-provider-self-hosted-only)); only
+`.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
 
 - Default: `true`
+
+<hr />
+
+### `OAUTH_EXTERNAL_JWKS_URI`
+
+The JWKS URL of your identity provider. When set, the MCP server accepts JWT access tokens
+([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) signed by a key from this URL. Set this or
+[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri), not both. Must use `https`
+unless the host is loopback. See
+[Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
+
+<hr />
+
+### `OAUTH_EXTERNAL_INTROSPECTION_URI`
+
+The token introspection endpoint ([RFC 7662](https://www.rfc-editor.org/rfc/rfc7662)) of your
+identity provider. When set, the MCP server sends each access token to this endpoint to check it.
+Set this or [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), not both. Must use `https` unless
+the host is loopback.
+
+<hr />
+
+### `OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID`
+
+The client ID the MCP server uses to call
+[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) with HTTP Basic auth.
+Required when that variable is set.
+
+<hr />
+
+### `OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET`
+
+The client secret for
+[`OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID`](#oauth_external_introspection_client_id). Required when
+[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) is set.
+
+<hr />
+
+### `OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`
+
+The name of the access token claim to use as the Tableau username. The claim's value must be a
+non-empty string. Surrounding spaces in the name are trimmed, and an empty name falls back to `sub`.
+
+- Default: `sub`
 
 <hr />
 
