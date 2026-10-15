@@ -1,3 +1,4 @@
+import { getDefaultEnv } from '../tests/testEnv.js';
 import { Config } from './config.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { milliseconds } from './utils/milliseconds.js';
@@ -312,6 +313,15 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.flowToolsEnabled).toBe(expected);
+  });
+
+  it('should preserve FLOW_TOOLS_ENABLED=false in the E2E server environment', () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'false');
+
+    const serverEnv = getDefaultEnv();
+    vi.stubEnv('FLOW_TOOLS_ENABLED', serverEnv.FLOW_TOOLS_ENABLED);
+
+    expect(new Config().flowToolsEnabled).toBe(false);
   });
 
   it('should default insightsToolsEnabled to false', () => {
