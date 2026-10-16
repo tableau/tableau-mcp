@@ -269,8 +269,9 @@ describe('getWorkbookTool', () => {
     });
 
     describe('when a scope restricts workbooks', () => {
-      // Embedded datasources are admitted via the (already allowed) workbook, so
-      // INCLUDE_DATASOURCE_IDS only filters the published ones.
+      // INCLUDE_DATASOURCE_IDS is an absolute allowlist: even when a workbook scope admits the
+      // workbook, embedded datasources outside the allowlist are filtered out — otherwise
+      // get-workbook would list an embedded datasource that query-datasource then denies.
       beforeEach(() => {
         vi.stubEnv('INCLUDE_WORKBOOK_IDS', workbookId);
         mocks.mockGraphql.mockResolvedValue({
@@ -296,29 +297,24 @@ describe('getWorkbookTool', () => {
         ]);
       });
 
-      it('keeps an embedded DS that is not in INCLUDE_DATASOURCE_IDS', async () => {
+      it('filters an embedded DS that is not in INCLUDE_DATASOURCE_IDS, keeping its allowed parent', async () => {
         vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'pub-luid-1');
 
         const response = await getResponseData({ workbookId });
 
+        // emb-luid-1 is dropped (not in the allowlist); its parent pub-luid-1 is, so it survives
+        // as a standalone published entry.
         expect(response.data.upstreamDatasources).toEqual([
-          {
-            luid: 'emb-luid-1',
-            name: 'Embedded DS',
-            datasourceType: 'embedded',
-            publishedParent: { luid: 'pub-luid-1', name: 'Published DS' },
-          },
+          { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
         ]);
       });
 
-      it('still filters the published DS and its publishedParent pointer by INCLUDE_DATASOURCE_IDS', async () => {
+      it('filters both the embedded DS and the published DS when neither is in INCLUDE_DATASOURCE_IDS', async () => {
         vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-luid');
 
         const response = await getResponseData({ workbookId });
 
-        expect(response.data.upstreamDatasources).toEqual([
-          { luid: 'emb-luid-1', name: 'Embedded DS', datasourceType: 'embedded' },
-        ]);
+        expect(response.data.upstreamDatasources).toBeUndefined();
       });
     });
 

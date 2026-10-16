@@ -635,9 +635,8 @@ export function filterLineageContentsByAllowedIds(
 }
 
 // Strips a publishedParent pointer whose luid is out of bounds: the same excluded datasource would be
-// dropped as a standalone entry, so it must not leak via a parent pointer either. Used on its own for
-// embedded datasources, which are admitted via their workbook rather than by luid.
-export function stripOutOfBoundsPublishedParents(
+// dropped as a standalone entry, so it must not leak via a parent pointer either.
+function stripOutOfBoundsPublishedParents(
   contents: Array<LineageContent>,
   allowedIds?: Set<string> | null,
 ): Array<LineageContent> {
