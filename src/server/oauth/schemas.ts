@@ -124,6 +124,40 @@ export const tableauBearerTokenSchema = z.object({
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
 });
 
+const stringOrStringArraySchema = z.union([z.string(), z.array(z.string())]);
+
+// Other claims pass through so the username claim is configurable.
+const externalTokenClaimsObjectSchema = z
+  .object({
+    iss: z.string().optional(),
+    aud: stringOrStringArraySchema.optional(),
+    exp: z.number().optional(),
+    scope: z.string().optional(),
+    scp: stringOrStringArraySchema.optional(),
+    client_id: z.string().optional(),
+    azp: z.string().optional(),
+  })
+  .passthrough();
+
+/** Claims of a verified RFC 9068 JWT access token from an external authorization server. */
+export const externalTokenClaimsSchema = externalTokenClaimsObjectSchema.transform(
+  ({ client_id, ...claims }) => ({ ...claims, clientId: client_id }),
+);
+
+/** RFC 7662 token introspection response from an external authorization server. */
+export const introspectionResponseSchema = externalTokenClaimsObjectSchema
+  .extend({
+    active: z.boolean(),
+    token_type: z.string().optional(),
+  })
+  .transform(({ client_id, token_type, ...claims }) => ({
+    ...claims,
+    clientId: client_id,
+    tokenType: token_type,
+  }));
+
+export type ExternalTokenClaims = z.infer<typeof externalTokenClaimsSchema>;
+
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
 export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>;
 

@@ -12,6 +12,7 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import { LOOPBACK_HOSTS } from './server/oauth/loopbackHosts.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -85,6 +86,13 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    external: {
+      jwksUri: string;
+      introspectionUri: string;
+      introspectionClientId: string;
+      introspectionClientSecret: string;
+      usernameClaimName: string;
+    } | null;
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
@@ -163,6 +171,11 @@ export class Config extends BaseConfig {
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
+      OAUTH_EXTERNAL_JWKS_URI: oauthExternalJwksUri,
+      OAUTH_EXTERNAL_INTROSPECTION_URI: oauthExternalIntrospectionUri,
+      OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID: oauthExternalIntrospectionClientId,
+      OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET: oauthExternalIntrospectionClientSecret,
+      OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
@@ -289,6 +302,21 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      external: [
+        oauthExternalJwksUri,
+        oauthExternalIntrospectionUri,
+        oauthExternalIntrospectionClientId,
+        oauthExternalIntrospectionClientSecret,
+        oauthExternalUsernameClaimName,
+      ].some(Boolean)
+        ? {
+            jwksUri: oauthExternalJwksUri ?? '',
+            introspectionUri: oauthExternalIntrospectionUri ?? '',
+            introspectionClientId: oauthExternalIntrospectionClientId ?? '',
+            introspectionClientSecret: oauthExternalIntrospectionClientSecret ?? '',
+            usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
+          }
+        : null,
     };
 
     if (
@@ -428,6 +456,15 @@ export class Config extends BaseConfig {
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
+    if (this.oauth.external) {
+      validateOAuthExternal({
+        auth: this.auth,
+        oauth: this.oauth,
+        external: this.oauth.external,
+        usernameTemplate: this.auth === 'uat' ? (uatUsernameClaim ?? jwtSubClaim) : jwtSubClaim,
+      });
+    }
+
     if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
@@ -566,6 +603,71 @@ function validateServer(server: string): void {
     throw new Error(
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
     );
+  }
+}
+
+function validateOAuthExternal({
+  auth,
+  oauth: { enabled, embeddedAuthzServer },
+  external: { jwksUri, introspectionUri, introspectionClientId, introspectionClientSecret },
+  usernameTemplate,
+}: {
+  auth: AuthType;
+  oauth: Config['oauth'];
+  external: NonNullable<Config['oauth']['external']>;
+  usernameTemplate: string | undefined;
+}): void {
+  if (!enabled || embeddedAuthzServer) {
+    throw new Error(
+      'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"',
+    );
+  }
+
+  if (!jwksUri === !introspectionUri) {
+    throw new Error(
+      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI must be set',
+    );
+  }
+
+  if (introspectionUri && (!introspectionClientId || !introspectionClientSecret)) {
+    throw new Error(
+      'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID and OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET must be set when OAUTH_EXTERNAL_INTROSPECTION_URI is set',
+    );
+  }
+
+  validateHttpsOrLoopbackUri(
+    jwksUri ? 'OAUTH_EXTERNAL_JWKS_URI' : 'OAUTH_EXTERNAL_INTROSPECTION_URI',
+    jwksUri || introspectionUri,
+  );
+
+  if (auth !== 'direct-trust' && auth !== 'uat') {
+    throw new Error(
+      'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI is set, AUTH must be "direct-trust" or "uat"',
+    );
+  }
+
+  if (!usernameTemplate?.includes('{OAUTH_USERNAME}')) {
+    throw new Error(
+      auth === 'direct-trust'
+        ? 'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}'
+        : 'When OAUTH_EXTERNAL_* is set and AUTH is "uat", UAT_USERNAME_CLAIM (or JWT_SUB_CLAIM) must contain {OAUTH_USERNAME}',
+    );
+  }
+}
+
+function validateHttpsOrLoopbackUri(name: string, uri: string): void {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    throw new Error(`The environment variable ${name} is not a valid URL`);
+  }
+
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))
+  ) {
+    throw new Error(`The environment variable ${name} must use https unless its host is loopback`);
   }
 }
 

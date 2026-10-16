@@ -1,19 +1,23 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { KeyObject } from 'crypto';
-import { compactDecrypt } from 'jose';
+import { compactDecrypt, createRemoteJWKSet, jwtVerify, JWTVerifyGetKey } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig } from '../../config.js';
+import { Config, getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import invariant from '../../utils/invariant.js';
 import {
   buildResourceIdentifier,
   canonicalizeLoopbackHost,
   stripTrailingSlash,
 } from './resourceIdentifier.js';
 import {
+  ExternalTokenClaims,
+  externalTokenClaimsSchema,
+  introspectionResponseSchema,
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
   TableauAuthInfo,
@@ -31,6 +35,34 @@ function truncateForLog(value: string): string {
   return value.length > MAX_LOGGED_CLAIM_LENGTH
     ? `${value.slice(0, MAX_LOGGED_CLAIM_LENGTH)}... (truncated)`
     : value;
+}
+
+// The pod-specific resource identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always
+// accepted; each global resource URL (when configured) is matched as the AS stamps it. Both the
+// allowed values and the token's aud are compared with trailing slashes stripped so a cosmetic `/`
+// difference (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a
+// mismatch, and with loopback hosts canonicalized so the interchangeable local-dev forms
+// `localhost`, `127.0.0.1`, and `[::1]` (the resource URI defaults to `http://127.0.0.1:<port>`)
+// are not a mismatch either. Both normalizations only collapse equivalent forms; remote hosts are
+// exact.
+export function matchAudience({
+  aud,
+  config,
+}: {
+  aud: string | string[];
+  config: Pick<Config, 'oauth'>;
+}): { allowedAudiences: string[]; matches: boolean } {
+  const normalizeAudience = (uri: string): string =>
+    stripTrailingSlash(canonicalizeLoopbackHost(uri));
+  const allowedAudiences = [
+    buildResourceIdentifier(config.oauth.resourceUri),
+    ...config.oauth.globalResourceUris,
+  ].map(normalizeAudience);
+  const audiences = Array.isArray(aud) ? aud : [aud];
+  return {
+    allowedAudiences,
+    matches: audiences.some((value) => allowedAudiences.includes(normalizeAudience(value))),
+  };
 }
 
 export abstract class AccessTokenValidator {
@@ -210,21 +242,9 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       // RFC 9068 audience validation: reject tokens not minted for this MCP server's resource
       // URL. Without this, a token issued for one deployment (same shared SSO issuer) passes
-      // validation against another, surfacing later as an opaque 500. The pod-specific resource
-      // identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always accepted; each global
-      // resource URL (when configured) is matched as the AS stamps it. Both the allowed values and
-      // the token's aud are compared with trailing slashes stripped so a cosmetic `/` difference
-      // (RFC 3986 treats `https://host` and `https://host/` as the same resource) is not a mismatch,
-      // and with loopback hosts canonicalized so the interchangeable local-dev forms `localhost`,
-      // `127.0.0.1`, and `[::1]` (the resource URI defaults to `http://127.0.0.1:<port>`) are not a
-      // mismatch either. Both normalizations only collapse equivalent forms; remote hosts are exact.
-      const normalizeAudience = (uri: string): string =>
-        stripTrailingSlash(canonicalizeLoopbackHost(uri));
-      const allowedAudiences = [
-        buildResourceIdentifier(this.config.oauth.resourceUri),
-        ...this.config.oauth.globalResourceUris,
-      ].map(normalizeAudience);
-      if (!allowedAudiences.includes(normalizeAudience(aud))) {
+      // validation against another, surfacing later as an opaque 500.
+      const { allowedAudiences, matches } = matchAudience({ aud, config: this.config });
+      if (!matches) {
         log({
           message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog(aud)}'`,
           level: 'error',
@@ -283,5 +303,161 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       });
       return new Err('Invalid or expired access token');
     }
+  }
+}
+
+const INTROSPECTION_TIMEOUT_MS = 5000;
+
+/**
+ * Validates access tokens from an external OAuth/OIDC authorization server: JWTs against its JWKS
+ * (RFC 9068) or opaque tokens through token introspection (RFC 7662). The configured claim becomes
+ * the Tableau username; outbound Tableau auth stays direct-trust or UAT.
+ */
+export class ExternalAccessTokenValidator extends AccessTokenValidator {
+  private readonly external: NonNullable<Config['oauth']['external']>;
+  private readonly fetch: typeof fetch;
+  private readonly getKey: JWTVerifyGetKey | undefined;
+
+  constructor({
+    fetch = globalThis.fetch,
+    getKey,
+  }: { fetch?: typeof globalThis.fetch; getKey?: JWTVerifyGetKey } = {}) {
+    super();
+
+    invariant(this.config.oauth.external, 'OAUTH_EXTERNAL_* environment variables are not set');
+    this.external = this.config.oauth.external;
+    this.fetch = fetch;
+    this.getKey =
+      getKey ??
+      (this.external.jwksUri ? createRemoteJWKSet(new URL(this.external.jwksUri)) : undefined);
+  }
+
+  async validate(token: string): Promise<AccessTokenValidatorResult> {
+    try {
+      const claims = this.getKey
+        ? await this.verifyJwt(token, this.getKey)
+        : await this.introspect(token);
+      if (claims.isErr()) {
+        return this.reject(claims.error);
+      }
+
+      return this.toAuthInfo(token, claims.value);
+    } catch (error) {
+      return this.reject(error instanceof Error ? error.message : 'unknown error');
+    }
+  }
+
+  private async verifyJwt(
+    token: string,
+    getKey: JWTVerifyGetKey,
+  ): Promise<Result<ExternalTokenClaims, string>> {
+    const { payload } = await jwtVerify(token, getKey, {
+      issuer: this.config.oauth.issuer,
+      requiredClaims: ['exp'],
+    });
+
+    const claims = externalTokenClaimsSchema.safeParse(payload);
+    return claims.success
+      ? Ok(claims.data)
+      : Err(`invalid claims: ${fromError(claims.error).toString()}`);
+  }
+
+  private async introspect(token: string): Promise<Result<ExternalTokenClaims, string>> {
+    const { introspectionUri, introspectionClientId, introspectionClientSecret } = this.external;
+    // RFC 6749 section 2.3.1: form-encode the client credentials before base64.
+    const credentials = Buffer.from(
+      `${encodeURIComponent(introspectionClientId)}:${encodeURIComponent(introspectionClientSecret)}`,
+    ).toString('base64');
+
+    const response = await this.fetch(introspectionUri, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ token, token_type_hint: 'access_token' }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(INTROSPECTION_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return Err(`introspection endpoint returned HTTP ${response.status}`);
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      // JSON.parse errors quote the start of the body, which may echo the token.
+      return Err('introspection response is not valid JSON');
+    }
+
+    const parsed = introspectionResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      return Err(`invalid introspection response: ${fromError(parsed.error).toString()}`);
+    }
+
+    const { active, tokenType, ...claims } = parsed.data;
+    if (!active) {
+      return Err('token is not active');
+    }
+
+    if (tokenType && /refresh/i.test(tokenType)) {
+      return Err('token_type is a refresh token');
+    }
+
+    if (claims.iss !== undefined && claims.iss !== this.config.oauth.issuer) {
+      return Err('unexpected iss');
+    }
+
+    if (claims.exp !== undefined && claims.exp < Math.floor(Date.now() / 1000)) {
+      return Err('token is expired');
+    }
+
+    return Ok(claims);
+  }
+
+  private toAuthInfo(token: string, claims: ExternalTokenClaims): AccessTokenValidatorResult {
+    const { aud = [], azp, clientId, exp, scope, scp } = claims;
+    const { allowedAudiences, matches } = matchAudience({ aud, config: this.config });
+    if (!matches) {
+      log({
+        message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog([aud].flat().join(', '))}'`,
+        level: 'error',
+        logger: 'oauth',
+      });
+      return new Err('Token audience does not match this MCP server');
+    }
+
+    const { usernameClaimName } = this.external;
+    const claimsByName: Record<string, unknown> = claims;
+    const username = claimsByName[usernameClaimName];
+    if (typeof username !== 'string' || !username.trim() || /\p{Cc}/u.test(username)) {
+      return this.reject(`missing or invalid '${truncateForLog(usernameClaimName)}' claim`);
+    }
+
+    const tableauAuthInfo: TableauAuthInfo = {
+      type: 'X-Tableau-Auth',
+      username,
+      server: this.config.server,
+      siteName: this.config.siteName,
+    };
+
+    return Ok({
+      token,
+      clientId: clientId ?? azp ?? '',
+      scopes: parseScopes(scope ?? (Array.isArray(scp) ? scp.join(' ') : scp)),
+      expiresAt: exp,
+      extra: tableauAuthInfo,
+    });
+  }
+
+  private reject(reason: string): AccessTokenValidatorResult {
+    log({
+      message: `External access token rejected: ${reason}`,
+      level: 'error',
+      logger: 'oauth',
+    });
+    return new Err('Invalid or expired access token');
   }
 }

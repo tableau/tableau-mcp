@@ -1,10 +1,21 @@
 import { generateKeyPairSync } from 'crypto';
-import { CompactEncrypt } from 'jose';
+import {
+  CompactEncrypt,
+  createLocalJWKSet,
+  exportJWK,
+  generateKeyPair,
+  JWTVerifyGetKey,
+  SignJWT,
+} from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
+import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   EmbeddedAccessTokenValidator,
+  ExternalAccessTokenValidator,
+  matchAudience,
   TableauAccessTokenValidator,
 } from './accessTokenValidator.js';
 
@@ -562,6 +573,355 @@ describe('EmbeddedAccessTokenValidator site binding', () => {
       const token = await oauthToken({ tableauServer: 'https://10az.online.tableau.com' });
       const result = await new EmbeddedAccessTokenValidator(privateKey).validate(token);
       expect(result.isErr()).toBe(true);
+    });
+  });
+});
+
+describe('matchAudience', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  it('lists the normalized resource identifier and global resource URIs', () => {
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', `${MOCK_GLOBAL_RESOURCE_URI}/`);
+
+    expect(matchAudience({ aud: EXPECTED_AUD, config: getConfig() })).toEqual({
+      allowedAudiences: [EXPECTED_AUD, MOCK_GLOBAL_RESOURCE_URI],
+      matches: true,
+    });
+  });
+
+  it.each([
+    [[EXPECTED_AUD], true],
+    [['https://other.example.com', `${MOCK_GLOBAL_RESOURCE_URI}/`], true],
+    [['https://other.example.com', 'my-client-id'], false],
+    [[], false],
+    ['https://other-pod.example.com/tableau-mcp', false],
+  ])('matches aud %j: %s', (aud, matches) => {
+    expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
+  });
+});
+
+describe('ExternalAccessTokenValidator', () => {
+  const EXTERNAL_ISSUER = 'https://idp.example.com';
+  const EXTERNAL_CLIENT_ID = 'mcp-client';
+  const INTROSPECTION_URI = 'https://idp.example.com/introspect';
+  const INTROSPECTION_CLIENT_ID = 'mcp-resource-server';
+  const INTROSPECTION_SECRET = 'introspection-s3cret';
+  const INVALID_TOKEN_ERROR = 'Invalid or expired access token';
+  const AUDIENCE_ERROR = 'Token audience does not match this MCP server';
+  const now = Math.floor(Date.now() / 1000);
+  const tableauAuthInfo = (username: string): Record<string, unknown> => ({
+    type: 'X-Tableau-Auth',
+    username,
+    server: 'https://my-tableau-server.com',
+    siteName: 'tc25',
+  });
+
+  function withoutUndefined(claims: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(claims).filter(([, value]) => value !== undefined));
+  }
+
+  function errorOf(result: Awaited<ReturnType<ExternalAccessTokenValidator['validate']>>): string {
+    return result.isErr() ? result.error : 'not an error';
+  }
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('AUTH', 'direct-trust');
+    vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+    vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
+    vi.stubEnv('OAUTH_ISSUER', EXTERNAL_ISSUER);
+    vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  describe('JWT access tokens (RFC 9068)', () => {
+    let privateKey: CryptoKey;
+    let otherPrivateKey: CryptoKey;
+    let getKey: JWTVerifyGetKey;
+
+    beforeAll(async () => {
+      const keyPair = await generateKeyPair('RS256');
+      privateKey = keyPair.privateKey;
+      otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
+      getKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg: 'RS256', kid: 'key-1' }],
+      });
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+    });
+
+    function rfc9068Claims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        exp: now + 3600,
+        aud: EXPECTED_AUD,
+        sub: 'jdoe@example.com',
+        client_id: EXTERNAL_CLIENT_ID,
+        iat: now,
+        jti: 'dbe39bf3a3ba4238a513f51d6e1691c4',
+        scope: 'tableau:mcp:datasource:read tableau:mcp:view:read',
+        ...overrides,
+      });
+    }
+
+    async function sign(claims: Record<string, unknown>, key = privateKey): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', typ: 'at+jwt', kid: 'key-1' })
+        .sign(key);
+    }
+
+    it('maps a verified token to an X-Tableau-Auth identity', async () => {
+      const token = await sign(rfc9068Claims());
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: EXTERNAL_CLIENT_ID,
+        scopes: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('jdoe@example.com'),
+      });
+    });
+
+    it('reads scp array scopes, azp, an aud array, and a custom username claim', async () => {
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
+      const token = await sign(
+        rfc9068Claims({
+          aud: ['https://other.example.com', EXPECTED_AUD],
+          azp: 'azp-client',
+          client_id: undefined,
+          scope: undefined,
+          scp: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+          tableau_username: 'jdoe',
+        }),
+      );
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toMatchObject({
+        clientId: 'azp-client',
+        scopes: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+        extra: tableauAuthInfo('jdoe'),
+      });
+    });
+
+    it('rejects a token signed by another key', async () => {
+      const token = await sign(rfc9068Claims(), otherPrivateKey);
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects a token with a forged signature without trusting its claims', async () => {
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(
+        makeBearer(rfc9068Claims()),
+      );
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each<[string, Record<string, unknown>]>([
+      ['iss is wrong', { iss: 'https://evil.example.com' }],
+      ['exp has passed', { exp: now - 60 }],
+      ['exp is missing', { exp: undefined }],
+      ['the username claim is missing', { sub: undefined }],
+      ['the username claim is blank', { sub: '   ' }],
+      ['the username claim has a control character', { sub: 'jdoe\nadmin' }],
+    ])('rejects the token when %s', async (_, overrides) => {
+      const token = await sign(rfc9068Claims(overrides));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each([
+      ['another resource', 'https://other-pod.example.com/tableau-mcp'],
+      ['the client ID', EXTERNAL_CLIENT_ID],
+    ])('rejects the token when aud is %s', async (_, aud) => {
+      const token = await sign(rfc9068Claims({ aud }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(AUDIENCE_ERROR);
+    });
+  });
+
+  describe('token introspection (RFC 7662)', () => {
+    const OPAQUE_TOKEN = '2YotnFZFEjr1zCsicMWpAA';
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_URI', INTROSPECTION_URI);
+      vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID', INTROSPECTION_CLIENT_ID);
+      vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET', INTROSPECTION_SECRET);
+    });
+
+    // The RFC 7662 section 2.2 example response, with aud, iss, and exp set for this server.
+    function rfc7662Response(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        active: true,
+        client_id: 'l238j323ds-23ij4',
+        username: 'jdoe',
+        scope: 'read write dolphin',
+        sub: 'Z5O3upPC88QrAjx00dis',
+        aud: EXPECTED_AUD,
+        iss: EXTERNAL_ISSUER,
+        exp: FUTURE_EXP,
+        iat: 1419350238,
+        extension_field: 'twenty-seven',
+        ...overrides,
+      });
+    }
+
+    function mockFetch(
+      body: unknown,
+      status = 200,
+    ): ReturnType<typeof vi.fn<typeof globalThis.fetch>> {
+      return vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }
+
+    it('maps an active introspection response to an X-Tableau-Auth identity', async () => {
+      const fetch = mockFetch(rfc7662Response());
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(OPAQUE_TOKEN);
+
+      expect(result.unwrap()).toEqual({
+        token: OPAQUE_TOKEN,
+        clientId: 'l238j323ds-23ij4',
+        scopes: ['read', 'write', 'dolphin'],
+        expiresAt: FUTURE_EXP,
+        extra: tableauAuthInfo('Z5O3upPC88QrAjx00dis'),
+      });
+      expect(fetch).toHaveBeenCalledOnce();
+      const [url, init] = fetch.mock.calls[0];
+      expect(url).toBe(INTROSPECTION_URI);
+      expect(init).toMatchObject({
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${INTROSPECTION_CLIENT_ID}:${INTROSPECTION_SECRET}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(String(init?.body)).toBe(`token=${OPAQUE_TOKEN}&token_type_hint=access_token`);
+    });
+
+    it('form-encodes the client credentials in the Basic header', async () => {
+      vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET', 'p@ss:word');
+      const fetch = mockFetch(rfc7662Response());
+
+      await new ExternalAccessTokenValidator({ fetch }).validate(OPAQUE_TOKEN);
+
+      expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+        Authorization: `Basic ${Buffer.from(`${INTROSPECTION_CLIENT_ID}:p%40ss%3Aword`).toString('base64')}`,
+      });
+    });
+
+    it.each<[string, unknown]>([
+      ['active is false', { active: false }],
+      ['active is missing', rfc7662Response({ active: undefined })],
+      ['iss does not match', rfc7662Response({ iss: 'https://evil.example.com' })],
+      ['exp has passed', rfc7662Response({ exp: now - 60 })],
+      ['token_type is a refresh token', rfc7662Response({ token_type: 'refresh_token' })],
+    ])('rejects the token when %s', async (_, body) => {
+      const result = await new ExternalAccessTokenValidator({ fetch: mockFetch(body) }).validate(
+        OPAQUE_TOKEN,
+      );
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each([
+      ['aud is missing', rfc7662Response({ aud: undefined })],
+      ['aud is another resource', rfc7662Response({ aud: 'https://other.example.com' })],
+    ])('rejects the token when %s', async (_, body) => {
+      const result = await new ExternalAccessTokenValidator({ fetch: mockFetch(body) }).validate(
+        OPAQUE_TOKEN,
+      );
+
+      expect(errorOf(result)).toBe(AUDIENCE_ERROR);
+    });
+
+    it('rejects the token when the introspection endpoint returns a non-2xx status', async () => {
+      const fetch = mockFetch(rfc7662Response(), 401);
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(OPAQUE_TOKEN);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects the token when the introspection request fails', async () => {
+      const fetch = vi
+        .fn<typeof globalThis.fetch>()
+        .mockRejectedValue(new TypeError('fetch failed'));
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(OPAQUE_TOKEN);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+
+    it('never logs the token, the client secret, or the response body', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const echoedBody = { error: OPAQUE_TOKEN, error_description: INTROSPECTION_SECRET };
+
+      await new ExternalAccessTokenValidator({ fetch: mockFetch(echoedBody, 400) }).validate(
+        OPAQUE_TOKEN,
+      );
+      await new ExternalAccessTokenValidator({
+        fetch: mockFetch(rfc7662Response({ aud: 'https://other.example.com' })),
+      }).validate(OPAQUE_TOKEN);
+      await new ExternalAccessTokenValidator({
+        fetch: vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('fetch failed')),
+      }).validate(OPAQUE_TOKEN);
+      // JSON.parse errors quote the first 10 characters of a body that starts with a letter.
+      const leakCheckToken = 'opaque-token-leak-check';
+      await new ExternalAccessTokenValidator({
+        fetch: vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(new Response(`${leakCheckToken} ${INTROSPECTION_SECRET}`)),
+      }).validate(leakCheckToken);
+
+      const output = [...consoleSpy.mock.calls, ...stderrSpy.mock.calls].flat().map(String).join();
+      expect(output).toContain('External access token rejected');
+      expect(output).toContain('Access token audience mismatch');
+      expect(output).toContain('introspection response is not valid JSON');
+      expect(output).not.toContain(OPAQUE_TOKEN);
+      expect(output).not.toContain(leakCheckToken.slice(0, 10));
+      expect(output).not.toContain(INTROSPECTION_SECRET);
+      expect(output).not.toContain(
+        Buffer.from(`${INTROSPECTION_CLIENT_ID}:${INTROSPECTION_SECRET}`).toString('base64'),
+      );
     });
   });
 });
