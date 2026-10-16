@@ -251,6 +251,12 @@ describe('server', () => {
     for (const promptName of adminPromptNamesInInstructions) {
       expect(instructions).toContain(promptName);
     }
+    // The model cannot call prompts/get (prompts are user-invoked slash commands), so the
+    // instructions point it at the model-readable workflow resources instead (W-23757369).
+    expect(instructions).not.toContain('prompts/get');
+    expect(instructions).toContain('tableau-mcp://admin-workflows/<prompt-name>');
+    expect(instructions).toContain('slash-command prompt');
+    expect(instructions).toContain('If you cannot read MCP resources');
     // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
     expect(instructions).toContain('read-only report');
     expect(instructions).toContain('dry-run by default');
@@ -299,6 +305,7 @@ describe('server', () => {
       expect(instructions).not.toContain(promptName);
     }
     expect(instructions).not.toContain('Markdown tables');
+    expect(instructions).not.toContain('tableau-mcp://admin-workflows/');
     expect(instructions).not.toContain(
       'Do not require the user to state or re-confirm admin status',
     );
@@ -459,12 +466,23 @@ describe('server', () => {
       'user-license-reclamation-apply',
     ];
 
-    async function getRegisteredNames(): Promise<{ tools: string[]; prompts: string[] }> {
+    const adminWorkflowResourceUris = adminPromptNames.map(
+      (name) => `tableau-mcp://admin-workflows/${name}`,
+    );
+
+    async function getRegisteredNames(): Promise<{
+      tools: string[];
+      prompts: string[];
+      resourceUris: string[];
+    }> {
       const server = getServer();
       await server.registerTools();
       return {
         tools: vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
         prompts: vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0]),
+        resourceUris: vi
+          .mocked(server.mcpServer.registerResource)
+          .mock.calls.map((call) => String(call[1])),
       };
     }
 
@@ -477,6 +495,29 @@ describe('server', () => {
 
       expect(tools).toEqual(expect.arrayContaining(adminToolNames));
       expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
+    });
+
+    it('should register a workflow resource per admin prompt without adding any tool', async () => {
+      const { tools: toolsWithoutAdmin } = await getRegisteredNames();
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'admin-tools',
+      );
+      const { tools, prompts, resourceUris } = await getRegisteredNames();
+
+      expect(resourceUris).toEqual(adminWorkflowResourceUris);
+      expect(resourceUris).toHaveLength(prompts.length);
+      // The only tools added by enabling admin are the pre-existing admin tools — no workflow tool.
+      expect(tools.filter((name) => !toolsWithoutAdmin.includes(name)).sort()).toEqual(
+        [...adminToolNames].sort(),
+      );
+      expect(tools.every((name) => webToolNames.includes(name as WebToolName))).toBe(true);
+    });
+
+    it('should not register workflow resources when admin tools are disabled', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      const { resourceUris } = await getRegisteredNames();
+      expect(resourceUris).toEqual([]);
     });
 
     it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF', async () => {
@@ -828,6 +869,7 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
         name === 'knowledge-tools' ||
+        name === 'knowledge-write-tools' ||
         enforceRoleRequirements(name) ||
         enforceRegistrationConditions(name),
     );
@@ -874,6 +916,38 @@ describe('server', () => {
     await server.registerTools();
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
+  });
+
+  it('registers only Knowledge read tools when the write flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(2);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'query-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'inspect-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
   });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {
