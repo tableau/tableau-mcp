@@ -491,6 +491,7 @@ Enables admin-only tools that require site administrator permissions.
   - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../tools/jobs/list-jobs.md)
   - [`list-users`](../../tools/users/list-users.md)
+  - [`list-groups`](../../tools/users/list-groups.md)
   - [`delete-content`](../../tools/content/delete-content.md)
   - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
