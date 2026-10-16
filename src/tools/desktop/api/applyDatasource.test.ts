@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
@@ -14,6 +14,7 @@ import type {
 } from '../../../desktop/externalApi/executorTypes.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { sidecarPath } from '../../../desktop/wrappers/cacheFingerprint.js';
+import { READBACK_POLL_INTERVAL_MS } from '../../../desktop/wrappers/pollReadback.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { notifier } from '../../../logging/notification.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -41,6 +42,13 @@ const structuredSchema = successSchema.extend({
     }),
   }),
 });
+
+function colorFixture(name: string): string {
+  return readFileSync(
+    join(process.cwd(), 'src', 'desktop', 'validation', '__fixtures__', 'color-map', name),
+    'utf8',
+  );
+}
 
 const routeMissing: ExecuteCommandError = {
   type: 'command-failed',
@@ -243,6 +251,120 @@ describe('getApplyDatasourceTool', () => {
     ]);
   });
 
+  it('makes no extra Desktop call when the payload carries no color map', async () => {
+    const file = datasourceFile('no-color-map');
+    writeMatchingSidecar(file);
+
+    const { result, order, executor } = await invoke({ datasourceName: 'Sales', file });
+
+    expect(result.isError).toBe(false);
+    expect(order).toEqual(['list', 'apply:Sales%20Extract']);
+    expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+    expect(JSON.parse(resultText(result))).not.toHaveProperty('verification');
+  });
+
+  describe('color map readback', () => {
+    const superstore = [{ id: 'superstore', name: 'superstore' }];
+
+    afterEach(() => vi.useRealTimers());
+
+    it('fails verification for the live L1a payload whose map Desktop dropped, without a tool error', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const file = datasourceFile('color-l1a', colorFixture('apply-L1a-ds.xml'));
+      writeMatchingSidecar(file);
+
+      const pending = invoke({
+        datasourceName: 'superstore',
+        datasources: superstore,
+        file,
+        readbacks: [colorFixture('rb-L1a-ds.xml')],
+      });
+      let settled = false;
+      void pending.finally(() => (settled = true));
+      while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+      const { result, executor } = await pending;
+
+      expect(result.isError).toBe(false);
+      const body = JSON.parse(resultText(result));
+      expect(body.message).toBe(
+        'Desktop accepted the datasource update for "superstore", but 3 requested member color(s) did not take: [none:Category:nk]: Furniture expected #59a14f, found missing; [none:Category:nk]: Technology expected #9c755f, found missing; [none:Category:nk]: Office Supplies expected #b07aa1, found missing. Do not tell the user these colors are set. The datasource needs a <column-instance> for [none:Category:nk] next to its <style>.',
+      );
+      expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(body.verification.findings).toHaveLength(3);
+      expect(result.structuredContent).toMatchObject({
+        nextAction: { kind: 'prefill', label: 'Verification failed — diagnose listed findings' },
+      });
+      expect(executor.getDatasourceDocument).toHaveBeenCalledWith('superstore', expect.anything());
+    });
+
+    it('passes verification for the live L1b payload whose map Desktop kept', async () => {
+      const file = datasourceFile('color-l1b', colorFixture('apply-L1b-ds.xml'));
+      writeMatchingSidecar(file);
+
+      const { result, order } = await invoke({
+        datasourceName: 'superstore',
+        datasources: superstore,
+        file,
+        readbacks: [colorFixture('rb-L1b-ds.xml')],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(order).toEqual(['list', 'apply:superstore', 'read:superstore']);
+      const structured = structuredSchema
+        .extend({ verification: z.object({ status: z.literal('passed') }) })
+        .parse(result.structuredContent);
+      expect(structured.message).toBe(
+        'Successfully applied datasource update for "superstore". The datasource has been updated. Read back the datasource document: every requested member color matched.',
+      );
+      expect(structured.nextAction.receipt.did).toEqual([
+        'Desktop accepted the datasource XML apply for "superstore"',
+        'read back the datasource document: every requested member color matched',
+      ]);
+    });
+
+    it('keeps the landed apply Ok when the request aborts mid-poll', async () => {
+      const controller = new AbortController();
+      const file = datasourceFile('color-abort', colorFixture('apply-L1a-ds.xml'));
+      writeMatchingSidecar(file);
+
+      const { result, executor } = await invoke({
+        datasourceName: 'superstore',
+        datasources: superstore,
+        file,
+        readbacks: [colorFixture('rb-L1a-ds.xml')],
+        signal: controller.signal,
+        onRead: () => controller.abort(),
+      });
+
+      expect(result.isError).toBe(false);
+      const body = JSON.parse(resultText(result));
+      expect(body.message).toContain('Successfully applied datasource update for "superstore"');
+      expect(body.verification).toMatchObject({ ok: true, status: 'warning' });
+      expect(body.verification.message).toContain('the readback was interrupted');
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the apply accepted and only warns when the readback cannot be read', async () => {
+      const file = datasourceFile('color-read-error', colorFixture('apply-L1b-ds.xml'));
+      writeMatchingSidecar(file);
+
+      const { result } = await invoke({
+        datasourceName: 'superstore',
+        datasources: superstore,
+        file,
+        readbackError: routeMissing,
+      });
+
+      expect(result.isError).toBe(false);
+      const structured = structuredSchema.parse(result.structuredContent);
+      expect(structured.message).toContain('Successfully applied datasource update');
+      expect(structured.message).toContain('Requested member colors are not verified');
+      expect(structured.nextAction.receipt.unverified).toContain(
+        'whether the requested member colors took — color readback unavailable for datasource "superstore": No route matches POST /v0/workbook/datasources/target/document',
+      );
+    });
+  });
+
   it.each([
     ['missing', () => join(cacheDirectory('missing'), 'missing.xml')],
     [
@@ -443,6 +565,9 @@ describe('getApplyDatasourceTool', () => {
     listError,
     applyError,
     signal,
+    readbacks = [],
+    readbackError,
+    onRead,
   }: {
     datasourceName: string;
     file: string;
@@ -451,6 +576,10 @@ describe('getApplyDatasourceTool', () => {
     listError?: ExecuteCommandError;
     applyError?: ExecuteCommandError;
     signal?: AbortSignal;
+    /** Datasource documents returned by successive post-apply reads; the last one repeats. */
+    readbacks?: string[];
+    readbackError?: ExecuteCommandError;
+    onRead?: () => void;
   }): Promise<{
     result: CallToolResult;
     order: string[];
@@ -473,10 +602,20 @@ describe('getApplyDatasourceTool', () => {
           });
     });
     const applyWorkbookDocument = vi.fn();
+    let reads = 0;
+    const getDatasourceDocument = vi.fn(async (id: string) => {
+      order.push(`read:${id}`);
+      onRead?.();
+      const xml = readbacks[Math.min(reads++, readbacks.length - 1)] ?? '';
+      return readbackError
+        ? Err(readbackError)
+        : Ok({ xml, applicationVersion: undefined, xsdPayloadVersion: undefined });
+    });
     const executor = makeExecutorMock({
       listWorkbookDatasources,
       applyDatasourceDocument,
       applyWorkbookDocument,
+      getDatasourceDocument,
     });
     const tool = getApplyDatasourceTool(new DesktopMcpServer());
     const callback = await Provider.from(tool.callback);

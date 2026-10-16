@@ -12,6 +12,7 @@ import {
   formatDashboardPromiseCheck,
   formatDesktopWarnings,
 } from '../../../desktop/validation/promise-check.js';
+import type { ReadbackVerificationResult } from '../../../desktop/validation/readback-verify.js';
 import {
   CacheArtifactKind,
   type CacheSidecarInput,
@@ -151,6 +152,7 @@ export function acceptedNoReadbackApplyResult({
   hostVerification,
   messageSuffix = '',
   additionalUnverified = [],
+  verification,
 }: {
   kind: NoReadbackApplyKind;
   /** Sheet name for the per-sheet applies; a whole-workbook apply names none. */
@@ -163,25 +165,43 @@ export function acceptedNoReadbackApplyResult({
   hostVerification: string;
   messageSuffix?: string;
   additionalUnverified?: readonly string[];
-}): StructuredResult<{ message: string }> {
+  /** Color map readback result, when the applied XML carried a color map. */
+  verification?: ReadbackVerificationResult;
+}): StructuredResult<{ message: string; verification?: ReadbackVerificationResult }> {
   const { noun, scope } = NO_READBACK_WORDING[kind];
   const target = appliedName === undefined ? '' : ` for "${appliedName}"`;
   const subject = appliedName === undefined ? 'command' : `for "${appliedName}"`;
   const capitalized = kind.charAt(0).toUpperCase() + kind.slice(1);
   const warned = resultWarnings.length > 0;
-  const headline = warned
-    ? `Applied ${kind} update${target}, but Desktop reported ${resultWarnings.length} warning(s); the ${kind} may not match what you sent.`
-    : `Successfully applied ${kind} update${target}. The ${kind} has been updated.`;
-  const message = `${headline}${hostVerification}${formatDesktopWarnings(resultWarnings)}${messageSuffix}`;
+  const colorFailed = verification?.status === 'failed';
+  const colorsMatched = verification?.status === 'passed';
+  const headline = colorFailed
+    ? `Desktop accepted the ${kind} update${target}, but ${verification.message}`
+    : warned
+      ? `Applied ${kind} update${target}, but Desktop reported ${resultWarnings.length} warning(s); the ${kind} may not match what you sent.`
+      : `Successfully applied ${kind} update${target}. The ${kind} has been updated.`;
+  const body = {
+    message: `${headline}${hostVerification}${formatDesktopWarnings(resultWarnings)}${messageSuffix}`,
+    ...(verification === undefined ? {} : { verification }),
+  };
   const unverified = [
     `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (${scope} applies have none)`,
+    ...(verification?.status === 'warning'
+      ? [`whether the requested member colors took — ${verification.message}`]
+      : []),
     ...additionalUnverified,
   ];
+  if (colorFailed) {
+    return withNextAction(
+      body,
+      prefillNextAction('Verification failed — diagnose listed findings'),
+    );
+  }
   if (warned) {
-    return withNextAction({ message }, desktopWarningNextAction());
+    return withNextAction(body, desktopWarningNextAction());
   }
   return withNextAction(
-    { message },
+    body,
     doneNextAction(
       receipt({
         did: [
@@ -189,6 +209,9 @@ export function acceptedNoReadbackApplyResult({
           ...(preflightWarnings === undefined
             ? []
             : [`preflight validation returned ${preflightWarnings.length} warning(s)`]),
+          ...(colorsMatched
+            ? ['read back the datasource document: every requested member color matched']
+            : []),
         ],
         unverified,
       }),
