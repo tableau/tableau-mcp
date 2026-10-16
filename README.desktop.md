@@ -29,6 +29,44 @@ Typical flow: `list-templates` → `list-available-fields` →
 proposal-driven binding of a single template when a caller wants the binder's
 deterministic gate.
 
+## Workbook actions
+
+`author-action` creates, edits, and deletes mark interactions. Omit `operation` to create. For
+`operation: "edit"`, pass the exact `actionName` returned by creation and a complete replacement
+definition: `mode`, `caption`, `sourceWorksheet`, the mode's target, and every nondefault option you
+want to keep. Edits require an explicit `mode`; only creation defaults to `parameter`. Omitted
+options use the creation defaults; edits do not merge individual settings. The internal action name
+and enabled state stay the same, including when the mode changes. URL actions can share a destination
+when their triggers, destination options, encoding, or source exclusions differ. For a dashboard-only
+source, pass `sourceWorksheet: ""` and `sourceDashboard`.
+
+If edit readback reports that the original action was removed or changed, run `undo-workbook` in
+the same session to restore the previous workbook before retrying. Failed verification does not
+automatically undo the apply.
+
+For example, this edits a URL action:
+
+```json
+{
+  "operation": "edit",
+  "actionName": "[Action1]",
+  "mode": "url",
+  "caption": "Open customer",
+  "sourceWorksheet": "Customers",
+  "url": "https://example.com/customer/<[Customer ID]>"
+}
+```
+
+Delete with `{"operation":"delete","actionName":"[Action1]"}` and an optional `session`. An unknown
+name returns the available names and captions. Existing actions can also be inspected with
+`get-workbook-xml`; use their internal `name`, rather than their caption. Edits/deletes require a
+Desktop build that replaces actions during whole-workbook applies. The tool verifies the resulting
+action identities and edited settings after applying; `undo-workbook` and `redo-workbook` can
+reverse and restore the change.
+
+Highlight actions use `clearSelection: "show-all"` by default; Desktop always clears highlighting
+with the selection. Other clearing options are refused before applying.
+
 ## Build & run from source
 
 Requires Node.js `>=22.7.5`.
