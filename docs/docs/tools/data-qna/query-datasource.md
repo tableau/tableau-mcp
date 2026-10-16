@@ -83,9 +83,15 @@ Example:
 
 The maximum number of rows to return. The tool will return at most this many rows.
 
+When a row limit applies (this argument, `MAX_RESULT_LIMIT` or a per-tool `MAX_RESULT_LIMITS` entry),
+the response includes `mcp.resultInfo` with `returnedCount` and `truncated`. If `truncated` is
+`true`, more rows matched; `truncationReason` is `admin-cap` when a server cap cut the results, or
+`requested-limit` when this argument did. `mcp.resultInfo` is absent when no row limit applies.
+
 Example: `2000`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)
 
 <hr />
 
