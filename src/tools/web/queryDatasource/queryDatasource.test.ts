@@ -58,6 +58,9 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
+  mockRestQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -65,8 +68,16 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       signIn: vi.fn(),
       signOut: vi.fn(),
+      siteId: 'test-site-id',
       vizqlDataServiceMethods: {
         queryDatasource: mocks.mockQueryDatasource,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockRestQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
       },
     }),
   ),
@@ -111,6 +122,7 @@ describe('queryDatasourceTool', () => {
       {
         datasourceLuid: '',
         query: { fields: [{ fieldCaption: 'Category' }] },
+        workbookLuid: undefined,
         limit: undefined,
       },
       getMockRequestHandlerExtra(),
@@ -369,6 +381,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -416,6 +429,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -457,6 +471,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -495,6 +510,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -553,6 +569,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -624,14 +641,64 @@ describe('queryDatasourceTool', () => {
 
     expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockRestQueryDatasource.mockResolvedValue({
+        id: datasourceLuid,
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: datasourceLuid } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+    });
+
+    it('should query an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockQueryDatasource).toHaveBeenCalled();
+    });
+
+    it('should not query an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult({
   limit,
   productVersion,
+  workbookLuid,
 }: {
   limit?: number;
   productVersion?: ProductVersion;
+  workbookLuid?: string;
 } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(
     new WebMcpServer(),
@@ -647,6 +714,7 @@ async function getToolResult({
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      workbookLuid,
       limit,
     },
     getMockRequestHandlerExtra(),
