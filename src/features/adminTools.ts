@@ -5,5 +5,5 @@ import { getFeatureGate } from './init.js';
 export async function isAdminToolsEnabled(
   config: Pick<Config, 'adminToolsEnabled'>,
 ): Promise<boolean> {
-  return config.adminToolsEnabled && (await getFeatureGate().isFeatureEnabled('admin-tools'));
+  return config.adminToolsEnabled || (await getFeatureGate().isFeatureEnabled('admin-tools'));
 }
