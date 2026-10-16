@@ -505,6 +505,102 @@ describe('author-action edit/delete', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  describe.each(['edit', 'delete'] as const)(
+    '%s on a Desktop that appends actions',
+    (operation) => {
+      it.each(CASES)(
+        'explains added copies and undo recovery for $mode actions',
+        async ({ mode, definition, args }) => {
+          const copiedSibling = UNRELATED.replace('[Action3]', '[Action13]');
+          const copiedEdit = definition
+            .replace('[Action7]', '[Action17]')
+            .replace('Original', 'Edited');
+          const { result, applyWorkbookDocument } = await getToolResult({
+            args:
+              operation === 'delete'
+                ? { operation, actionName: '[Action7]' }
+                : {
+                    operation,
+                    actionName: '[Action7]',
+                    mode,
+                    caption: 'Edited',
+                    sourceWorksheet: 'Profit',
+                    ...args,
+                  },
+            initialXml: withActions(WORKBOOK, UNRELATED + definition),
+            readbackXml: withActions(
+              WORKBOOK,
+              UNRELATED + definition + copiedSibling + (operation === 'edit' ? copiedEdit : ''),
+            ),
+          });
+          expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain(
+            'This Desktop build adds actions instead of replacing them.',
+          );
+          expect(result.content[0].text).toContain('Copies were added to the workbook.');
+          expect(result.content[0].text).toContain('Run undo-workbook in the same session');
+          expect(result.content[0].text).toContain(
+            'use a Desktop build that supports replacing workbook actions before retrying',
+          );
+        },
+      );
+
+      it('does not diagnose added copies when an original name is absent', async () => {
+        const definition = CASES[2].definition;
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args:
+            operation === 'delete'
+              ? { operation, actionName: '[Action7]' }
+              : {
+                  operation,
+                  actionName: '[Action7]',
+                  mode: 'url',
+                  caption: 'Edited',
+                  sourceWorksheet: 'Profit',
+                  url: 'https://example.com/selected',
+                },
+          initialXml: withActions(WORKBOOK, UNRELATED + definition),
+          readbackXml: withActions(
+            WORKBOOK,
+            UNRELATED +
+              UNRELATED.replace('[Action3]', '[Action13]') +
+              definition.replace('[Action7]', '[Action17]'),
+          ),
+        });
+        expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).not.toContain('Copies were added');
+      });
+    },
+  );
+
+  it('keeps creation readback failures separate from edit/delete compatibility errors', async () => {
+    const definition = CASES[2].definition;
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'New',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/new',
+      },
+      initialXml: withActions(WORKBOOK, UNRELATED + definition),
+      readbackXml: withActions(
+        WORKBOOK,
+        UNRELATED +
+          definition +
+          UNRELATED.replace('[Action3]', '[Action13]') +
+          definition.replace('[Action7]', '[Action17]'),
+      ),
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('Copies were added');
+  });
+
   it.each(['retained', 'dropped sibling', 'renamed sibling'])(
     'rejects an unsuccessful delete readback: %s',
     async (failure) => {
@@ -521,6 +617,8 @@ describe('author-action edit/delete', () => {
         readbackXml,
       });
       expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).not.toContain('Copies were added');
     },
   );
 
@@ -561,6 +659,8 @@ describe('author-action edit/delete', () => {
         readbackXml: initialXml,
       });
       expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).not.toContain('Copies were added');
     },
   );
 

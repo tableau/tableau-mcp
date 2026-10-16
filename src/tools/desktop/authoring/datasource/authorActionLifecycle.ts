@@ -77,6 +77,19 @@ export function removeWorkbookAction(
   }
 }
 
+export function appendedActionsError(
+  xml: string,
+  baselineActions: WorkbookAction[],
+): XmlModificationError | undefined {
+  const readback = readWorkbookActions(xml);
+  if (readback.isErr() || readback.value.length <= baselineActions.length) return undefined;
+  const readbackNames = new Set(readback.value.map((action) => action.name));
+  if (!baselineActions.every((action) => readbackNames.has(action.name))) return undefined;
+  return new XmlModificationError(
+    'This Desktop build adds actions instead of replacing them. Copies were added to the workbook. Run undo-workbook in the same session to remove the copies, then use a Desktop build that supports replacing workbook actions before retrying.',
+  );
+}
+
 export function actionNamesMatch(actions: WorkbookAction[], names: string[]): boolean {
   return actions.length === names.length && actions.every((action) => names.includes(action.name));
 }

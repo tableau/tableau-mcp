@@ -14,6 +14,7 @@ import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
 import {
   actionNamesMatch,
+  appendedActionsError,
   editedActionSettingsMatch,
   readWorkbookActions,
   removeWorkbookAction,
@@ -71,20 +72,20 @@ const paramsSchema = {
   mode: modeSchema
     .default('parameter')
     .describe(
-      'parameter:sourceField+targetParameter;set:targetSet;url:url;filter/highlight:targetSheet',
+      'parameter:sourceField+targetParameter;set:targetSet;url;filter/highlight:targetSheet',
     ),
   caption: z.string().optional().describe(''),
   sourceWorksheet: z.string().optional().describe(''),
-  sourceField: z.string().optional().describe('parameter: shelf ref.'),
-  targetParameter: z.string().optional().describe('parameter: [Parameters].[Name].'),
-  targetSet: z.string().optional().describe('set.'),
+  sourceField: z.string().optional().describe('parameter:ref'),
+  targetParameter: z.string().optional().describe('[Parameters].[Name].'),
+  targetSet: z.string().optional().describe('set'),
   targetSheet: z.string().optional().describe('filter/highlight.'),
   filterFields: z.array(z.string()).optional().describe(''),
   highlightFields: z.array(z.string()).optional().describe('Captions.'),
   highlightBy: highlightBySchema.optional().describe('Omit with highlightFields.'),
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
-  clearSelection: clearSelectionSchema.optional().describe('highlight: show-all only.'),
+  clearSelection: clearSelectionSchema.optional().describe('filter/set; highlight: show-all only.'),
   sourceFieldAggregation: sourceFieldAggregationSchema.optional().describe('Default attr.'),
   onClear: onClearSchema.optional().describe('Default set-value if clearValue set.'),
   clearValue: z.string().optional().describe('Reset on clear; no datetime.'),
@@ -540,7 +541,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'author-action',
     title,
-    description: 'Create/edit: full mode definition; delete: actionName.',
+    description: 'Create/edit: full mode; omitted options reset; delete: actionName.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -599,6 +600,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               });
               if (outcome.status === 'failed') return outcome.error.toErr();
               if (outcome.status === 'not-applied') {
+                const appendError = appendedActionsError(
+                  outcome.workbookXml,
+                  baselineActions.value,
+                );
+                if (appendError) return appendError.toErr();
                 return new XmlModificationError(
                   'action deletion did not survive readback, or other action identities changed; this requires Desktop support for replacing workbook actions',
                 ).toErr();
@@ -1036,6 +1042,10 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return outcome.error.toErr();
           }
           if (outcome.status === 'not-applied') {
+            if (input.operation === 'edit') {
+              const appendError = appendedActionsError(outcome.workbookXml, baselineActions.value);
+              if (appendError) return appendError.toErr();
+            }
             return new XmlModificationError(
               input.mode === 'set'
                 ? 'action applied but the target-group param did not survive readback'
