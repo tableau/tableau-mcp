@@ -614,6 +614,7 @@ describe('verifyWorksheetReadback — filter column-instance co-dependency', () 
 describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
   const CITY = '[DS].[none:City:nk]';
   const PROFIT = '[DS].[sum:Profit:qk]';
+  const QTY = '[DS].[sum:Quantity:qk]';
   const severities = (
     intendedRows: string,
     readbackRows: string,
@@ -668,6 +669,38 @@ describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
       'error',
       'error',
     ]);
+  });
+
+  it('errors when a nested sum moves a pill between panes', () => {
+    expect(
+      severities(`(${SALES_FIELD} / ${PROFIT}) + ${QTY}`, `(${QTY} / ${PROFIT}) + ${SALES_FIELD}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('errors when a nested sum with a product moves a pill between groups', () => {
+    expect(
+      severities(`(${SALES_FIELD} * ${PROFIT}) + ${QTY}`, `(${QTY} * ${PROFIT}) + ${SALES_FIELD}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('errors when the pills inside a nested group are reordered', () => {
+    expect(
+      severities(`(${SALES_FIELD} / ${PROFIT}) + ${QTY}`, `(${PROFIT} / ${SALES_FIELD}) + ${QTY}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('warns when a parenthesized sum is reordered but still flattens to one sum', () => {
+    expect(
+      severities(`(${SALES_FIELD} + ${PROFIT}) + ${QTY}`, `${QTY} + (${SALES_FIELD} + ${PROFIT})`),
+    ).toEqual(['warning', 'warning', 'warning']);
+  });
+
+  it('errors when a shelf has two items, even if each is a flat sum', () => {
+    const sum = `${SALES_FIELD} + ${PROFIT}`;
+    const reordered = `${PROFIT} + ${SALES_FIELD}`;
+    expect(
+      severities(`${sum}</rows><rows>${sum}`, `${reordered}</rows><rows>${reordered}`),
+    ).toEqual(['error', 'error', 'error', 'error']);
   });
 
   it('errors when a derivation changes, even on a shared axis', () => {

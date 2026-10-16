@@ -428,10 +428,12 @@ function isQuantitativePill(pill: string): boolean {
   return /^\[(?:[^\]]|\]\])+\]\.\[[^:\]]+:.+:qk\]$/.test(pill.trim());
 }
 
+const FLAT_SUM_SHAPE = /^\+\(L(?:,L)+\)$/;
+
 /**
- * W-24366132: the only shelf change downgraded to a warning is a pure reorder of quantitative
- * pills on a shared axis ("a + b"). Any other reorder changes nesting or pane order, and a
- * derivation change alters the numbers shown.
+ * W-24366132: the only shelf change downgraded to a warning is a reorder of quantitative pills in
+ * a flat "a + b + ..." sum of leaves: the same measures, in a different order. Any other reorder
+ * can move a measure into a different group, and a derivation change alters the numbers shown.
  */
 function shelfSeverity(
   intended: WorksheetSignature,
@@ -440,13 +442,15 @@ function shelfSeverity(
 ): ReadbackFindingSeverity {
   const intendedPills = intended.shelves[shelf];
   const readbackPills = readback.shelves[shelf];
-  const sharedAxis =
+  const flatSumReorder =
     intended.shelfShapes[shelf] === readback.shelfShapes[shelf] &&
-    intended.shelfShapes[shelf].startsWith('+(');
+    FLAT_SUM_SHAPE.test(intended.shelfShapes[shelf]);
   const sameMembers =
     intendedPills.length === readbackPills.length &&
     [...intendedPills].sort().join('\n') === [...readbackPills].sort().join('\n');
-  return sharedAxis && sameMembers && intendedPills.every(isQuantitativePill) ? 'warning' : 'error';
+  return flatSumReorder && sameMembers && intendedPills.every(isQuantitativePill)
+    ? 'warning'
+    : 'error';
 }
 
 /**

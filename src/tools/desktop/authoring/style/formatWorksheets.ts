@@ -201,7 +201,7 @@ export const getFormatWorksheetsTool = (
                 earlierUpdatesWarning(updatedWorksheetCount),
               ).toErr();
             }
-            // W-24366132: shelf/filter warnings are non-blocking once the poll budget is spent.
+            // W-24366132: shelf and sort warnings are non-blocking once the poll budget is spent.
             const lastFindings = verifyWorksheetReadback(xml, readback.value.xml);
             const onlyWarnings =
               hasRequestedFormatting(readback.value.xml, xml) &&
