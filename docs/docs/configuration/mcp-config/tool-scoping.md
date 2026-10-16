@@ -143,6 +143,19 @@ results of the tools. This variable is site and request overridable, see
 
 Example: `sales,marketing`
 
+## Data source publishing
+
+`publish-datasource` uses `INCLUDE_PROJECT_IDS` to limit the destination project, including when
+`overwrite` is true. Datasource-ID and tag bounds constrain queries and listings; they do not
+restrict replacing a same-name datasource within an allowed project. Tableau publish and overwrite
+permissions still apply.
+
+`datasourceFilePath` refers to the MCP server's filesystem and uses the process's file permissions.
+Use it with trusted clients or a filesystem isolated to the caller. Hosted clients can instead use
+`request-datasource-upload` and pass its staged upload ID. When `MCP_S3_BUCKET` is configured, the
+publisher rejects local paths. Staged datasource uploads retain the **5 GB (5000000000 bytes)**
+limit. Files are buffered in server memory before the chunked Tableau upload.
+
 ## Data source permissions
 
 When [`INCLUDE_PROJECT_IDS`](#include_project_ids) and/or [`INCLUDE_TAGS`](#include_tags) is set,

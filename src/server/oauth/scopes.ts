@@ -21,6 +21,7 @@ import type { WebToolName } from '../../tools/web/toolName.js';
 export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
+  | 'tableau:mcp:datasource:create'
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
@@ -72,6 +73,7 @@ export type TableauApiScope =
   | 'tableau:datasource_tags:update'
   | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
+  | 'tableau:datasources:create'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
@@ -89,6 +91,7 @@ export type TableauApiScope =
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
   'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
@@ -278,6 +281,14 @@ const toolScopeMap: Record<
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+  },
+  'request-datasource-upload': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
+  'publish-datasource': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set(['tableau:datasources:create', 'tableau:file_uploads:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -608,6 +619,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('request-datasource-upload');
+    enabledTools.delete('publish-datasource');
     enabledTools.delete('download-workbook');
   }
 
