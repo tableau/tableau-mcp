@@ -32,12 +32,13 @@ export function isPromisedSortLossWarning(finding: ReadbackFinding): boolean {
 
 export type ReadbackVerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
 
-export type VerificationSource = 'readback' | 'used-field-validity';
+export type VerificationSource = 'readback' | 'used-field-validity' | 'color-map';
 
 export interface VerificationFinding {
   severity: ReadbackFindingSeverity;
   source: VerificationSource;
   message: string;
+  datasource?: string;
   worksheetId?: string;
   fieldName?: string;
   fieldCaption?: string;

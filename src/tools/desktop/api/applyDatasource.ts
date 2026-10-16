@@ -5,7 +5,10 @@ import { checkCacheFileArg } from '../../../desktop/cachePath.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
+import { formatColorMapCheck } from '../../../desktop/validation/colorMapReadback.js';
+import type { ReadbackVerificationResult } from '../../../desktop/validation/readback-verify.js';
 import { applyDatasourceXml } from '../../../desktop/wrappers/applyDatasourceXml.js';
+import { readColorMapsBack } from '../../../desktop/wrappers/readColorMapsBack.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -24,6 +27,7 @@ const paramsSchema = {
 type ApplyDatasourceResult = StructuredResult<{
   message: string;
   warnings: ExecuteCommandWarning[];
+  verification?: ReadbackVerificationResult;
 }>;
 
 const title = 'Applying datasource changes';
@@ -103,13 +107,19 @@ export const getApplyDatasourceTool = (
           }
 
           const warnings = result.value.warnings ?? [];
+          const verification = await readColorMapsBack({
+            appliedXml: preamble.value.xml,
+            datasourceId: resolved.id,
+            executor,
+            signal: extra.signal,
+          });
           await emitEpisodeEvent(extra.config, {
             type: 'apply_succeeded',
             session_id: preamble.value.resolvedSession,
             episode_id: currentEpisodeId(preamble.value.resolvedSession),
             tool: 'apply-datasource',
             operation: 'apply datasource document',
-            promise_outcome: 'unverified',
+            promise_outcome: verification?.status === 'failed' ? 'failed' : 'unverified',
           });
 
           return new Ok({
@@ -117,7 +127,11 @@ export const getApplyDatasourceTool = (
               kind: 'datasource',
               appliedName: resolved.name,
               resultWarnings: warnings,
-              hostVerification: ' No post-apply datasource readback ran.',
+              hostVerification:
+                verification === undefined
+                  ? ' No post-apply datasource readback ran.'
+                  : formatColorMapCheck(verification),
+              verification,
             }),
             warnings,
           });

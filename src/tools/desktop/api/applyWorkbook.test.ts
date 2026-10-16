@@ -4,8 +4,10 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
+import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as loadWorkbookXmlModule from '../../../desktop/wrappers/loadWorkbookXml.js';
+import { READBACK_POLL_INTERVAL_MS } from '../../../desktop/wrappers/pollReadback.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -563,6 +565,110 @@ describe('applyWorkbookTool', () => {
         signal: customSignal,
       }),
     );
+  });
+});
+
+describe('applyWorkbookTool color map readback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockContainedCacheReadFromFs();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // `fs` is mocked in this file, so live-shaped fixtures come through the real module.
+  async function colorFixture(name: string): Promise<string> {
+    const fs = await vi.importActual<typeof import('fs')>('fs');
+    return fs.readFileSync(
+      `${process.cwd()}/src/desktop/validation/__fixtures__/color-map/${name}`,
+      'utf8',
+    );
+  }
+
+  async function workbookWithL1aDatasource(): Promise<string> {
+    const datasource = (await colorFixture('apply-L1a-ds.xml')).replace(/^<!--.*-->\n/, '');
+    return `<?xml version='1.0' encoding='utf-8' ?><workbook><datasources>${datasource}</datasources></workbook>`;
+  }
+
+  it('fails verification when the datasource readback lacks the map, and that next action wins over invalid fields', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const diagnostics = {
+      worksheets: [
+        {
+          worksheetId: 'sheet-invalid',
+          status: 'complete' as const,
+          invalidFields: [
+            {
+              fieldName: '[none:Missing:nk]',
+              shelf: 'rows',
+              marksSpecificationId: 'marks-1',
+              encodingType: 'text',
+              reason: 'Field is unavailable.',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: [], diagnostics }),
+    );
+    const readback = await colorFixture('rb-L1a-ds.xml');
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(Ok({ datasources: [{ id: 'superstore', name: 'superstore' }] })),
+      getDatasourceDocument: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ xml: readback, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+    });
+
+    const pending = getToolResult({
+      session: '12345',
+      workbookXml: await workbookWithL1aDatasource(),
+      mockExecutor: vi.fn().mockResolvedValue(executor),
+    });
+    let settled = false;
+    void pending.finally(() => (settled = true));
+    while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+    const result = await pending;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.message).toMatch(
+      /^Desktop accepted the workbook update, but 3 requested member color\(s\) did not take: \[none:Category:nk\]: Furniture expected #59a14f, found missing;/,
+    );
+    expect(body.message).toContain('Do not tell the user these colors are set.');
+    expect(body.message).toContain(
+      'The datasource needs a <column-instance> for [none:Category:nk] next to its <style>.',
+    );
+    expect(body.message).toContain(
+      'address the reported invalid fields without replaying the apply',
+    );
+    expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+    expect(result.structuredContent).toMatchObject({
+      nextAction: { kind: 'prefill', label: 'Verification failed — diagnose listed findings' },
+    });
+    expect(executor.getDatasourceDocument).toHaveBeenCalledWith('superstore', expect.anything());
+  });
+
+  it('makes no extra Desktop call when the workbook carries no color map', async () => {
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: [] }),
+    );
+    const executor = makeExecutorMock();
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml:
+        "<workbook><datasources><datasource name='superstore' /></datasources></workbook>",
+      mockExecutor: vi.fn().mockResolvedValue(executor),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+    expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
   });
 });
 

@@ -2,8 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
+import { formatColorMapCheck } from '../../../desktop/validation/colorMapReadback.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
+import { readColorMapsBack } from '../../../desktop/wrappers/readColorMapsBack.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -91,8 +93,15 @@ export const getApplyWorkbookTool = (
           const documentWarnings = result.isOk() ? (result.value.documentWarnings ?? []) : [];
           const diagnostics = result.isOk() ? result.value.diagnostics : undefined;
           const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
+          const verification = await readColorMapsBack({
+            appliedXml: workbookXml,
+            executor,
+            signal: extra.signal,
+          });
           const hostVerification = result.isOk()
-            ? formatWorkbookPromiseCheck(validationWarnings, documentWarnings)
+            ? `${formatWorkbookPromiseCheck(validationWarnings, documentWarnings)}${
+                verification === undefined ? '' : formatColorMapCheck(verification)
+              }`
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -101,7 +110,7 @@ export const getApplyWorkbookTool = (
               episode_id: currentEpisodeId(resolvedSession),
               tool: 'apply-workbook',
               operation: 'load-workbook',
-              promise_outcome: 'unverified',
+              promise_outcome: verification?.status === 'failed' ? 'failed' : 'unverified',
             });
           }
 
@@ -124,6 +133,7 @@ export const getApplyWorkbookTool = (
             preflightWarnings: validationWarnings,
             resultWarnings: documentWarnings,
             hostVerification,
+            verification,
             ...(diagnosticsCoverage === 'incomplete'
               ? {
                   messageSuffix:
@@ -138,21 +148,25 @@ export const getApplyWorkbookTool = (
                   }
                 : {}),
           });
-          const acceptedWithGuidance = hasInvalidFields
-            ? withNextAction(
-                {
-                  ...accepted,
-                  message:
-                    `${accepted.message} The edit was accepted; address the reported invalid fields ` +
-                    'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
-                },
-                prefillNextAction(
-                  documentWarnings.length > 0
-                    ? 'Fix invalid fields; tell the user what Desktop warned about'
-                    : 'Address invalid fields reported in diagnostics',
-                ),
-              )
-            : accepted;
+          const guided = {
+            ...accepted,
+            message:
+              `${accepted.message} The edit was accepted; address the reported invalid fields ` +
+              'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
+          };
+          // A color failure's next action (already on `accepted`) wins over the invalid-fields one.
+          const acceptedWithGuidance = !hasInvalidFields
+            ? accepted
+            : verification?.status === 'failed'
+              ? guided
+              : withNextAction(
+                  guided,
+                  prefillNextAction(
+                    documentWarnings.length > 0
+                      ? 'Fix invalid fields; tell the user what Desktop warned about'
+                      : 'Address invalid fields reported in diagnostics',
+                  ),
+                );
           return new Ok({
             ...acceptedWithGuidance,
             ...(diagnostics ? { diagnostics } : {}),

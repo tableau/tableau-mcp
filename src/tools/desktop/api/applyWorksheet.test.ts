@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
+import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import type { WorksheetTemplatePlan } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   TemplateArtifactStore,
@@ -17,6 +18,7 @@ import type {
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
+import { READBACK_POLL_INTERVAL_MS } from '../../../desktop/wrappers/pollReadback.js';
 import {
   DesktopCommandExecutionError,
   WorksheetXmlLoadFailedError,
@@ -1258,6 +1260,115 @@ describe('applyWorksheetTool', () => {
         promiseOutcome: 'verified',
       }),
     );
+  });
+
+  describe('color map readback (cached file)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    // `fs` is mocked in this file, so live-shaped fixtures come through the real module.
+    async function colorFixture(name: string): Promise<string> {
+      const fs = await vi.importActual<typeof import('fs')>('fs');
+      return fs.readFileSync(
+        `${process.cwd()}/src/desktop/validation/__fixtures__/color-map/${name}`,
+        'utf8',
+      );
+    }
+
+    async function colorExecutor(readback: string): Promise<ReturnType<typeof makeExecutorMock>> {
+      return makeExecutorMock({
+        listWorkbookDatasources: vi
+          .fn()
+          .mockResolvedValue(Ok({ datasources: [{ id: 'superstore', name: 'superstore' }] })),
+        getDatasourceDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: await colorFixture(readback),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+      });
+    }
+
+    it('passes the live L2 payload whose map Desktop moved into the datasource', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = await colorExecutor('rb-L2-ds.xml');
+
+      const result = await getToolResult({
+        session: '12345',
+        worksheetName: 'L2',
+        worksheetXml: await colorFixture('apply-L2-ws.xml'),
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain('Successfully applied worksheet update for "L2"');
+      expect(body.verification).toEqual({ ok: true, status: 'passed' });
+      expect(executor.getDatasourceDocument).toHaveBeenCalledWith('superstore', expect.anything());
+      expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'done' } });
+    });
+
+    it('fails verification when the datasource readback lacks the worksheet color map', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const eventSpy = vi.spyOn(episodeEvents, 'emitWorksheetPromiseEvents');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = await colorExecutor('rb-L1a-ds.xml');
+
+      const pending = getToolResult({
+        session: '12345',
+        worksheetName: 'L2',
+        worksheetXml: await colorFixture('apply-L2-ws.xml'),
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+      let settled = false;
+      void pending.finally(() => (settled = true));
+      while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+      const result = await pending;
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain(
+        'Desktop applied the worksheet update for "L2", but verification found invalid or dropped worksheet state.',
+      );
+      expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(body.verification.message).toContain('3 requested member color(s) did not take');
+      expect(body.verification.message).toContain('Do not tell the user these colors are set.');
+      expect(body.verification.message).not.toContain('<column-instance>');
+      expect(body.verification.findings).toHaveLength(3);
+      expect(result.structuredContent).toMatchObject({
+        nextAction: { kind: 'prefill', label: 'Verification failed — diagnose listed findings' },
+      });
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          readback: expect.objectContaining({ status: 'failed' }),
+          promiseOutcome: 'failed',
+        }),
+      );
+    });
+
+    it('makes no extra Desktop call for a worksheet payload without a color map', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = makeExecutorMock();
+
+      const result = await getToolResult({
+        session: '12345',
+        worksheetName: 'Sheet 1',
+        worksheetXml: '<worksheet name="Sheet 1"><table></table></worksheet>',
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+      expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+    });
   });
 
   it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {

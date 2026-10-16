@@ -14,6 +14,7 @@ import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
 } from '../../../desktop/templates/templateArtifactStore.js';
+import { mergeColorMapVerification } from '../../../desktop/validation/colorMapReadback.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -26,6 +27,7 @@ import {
   loadWorksheetXml,
   resolveCanonicalWorksheetName,
 } from '../../../desktop/wrappers/loadWorksheetXml.js';
+import { readColorMapsBack } from '../../../desktop/wrappers/readColorMapsBack.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -401,6 +403,18 @@ export const getApplyWorksheetTool = (
             }
           }
 
+          // Desktop moves a worksheet's color map into the datasource, so the color check reads
+          // that document; loadWorksheetXml has already released the apply lock.
+          const readbackVerification = result.isOk()
+            ? mergeColorMapVerification(
+                result.value.readbackVerification,
+                await readColorMapsBack({
+                  appliedXml: worksheetXml,
+                  executor,
+                  signal: extra.signal,
+                }),
+              )
+            : undefined;
           // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
           // along so the agent can re-check the rendered chart before moving on.
           const readbackWarning = result.isOk()
@@ -412,7 +426,7 @@ export const getApplyWorksheetTool = (
           const receiptInput = result.isOk()
             ? {
                 validationWarnings: result.value.validationWarnings ?? [],
-                readback: result.value.readbackVerification,
+                readback: readbackVerification,
                 readbackFindings: result.value.readbackWarnings,
               }
             : undefined;
@@ -425,7 +439,7 @@ export const getApplyWorksheetTool = (
               sessionId: resolvedSession,
               tool: 'apply-worksheet',
               operation: 'load-worksheet',
-              readback: result.value.readbackVerification,
+              readback: readbackVerification,
               findings: result.value.readbackWarnings,
               promiseOutcome,
             });
