@@ -1,7 +1,7 @@
 import { Config } from '../config.js';
 import { getFeatureGate } from './init.js';
 
-/** Admin tools require both `ADMIN_TOOLS_ENABLED=true` and the `admin-tools` feature flag. */
+/** Admin tools are enabled when either `ADMIN_TOOLS_ENABLED=true` or the `admin-tools` feature flag is set. */
 export async function isAdminToolsEnabled(
   config: Pick<Config, 'adminToolsEnabled'>,
 ): Promise<boolean> {

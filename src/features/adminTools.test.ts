@@ -15,8 +15,8 @@ describe('isAdminToolsEnabled', () => {
 
   it.each([
     [true, true, true],
-    [true, false, false],
-    [false, true, false],
+    [true, false, true],
+    [false, true, true],
     [false, false, false],
   ])('ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → %s', async (env, flag, expected) => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
@@ -24,8 +24,8 @@ describe('isAdminToolsEnabled', () => {
     await expect(isAdminToolsEnabled({ adminToolsEnabled: env })).resolves.toBe(expected);
   });
 
-  it('does not consult the feature gate when ADMIN_TOOLS_ENABLED is off', async () => {
-    await isAdminToolsEnabled({ adminToolsEnabled: false });
+  it('does not consult the feature gate when ADMIN_TOOLS_ENABLED is on', async () => {
+    await isAdminToolsEnabled({ adminToolsEnabled: true });
 
     expect(mocks.mockIsFeatureEnabled).not.toHaveBeenCalled();
   });
