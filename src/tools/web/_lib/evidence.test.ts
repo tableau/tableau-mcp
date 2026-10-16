@@ -158,7 +158,7 @@ describe('RegistryEvidence', () => {
     vi.clearAllMocks();
     // The TTL is read once when the cache is lazily created (module-level singleton). Keep the
     // default; the single-use + miss behaviors below don't depend on the exact TTL value.
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
   });
 
   it('describes itself as a registry-nonce and NEVER leaks the raw nonce in the descriptor', async () => {
@@ -329,7 +329,7 @@ describe('RegistryEvidence', () => {
 describe('AppApprovalEvidence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
   });
 
   // The app-approval registry is module-scoped and shared across instances (the preview tool and
@@ -570,7 +570,7 @@ describe('AppApprovalEvidence', () => {
 describe('AllEvidence (AND-composition)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
     mocks.mockGetWorkbook.mockResolvedValue({
       tags: { tag: [{ label: 'pending-deletion-2026-09-25' }] },
     });
@@ -633,12 +633,8 @@ describe('AllEvidence (AND-composition)', () => {
 });
 
 describe('getMutationPreviewTtlMs', () => {
-  afterEach(() => {
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
-  });
-
   it('defaults to 5 minutes', async () => {
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
     const { getMutationPreviewTtlMs } = await import('./evidence.js');
     expect(getMutationPreviewTtlMs()).toBe(1000 * 60 * 5);
   });

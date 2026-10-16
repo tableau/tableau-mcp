@@ -165,6 +165,172 @@ describe('pulseBundleRequestSchema optionality', () => {
     };
     expect(() => pulseBundleRequestSchema.parse(req)).not.toThrow();
   });
+
+  // Build a request with the given options.now and/or measurement_period.specific_period.
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  function withTimeWindow(overrides: {
+    now?: unknown;
+    specificPeriod?: unknown;
+    lastXPeriod?: unknown;
+    granularity?: string;
+    range?: string;
+  }) {
+    const base = minimalBundleRequest.bundle_request;
+    return {
+      bundle_request: {
+        ...base,
+        options: {
+          ...base.options,
+          ...(overrides.now !== undefined ? { now: overrides.now } : {}),
+        },
+        input: {
+          ...base.input,
+          metric: {
+            ...base.input.metric,
+            metric_specification: {
+              ...base.input.metric.metric_specification,
+              measurement_period: {
+                ...base.input.metric.metric_specification.measurement_period,
+                ...(overrides.granularity !== undefined
+                  ? { granularity: overrides.granularity }
+                  : {}),
+                ...(overrides.range !== undefined ? { range: overrides.range } : {}),
+                ...(overrides.specificPeriod !== undefined
+                  ? { specific_period: overrides.specificPeriod }
+                  : {}),
+                ...(overrides.lastXPeriod !== undefined
+                  ? { last_x_period: overrides.lastXPeriod }
+                  : {}),
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  it('accepts a valid now (date and datetime) and empty string', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ now: '2026-05-31' })),
+    ).not.toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ now: '2026-05-31 23:59:59' })),
+    ).not.toThrow();
+    expect(() => pulseBundleRequestSchema.parse(withTimeWindow({ now: '' }))).not.toThrow();
+  });
+
+  it('rejects a malformed now', () => {
+    expect(() => pulseBundleRequestSchema.parse(withTimeWindow({ now: 'not-a-date' }))).toThrow();
+  });
+
+  it('accepts a valid specific_period (date, and date+end_date span)', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: '2026-04-15' } })),
+    ).not.toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({ specificPeriod: { date: '2026-04-15', end_date: '2026-04-20' } }),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a malformed or empty specific_period.date', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: 'nope' } })),
+    ).toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: '' } })),
+    ).toThrow();
+  });
+
+  it('rejects specific_period whose end_date precedes date', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({ specificPeriod: { date: '2026-04-20', end_date: '2026-04-15' } }),
+      ),
+    ).toThrow();
+  });
+
+  it.each([7, 14, 30, 60, 90])(
+    'accepts and preserves the supported rolling %i-day window',
+    (period) => {
+      const parsed = pulseBundleRequestSchema.parse(
+        withTimeWindow({
+          granularity: 'GRANULARITY_BY_DAY',
+          range: 'RANGE_BY_CONFIG',
+          lastXPeriod: {
+            period,
+            period_type: 'GRANULARITY_BY_DAY',
+            include_current_period: true,
+          },
+        }),
+      );
+      expect(
+        parsed.bundle_request.input.metric.metric_specification.measurement_period.last_x_period,
+      ).toEqual({
+        period,
+        period_type: 'GRANULARITY_BY_DAY',
+        include_current_period: true,
+      });
+    },
+  );
+
+  it('accepts and preserves the supported trailing-year window', () => {
+    const parsed = pulseBundleRequestSchema.parse(
+      withTimeWindow({
+        granularity: 'GRANULARITY_BY_MONTH',
+        range: 'RANGE_BY_CONFIG',
+        lastXPeriod: {
+          period: 1,
+          period_type: 'GRANULARITY_BY_YEAR',
+          include_current_period: false,
+        },
+      }),
+    );
+    expect(
+      parsed.bundle_request.input.metric.metric_specification.measurement_period.last_x_period,
+    ).toEqual({
+      period: 1,
+      period_type: 'GRANULARITY_BY_YEAR',
+      include_current_period: false,
+    });
+  });
+
+  it.each([3, 8, 365])('rejects unsupported rolling %i-day windows', (period) => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({
+          granularity: 'GRANULARITY_BY_DAY',
+          range: 'RANGE_BY_CONFIG',
+          lastXPeriod: {
+            period,
+            period_type: 'GRANULARITY_BY_DAY',
+            include_current_period: true,
+          },
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('preserves use_dynamic_offset in extension options', () => {
+    const base = minimalBundleRequest.bundle_request;
+    const parsed = pulseBundleRequestSchema.parse({
+      bundle_request: {
+        ...base,
+        input: {
+          ...base.input,
+          metric: {
+            ...base.input.metric,
+            extension_options: { use_dynamic_offset: true, offset_from_today: 0 },
+          },
+        },
+      },
+    });
+    expect(parsed.bundle_request.input.metric.extension_options).toEqual({
+      use_dynamic_offset: true,
+      offset_from_today: 0,
+    });
+  });
 });
 
 describe('metricGroupContextSchema optionality', () => {

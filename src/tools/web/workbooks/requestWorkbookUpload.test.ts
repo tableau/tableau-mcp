@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -21,6 +22,10 @@ vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./stagedWorkbookUpload.js')>()),
   requestStagedWorkbookUpload: mocks.mockRequestStagedWorkbookUpload,
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('requestWorkbookUploadTool', () => {
   beforeEach(() => {

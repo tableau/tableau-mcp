@@ -1,0 +1,299 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { DesktopCache } from '../../../../desktop/cache.js';
+import { currentEpisodeId, emitEpisodeEvent } from '../../../../desktop/episode-events.js';
+import { writeRedactedXmlCacheFile } from '../../../../desktop/limits/redactedXmlCache.js';
+import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
+import {
+  formatDesktopWarnings,
+  formatWorkbookPromiseCheck,
+} from '../../../../desktop/validation/promise-check.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
+import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import {
+  DesktopCommandExecutionError,
+  IncompleteOperationError,
+  WorkbookXmlLoadFailedError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { desktopWarningNextAction } from '../../api/applyPreamble.js';
+import { sessionParam } from '../../params.js';
+import { jsonToolResult, withNextAction } from '../../structuredContent.js';
+import { DesktopTool } from '../../tool.js';
+import { distinctCacheId } from '../fields/worksheetCache.js';
+import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
+
+const PHASE1_APPLIED_GUIDANCE =
+  'The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.';
+
+type ArtifactFailure = { name: string; error: string };
+
+function fragmentFailureMessage(error: { type: string; error: unknown }): string {
+  if (
+    typeof error.error === 'object' &&
+    error.error !== null &&
+    'message' in error.error &&
+    typeof error.error.message === 'string'
+  ) {
+    return error.error.message;
+  }
+  return `${error.type}: ${JSON.stringify(error.error)}`;
+}
+
+const paramsSchema = {
+  session: sessionParam(),
+  worksheetNames: z.array(z.string()),
+  dashboardName: z.string(),
+};
+
+const toolTitle = 'Creating worksheets';
+export const getBatchCreateAndCacheSheetsTool = (
+  server: DesktopMcpServer,
+): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'batch-create-and-cache-sheets',
+    title: toolTitle,
+    description: 'Batch-create dashboard sheet caches.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    callback: async (
+      { session, worksheetNames, dashboardName },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await tool.logAndExecute({
+        extra,
+        args: { session, worksheetNames, dashboardName },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
+        callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const executor = await extra.getExecutor(resolvedSession);
+          const signal = extra.signal;
+          const cache = new DesktopCache(resolvedSession);
+
+          // Fetch current workbook
+          const workbookResult = await getWorkbookXml({ executor, signal });
+          if (workbookResult.isErr()) {
+            return new DesktopCommandExecutionError(workbookResult.error).toErr();
+          }
+          const baselineXml = workbookResult.value;
+          let workbookXml = baselineXml;
+
+          // Add worksheets and dashboard to workbook XML
+          for (const name of worksheetNames) {
+            workbookXml = addSheet(workbookXml, name);
+          }
+          workbookXml = addDashboard(workbookXml, dashboardName);
+
+          // Apply modified workbook
+          // The sheets this creates are empty scaffolding for a later parallel build, not
+          // anything the user asked to look at, so put them back where they were.
+          const applyResult = await loadWorkbookXml({
+            xml: workbookXml,
+            baselineXml,
+            expectedWorkbookXml: baselineXml,
+            focus: { navigate: 'restore' },
+            executor,
+            signal,
+          });
+          if (applyResult.isErr()) {
+            const { type, error } = applyResult.error;
+            switch (type) {
+              case 'execute-command-error':
+                return new DesktopCommandExecutionError(error).toErr();
+              case 'load-workbook-xml-error':
+                return new WorkbookXmlLoadFailedError(error).toErr();
+              default: {
+                const _exhaustive: never = type;
+              }
+            }
+          }
+
+          const documentWarnings = applyResult.isOk() ? applyResult.value.documentWarnings : [];
+          const acceptedWorkbookResult = await getWorkbookXml({ executor, signal });
+          if (acceptedWorkbookResult.isErr()) {
+            return new DesktopCommandExecutionError(
+              acceptedWorkbookResult.error,
+              `Post-apply workbook readback failed. ${PHASE1_APPLIED_GUIDANCE}${formatDesktopWarnings(documentWarnings)}`,
+            ).toErr();
+          }
+          const acceptedWorkbookXml = acceptedWorkbookResult.value;
+
+          // Cache workbook
+          const workbookFile = cache.getCacheFilePath({
+            prefix: 'workbook',
+            id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
+          });
+          try {
+            writeRedactedXmlCacheFile(workbookFile, acceptedWorkbookXml);
+          } catch (error) {
+            return new IncompleteOperationError({
+              stage: 'workbookCacheWrite',
+              applied: true,
+              retrySafe: false,
+              error: `Workbook cache write failed: ${getExceptionMessage(error)}${formatDesktopWarnings(documentWarnings)}`,
+              guidance: PHASE1_APPLIED_GUIDANCE,
+              ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),
+            }).toErr();
+          }
+          // Fingerprint the cache with the producing Desktop instance so a Phase-2 apply
+          // can refuse a cache from a different (or restarted) Desktop session.
+          writeSidecar(workbookFile, resolvedSession, sourceSha256(acceptedWorkbookXml));
+
+          // Fetch and cache all worksheet working copies.
+          const worksheetFiles: Record<string, string> = {};
+          const worksheetFailures: ArtifactFailure[] = [];
+          for (const name of worksheetNames) {
+            const wsResult = await getWorksheetXml({ worksheetName: name, executor, signal });
+            if (wsResult.isErr()) {
+              worksheetFailures.push({
+                name,
+                error: fragmentFailureMessage(wsResult.error),
+              });
+              continue;
+            }
+            const file = cache.getCacheFilePath({
+              prefix: 'worksheet',
+              id: distinctCacheId(name, resolvedSession),
+            });
+            try {
+              writeRedactedXmlCacheFile(file, wsResult.value.xml);
+              writeSidecar(file, resolvedSession, sourceSha256(wsResult.value.xml));
+            } catch (error) {
+              worksheetFailures.push({
+                name,
+                error: `cache write failed: ${getExceptionMessage(error)}`,
+              });
+              continue;
+            }
+            worksheetFiles[name] = file;
+          }
+
+          // Fetch and cache the dashboard working copy.
+          let dashboardFile: string | null = null;
+          const dashboardFailures: ArtifactFailure[] = [];
+          const dashResult = await getDashboardXml({ dashboardName, executor, signal });
+          if (dashResult.isErr()) {
+            dashboardFailures.push({
+              name: dashboardName,
+              error: fragmentFailureMessage(dashResult.error),
+            });
+          } else {
+            const file = cache.getCacheFilePath({
+              prefix: 'dashboard',
+              id: distinctCacheId(dashboardName, resolvedSession),
+            });
+            try {
+              writeRedactedXmlCacheFile(file, dashResult.value.xml);
+              writeSidecar(file, resolvedSession, sourceSha256(dashResult.value.xml));
+              dashboardFile = file;
+            } catch (error) {
+              dashboardFailures.push({
+                name: dashboardName,
+                error: `cache write failed: ${getExceptionMessage(error)}`,
+              });
+            }
+          }
+
+          const worksheetFileLines = Object.entries(worksheetFiles)
+            .map(([name, file]) => `  ${name} → ${file}`)
+            .join('\n');
+
+          const hasArtifactFailures = worksheetFailures.length > 0 || dashboardFailures.length > 0;
+          let msg = hasArtifactFailures
+            ? `Phase 1 incomplete: cached ${Object.keys(worksheetFiles).length}/${worksheetNames.length} worksheets and ${dashboardFile ? '1/1' : '0/1'} dashboard.\n\n`
+            : `Created and cached ${worksheetNames.length} worksheets + 1 dashboard\n\n`;
+          msg += `Worksheets:\n${worksheetFileLines || '  (none cached)'}\n\n`;
+          msg += `Dashboard:\n  ${dashboardName} → ${dashboardFile || 'FAILED'}\n\n`;
+          msg += `Workbook cache: ${workbookFile}`;
+          const failures = [...worksheetFailures, ...dashboardFailures];
+          if (failures.length > 0) {
+            msg += `\n\nFailed required artifacts:\n${failures
+              .map((failure) => `  • ${failure.name}: ${failure.error}`)
+              .join('\n')}`;
+          }
+          msg += hasArtifactFailures
+            ? '\n\nPhase 2 is not ready. Retry the failed fetch/cache steps before continuing.'
+            : '\n\nWorksheet caches are ready for build and apply. Dashboard apply is a separate, later step.';
+          const registration = dashboardCreationPrerequisite(
+            dashboardName,
+            worksheetNames,
+            executor.desktopApiVersion,
+          );
+          if (registration.required) {
+            msg +=
+              '\n\nDashboard apply is blocked until the rendered worksheet views are registered.\n' +
+              registration.instructions.join('\n');
+          }
+          // Host verification receipt (W-23447506): the accepted live readback seeds Phase 2,
+          // but it is not a structural comparison against the full requested intent.
+          msg += applyResult.isOk()
+            ? formatWorkbookPromiseCheck(applyResult.value.validationWarnings, documentWarnings) +
+              formatDesktopWarnings(documentWarnings)
+            : '';
+          if (applyResult.isOk()) {
+            await emitEpisodeEvent(extra.config, {
+              type: 'apply_succeeded',
+              session_id: resolvedSession,
+              episode_id: currentEpisodeId(resolvedSession),
+              tool: 'batch-create-and-cache-sheets',
+              operation: 'load-workbook',
+              promise_outcome: 'unverified',
+            });
+          }
+
+          const payload = {
+            message: msg,
+            worksheetFiles,
+            dashboardFile,
+            workbookFile,
+            readiness: {
+              worksheetBuild: !hasArtifactFailures,
+              dashboardApply: !hasArtifactFailures && worksheetNames.length === 0,
+            },
+            registration,
+            ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),
+          };
+          if (hasArtifactFailures) {
+            return new IncompleteOperationError({
+              ...payload,
+              succeeded: {
+                worksheets: Object.keys(worksheetFiles),
+                dashboard: dashboardFile ? [dashboardName] : [],
+              },
+              failed: {
+                worksheets: worksheetFailures,
+                dashboard: dashboardFailures,
+              },
+              guidance:
+                'Do not start Phase 2 while required cache files are missing. Retry Phase 1 after resolving the named fetch/cache failures.',
+            }).toErr();
+          }
+          return new Ok(
+            documentWarnings.length > 0
+              ? withNextAction(payload, desktopWarningNextAction())
+              : payload,
+          );
+        },
+      });
+    },
+  });
+  return tool;
+};

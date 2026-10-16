@@ -146,53 +146,50 @@ describe('list-users', () => {
       return;
     }
 
-    // THE BUG: `limit` was applied to the FETCH before the client-side filter
-    // ran. On the live site (~27,058 users) the first `limit` fetched rows are
-    // typically active admins/service accounts that FAIL an inactivity filter,
-    // so `limit:5` + `lastLogin:lt:<recent cutoff>` returned 0 users even though
-    // thousands matched. After the fix `limit` bounds POST-filter matches: the
-    // tool pages until it has 5 filter-matches, so this returns exactly 5 users.
-    //
-    // Use a large pageSize so the 5 matches are found in as few sequential REST
-    // calls as possible. The cutoff is recent (2026-07-01) so the vast majority
-    // of the ~27,058 users — anyone who has not logged in since then, plus every
-    // never-logged-in user — match; 5 matches are found on the very first page.
-    const result = await client.callTool('list-users', {
+    const cutoff = '2026-07-01T00:00:00Z';
+    const inactivityFilter = `lastLogin:lt:${cutoff}`;
+    const witness = await client.callTool('list-users', {
       schema: listUsersResultSchema,
-      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:lt:2026-07-01T00:00:00Z' },
+      toolArgs: { pageSize: 1000, limit: 6, filter: inactivityFilter },
     });
 
-    // The regression assertion: NON-empty, and exactly `limit` matching users.
-    expect(result.users.length).toBe(5);
+    expect(
+      witness.users.length,
+      'This E2E site needs at least two inactive users to witness requested-limit truncation.',
+    ).toBeGreaterThanOrEqual(2);
+    const witnessIds = witness.users.map((user) => user.id);
+    expect(new Set(witnessIds).size).toBe(witnessIds.length);
+    const cutoffTime = new Date(cutoff).getTime();
+    for (const user of witness.users) {
+      if (user.lastLogin === undefined) {
+        continue;
+      }
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
+    }
 
-    // Every returned user actually satisfies the filter: either an inactive
-    // lastLogin strictly before the cutoff, or a never-logged-in user (no
-    // lastLogin — the most-inactive class, which MUST match `lt`).
-    const cutoff = new Date('2026-07-01T00:00:00Z').getTime();
+    const requestedLimit = witnessIds.length - 1;
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: {
+        pageSize: 1000,
+        limit: requestedLimit,
+        filter: `id:in:${witnessIds.join('|')},${inactivityFilter}`,
+      },
+    });
+
+    const resultIds = result.users.map((user) => user.id);
+    expect(resultIds).toHaveLength(requestedLimit);
+    expect(new Set(resultIds).size).toBe(requestedLimit);
+    expect(resultIds.every((id) => witnessIds.includes(id))).toBe(true);
     for (const user of result.users) {
       if (user.lastLogin === undefined) {
-        continue; // never-logged-in: correctly included by lt
+        continue;
       }
-      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoff);
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoffTime);
     }
-
-    // resultInfo must report the limit-truncation honestly. On a large site (e.g. the
-    // ~27,058-user site this regression was found on) far more than 5 users match, so
-    // truncated:true with truncationReason 'requested-limit' (the caller's own limit was
-    // binding). On a small site (e.g. the shared CI test site) the inactivity filter may
-    // match 5 or fewer users total, in which case the 5 returned ARE the complete match set
-    // and truncated is correctly false — asserting the honest true case here would be
-    // asserting a fact about the site's data, not the tool. Either way returnedCount is 5.
-    expect(result.mcp?.resultInfo.returnedCount).toBe(5);
-    if (result.mcp?.resultInfo.truncated) {
-      expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
-    } else {
-      console.warn(
-        'Skipping requested-limit truncation assertion — the inactivity filter matched ' +
-          'exactly 5 users on this site, so the 5 returned are the complete match set, not a ' +
-          'truncated prefix. The truncation branch itself is covered by unit tests.',
-      );
-    }
+    expect(result.mcp?.resultInfo.returnedCount).toBe(requestedLimit);
+    expect(result.mcp?.resultInfo.truncated).toBe(true);
+    expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
   });
 
   it('W-23757370: an unbounded call is bounded by a default limit and flagged default-limit, not paged over the whole site', async () => {

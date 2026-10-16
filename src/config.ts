@@ -12,6 +12,7 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import { log } from './logging/logger.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -23,7 +24,7 @@ import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -88,9 +89,6 @@ export class Config extends BaseConfig {
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
-  productTelemetryEndpoint: string;
-  productTelemetryEnabled: boolean;
-  isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
   activityLog: ActivityLogConfig;
@@ -172,9 +170,6 @@ export class Config extends BaseConfig {
       ACTIVITY_LOG_PROVIDER: activityLogProvider,
       ACTIVITY_LOG_PROVIDER_CONFIG: activityLogProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
-      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
-      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
-      IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
@@ -232,7 +227,17 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+    const normalizedAuth = auth?.trim().toLowerCase();
+    // Like TRANSPORT and the provider vars, an unknown value falls back to the default; warn so a typo (e.g. "passthru") is not silent.
+    if (normalizedAuth && !isAuthType(normalizedAuth)) {
+      log({
+        message: `Unknown AUTH "${auth}"; expected one of ${authTypes.join(', ')}. Falling back to the default.`,
+        level: 'warning',
+        logger: 'config',
+      });
+    }
+    const purePassthroughAuth = normalizedAuth === 'passthrough';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || purePassthroughAuth;
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -245,7 +250,7 @@ export class Config extends BaseConfig {
     }
 
     this.oauth = {
-      enabled: disableOauthOverride ? false : !!oauthIssuer,
+      enabled: !purePassthroughAuth && !disableOauthOverride && !!oauthIssuer,
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
@@ -318,10 +323,6 @@ export class Config extends BaseConfig {
     }
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
-    this.productTelemetryEndpoint =
-      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
-    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
-    this.isHyperforce = isHyperforce === 'true';
 
     // Feature gate provider configuration (similar to telemetry provider)
     if (isFeatureGateProvider(featureGateProvider) && featureGateProvider === 'custom') {
@@ -425,13 +426,22 @@ export class Config extends BaseConfig {
       }),
     };
 
-    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
+    this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
-    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+    if (
+      this.transport === 'http' &&
+      this.auth !== 'passthrough' &&
+      !disableOauthOverride &&
+      !this.oauth.issuer
+    ) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
+    }
+
+    if (this.auth === 'passthrough' && this.transport === 'stdio') {
+      throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
     }
 
     if (this.auth === 'oauth') {

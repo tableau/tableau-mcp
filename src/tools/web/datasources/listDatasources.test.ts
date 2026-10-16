@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
@@ -24,6 +25,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listDatasourcesTool', () => {
   beforeEach(() => {

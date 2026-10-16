@@ -12,7 +12,6 @@ import { join, relative } from 'node:path';
 
 import { z } from 'zod';
 
-import * as agentApi from '../desktop/agentApi/apis.js';
 import * as authenticationApi from '../tableau/apis/authenticationApi.js';
 import * as contentExplorationApi from '../tableau/apis/contentExplorationApi.js';
 import * as datasourcesApi from '../tableau/apis/datasourcesApi.js';
@@ -46,7 +45,6 @@ type Endpoint = {
 // Static imports (the project type-checks as CommonJS, so `import.meta.glob` is unavailable).
 // The "covers every api module" test below fails if a new file is added without registering here.
 const modules: Record<string, Record<string, unknown>> = {
-  'desktop/agentApi/apis.ts': agentApi,
   'tableau-oauth/apis.ts': tableauOAuthApi,
   'tableau/apis/authenticationApi.ts': authenticationApi,
   'tableau/apis/contentExplorationApi.ts': contentExplorationApi,

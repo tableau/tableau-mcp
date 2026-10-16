@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -62,11 +63,14 @@ vi.mock('../../../../restApiInstance.js', () => ({
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getFlowTool', () => {
   beforeEach(() => {

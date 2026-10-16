@@ -42,9 +42,15 @@ The MCP transport type to use for the server.
 The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat`, `direct-trust`, or `oauth`
+- Possible values: `pat`, `direct-trust`, `oauth`, or `passthrough`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
+- Setting `passthrough` implies
+  [`ENABLE_PASSTHROUGH_AUTH`](authentication/passthrough.md#enable_passthrough_auth) is `true`,
+  requires `TRANSPORT=http`, and requires every request to carry a token in the `X-Tableau-Auth`
+  header or the `workgroup_session_id` cookie (there is no fallback auth method).
+  OAuth stays disabled in this mode, even when `OAUTH_ISSUER` is set. See
+  [Passthrough Authentication](authentication/passthrough).
 
 <hr />
 
@@ -206,6 +212,40 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 - Default: Empty string (_none_ are excluded)
 - Cannot be provided with `INCLUDE_TOOLS`.
+
+<hr />
+
+## `TOOL_PROFILE`
+
+Selects which tools the Desktop authoring server registers, and whether the combined Web and Desktop
+server loads its Web tools lazily. The value is trimmed and lowercased. The standalone Web
+server ignores `TOOL_PROFILE`. On the combined server, only `combined-lean` changes the Web half.
+
+- Unset or `dynamic-authoring`: the Desktop server registers a lean native authoring subset.
+- `full`: every Desktop tool.
+- `demo`: the demo subset. Experimental; it may change or be removed in a minor release.
+- `spec-loop`: the spec-loop subset. Experimental; it may change or be removed in a minor release.
+- `combined-lean`: the full Desktop surface, and the Web tools load on demand (see below).
+- Any other value logs a warning and uses the default (`dynamic-authoring`) set.
+
+Lazy Web loading for `combined-lean` happens only on the combined server, which runs over stdio with
+one identity per process. On the standalone Desktop server, `combined-lean` acts like `full`. On the
+combined server, only the `load-web-tools` tool is listed for the Web half at startup. A client calls
+it with a tool group name (or `all`), the server registers that group's tools, and it sends a
+`tools/list_changed` notification. The tool's description lists every group and its tools. Standalone
+Web servers register every Web tool.
+
+The `load-web-tools` result is JSON `{ status, toolNames, warnings?, notes? }`:
+
+- `status` is `loaded`, `already-loaded`, or `partial`. `partial` means a retryable failure dropped
+  some of the requested tools; call `load-web-tools` again for that group.
+- `warnings` lists retryable problems for the requested group only, such as a failed site role
+  lookup, a registration condition check that could not be completed, or a tool that failed to
+  register.
+- `notes` lists deliberate omissions for the requested group, such as a registration condition that
+  is not met. Calling again does not change these.
+- Tools left out on purpose (site role, `INCLUDE_TOOLS`/`EXCLUDE_TOOLS`, unmet conditions) count as
+  loaded, so the group is not retried.
 
 <hr />
 
@@ -440,12 +480,74 @@ LATENCY_METRIC_NAME=http_server_1agg1_request_duration
 
 Enables product telemetry for tool usage tracking.
 
-- Default: `true`
-- When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
-  call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry. Read
+- Default: `true`. This applies to both the web (Tableau Server and Cloud) and the Desktop variants.
+- When `true`, the server sends one `tool_call` event to Tableau's telemetry endpoint for each tool
+  call. See [Product telemetry fields](#product-telemetry-fields) for exactly what each variant
+  sends.
+- Set to `false` to disable product telemetry. Only the exact value `false` disables it. Read
   https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
   information
+
+<hr />
+
+## `PRODUCT_TELEMETRY_ENDPOINT`
+
+The URL product telemetry events are sent to.
+
+- Default: `https://prod.telemetry.tableausoftware.com`
+- If the value is not a valid URL, the server logs one error on the first tool call and sends no
+  product telemetry. Credentials in the URL (`https://user:pass@host`) also count as invalid.
+
+<hr />
+
+## `IS_HYPERFORCE`
+
+Set to `true` to mark the deployment as Hyperforce. Sent as `is_hyperforce` on every product
+telemetry event.
+
+- Default: `false`
+
+<hr />
+
+## `TABLEAU_POD_NAME`
+
+Desktop only. The server URL Desktop is signed in to. Sent as `pod` and `podname` on every product
+telemetry event. The web variants send the value of `SERVER` instead (`SERVER` wins if both are
+set).
+
+<hr />
+
+## `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID`
+
+Desktop only. Set by the launcher (Tableau Desktop and its agent), not by hand. They are sent as
+`site_luid`, `user_luid`, `chat_id` and `session_id` on Desktop product telemetry events. Each is
+empty if the launcher did not set it. `TABLEAU_DESKTOP_SESSION_LUID` is ignored unless it is a
+well-formed GUID.
+
+<hr />
+
+## Product telemetry fields
+
+Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
+(`tableau-mcp`), `pod`, `podname` and `is_hyperforce`.
+
+| Field                                          | Web                                                                                                                                         | Desktop                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
+| `host_name`                                    | the machine's hostname                                                                                                                      | not sent                                                                              |
+| `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
+| `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
+| `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
+| `success`                                      | yes                                                                                                                                         | yes                                                                                   |
+| `error_code`                                   | empty on success. On failure, the HTTP status of the error, empty if the error result carries none, or `500` for a thrown error without one | status code of a typed tool error, else empty                                         |
+| `error_message`                                | text of the tool's error result (free text)                                                                                                 | stable error type slug only (for example `args-validation`), empty for untyped errors |
+| `auth_type`                                    | `pat`, `uat`, `direct-trust`, `embedded-oauth`, `tableau-oauth`, `passthrough` or `unknown`                                                 | `desktop`                                                                             |
+| `oauth_client_id`, `oauth_client_display_name` | OAuth client of the caller, if any                                                                                                          | empty                                                                                 |
+
+The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
+separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
+1024 characters), `site_luid`, `user_luid` and `host_name` (the machine's hostname). Calling it also
+sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
@@ -755,3 +857,49 @@ should be fetched promptly rather than stored.
 ```bash
 FILE_TTL=30
 ```
+<hr />
+
+## Desktop
+
+The Tableau Desktop authoring server (`build/index.desktop.js`) reads these variables in addition to
+the shared ones above (for example [`TRANSPORT`](#transport), which must be `stdio`,
+[`ENABLED_LOGGERS`](#enabled_loggers) and [`TOOL_PROFILE`](#tool_profile)). The combined variant
+reads them too. It builds the Desktop config at startup, so they apply there as well. Both entry
+points load a `.env` file from the working directory before reading the environment.
+
+This section is one table on purpose: most of these are set by the app that launches the server, not
+by end users. Each row is tagged:
+
+- **spawner**: set by the app that launches the server. Not for end users.
+- **dev/test**: overrides for development and tests.
+- **user**: safe for anyone to set.
+
+For numeric values, an unparseable value or a value below the minimum is ignored and the default is
+used (it is not raised to the minimum). A value above a clamp is lowered to the clamp.
+
+| Variable                                                                                                        | Default                                                                                                                                                                                                                    | Bounds                                   | What it does                                                                                                                                                                                                                                                                     | Who sets it |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `EPISODE_EVENTS`                                                                                                | off                                                                                                                                                                                                                        | exactly `on` enables                     | Writes episode events (JSON lines, `episodes-<timestamp>.jsonl`) to `EPISODE_EVENTS_DIR`.                                                                                                                                                                                        | user        |
+| `EPISODE_EVENTS_DIR`                                                                                            | `FILE_LOGGER_DIRECTORY`                                                                                                                                                                                                    |                                          | Directory for the episode event files. The server never deletes these files; use a directory you clean up yourself. See [`FILE_LOGGER_DIRECTORY`](#file_logger_directory).                                                                                                       | user        |
+| `INLINE_XML_MAX_BYTES`                                                                                          | `16384`                                                                                                                                                                                                                    | minimum `1`                              | Largest XML returned inline by any get-XML tool (workbook, worksheet, dashboard, datasource, storyboard). Above it, the tool responds in file mode. | user        |
+| `INLINE_IMAGE_MAX_BYTES`                                                                                        | `1048576` (1 MiB)                                                                                                                                                                                                          | minimum `1`                              | Largest image returned inline by the export-image tools and `capture-window-screenshot`. SVG counts about twice its decoded size, because it is sent as both text and an image block. Above the cap, the tool writes a cache file and returns its path. | user        |
+| `IMAGE_EXPORT_TIMEOUT_MS`                                                                                       | `30000`                                                                                                                                                                                                                    | minimum `1`, clamped to `2147483647`     | Deadline for the image-render call. Bounds a hang when Desktop is showing a blocking dialog.                                                                                                                                                                                     | user        |
+| `TABLEAU_DESKTOP_CALL_TIMEOUT_MS`                                                                               | `60000`                                                                                                                                                                                                                    | minimum `40000`, clamped to `2147483647` | Wall-clock ceiling on one Desktop tool call. Past it the call aborts and the agent is told Desktop stopped answering. A value under `40000` is ignored and `60000` is used.                                                                                                      | user        |
+| `TABLEAU_DESKTOP_SESSION_ID`                                                                                    | none                                                                                                                                                                                                                       | must be digits only (a Desktop pid)      | Pins the Desktop instance session-scoped tools default to. The agent can still target another open Desktop. Anything that is not a pid is ignored.                                                                                                                               | spawner     |
+| `TABLEAU_USER_AGENT_PREFIX`                                                                                     | none                                                                                                                                                                                                                       | a single `name/version` product token; anything else is ignored| Product token the launcher puts at the front of the External Client API `User-Agent`, ahead of `tableau-desktop-mcp/<version>`. Desktop attributes each call to the leading token. Tableau Agent sets `tableau-agent/<version>`.                                                 | spawner     |
+| `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`                                                                            | OS default root: `%LOCALAPPDATA%` on Windows (`~\AppData\Local` if unset), `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` (else `~/.local/share`) on Linux. Two folders are searched, in order: `<root>/Tableau/Tableau/ExternalApi`, then `<root>/Tableau/ExternalApi` |                                          | Directory searched for running Desktop instances. When set, it is the only directory searched.                                                                                                                                                                                   | dev/test    |
+| `TABLEAU_COMMANDS_REGISTRY_DIR`                                                                                 | none                                                                                                                                                                                                                       | blank is treated as unset                | Directory with the Desktop command and parameter registry JSON files. Without it the commands reference is unavailable.                                                                                                                                                          | spawner     |
+| `TABLEAU_KNOWLEDGE_DIR`                                                                                         | none (the knowledge corpus is empty)                                                                                                                                                                                       |                                          | Knowledge roots served as `expertise://` resources. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows). Earlier roots win on a name collision.                                                                                           | spawner     |
+| `TEMPLATES_DIR`                                                                                                 | the bundled `templates` directory                                                                                                                                                                                          |                                          | Replaces the whole template catalog with this directory.                                                                                                                                                                                                                         | dev/test    |
+| `TABLEAU_REPOSITORY_DIR`                                                                                        | none                                                                                                                                                                                                                       |                                          | Adds three external template folders under this directory, in order: `Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A later folder overrides a bundled or earlier template with the same name. Ignored when `TEMPLATES_DIR` is set. | spawner     |
+| `WORKBOOK_XSD_PATH`                                                                                             | the bundled workbook XSD                                                                                                                                                                                                   |                                          | Workbook XSD file used by `lookup-workbook-schema`.                                                                                                                                                                                                                              | dev/test    |
+| `TWB_INDEX_PATH`                                                                                                | the bundled workbook example index                                                                                                                                                                                         |                                          | JSON index of example workbooks. A path that does not exist gives an empty index.                                                                                                                                                                                                | dev/test    |
+| `EXAMPLES_DIR`                                                                                                  | the bundled `examples`                                                                                                                                                                                                     |                                          | Directory of `.json` and `.md` examples for `search-examples`. When set, even to an empty string, only this directory is read and the bundled examples are not used. An empty string or a missing directory gives no examples.                                                   | dev/test    |
+| `SYSTEM_PROMPT_VERSION`                                                                                         | `mcp-server@<server version>`                                                                                                                                                                                              |                                          | Sent as `system_prompt_version` on the episode-begin event only. | spawner     |
+| `AGENT_TYPES`                                                                                                   | none                                                                                                                                                                                                                       |                                          | Comma-separated agent types, sent as `agent_types` on the episode-begin event only. Blank entries are dropped. | spawner     |
+| `LANGSMITH_RUN_ID`, `LANGSMITH_TRACE_ID`                                                                        | none                                                                                                                                                                                                                       |                                          | Sent as `langsmith_run_id` on the episode-begin event only. `LANGSMITH_RUN_ID` wins when both are set. | spawner     |
+| `ENABLE_FILTER_GUARDRAIL`                                                                                       | off                                                                                                                                                                                                                        | exactly `true` enables                   | Blocks a proposal with more than 5 categorical filter controls. Any other value, including `false`, `0` and `1`, leaves it off.                                                                                                                                                  | dev/test    |
+| `ALLOW_SKIP_VALIDATION`                                                                                         | `false`                                                                                                                                                                                                                    | exactly `true` enables                   | **Turns off the bind-template preflight.** With it set, a caller can pass `skip_validation` to `bind-template` and skip validation of the proposal before apply. Only a trusted spawner that builds proposals in code should set it. Never set it for an ordinary agent session. | spawner     |
+| `TABLEAU_POD_NAME`, `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`, `TABLEAU_CHAT_ID`, `TABLEAU_DESKTOP_SESSION_LUID` | none                                                                                                                                                                                                                       |                                          | Product telemetry context. See [`TABLEAU_POD_NAME`](#tableau_pod_name) and [the LUID and chat id variables](#tableau_site_luid-tableau_user_luid-tableau_chat_id-tableau_desktop_session_luid).                                                                                  | spawner     |
+| `TABLEAU_MCP_CACHE_DIR`                                                                                         | `<bundle dir>/../cache`                                                                                                                                                                                                    | absolute path; blank or relative ignored | Directory for cache files (cached XML, exported images) and the only place `read-cached-xml` and `write-cached-xml` accept. Tableau Agent sets a per-session directory so concurrent sessions do not share cache files.                                                          | spawner     |
+| `PRODUCT_TELEMETRY_ENABLED`, `PRODUCT_TELEMETRY_ENDPOINT`, `IS_HYPERFORCE`                                      |                                                                                                                                                                                                                            |                                          | See [`PRODUCT_TELEMETRY_ENABLED`](#product_telemetry_enabled), [`PRODUCT_TELEMETRY_ENDPOINT`](#product_telemetry_endpoint) and [`IS_HYPERFORCE`](#is_hyperforce).                                                                                                                | spawner     |

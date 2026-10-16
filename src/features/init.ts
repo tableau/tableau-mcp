@@ -6,6 +6,7 @@ import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
+import { loadProviderModule } from '../utils/loadProviderModule.js';
 import type { FeatureGateProvider } from './featureGateProvider.js';
 import { ServerFeatureGate } from './serverFeatureGate.js';
 
@@ -140,8 +141,7 @@ function loadCustomProvider(config?: Record<string, unknown>): FeatureGateProvid
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
-    const module = require(resolvedPath);
+    const module = loadProviderModule(resolvedPath, require);
 
     // Look for default export or named export "FeatureGateProvider"
     const ProviderClass = module.default || module.FeatureGateProvider;

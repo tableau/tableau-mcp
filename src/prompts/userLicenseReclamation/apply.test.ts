@@ -343,25 +343,17 @@ describe('user-license-reclamation-apply prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
-    try {
-      const text = await textOf();
-      expect(text).toContain('45 days');
-      expect(text).toContain('"rangeN": 45');
-    } finally {
-      delete process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
-    }
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
+    const text = await textOf();
+    expect(text).toContain('45 days');
+    expect(text).toContain('"rangeN": 45');
   });
 
   it('reads LICENSE_RECLAIM_ROLES from env', async () => {
-    process.env.LICENSE_RECLAIM_ROLES = 'Creator,Viewer';
-    try {
-      const text = await textOf();
-      expect(text).toContain('Creator, Viewer');
-      expect(text).not.toContain('SiteAdministratorCreator');
-    } finally {
-      delete process.env.LICENSE_RECLAIM_ROLES;
-    }
+    vi.stubEnv('LICENSE_RECLAIM_ROLES', 'Creator,Viewer');
+    const text = await textOf();
+    expect(text).toContain('Creator, Viewer');
+    expect(text).not.toContain('SiteAdministratorCreator');
   });
 
   // --- HITL-refusal / adversarial cases ---

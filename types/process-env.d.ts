@@ -4,7 +4,15 @@ interface ProcessEnvBase {
   LOG_LEVEL: string | undefined;
   ENABLED_LOGGERS: string | undefined;
   FILE_LOGGER_DIRECTORY: string | undefined;
+  EPISODE_EVENTS: string | undefined;
+  EPISODE_EVENTS_DIR: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
+  DISABLE_LOG_MASKING: string | undefined;
+  NOTIFICATION_PAYLOAD_MAX_BYTES: string | undefined;
+  PRODUCT_TELEMETRY_ENABLED: string | undefined;
+  PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
+  IS_HYPERFORCE: string | undefined;
+  TOOL_PROFILE: string | undefined;
 }
 
 export interface ProcessEnvWeb extends ProcessEnvBase {
@@ -30,8 +38,6 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
-  LOG_LEVEL: string | undefined;
-  DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
@@ -71,9 +77,6 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   LATENCY_METRIC_NAME: string | undefined;
   TELEMETRY_PROVIDER: string | undefined;
   TELEMETRY_PROVIDER_CONFIG: string | undefined;
-  PRODUCT_TELEMETRY_ENABLED: string | undefined;
-  PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
-  IS_HYPERFORCE: string | undefined;
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
   ADMIN_TOOLS_ENABLED: string | undefined;
   PENDING_DELETION_MAX_AGE_DAYS: string | undefined;
@@ -86,9 +89,32 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
 }
 
 export interface ProcessEnvDesktop extends ProcessEnvBase {
-  AGENT_API_BASE: string | undefined;
-  AGENT_API_AUTH_TOKEN: string | undefined;
-  AGENT_API_POLL_INTERVAL_MS: string | undefined;
+  TABLEAU_DESKTOP_SESSION_ID: string | undefined;
+  AGENT_TYPES: string | undefined;
+  SYSTEM_PROMPT_VERSION: string | undefined;
+  LANGSMITH_RUN_ID: string | undefined;
+  LANGSMITH_TRACE_ID: string | undefined;
+  INLINE_XML_MAX_BYTES: string | undefined;
+  INLINE_IMAGE_MAX_BYTES: string | undefined;
+  IMAGE_EXPORT_TIMEOUT_MS: string | undefined;
+  TABLEAU_DESKTOP_CALL_TIMEOUT_MS: string | undefined;
+  TABLEAU_EXTERNAL_API_DISCOVERY_DIR: string | undefined;
+  TABLEAU_COMMANDS_REGISTRY_DIR: string | undefined;
+  TABLEAU_USER_AGENT_PREFIX: string | undefined;
+  TABLEAU_KNOWLEDGE_DIR: string | undefined;
+  TEMPLATES_DIR: string | undefined;
+  TABLEAU_REPOSITORY_DIR: string | undefined;
+  WORKBOOK_XSD_PATH: string | undefined;
+  TWB_INDEX_PATH: string | undefined;
+  EXAMPLES_DIR: string | undefined;
+  ENABLE_FILTER_GUARDRAIL: string | undefined;
+  ALLOW_SKIP_VALIDATION: string | undefined;
+  TABLEAU_POD_NAME: string | undefined;
+  TABLEAU_SITE_LUID: string | undefined;
+  TABLEAU_USER_LUID: string | undefined;
+  TABLEAU_CHAT_ID: string | undefined;
+  TABLEAU_DESKTOP_SESSION_LUID: string | undefined;
+  TABLEAU_MCP_CACHE_DIR: string | undefined;
 }
 
 declare global {

@@ -34,6 +34,28 @@ export default [
     },
   },
   {
+    // Test-only helpers living in src/ (mocks, mock servers, fixtures, shared test
+    // utilities) must never be imported from production code — they are excluded from
+    // coverage and never shipped. Test files, the helpers themselves, and the vitest
+    // setup file are exempt.
+    files: ['src/**/*.ts'],
+    ignores: ['**/*.test.ts', '**/*.mock.ts', '**/mock*.ts', '**/*Fixtures.ts', 'src/testSetup.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/*.mock.js', '**/mock*.js', '**/*Fixtures.js', '**/testShared.js'],
+              message:
+                'Test-only helper — import it from a *.test.ts file (or another test helper), never from production code.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // REST route safety. These selectors are a HINT for reviewers, not the guarantee: static
     // analysis cannot follow every alias (e.g. an axios instance passed to a helper). The real
     // guard is runtime: `createGuardedZodios` installs a path-param plugin plus an axios request
@@ -67,6 +89,49 @@ export default [
             "VariableDeclarator[init.property.name='axios'], VariableDeclarator > ObjectPattern > Property[key.name='axios']",
           message:
             "Do not alias a client's axios instance; call client.axios.<verb>(buildRestPath(...)) so the URL stays lintable (route-traversal guard).",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^replace(All)?$/][arguments.length=2]:not([arguments.1.type=/^(Literal|ArrowFunctionExpression|FunctionExpression)$/]):not([arguments.1.type='TemplateLiteral'][arguments.1.expressions.length=0])",
+          message:
+            "String.replace expands $&, $', $` and $$ in a string replacement. Wrap the replacement in an arrow function, e.g. () => value, unless it is a string literal.",
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "AssignmentExpression[left.object.object.name='process'][left.object.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector: "AssignmentExpression[left.object.name='process'][left.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "UnaryExpression[operator='delete'][argument.object.object.name='process'][argument.object.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='Object'][callee.property.name='assign'][arguments.0.object.name='process'][arguments.0.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(deleteProperty|defineProperty|set)$/][arguments.0.object.name='process'][arguments.0.property.name='env']",
+          message:
+            'Tests must change env through vi.stubEnv (restored by unstubEnvs); direct process.env writes leak into later tests.',
         },
       ],
     },
@@ -115,6 +180,9 @@ export default [
       'build/**',
       'docs/.docusaurus/**',
       'docs/build/**',
+      // Migration snapshot workspace (local-only, git-excluded) — reference material
+      // only, never built or shipped.
+      '.a2td-snapshot/**',
       '.claude/**',
       '.worktrees/**',
       'src/templates/**',

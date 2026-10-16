@@ -1,0 +1,556 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
+
+import { DesktopMcpServer } from '../../../../server.desktop.js';
+import invariant from '../../../../utils/invariant.js';
+import { Provider } from '../../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import { getBatchCreateAndCacheSheetsTool } from './batchCreateAndCacheSheets.js';
+
+vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
+vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
+vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
+vi.mock('../../../../desktop/wrappers/getDashboardXml.js');
+vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
+vi.mock('../../../../desktop/metadata/index.js');
+vi.mock('../../../../desktop/cachePath.js');
+
+import { writeCacheTextFile } from '../../../../desktop/cachePath.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
+import { addDashboard, addSheet } from '../../../../desktop/metadata/index.js';
+import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
+import { getDashboardXml } from '../../../../desktop/wrappers/getDashboardXml.js';
+import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
+import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
+import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
+import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
+
+const SESSION = 'session-1';
+
+const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
+const SUBMITTED_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sheet1"/></worksheets><dashboards><dashboard name="My Dashboard"/></dashboards></workbook>';
+const ACCEPTED_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook normalized="true"><worksheets><worksheet name="Sheet1"/></worksheets><dashboards><dashboard name="My Dashboard"/></dashboards></workbook>';
+const WORKSHEET_XML = '<worksheet name="Sheet1"><table/></worksheet>';
+const DASHBOARD_XML = '<dashboard name="My Dashboard"/>';
+
+function makeExtra(): TableauDesktopRequestHandlerExtra {
+  const extra = getMockRequestHandlerExtra();
+  extra.getExecutor = vi.fn().mockResolvedValue({});
+  vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(WORKBOOK_XML));
+  vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
+  vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
+  vi.mocked(loadWorkbookXml).mockResolvedValue(
+    new Ok({ validationWarnings: [], documentWarnings: [] }),
+  );
+  vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }));
+  vi.mocked(getDashboardXml).mockResolvedValue(
+    new Ok({ xml: DASHBOARD_XML, name: 'My Dashboard' }),
+  );
+  vi.mocked(writeCacheTextFile).mockImplementation(() => {});
+  vi.mocked(writeSidecar).mockImplementation(() => {});
+  vi.mocked(sourceSha256).mockImplementation((xml) => {
+    if (xml === WORKBOOK_XML) return 'a'.repeat(64);
+    if (xml === WORKSHEET_XML) return 'b'.repeat(64);
+    return 'c'.repeat(64);
+  });
+  return extra;
+}
+
+describe('batchCreateAndCacheSheetsTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should create a tool instance with correct properties', () => {
+    const tool = getBatchCreateAndCacheSheetsTool(new DesktopMcpServer());
+    expect(tool.name).toBe('batch-create-and-cache-sheets');
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false });
+    expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
+      worksheetNames: expect.any(Object),
+      dashboardName: expect.any(Object),
+    });
+  });
+
+  it('should succeed and return file paths on happy path', async () => {
+    const result = await getResult({
+      session: SESSION,
+      worksheetNames: ['Sheet1', 'Sheet2'],
+      dashboardName: 'My Dashboard',
+    });
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Sheet1');
+    expect(result.content[0].text).toContain('Sheet2');
+    expect(result.content[0].text).toContain('My Dashboard');
+    expect(result.content[0].text).toContain('Worksheet caches are ready');
+    expect(result.content[0].text).toContain('Dashboard apply is blocked');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+    expect(payload.registration).toMatchObject({ required: true, kind: 'manual' });
+    expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
+    expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
+  });
+
+  it('redacts connection credentials in the workbook cache file', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml).mockResolvedValue(
+      new Ok("<workbook><connection password='hunter2'/></workbook>"),
+    );
+
+    await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    const workbookWrite = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.find(([, text]) => text.includes('<connection'));
+    invariant(workbookWrite);
+    expect(workbookWrite[1]).not.toContain('hunter2');
+    expect(workbookWrite[1]).toContain(REDACTED_CREDENTIAL_SENTINEL);
+  });
+
+  it('redacts connection credentials in the worksheet and dashboard cache files', async () => {
+    const extra = makeExtra();
+    const leaky = "<x><connection password='hunter2' username='y'/></x>";
+    vi.mocked(getWorksheetXml).mockResolvedValue(new Ok({ xml: leaky, name: 'Sheet1' }));
+    vi.mocked(getDashboardXml).mockResolvedValue(new Ok({ xml: leaky, name: 'My Dashboard' }));
+
+    await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    const writes = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.filter(([, text]) => text.includes('<connection'));
+    expect(writes).toHaveLength(2);
+    for (const [, text] of writes) {
+      expect(text).not.toContain('hunter2');
+      expect(text).toContain(REDACTED_CREDENTIAL_SENTINEL);
+    }
+  });
+
+  it('shows Desktop warnings and gives a non-done next action', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Desktop reported 1 warning(s)');
+    expect(payload.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(payload.warnings).toEqual(warnings);
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('names Desktop warnings when the post-apply readback fails', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+    vi.mocked(getWorkbookXml)
+      .mockReset()
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(
+        Err({ type: 'execute-command-error', error: 'readback boom' } as never),
+      );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Post-apply workbook readback failed');
+    expect(result.content[0].text).toContain('dropped-node: Removed an unsupported zone.');
+  });
+
+  it('carries Desktop warnings when the workbook cache write fails after apply', async () => {
+    const extra = makeExtra();
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Ok({ validationWarnings: [], documentWarnings: warnings }),
+    );
+    vi.mocked(writeCacheTextFile).mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.error).toContain('disk full');
+    expect(payload.error).toContain('dropped-node: Removed an unsupported zone.');
+    expect(payload.warnings).toEqual(warnings);
+  });
+
+  it('omits warnings and next action on a clean Phase 1', async () => {
+    const result = await getResult({
+      session: SESSION,
+      worksheetNames: ['Sheet1'],
+      dashboardName: 'My Dashboard',
+    });
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('warnings');
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it.each(['0.2.22', '0.2.23', '0.3.0'])(
+    'keeps Phase 1 dashboard readiness false on native API %s until worksheets are applied',
+    async (apiVersion) => {
+      const extra = makeExtra();
+      extra.getExecutor = vi.fn().mockResolvedValue({ desktopApiVersion: apiVersion });
+      const result = await getResult(
+        { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+        extra,
+      );
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.readiness).toEqual({ worksheetBuild: true, dashboardApply: false });
+      expect(payload.registration).toMatchObject({
+        required: false,
+        status: 'ready',
+        kind: 'native',
+      });
+      expect(payload.registration.instructions[0]).toContain(
+        'Finish applying every worksheet first',
+      );
+    },
+  );
+
+  it('does not require worksheet registration for an empty dashboard', async () => {
+    const result = await getResult({
+      session: SESSION,
+      worksheetNames: [],
+      dashboardName: 'Empty',
+    });
+    expect(result.isError).toBe(false);
+    expect(
+      JSON.parse(result.content[0].type === 'text' ? result.content[0].text : ''),
+    ).toMatchObject({
+      readiness: { worksheetBuild: true, dashboardApply: true },
+      registration: { required: false, status: 'ready' },
+    });
+  });
+
+  it('should call addSheet for each worksheet name', async () => {
+    await getResult({
+      session: SESSION,
+      worksheetNames: ['WS1', 'WS2', 'WS3'],
+      dashboardName: 'DB',
+    });
+
+    expect(addSheet).toHaveBeenCalledTimes(3);
+    expect(addDashboard).toHaveBeenCalledWith(expect.any(String), 'DB');
+  });
+
+  it('keeps the entire batch focus-neutral', async () => {
+    await getResult({
+      session: SESSION,
+      worksheetNames: ['WS1', 'WS2'],
+      dashboardName: 'DB',
+    });
+
+    expect(loadWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(loadWorkbookXml).mock.calls[0]?.[0]).not.toHaveProperty('activateSheetName');
+  });
+
+  it('should return error when getWorkbookXml fails', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml).mockResolvedValue(
+      new Err({
+        type: 'command-failed' as const,
+        error: { code: 'E1', message: 'fail', recoverable: false },
+      }),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: [], dashboardName: 'DB' },
+      extra,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  it('should return error when loadWorkbookXml fails', async () => {
+    const extra = makeExtra();
+    vi.mocked(loadWorkbookXml).mockResolvedValue(
+      new Err({
+        type: 'execute-command-error',
+        error: {
+          type: 'command-failed' as const,
+          error: { code: 'E1', message: 'fail', recoverable: false },
+        },
+      }),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['S1'], dashboardName: 'DB' },
+      extra,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  it('caches and fingerprints the accepted live workbook readback, not the submitted body', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml)
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(new Ok(ACCEPTED_WORKBOOK_XML));
+    vi.mocked(addSheet).mockReturnValue(SUBMITTED_WORKBOOK_XML);
+    vi.mocked(addDashboard).mockReturnValue(SUBMITTED_WORKBOOK_XML);
+    const acceptedHash = 'd'.repeat(64);
+    vi.mocked(sourceSha256).mockImplementation((xml) =>
+      xml === ACCEPTED_WORKBOOK_XML ? acceptedHash : 'e'.repeat(64),
+    );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    const workbookWrite = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.find(([, contents]) => contents === ACCEPTED_WORKBOOK_XML);
+    expect(workbookWrite).toBeDefined();
+    expect(writeCacheTextFile).not.toHaveBeenCalledWith(expect.any(String), SUBMITTED_WORKBOOK_XML);
+    expect(sourceSha256).toHaveBeenCalledWith(ACCEPTED_WORKBOOK_XML);
+    expect(sourceSha256).not.toHaveBeenCalledWith(SUBMITTED_WORKBOOK_XML);
+    expect(writeSidecar).toHaveBeenCalledWith(workbookWrite?.[0], SESSION, acceptedHash);
+  });
+
+  it('tells the caller not to retry Phase 1 when the workbook cache write fails after apply', async () => {
+    const extra = makeExtra();
+    vi.mocked(writeCacheTextFile).mockImplementation((_path, contents) => {
+      if (String(contents).startsWith('<?xml')) {
+        throw new Error('ENOSPC: disk full');
+      }
+    });
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('ENOSPC');
+    expect(result.content[0].text).toContain('do not replay or retry Phase 1 automatically');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ applied: true, retrySafe: false });
+    expect(result.content[0].text).not.toContain('Ready for Phase 2');
+  });
+
+  it('gives sheets whose names sanitize alike different cache files', async () => {
+    const extra = makeExtra();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['Sales 2024', 'Sales-2024'],
+        dashboardName: 'My Dashboard',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    const worksheetPaths = vi
+      .mocked(writeCacheTextFile)
+      .mock.calls.filter(([, contents]) => contents === WORKSHEET_XML)
+      .map(([path]) => String(path));
+    expect(worksheetPaths).toHaveLength(2);
+    expect(new Set(worksheetPaths).size).toBe(2);
+  });
+
+  it('does not claim Phase 2 ready when the post-apply workbook readback fails', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorkbookXml)
+      .mockResolvedValueOnce(new Ok(WORKBOOK_XML))
+      .mockResolvedValueOnce(
+        new Err({
+          type: 'command-failed' as const,
+          error: { code: 'READBACK_FAILED', message: 'live readback failed', recoverable: false },
+        }),
+      );
+
+    const result = await getResult(
+      { session: SESSION, worksheetNames: ['Sheet1'], dashboardName: 'My Dashboard' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('live readback failed');
+    expect(result.content[0].text).toContain(
+      'Post-apply workbook readback failed. The requested worksheets and dashboard may already exist in Tableau. Inspect Tableau before continuing; do not replay or retry Phase 1 automatically.',
+    );
+    expect(result.content[0].text).not.toContain('Ready for Phase 2');
+    expect(writeCacheTextFile).not.toHaveBeenCalled();
+    expect(writeSidecar).not.toHaveBeenCalled();
+  });
+
+  it('should return an error naming a worksheet fetch failure', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorksheetXml).mockResolvedValue(
+      new Err({
+        type: 'get-worksheet-xml-error',
+        error: { type: 'no-worksheet-found' as const, message: 'Not found' },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['Missing'],
+        dashboardName: 'DB',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.succeeded).toEqual({ worksheets: [], dashboard: ['DB'] });
+    expect(body.failed).toEqual({
+      worksheets: [{ name: 'Missing', error: 'Not found' }],
+      dashboard: [],
+    });
+    expect(body.message).not.toContain('Ready for Phase 2');
+  });
+
+  it('should aggregate partial worksheet and dashboard cache failures', async () => {
+    const extra = makeExtra();
+    vi.mocked(getWorksheetXml)
+      .mockResolvedValueOnce(new Ok({ xml: WORKSHEET_XML, name: 'Sheet1' }))
+      .mockResolvedValueOnce(
+        new Err({
+          type: 'get-worksheet-xml-error',
+          error: { type: 'no-worksheet-found' as const, message: 'Missing worksheet' },
+        }),
+      );
+    vi.mocked(getDashboardXml).mockResolvedValue(
+      new Err({
+        type: 'get-dashboard-xml-error',
+        error: { type: 'no-dashboard-found' as const, message: 'Missing dashboard' },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['Cached', 'Missing'],
+        dashboardName: 'DB',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.succeeded).toEqual({ worksheets: ['Cached'], dashboard: [] });
+    expect(body.failed).toEqual({
+      worksheets: [{ name: 'Missing', error: 'Missing worksheet' }],
+      dashboard: [{ name: 'DB', error: 'Missing dashboard' }],
+    });
+    expect(body.worksheetFiles).toHaveProperty('Cached');
+    expect(body.worksheetFiles).not.toHaveProperty('Missing');
+    expect(body.dashboardFile).toBeNull();
+    expect(body.message).not.toContain('Ready for Phase 2');
+  });
+
+  it('should return an error when a fetched worksheet cannot be cached', async () => {
+    const extra = makeExtra();
+    vi.mocked(writeCacheTextFile)
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new Error('disk full');
+      })
+      .mockImplementation(() => {});
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['Uncached'],
+        dashboardName: 'DB',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.failed.worksheets).toEqual([
+      { name: 'Uncached', error: 'cache write failed: disk full' },
+    ]);
+    expect(body.succeeded.dashboard).toEqual(['DB']);
+    expect(body.message).not.toContain('Ready for Phase 2');
+  });
+
+  it('should aggregate worksheet sidecar write failures', async () => {
+    const extra = makeExtra();
+    vi.mocked(writeSidecar)
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new Error('sidecar denied');
+      })
+      .mockImplementation(() => {});
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['NoSidecar'],
+        dashboardName: 'DB',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.failed.worksheets).toEqual([
+      { name: 'NoSidecar', error: 'cache write failed: sidecar denied' },
+    ]);
+    expect(body.succeeded.dashboard).toEqual(['DB']);
+    expect(body.message).not.toContain('Ready for Phase 2');
+  });
+
+  it('should write files for each successfully fetched worksheet', async () => {
+    await getResult({
+      session: SESSION,
+      worksheetNames: ['Sheet1'],
+      dashboardName: 'DB',
+    });
+
+    expect(writeCacheTextFile).toHaveBeenCalled();
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'a'.repeat(64));
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'b'.repeat(64));
+    expect(writeSidecar).toHaveBeenCalledWith(expect.any(String), SESSION, 'c'.repeat(64));
+  });
+});
+
+async function getResult(
+  params: { session: string; worksheetNames: string[]; dashboardName: string },
+  extra = makeExtra(),
+): Promise<CallToolResult> {
+  const tool = getBatchCreateAndCacheSheetsTool(new DesktopMcpServer());
+  const callback = await Provider.from(tool.callback);
+  return await callback(params, extra);
+}

@@ -1,0 +1,82 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
+
+import { readCacheFileArg } from '../../../../desktop/cachePath.js';
+import { listFields } from '../../../../desktop/metadata/index.js';
+import { FileNotFoundError, XmlModificationError } from '../../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { artifactFileParam } from '../../params.js';
+import { DesktopTool } from '../../tool.js';
+
+const paramsSchema = {
+  worksheetFile: artifactFileParam('worksheet'),
+};
+
+const title = 'Listing placed fields';
+export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
+  const listFieldsTool = new DesktopTool({
+    server,
+    name: 'list-fields',
+    title,
+    description: 'List fields placed on Rows, Columns, or Marks in one cached worksheet file.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    callback: async ({ worksheetFile }, extra): Promise<CallToolResult> => {
+      return await listFieldsTool.logAndExecute({
+        extra,
+        args: { worksheetFile },
+        callback: async () => {
+          const read = readCacheFileArg(
+            'worksheetFile',
+            worksheetFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (read.isErr()) return read.error.toErr();
+          const worksheetXml = read.value.text;
+
+          let fields;
+          try {
+            fields = listFields(worksheetXml);
+          } catch (error) {
+            return new XmlModificationError(
+              error instanceof Error ? error.message : String(error),
+            ).toErr();
+          }
+
+          if (fields.length === 0) {
+            return new Ok({ message: 'No fields found on worksheet.', fields: [] });
+          }
+
+          const byLocation: Record<string, typeof fields> = {};
+          for (const field of fields) {
+            const key =
+              field.location === 'encodings'
+                ? `${field.location}:${field.encodingType}`
+                : field.location;
+            if (!byLocation[key]) byLocation[key] = [];
+            byLocation[key].push(field);
+          }
+
+          const lines: string[] = [`Found ${fields.length} field(s):\n`];
+          for (const [location, locationFields] of Object.entries(byLocation)) {
+            const displayLocation =
+              location === 'rows' ? 'Rows' : location === 'cols' ? 'Columns' : location;
+            lines.push(`\n${displayLocation}:`);
+            for (const field of locationFields) {
+              lines.push(`  [${field.index}] ${field.column}`);
+            }
+          }
+
+          return new Ok({ message: lines.join('\n'), fields });
+        },
+      });
+    },
+  });
+
+  return listFieldsTool;
+};
