@@ -204,7 +204,7 @@ describe('confirmDeleteContentTool', () => {
     ]);
   });
 
-  it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
+  it('is a model-invisible app-only tool gated on admin-tools enablement && mcp-apps', () => {
     const tool = getConfirmDeleteContentTool(new WebMcpServer());
     expect(tool.name).toBe('confirm-delete-content');
     expect(tool.meta).toEqual({ ui: { visibility: ['app'] } });
@@ -235,21 +235,22 @@ describe('confirmDeleteContentTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when ADMIN_TOOLS_ENABLED is off even if the admin-tools flag is on', async () => {
+  it('is enabled when only the admin-tools flag is on (ADMIN_TOOLS_ENABLED off) and mcp-apps is on', async () => {
+    // beforeEach leaves the admin-tools and mcp-apps flags on; only the env var is turned off here.
     const { getConfig } = await import('../../../config.js');
     vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled: false } as ReturnType<
       typeof getConfig
     >);
     const tool = getConfirmDeleteContentTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the admin-tools flag is OFF even if ADMIN_TOOLS_ENABLED is on', async () => {
+  it('is enabled when only ADMIN_TOOLS_ENABLED is on (admin-tools flag off) and mcp-apps is on', async () => {
     mocks.mockIsFeatureEnabled.mockImplementation(
       async (featureName: string) => featureName === 'mcp-apps',
     );
     const tool = getConfirmDeleteContentTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {

@@ -234,50 +234,14 @@ describe('server', () => {
     return sdkServer._instructions ?? '';
   }
 
-  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'admin-tools',
-    );
-    const instructions = await getRegisteredInstructions();
-
-    // Admin capability menu + generic-intent tie-in.
-    expect(instructions).toContain('site-administration capabilities');
-    expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('query-admin-insights');
-    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
-    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
-    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
-    for (const promptName of adminPromptNamesInInstructions) {
-      expect(instructions).toContain(promptName);
-    }
-    // The model cannot call prompts/get (prompts are user-invoked slash commands), so the
-    // instructions point it at the model-readable workflow resources instead (W-23757369).
-    expect(instructions).not.toContain('prompts/get');
-    expect(instructions).toContain('tableau-mcp://admin-workflows/<prompt-name>');
-    expect(instructions).toContain('slash-command prompt');
-    expect(instructions).toContain('If you cannot read MCP resources');
-    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
-    expect(instructions).toContain('read-only report');
-    expect(instructions).toContain('dry-run by default');
-    // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
-    // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
-    // so a future edit that drops the rendering guidance can't silently pass.
-    expect(instructions).toContain('present them as Markdown tables');
-    expect(instructions).toContain('to a chat or Slack surface');
-    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
-    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
-    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
-
-    // The admin block is appended after the base guidance, never spliced into the base sentence.
-    expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
-    const adminStart = instructions.indexOf('site-administration capabilities');
-    const clauseStart = instructions.indexOf('present them as Markdown tables');
-    expect(adminStart).toBeGreaterThan(-1);
-    expect(clauseStart).toBeGreaterThan(adminStart);
-  });
-
+  // Admin tools are enabled when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is on, so
+  // each of these scenarios (both on, env-only, flag-only) surfaces the full admin guidance block.
   it.each([
+    {
+      scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+      env: 'true',
+      flag: true,
+    },
     {
       scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
       env: 'true',
@@ -288,11 +252,55 @@ describe('server', () => {
       env: undefined,
       flag: true,
     },
-  ])('should omit admin guidance from instructions when $scenario', async ({ env, flag }) => {
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => flag && featureName === 'admin-tools',
-    );
+  ])(
+    'should include admin site-health guidance in instructions when $scenario',
+    async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const instructions = await getRegisteredInstructions();
+
+      // Admin capability menu + generic-intent tie-in.
+      expect(instructions).toContain('site-administration capabilities');
+      expect(instructions).toContain('general admin/site-health');
+      expect(instructions).toContain('query-admin-insights');
+      // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+      // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+      // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+      for (const promptName of adminPromptNamesInInstructions) {
+        expect(instructions).toContain(promptName);
+      }
+      // The model cannot call prompts/get (prompts are user-invoked slash commands), so the
+      // instructions point it at the model-readable workflow resources instead (W-23757369).
+      expect(instructions).not.toContain('prompts/get');
+      expect(instructions).toContain('tableau-mcp://admin-workflows/<prompt-name>');
+      expect(instructions).toContain('slash-command prompt');
+      expect(instructions).toContain('If you cannot read MCP resources');
+      // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+      expect(instructions).toContain('read-only report');
+      expect(instructions).toContain('dry-run by default');
+      // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
+      // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
+      // so a future edit that drops the rendering guidance can't silently pass.
+      expect(instructions).toContain('present them as Markdown tables');
+      expect(instructions).toContain('to a chat or Slack surface');
+      // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+      // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+      expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
+
+      // The admin block is appended after the base guidance, never spliced into the base sentence.
+      expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
+      const adminStart = instructions.indexOf('site-administration capabilities');
+      const clauseStart = instructions.indexOf('present them as Markdown tables');
+      expect(adminStart).toBeGreaterThan(-1);
+      expect(clauseStart).toBeGreaterThan(adminStart);
+    },
+  );
+
+  it('should omit admin guidance from instructions when both ADMIN_TOOLS_ENABLED and the admin-tools flag are off', async () => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
     const instructions = await getRegisteredInstructions();
 
     // Base guidance is still present...
@@ -486,10 +494,28 @@ describe('server', () => {
       };
     }
 
-    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    // Admin tools/prompts register when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is
+    // on — every enabling scenario registers the same admin surface.
+    it.each([
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+        env: 'true',
+        flag: true,
+      },
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
+        env: 'true',
+        flag: false,
+      },
+      {
+        scenario: 'the admin-tools flag is ON but ADMIN_TOOLS_ENABLED is unset',
+        env: undefined,
+        flag: true,
+      },
+    ])('should register admin tools and prompts when $scenario', async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (featureName: string) => featureName === 'admin-tools',
+        (featureName: string) => flag && featureName === 'admin-tools',
       );
       const { tools, prompts } = await getRegisteredNames();
 
@@ -515,32 +541,10 @@ describe('server', () => {
     });
 
     it('should not register workflow resources when admin tools are disabled', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      // Admin tools are disabled only when BOTH the env var and the flag are off.
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
       const { resourceUris } = await getRegisteredNames();
       expect(resourceUris).toEqual([]);
-    });
-
-    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-      const { tools, prompts } = await getRegisteredNames();
-
-      for (const name of adminToolNames) {
-        expect(tools).not.toContain(name);
-      }
-      expect(prompts).toEqual([]);
-    });
-
-    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is unset but the admin-tools flag is ON', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
-      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (featureName: string) => featureName === 'admin-tools',
-      );
-      const { tools, prompts } = await getRegisteredNames();
-
-      for (const name of adminToolNames) {
-        expect(tools).not.toContain(name);
-      }
-      expect(prompts).toEqual([]);
     });
 
     it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED and the admin-tools flag are both off', async () => {
