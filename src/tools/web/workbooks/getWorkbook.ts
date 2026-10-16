@@ -156,6 +156,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                 // Filter each list against the bounded context BEFORE de-duping: a standalone
                 // published entry is dropped only when a *surviving* embedded stub still carries it
                 // as publishedParent, so an out-of-bounds stub can't suppress its in-bounds parent.
+                // INCLUDE_DATASOURCE_IDS is an absolute allowlist (matching resourceAccessChecker),
+                // so it filters embedded entries too — otherwise get-workbook would list an embedded
+                // datasource that query-datasource then denies.
                 const merged = mergeWorkbookDatasources(
                   filterLineageContentsByAllowedIds(published, allowedIds),
                   filterLineageContentsByAllowedIds(embedded, allowedIds),
