@@ -28,6 +28,7 @@ import {
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
+import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
@@ -44,7 +45,7 @@ import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
-const serverName = 'tableau-desktop-mcp';
+const serverName = DESKTOP_MCP_NAME;
 const serverVersion = pkg.version;
 
 /**

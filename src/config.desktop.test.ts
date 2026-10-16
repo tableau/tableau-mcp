@@ -195,6 +195,28 @@ describe('DesktopConfig', () => {
     });
   });
 
+  describe('user agent prefix', () => {
+    it('should default to undefined', () => {
+      const config = new Config();
+      expect(config.userAgentPrefix).toBeUndefined();
+    });
+
+    it('should read the launcher product token from TABLEAU_USER_AGENT_PREFIX', () => {
+      vi.stubEnv('TABLEAU_USER_AGENT_PREFIX', 'tableau-agent/0.27.1234');
+      const config = new Config();
+      expect(config.userAgentPrefix).toBe('tableau-agent/0.27.1234');
+    });
+
+    it.each(['', '  ', 'tableau-agent/1.0 extra/2.0', 'tableau-agent/1.0\r\nX-Injected: 1'])(
+      'should ignore %j because it is not a single product token',
+      (value) => {
+        vi.stubEnv('TABLEAU_USER_AGENT_PREFIX', value);
+        const config = new Config();
+        expect(config.userAgentPrefix).toBeUndefined();
+      },
+    );
+  });
+
   describe('agent chat id', () => {
     it('should default to an empty string', () => {
       const config = new Config();

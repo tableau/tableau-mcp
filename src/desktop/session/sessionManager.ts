@@ -6,6 +6,7 @@ import { log } from '../../logging/logger.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../episode-events.js';
 import { discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
+import { buildDesktopUserAgent } from '../externalApi/userAgent.js';
 import { parseSessionPid } from './parseSessionPid.js';
 import { CACHED_XML_WARNING, noInstanceFoundMessage } from './unreachableInstance.js';
 
@@ -65,7 +66,10 @@ export class SessionManager {
       const executor = new ExternalApiToolExecutor({
         pid,
         discover,
-        clientOptions: { timeoutMs: config.desktopCallTimeoutMs },
+        clientOptions: {
+          timeoutMs: config.desktopCallTimeoutMs,
+          userAgent: buildDesktopUserAgent(config.userAgentPrefix),
+        },
         onRpc: async (event) => {
           await emitEpisodeEvent(config, {
             type: 'desktop_rpc',

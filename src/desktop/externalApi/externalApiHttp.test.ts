@@ -1,3 +1,4 @@
+import pkg from '../../../package.json';
 import { ExternalApiHttp } from './externalApiHttp.js';
 import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
@@ -79,6 +80,25 @@ describe('ExternalApiHttp', () => {
   it('attaches the bearer token from the discovery file on every request', async () => {
     await http.getOk(EXTERNAL_API_ROUTES.health);
     expect(server.requests.at(-1)?.authorization).toBe('Bearer valid-token');
+  });
+
+  it('identifies this server in the User-Agent instead of the runtime default', async () => {
+    await http.getOk(EXTERNAL_API_ROUTES.health);
+    expect(server.requests.at(-1)?.userAgent).toBe(`tableau-desktop-mcp/${pkg.version}`);
+  });
+
+  it('sends a configured User-Agent on every request', async () => {
+    const client = new ExternalApiHttp(makeInstance(server.baseUrl), {
+      userAgent: 'tableau-agent/0.27.1234 tableau-desktop-mcp/1.2.3',
+    });
+
+    await client.getOk(EXTERNAL_API_ROUTES.health);
+    await client.getOk(EXTERNAL_API_ROUTES.health);
+
+    expect(server.requests.map((request) => request.userAgent)).toEqual([
+      'tableau-agent/0.27.1234 tableau-desktop-mcp/1.2.3',
+      'tableau-agent/0.27.1234 tableau-desktop-mcp/1.2.3',
+    ]);
   });
 
   it('sets redirect manual on every request', async () => {

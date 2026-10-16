@@ -1,3 +1,4 @@
+import pkg from '../../../package.json';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { SessionManager } from './sessionManager.js';
 
@@ -56,6 +57,27 @@ describe('SessionManager executor selection', () => {
 
     expect(result.isOk()).toBe(true);
     expect(timeoutSpy).toHaveBeenCalledWith(90_000);
+  });
+
+  it('leads the External API User-Agent with the launcher prefix', async () => {
+    vi.stubEnv('TABLEAU_USER_AGENT_PREFIX', 'tableau-agent/0.27.1234');
+    const fetchFn = vi.fn().mockResolvedValue(new Response('<workbook />', { status: 200 }));
+    vi.stubGlobal('fetch', fetchFn);
+    mocks.discoverInstances.mockReturnValue([
+      {
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'token',
+        pid: 12345,
+        instanceId: 'inst',
+      },
+    ] as never);
+
+    const executor = await new SessionManager().getExecutor('12345');
+    await executor.getWorkbookDocument(new AbortController().signal);
+
+    expect(fetchFn.mock.calls[0][1].headers['user-agent']).toBe(
+      `tableau-agent/0.27.1234 tableau-desktop-mcp/${pkg.version}`,
+    );
   });
 
   it('throws an honest update-required error when an unpinned Desktop does not serve the External Client API', async () => {

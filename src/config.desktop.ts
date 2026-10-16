@@ -4,6 +4,7 @@ import {
   MAX_TIMER_DELAY_MS,
   MIN_DESKTOP_CALL_TIMEOUT_MS,
 } from './desktop/callDeadline.js';
+import { parseUserAgentPrefix } from './desktop/externalApi/userAgent.js';
 import {
   DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
@@ -40,6 +41,13 @@ export class Config extends BaseConfig {
 
   /** Optional override for the External Client API discovery directory. */
   externalApiDiscoveryDir: string | undefined;
+
+  /**
+   * Product token (`name/version`) of the app that launched this server, via
+   * `TABLEAU_USER_AGENT_PREFIX`. Leads the `User-Agent` sent to the External Client API so Desktop
+   * attributes the calls to the launcher. Ignored unless it is a single RFC 9110 product token.
+   */
+  userAgentPrefix: string | undefined;
 
   /** Optional directory holding the Desktop command-param and codegen registry JSON files. */
   commandsRegistryDir: string | undefined;
@@ -113,6 +121,7 @@ export class Config extends BaseConfig {
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_COMMANDS_REGISTRY_DIR: commandsRegistryDir,
+      TABLEAU_USER_AGENT_PREFIX: userAgentPrefix,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
       TABLEAU_SITE_LUID: siteLuid,
@@ -128,6 +137,7 @@ export class Config extends BaseConfig {
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
     this.commandsRegistryDir = commandsRegistryDir?.trim() || undefined;
+    this.userAgentPrefix = parseUserAgentPrefix(userAgentPrefix);
     this.desktopSessionId =
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
         ? desktopSessionId
