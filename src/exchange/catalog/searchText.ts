@@ -3,9 +3,11 @@ const STOP_WORDS = new Set(['a', 'an', 'and', 'for', 'in', 'of', 'on', 'or', 'th
 
 export function normalizeSearchText(value: string): string {
   return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/gu, '')
+    .normalize('NFKC') // compatibility-compose: fold \ufb01\u2192fi, \u2460\u21921, half/full-width; keep \u304c composed
     .toLocaleLowerCase('en-US')
+    .normalize('NFD') // decompose to expose combining diacritics
+    .replace(/[\u0300-\u036f]/gu, '') // fold Latin/Greek/Cyrillic accents only \u2014 NOT kana marks U+3099/309A
+    .normalize('NFC') // recompose, so a kept kana mark is not orphaned into a space below
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/gu, ' ');
