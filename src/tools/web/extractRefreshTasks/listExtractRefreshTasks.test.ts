@@ -69,8 +69,9 @@ describe('listExtractRefreshTasksTool', () => {
 
   it.each([
     [true, true, false],
-    [true, false, true],
-    [false, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
   ])(
     'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
     async (adminToolsEnabled, flag, disabled) => {

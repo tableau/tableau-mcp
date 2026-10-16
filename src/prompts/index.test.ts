@@ -79,8 +79,23 @@ describe('admin workflow prompts and resources', () => {
     expect(prompts.map((p) => p.name)).toEqual(adminPromptNames);
   });
 
-  it('getEnabledWebPrompts returns nothing when admin tools are disabled', async () => {
+  it('getEnabledWebPrompts returns every admin prompt when only ADMIN_TOOLS_ENABLED is set (admin-tools flag off)', async () => {
     vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    const prompts = await getEnabledWebPrompts(server);
+    expect(prompts.map((p) => p.name)).toEqual(adminPromptNames);
+  });
+
+  it('getEnabledWebPrompts returns every admin prompt when only the admin-tools flag is on (ADMIN_TOOLS_ENABLED unset)', async () => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName === 'admin-tools',
+    );
+    const prompts = await getEnabledWebPrompts(server);
+    expect(prompts.map((p) => p.name)).toEqual(adminPromptNames);
+  });
+
+  it('getEnabledWebPrompts returns nothing when admin tools are disabled (both the env var and the flag off)', async () => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
     expect(await getEnabledWebPrompts(server)).toEqual([]);
   });
 
