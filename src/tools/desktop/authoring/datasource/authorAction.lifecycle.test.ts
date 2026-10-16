@@ -1,5 +1,11 @@
+import { z } from 'zod';
+
+import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
+import { Provider } from '../../../../utils/provider.js';
+import { getAuthorActionTool } from './authorAction.js';
 import {
+  editedActionSettingsMatch,
   readWorkbookActions,
   removeWorkbookAction,
   WorkbookAction,
@@ -67,6 +73,185 @@ function receipt(
 
 describe('author-action edit/delete', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each(CASES)(
+    'requires an explicit edit mode through the registered schema for $mode actions',
+    async ({ definition }) => {
+      const tool = getAuthorActionTool(new DesktopMcpServer());
+      const shape = await Provider.from(tool.paramsSchema);
+      invariant(shape !== undefined);
+      const args = z.object(shape).parse({
+        operation: 'edit',
+        actionName: '[Action7]',
+        caption: 'Edited',
+        sourceWorksheet: 'Profit',
+        sourceField: `[${DATASOURCE_NAME}].[Profit]`,
+        targetParameter: '[Parameters].[Parameter 1]',
+      });
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args,
+        initialXml: withActions(WORKBOOK, UNRELATED + definition),
+        readbackXml: withActions(
+          WORKBOOK,
+          UNRELATED + CASES[0].definition.replace('Original', 'Edited'),
+        ),
+      });
+      expect(result.isError).toBe(true);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('mode is required for edit');
+    },
+  );
+
+  it.each([undefined, 'create'] as const)(
+    'keeps the parameter mode default for create operation %s',
+    async (operation) => {
+      const tool = getAuthorActionTool(new DesktopMcpServer());
+      const shape = await Provider.from(tool.paramsSchema);
+      invariant(shape !== undefined);
+      const args = z.object(shape).parse({
+        operation,
+        caption: 'Created',
+        sourceWorksheet: 'Profit',
+        sourceField: `[${DATASOURCE_NAME}].[Profit]`,
+        targetParameter: '[Parameters].[Parameter 1]',
+      });
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args,
+        initialXml: withActions(WORKBOOK, UNRELATED),
+        readbackXml: withActions(
+          WORKBOOK,
+          UNRELATED +
+            CASES[0].definition.replace('[Action7]', '[Action1]').replace('Original', 'Created'),
+        ),
+      });
+      expect(result.isError).toBe(false);
+      expect(receipt(result).mode).toBe('parameter');
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument))
+          .map((action) => action.name)
+          .sort(),
+      ).toEqual(['[Action1]', '[Action3]']);
+    },
+  );
+
+  describe.each(['missing', 'renamed', 'rewritten'] as const)(
+    'failed edit recovery: %s',
+    (failure) => {
+      it.each(CASES)(
+        'explains undo recovery for a $mode action',
+        async ({ mode, definition, args }) => {
+          const replacement = definition.replace('Original', 'Edited');
+          const readback =
+            failure === 'missing'
+              ? ''
+              : failure === 'renamed'
+                ? replacement.replace('[Action7]', '[Action17]')
+                : replacement.replace("worksheet='Profit'", "worksheet='Details'");
+          const { result, applyWorkbookDocument } = await getToolResult({
+            args: {
+              operation: 'edit',
+              actionName: '[Action7]',
+              mode,
+              caption: 'Edited',
+              sourceWorksheet: 'Profit',
+              ...args,
+            },
+            initialXml: withActions(WORKBOOK, UNRELATED + definition),
+            readbackXml: withActions(WORKBOOK, UNRELATED + readback),
+          });
+          expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+          expect(result.isError).toBe(true);
+          invariant(result.content[0].type === 'text');
+          expect(result.content[0].text).toContain('edit failed verification');
+          expect(result.content[0].text).toContain('[Action7]');
+          expect(result.content[0].text).toContain(
+            failure === 'rewritten' ? 'definition changed' : 'no longer present',
+          );
+          expect(result.content[0].text).toContain('Run undo-workbook in the same session');
+          expect(result.content[0].text).toContain('restore the previous workbook before retrying');
+          expect(result.content[0].text).not.toContain('Copies were added');
+        },
+      );
+    },
+  );
+
+  it.each(CASES)(
+    'preserves numeric disabled state for a $mode edit',
+    async ({ mode, definition, args }) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          operation: 'edit',
+          actionName: '[Action7]',
+          mode,
+          caption: 'Edited',
+          sourceWorksheet: 'Profit',
+          ...args,
+        },
+        initialXml: withActions(
+          WORKBOOK,
+          UNRELATED + definition.replace(' name=', " enabled='0' name="),
+        ),
+        readbackXml: withActions(
+          WORKBOOK,
+          UNRELATED +
+            definition.replace('Original', 'Edited').replace(' name=', " enabled='false' name="),
+        ),
+      });
+      expect(result.isError).toBe(false);
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument)).find(
+          (action) => action.name === '[Action7]',
+        )?.xml,
+      ).toMatch(/enabled=['"]false['"]/);
+    },
+  );
+
+  it.each(CASES)(
+    'rejects numeric disabled state becoming enabled for a $mode edit',
+    async ({ mode, definition, args }) => {
+      const { result } = await getToolResult({
+        args: {
+          operation: 'edit',
+          actionName: '[Action7]',
+          mode,
+          caption: 'Edited',
+          sourceWorksheet: 'Profit',
+          ...args,
+        },
+        initialXml: withActions(WORKBOOK, definition.replace(' name=', " enabled='0' name=")),
+        readbackXml: withActions(WORKBOOK, definition.replace('Original', 'Edited')),
+      });
+      expect(result.isError).toBe(true);
+    },
+  );
+
+  it('preserves numeric disabled state across a set-to-URL mode change', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action7]',
+        mode: 'url',
+        caption: 'Edited',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/selected',
+      },
+      initialXml: withActions(
+        WORKBOOK,
+        CASES[1].definition.replace(' name=', " enabled='0' name="),
+      ),
+      readbackXml: withActions(
+        WORKBOOK,
+        CASES[2].definition
+          .replace('Original', 'Edited')
+          .replace(' name=', " enabled='false' name="),
+      ),
+    });
+    expect(result.isError).toBe(false);
+    expect(actions(appliedDocumentXml(applyWorkbookDocument))[0].xml).toMatch(
+      /enabled=['"]false['"]/,
+    );
+  });
 
   describe.each([undefined, 'create'] as const)('create operation %s', (operation) => {
     it.each([undefined, '', ' ', '\t\r\n '])(
@@ -661,6 +846,7 @@ describe('author-action edit/delete', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).not.toContain('Copies were added');
+      expect(result.content[0].text).not.toContain('undo-workbook');
     },
   );
 
@@ -735,5 +921,41 @@ describe('workbook action selectors', () => {
   ])('rejects malformed or ambiguous action inventories', (xml) => {
     expect(readWorkbookActions(xml).isErr()).toBe(true);
     expect(removeWorkbookAction(xml, '[Action3]').isErr()).toBe(true);
+  });
+});
+
+describe('XML boolean action settings', () => {
+  it.each(['false', '0', ' false ', ' 0 '])('reads enabled=%j as disabled', (value) => {
+    const xml = withActions(
+      WORKBOOK,
+      CASES[2].definition.replace(' name=', ` enabled='${value}' name=`),
+    );
+    expect(actions(xml)[0].enabled).toBe(false);
+  });
+
+  it.each(['true', '1', undefined])('reads enabled=%j as enabled', (value) => {
+    const definition =
+      value === undefined
+        ? CASES[2].definition
+        : CASES[2].definition.replace(' name=', ` enabled='${value}' name=`);
+    expect(actions(withActions(WORKBOOK, definition))[0].enabled).toBe(true);
+  });
+
+  const booleanCases = [
+    {
+      mode: 'set',
+      xml: CASES[1].definition.replace(
+        '<add-or-remove-marks',
+        "<single-select value='true'/><add-or-remove-marks",
+      ),
+    },
+    { mode: 'URL', xml: CASES[2].definition.replace('<link ', "<link url-escape='true' ") },
+    { mode: 'highlight', xml: CASES[4].definition },
+  ];
+  it.each(booleanCases)('accepts numeric true for $mode settings', ({ xml }) => {
+    expect(editedActionSettingsMatch(xml.replaceAll("'true'", "'1'"), xml)).toBe(true);
+  });
+  it.each(booleanCases)('rejects numeric false for a true $mode setting', ({ xml }) => {
+    expect(editedActionSettingsMatch(xml.replaceAll("'true'", "'0'"), xml)).toBe(false);
   });
 });

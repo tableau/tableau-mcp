@@ -324,7 +324,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
     ['plan-dashboard-creation', 1373], // Manual-registration description trim; do not grow.
     ['build-and-apply-dashboard', 1418], // ratcheted down after removing viewpoint injection; do not grow
-    ['author-action', 2580], // trimmed while adding identity-based edit/delete; do not grow
+    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],

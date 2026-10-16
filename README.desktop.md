@@ -34,10 +34,15 @@ deterministic gate.
 `author-action` creates, edits, and deletes mark interactions. Omit `operation` to create. For
 `operation: "edit"`, pass the exact `actionName` returned by creation and a complete replacement
 definition: `mode`, `caption`, `sourceWorksheet`, the mode's target, and every nondefault option you
-want to keep. Omitted options use the creation defaults; edits do not merge individual settings. The
-internal action name and enabled state stay the same, including when the mode changes. URL actions
-can share a destination when their triggers, destination options, encoding, or source exclusions
-differ. For a dashboard-only source, pass `sourceWorksheet: ""` and `sourceDashboard`.
+want to keep. Edits require an explicit `mode`; only creation defaults to `parameter`. Omitted
+options use the creation defaults; edits do not merge individual settings. The internal action name
+and enabled state stay the same, including when the mode changes. URL actions can share a destination
+when their triggers, destination options, encoding, or source exclusions differ. For a dashboard-only
+source, pass `sourceWorksheet: ""` and `sourceDashboard`.
+
+If edit readback reports that the original action was removed or changed, run `undo-workbook` in
+the same session to restore the previous workbook before retrying. Failed verification does not
+automatically undo the apply.
 
 For example, this edits a URL action:
 

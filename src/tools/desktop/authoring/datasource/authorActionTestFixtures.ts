@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
@@ -162,37 +163,40 @@ export async function getToolResult({
   const tool = getAuthorActionTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
+  const shape = await Provider.from(tool.paramsSchema);
+  invariant(shape !== undefined);
+  const parsedArgs = z.object(shape).parse({ session: '12345', ...args });
   const result = await callback(
     {
       session: '12345',
-      ...args,
-      operation: args.operation,
-      actionName: args.actionName,
-      caption: args.caption,
-      sourceWorksheet: args.sourceWorksheet,
-      mode: args.mode ?? 'parameter',
-      sourceField: args.sourceField,
-      targetParameter: args.targetParameter,
-      targetSet: args.targetSet,
-      targetSheet: args.targetSheet,
-      filterFields: args.filterFields,
-      highlightFields: args.highlightFields,
-      highlightBy: args.highlightBy,
-      datasource: args.datasource,
-      singleSelect: args.singleSelect,
-      activation: args.activation ?? 'on-select',
-      setMembership: args.setMembership ?? 'assign',
-      clearSelection: args.clearSelection,
-      sourceFieldAggregation: args.sourceFieldAggregation,
-      clearValue: args.clearValue,
-      onClear: args.onClear,
-      url: args.url,
-      sourceDashboard: args.sourceDashboard,
-      excludeSourceSheets: args.excludeSourceSheets,
-      excludeTargetSheets: args.excludeTargetSheets,
-      urlTarget: args.urlTarget,
-      zoneId: args.zoneId,
-      urlEncode: args.urlEncode,
+      ...parsedArgs,
+      operation: parsedArgs.operation,
+      actionName: parsedArgs.actionName,
+      caption: parsedArgs.caption,
+      sourceWorksheet: parsedArgs.sourceWorksheet,
+      mode: parsedArgs.mode,
+      sourceField: parsedArgs.sourceField,
+      targetParameter: parsedArgs.targetParameter,
+      targetSet: parsedArgs.targetSet,
+      targetSheet: parsedArgs.targetSheet,
+      filterFields: parsedArgs.filterFields,
+      highlightFields: parsedArgs.highlightFields,
+      highlightBy: parsedArgs.highlightBy,
+      datasource: parsedArgs.datasource,
+      singleSelect: parsedArgs.singleSelect,
+      activation: parsedArgs.activation,
+      setMembership: parsedArgs.setMembership,
+      clearSelection: parsedArgs.clearSelection,
+      sourceFieldAggregation: parsedArgs.sourceFieldAggregation,
+      clearValue: parsedArgs.clearValue,
+      onClear: parsedArgs.onClear,
+      url: parsedArgs.url,
+      sourceDashboard: parsedArgs.sourceDashboard,
+      excludeSourceSheets: parsedArgs.excludeSourceSheets,
+      excludeTargetSheets: parsedArgs.excludeTargetSheets,
+      urlTarget: parsedArgs.urlTarget,
+      zoneId: parsedArgs.zoneId,
+      urlEncode: parsedArgs.urlEncode,
     },
     extra,
   );

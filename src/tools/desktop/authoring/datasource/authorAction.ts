@@ -16,6 +16,8 @@ import {
   actionNamesMatch,
   appendedActionsError,
   editedActionSettingsMatch,
+  editRecoveryError,
+  parseXmlBoolean,
   readWorkbookActions,
   removeWorkbookAction,
   WorkbookAction,
@@ -67,10 +69,13 @@ export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema
 // internal name so persisted references and undo/redo track the same action.
 const paramsSchema = {
   session: sessionParam(),
-  operation: z.enum(['create', 'edit', 'delete']).optional().describe('Default create.'),
+  operation: z
+    .enum(['create', 'edit', 'delete'])
+    .optional()
+    .describe('Default create; edit needs mode.'),
   actionName: z.string().optional().describe('edit/delete: internal name.'),
   mode: modeSchema
-    .default('parameter')
+    .optional()
     .describe(
       'parameter:sourceField+targetParameter;set:targetSet;url;filter/highlight:targetSheet',
     ),
@@ -251,6 +256,12 @@ export function parseAuthorActionArgs(
   if (operation === 'delete') {
     return new Ok({ operation, actionName: actionName!, session: args.session });
   }
+  if (operation === 'edit' && args.mode === undefined) {
+    return new ArgsValidationError(
+      'mode is required for edit; pass the complete replacement definition',
+    ).toErr();
+  }
+  const mode = args.mode ?? 'parameter';
   if (
     args.caption === undefined ||
     args.caption.trim().length === 0 ||
@@ -262,7 +273,6 @@ export function parseAuthorActionArgs(
   }
   const {
     session,
-    mode,
     caption,
     sourceWorksheet,
     sourceField,
@@ -573,12 +583,12 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           // Size guards compare the retained document: the removed definition can be large.
           // The apply still uses the original live document for its stale-state check.
           let xmlWithoutSelectedAction = liveXml;
-          let actionEnabled = true;
+          let originalAction: WorkbookAction | undefined;
           if (input.operation !== 'create') {
             const removed = removeWorkbookAction(liveXml, input.actionName!);
             if (removed.isErr()) return removed.error.toErr();
             xmlWithoutSelectedAction = removed.value.xml;
-            actionEnabled = removed.value.action.enabled;
+            originalAction = removed.value.action;
             if (input.operation === 'delete') {
               const validation = validateWorkbookDocumentApply(
                 xmlWithoutSelectedAction,
@@ -952,7 +962,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           }
           // Enabled state isn't an authoring option; editing must retain it.
-          if (!actionEnabled) {
+          if (originalAction?.enabled === false) {
             actionXml = actionXml.replace(/^<([\w-]+)/, "<$1 enabled='false'");
           }
           if (
@@ -1042,9 +1052,11 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return outcome.error.toErr();
           }
           if (outcome.status === 'not-applied') {
-            if (input.operation === 'edit') {
+            if (input.operation === 'edit' && originalAction !== undefined) {
               const appendError = appendedActionsError(outcome.workbookXml, baselineActions.value);
               if (appendError) return appendError.toErr();
+              const recoveryError = editRecoveryError(outcome.workbookXml, originalAction);
+              if (recoveryError) return recoveryError.toErr();
             }
             return new XmlModificationError(
               input.mode === 'set'
@@ -2032,7 +2044,7 @@ function hasHighlightAction(xml: string, expected: HighlightAction, caption?: st
       isSameSheetSet(buildSourceExcludeSheetNames(block), expected.sourceExcludeSheets) &&
       getAttr(activation, 'type') ===
         (expected.activation === 'on-menu' ? undefined : expected.activation) &&
-      (getAttr(activation, 'auto-clear') === 'true') === expected.autoClear &&
+      parseXmlBoolean(getAttr(activation, 'auto-clear'), false) === expected.autoClear &&
       params.get('target') === expected.target &&
       isSameSheetSet(parseActionList(params.get('exclude')), expected.targetExcludeSheets) &&
       params.get('special-fields') === expected.specialFields &&
@@ -2117,7 +2129,8 @@ function filterActionMatches(block: string, expected: FilterAction): boolean {
   const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
   const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
   const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
-  const autoClear = activationTag !== undefined && getAttr(activationTag, 'auto-clear') === 'true';
+  const autoClear =
+    activationTag !== undefined && parseXmlBoolean(getAttr(activationTag, 'auto-clear'), false);
 
   // Command params, keyed by name so presence/value checks ignore serialized order.
   const params = new Map<string, string>();

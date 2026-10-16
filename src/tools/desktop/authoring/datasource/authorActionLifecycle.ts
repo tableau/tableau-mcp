@@ -7,6 +7,19 @@ const actionTags = new Set(['action', 'nav-action', 'edit-group-action', 'edit-p
 
 export type WorkbookAction = { name: string; caption: string; enabled: boolean; xml: string };
 
+export function parseXmlBoolean(value: string | null | undefined, defaultValue: boolean): boolean {
+  switch (value?.trim()) {
+    case 'true':
+    case '1':
+      return true;
+    case 'false':
+    case '0':
+      return false;
+    default:
+      return defaultValue;
+  }
+}
+
 function parseActions(xml: string): {
   document: Document;
   elements: Node[];
@@ -35,7 +48,7 @@ function parseActions(xml: string): {
     return {
       name: element.getAttribute('name') ?? '',
       caption: element.getAttribute('caption') ?? '',
-      enabled: element.getAttribute('enabled') !== 'false',
+      enabled: parseXmlBoolean(element.getAttribute('enabled'), true),
       xml: serializer.serializeToString(element),
     };
   });
@@ -90,6 +103,25 @@ export function appendedActionsError(
   );
 }
 
+export function editRecoveryError(
+  xml: string,
+  original: WorkbookAction,
+): XmlModificationError | undefined {
+  const readback = readWorkbookActions(xml);
+  const action = readback.isOk()
+    ? readback.value.find((candidate) => candidate.name === original.name)
+    : undefined;
+  if (readback.isOk() && action?.xml === original.xml) return undefined;
+  const reason = readback.isErr()
+    ? 'the original action could not be verified'
+    : action === undefined
+      ? 'the original action is no longer present'
+      : 'the original action definition changed';
+  return new XmlModificationError(
+    `edit failed verification for "${original.name}": ${reason}. Run undo-workbook in the same session to restore the previous workbook before retrying.`,
+  );
+}
+
 export function actionNamesMatch(actions: WorkbookAction[], names: string[]): boolean {
   return actions.length === names.length && actions.every((action) => names.includes(action.name));
 }
@@ -106,7 +138,10 @@ export function editedActionSettingsMatch(actualXml: string, expectedXml: string
     );
   const attr = (element: Element | undefined, name: string): string =>
     element?.getAttribute(name) ?? '';
-  if ((attr(actual, 'enabled') === 'false') !== (attr(expected, 'enabled') === 'false'))
+  if (
+    parseXmlBoolean(attr(actual, 'enabled'), true) !==
+    parseXmlBoolean(attr(expected, 'enabled'), true)
+  )
     return false;
   const source = child(actual, 'source');
   const expectedSource = child(expected, 'source');
@@ -127,8 +162,8 @@ export function editedActionSettingsMatch(actualXml: string, expectedXml: string
   const expectedActivation = child(expected, 'activation');
   if (attr(activation, 'type') !== attr(expectedActivation, 'type')) return false;
   if (
-    (attr(activation, 'auto-clear') === 'true') !==
-    (attr(expectedActivation, 'auto-clear') === 'true')
+    parseXmlBoolean(attr(activation, 'auto-clear'), false) !==
+    parseXmlBoolean(attr(expectedActivation, 'auto-clear'), false)
   )
     return false;
   const param = (element: Element, name: string): string | null | undefined =>
@@ -150,8 +185,8 @@ export function editedActionSettingsMatch(actualXml: string, expectedXml: string
         attr(child(expected, 'add-or-remove-marks'), 'value') &&
       param(actual, 'selection-clear-set-option') ===
         param(expected, 'selection-clear-set-option') &&
-      (attr(child(actual, 'single-select'), 'value') === 'true') ===
-        (attr(child(expected, 'single-select'), 'value') === 'true')
+      parseXmlBoolean(attr(child(actual, 'single-select'), 'value'), false) ===
+        parseXmlBoolean(attr(child(expected, 'single-select'), 'value'), false)
     );
   }
   const link = child(actual, 'link');
@@ -161,7 +196,8 @@ export function editedActionSettingsMatch(actualXml: string, expectedXml: string
     const text = (element: Element, tag: string): string =>
       child(element, tag)?.textContent?.trim() ?? '';
     return (
-      (attr(link, 'url-escape') === 'true') === (attr(expectedLink, 'url-escape') === 'true') &&
+      parseXmlBoolean(attr(link, 'url-escape'), false) ===
+        parseXmlBoolean(attr(expectedLink, 'url-escape'), false) &&
       (text(link, 'url-action-type') || 'default-zone-or-browser') ===
         (text(expectedLink, 'url-action-type') || 'default-zone-or-browser') &&
       text(link, 'url-action-target') === text(expectedLink, 'url-action-target')
