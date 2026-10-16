@@ -165,7 +165,7 @@ type WorksheetVerification = {
 
 type BatchReadbackVerification = {
   ok: boolean;
-  /** True while a shelf/filter warning may still be a pre-apply read worth re-polling. */
+  /** True while a finding may still be a pre-apply read: any error, or a shelf warning. */
   pending: boolean;
   worksheets: WorksheetVerification[];
   dashboardIssues: string[];
