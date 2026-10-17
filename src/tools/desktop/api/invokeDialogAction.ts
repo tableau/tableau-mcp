@@ -40,11 +40,22 @@ const paramsSchema = {
   session: sessionParam(),
   dialog: dialogSchema.describe('Identity.'),
   requestId: z.string().optional().describe('Opaque.'),
-  action: actionSchema.describe('input.fields.'),
+  action: actionSchema.describe('Flat kind + named values; no input wrapper.'),
 };
 
 const title = 'Invoke Dialog Action';
 const REDACTED_DIALOG_VALUE = '[redacted]';
+const PENDING_RECONCILIATION_GUIDANCE =
+  'The action was dispatched and is pending, not indeterminate. Do not replay this mutation. ' +
+  'Continue with read only get-active-dialogs calls on the same Desktop session, matching ' +
+  'recentActions by status.requestId and status.sessionId from this receipt. Read-only inspection ' +
+  'is not an action retry and needs no additional permission. An empty dialogs array does not ' +
+  'prove completion or panel closure. Use at most 10 inspections or 30 seconds, whichever comes ' +
+  'first. If the matching status is missing, continue inspecting within that budget. On inspection ' +
+  'failure, expired or indeterminate status, or budget exhaustion without a terminal status, ' +
+  'stop mutations and report the unresolved requestId. After a terminal status, verify the expected ' +
+  'dialog and caller state. A separately authorized next action (such as cancel after a rejected ' +
+  'save) requires a fresh active dialog identity, its advertised capability, and a new requestId.';
 
 function invokeDialogActionRouteMissingError(): McpToolError {
   return new McpToolError({
@@ -153,7 +164,8 @@ export const getInvokeDialogActionTool = (
     name: 'invoke-dialog-action',
     minApiVersion: '0.2.23',
     title,
-    description: 'get-active-dialogs context: exact action. Never guess or retry.',
+    description:
+      'get-active-dialogs context: exact action. Never guess or retry mutations. Pending: inspect.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -192,6 +204,15 @@ export const getInvokeDialogActionTool = (
             hasSessionId,
             hasRevision,
           }),
+        getSuccessResult: (result) => ({
+          isError: false,
+          content: [
+            { type: 'text', text: JSON.stringify(result) },
+            ...(result.status.state === 'pending'
+              ? [{ type: 'text' as const, text: PENDING_RECONCILIATION_GUIDANCE }]
+              : []),
+          ],
+        }),
       });
     },
   });
@@ -219,7 +240,11 @@ async function invokeDialogAction({
   if (!parsedAction.success) {
     throw new McpToolError({
       type: 'invalid_request',
-      message: 'The dialog action must exactly match the advertised action input.',
+      message:
+        'The dialog action must exactly match the advertised action input. Use a flat action ' +
+        'object: kind and each input.fields name are sibling keys with their required values. ' +
+        'Do not nest values under input, fields or values. Local validation failed; no Desktop ' +
+        'action was dispatched. Do not guess or retry.',
       statusCode: 400,
     });
   }

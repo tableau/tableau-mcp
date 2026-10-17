@@ -343,6 +343,33 @@ describe('invoke-dialog-action tool', () => {
     }
   });
 
+  it.each([
+    { fields: [{ name: 'path', value: '/private/existing.twb' }] },
+    { fields: { path: '/private/existing.twb', filterId: 'twb', overwriteConfirmed: false } },
+  ])(
+    'rejects nested action metadata before dispatch and explains the flat shape',
+    async (input) => {
+      const harness = await startHarness();
+
+      try {
+        const result = await harness.callTool({
+          session: undefined,
+          ...defaultRequest,
+          action: { kind: 'save-file', input } as unknown as DialogActionInvocation,
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('sibling keys');
+        expect(result.content[0].text).toContain('no Desktop action was dispatched');
+        expect(result.content[0].text).not.toContain('/private/existing.twb');
+        expect(dialogPosts(harness.server)).toHaveLength(0);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
   it('does not down-convert a native Qt identity to an older Desktop tuple', async () => {
     const harness = await startHarness('0.2.22');
 
@@ -479,6 +506,49 @@ describe('invoke-dialog-action tool', () => {
     }
   });
 
+  it.each([false, true])(
+    'preserves a pending receipt and adds reconciliation guidance (visible dialog: %s)',
+    async (visibleDialog) => {
+      const response: InvokeDialogActionResult = {
+        outcome: 'dispatched-pending',
+        dialog: exactStringRequest.dialog,
+        status: {
+          sessionId: exactStringRequest.dialog.sessionId,
+          revision: exactStringRequest.dialog.revision,
+          requestId: exactStringRequest.requestId,
+          state: 'pending',
+          effect: 'none',
+        },
+        dialogs: visibleDialog
+          ? [{ ...exactStringRequest.dialog, family: 'qt', status: 'active' }]
+          : [],
+      };
+      const harness = await startHarness();
+      setSuccess(harness.server, response);
+
+      try {
+        const result = await harness.callTool({ session: undefined, ...exactStringRequest });
+
+        expect(result.isError).toBe(false);
+        expect(parseSuccess(result)).toEqual(response);
+        expect(result.content).toHaveLength(2);
+        invariant(result.content[1].type === 'text');
+        expect(result.content[1].text).toContain('read only get-active-dialogs');
+        expect(result.content[1].text).toContain('status.requestId and status.sessionId');
+        expect(result.content[1].text).toContain('empty dialogs array does not');
+        expect(result.content[1].text).toContain('Do not replay this mutation');
+        expect(result.content[1].text).toContain('stop mutations');
+        expect(result.content[1].text).toContain('new requestId');
+        expect(dialogPosts(harness.server)).toHaveLength(1);
+        expect(
+          harness.server.requests.filter((request) => request.path === '/v0/app/dialogs'),
+        ).toHaveLength(0);
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
   it.each(successCases)(
     'preserves the complete %s response without retrying',
     async (_label, response) => {
@@ -490,6 +560,7 @@ describe('invoke-dialog-action tool', () => {
 
         expect(result.isError).toBe(false);
         expect(parseSuccess(result)).toEqual(response);
+        expect(result.content).toHaveLength(1);
         expect(dialogPosts(harness.server)).toHaveLength(1);
       } finally {
         await harness.close();

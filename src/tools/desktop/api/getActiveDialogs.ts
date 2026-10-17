@@ -21,7 +21,14 @@ export const getActiveDialogsTool = (
     minApiVersion: '0.2.23',
     title,
     description:
-      'List current dialog blockers and capabilities. Only active dialogs advertise actions. Copy the exact identity into invoke-dialog-action; send the chosen action kind and values required by its input.fields, honoring its constraints. recentActions reports bounded sanitized completion status.',
+      'List blockers. Only active dialogs advertise actions. Copy the exact ' +
+      'identity into invoke-dialog-action with the chosen action kind and required input.fields, ' +
+      'honoring constraints. action is flat: {kind, path, filterId, overwriteConfirmed} for a ' +
+      'save; kind and input.fields names are sibling keys. Never nest input or fields in action. ' +
+      'While pending, inspect again on the same Desktop session; match ' +
+      'recentActions by requestId and sessionId from the receipt. These reads are not mutation ' +
+      'retries and need no further permission. Empty dialogs does not prove closure. Never replay. ' +
+      'Any authorized next action needs a fresh active identity, capability and new requestId.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
