@@ -19,8 +19,8 @@ an ad-hoc run with caller-chosen output steps.
 :::warning[This tool changes server state]
 
 It runs the flow (consuming Tableau Prep Conductor capacity and overwriting outputs) and is **not
-idempotent**. Only registered when both `FLOW_TOOLS_ENABLED=true` and
-`FLOW_WRITE_TOOLS_ENABLED=true`.
+idempotent**. The `FLOW_TOOLS_ENABLED` and `FLOW_WRITE_TOOLS_ENABLED` settings both default to
+`true`; setting either to `false` disables this tool.
 
 ## Two-phase confirmation
 

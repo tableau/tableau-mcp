@@ -60,7 +60,6 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'run-flow',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||

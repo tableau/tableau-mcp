@@ -590,7 +590,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // Requires the base flow gate (static + dynamic) and the write opt-in.
+  // Requires the base flow gate (static + dynamic) and the write setting.
   if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');

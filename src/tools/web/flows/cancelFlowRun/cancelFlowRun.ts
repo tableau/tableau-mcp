@@ -38,7 +38,6 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
     server,
     name: 'cancel-flow-run',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
