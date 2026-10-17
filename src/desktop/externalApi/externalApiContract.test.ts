@@ -37,7 +37,6 @@ import {
   storyboardListSchema,
   summaryDataSchema,
   validationResultSchema,
-  windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
   worksheetDiagnosticsSchema,
@@ -84,15 +83,20 @@ type SpecSchema = {
   required?: Array<string>;
   properties?: Record<string, SpecProperty>;
   oneOf?: Array<SpecSchema>;
+  additionalProperties?: boolean;
 };
 
-const spec = JSON.parse(
-  readFileSync(path.join(__dirname, '__fixtures__', 'externalClientApi-openapi.json'), 'utf-8'),
-) as {
+type OpenApiSpec = {
   info: { version: string };
   paths: Record<string, unknown>;
   components: { schemas: Record<string, SpecSchema> };
 };
+
+const readSpecFixture = (filename: string): OpenApiSpec =>
+  JSON.parse(readFileSync(path.join(__dirname, '__fixtures__', filename), 'utf-8')) as OpenApiSpec;
+
+const spec = readSpecFixture('externalClientApi-openapi.json');
+const nativeDialogSpec = readSpecFixture('nativeDialogs-openapi.json');
 
 const specSchema = (name: string): SpecSchema => {
   const schema = spec.components.schemas[name];
@@ -245,7 +249,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       ['ShowMeWorksheet', showMeWorksheetSchema],
       ['ShowMeOption', showMeOptionSchema],
       ['ShowMeOptions', showMeOptionsResultSchema],
-      ['WindowInfo', windowInfoSchema],
       ['ValidationResult', validationResultSchema],
       ['ImageExport', imageResultSchema],
     ] as const)(
@@ -376,10 +379,16 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(extras.sort()).toEqual(['detail', 'tableauErrorCode', 'type']);
     });
 
-    it('PROBLEM_CODES equals the spec x-extensible-enum exactly', () => {
-      expect([...PROBLEM_CODES].sort()).toEqual(
-        [...(problem.properties?.code?.['x-extensible-enum'] ?? [])].sort(),
-      );
+    it('PROBLEM_CODES exactly covers the archival enum plus the current-dialog additions', () => {
+      const nativeProblem = nativeDialogSpec.components.schemas.Problem;
+      const nativeDialogCodes = (
+        nativeProblem.properties?.code?.['x-extensible-enum'] ?? []
+      ).filter((code) => code.startsWith('dialog-'));
+      const expected = new Set([
+        ...(problem.properties?.code?.['x-extensible-enum'] ?? []),
+        ...nativeDialogCodes,
+      ]);
+      expect([...PROBLEM_CODES].sort()).toEqual([...expected].sort());
     });
 
     // Deliberately NO requiredness parity: problemResponseSchema keeps every field
@@ -389,120 +398,6 @@ describe('external client API contract (captured openapi fixture)', () => {
         problemResponseSchema.safeParse({ code: 'sheet-not-found', status: 404, instance: '/v0/x' })
           .success,
       ).toBe(true);
-    });
-  });
-
-  describe('dialog contracts', () => {
-    it.each([
-      ['DialogIdentity', dialogIdentitySchema],
-      ['DialogList', dialogListSchema],
-      ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
-    ] as const)('%s properties and required set match exactly', (name, schema) => {
-      const component = specSchema(name);
-      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
-      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
-    });
-
-    it('reuses WindowInfo for every dialog snapshot', () => {
-      const dialogList = specSchema('DialogList');
-      const dismissResult = specSchema('InvokeDialogActionResult');
-
-      expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      for (const outcome of dismissResult.oneOf ?? []) {
-        expect(outcome.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
-      }
-    });
-
-    it('documents bounded detailed text and its truncation marker', () => {
-      const windowInfo = specSchema('WindowInfo');
-
-      expect(windowInfo.properties?.detailedText?.maxLength).toBe(1024 * 1024);
-      expect(windowInfo.properties?.detailedTextTruncated?.type).toBe('boolean');
-    });
-
-    it('models exact labeled button and semantic close actions', () => {
-      const variants = specSchema('DialogAction').oneOf ?? [];
-      const byKind = Object.fromEntries(
-        variants.map((variant) => [variant.properties?.kind?.const, variant]),
-      );
-
-      expect(byKind.button.required?.sort()).toEqual(['kind', 'label']);
-      expect(byKind.button.properties?.label?.minLength).toBe(1);
-      expect(byKind.close.required).toEqual(['kind']);
-      expect(byKind.close.properties?.label).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'button', label: '' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'close' }).success).toBe(true);
-      expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
-      expect(dialogActionSchema.safeParse({ kind: 'unknown' }).success).toBe(false);
-    });
-
-    it('requires an exact returned action in requests and invoked responses', () => {
-      const request = specSchema('InvokeDialogActionRequest');
-      const outcomes = specSchema('InvokeDialogActionResult').oneOf ?? [];
-
-      expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-      expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: '' },
-        }).success,
-      ).toBe(false);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: '', title: '', className: '' },
-          action: { kind: 'button', label: ' ' },
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionRequestSchema.safeParse({
-          dialog: { objectName: 'dialog', title: 'Save' },
-          action: { kind: 'button', label: 'Discard' },
-        }).success,
-      ).toBe(false);
-      for (const outcome of outcomes.filter(
-        (candidate) => candidate.properties?.outcome?.const !== 'no-active-dialog',
-      )) {
-        expect(outcome.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
-        expect(outcome.properties?.action?.$ref).toBe('#/components/schemas/DialogAction');
-      }
-    });
-
-    it('models the exact three outcome branches and their required fields', () => {
-      const outcomeSchemas = specSchema('InvokeDialogActionResult').oneOf ?? [];
-      const requiredByOutcome = Object.fromEntries(
-        outcomeSchemas.map((outcome) => [
-          outcome.properties?.outcome?.const,
-          [...(outcome.required ?? [])].sort(),
-        ]),
-      );
-
-      expect(requiredByOutcome).toEqual({
-        'no-active-dialog': ['dialogs', 'outcome'],
-        dismissed: ['action', 'dialog', 'dialogs', 'outcome'],
-        'action-invoked-dialog-remains': ['action', 'dialog', 'dialogs', 'outcome'],
-      });
-
-      expect(
-        invokeDialogActionResultSchema.safeParse({ outcome: 'no-active-dialog', dialogs: [] })
-          .success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'dismissed',
-          dialog: { objectName: 'dialog', title: 'Save', className: 'QMessageBox' },
-          action: { kind: 'button', label: 'Discard' },
-          dialogs: [],
-        }).success,
-      ).toBe(true);
-      expect(
-        invokeDialogActionResultSchema.safeParse({
-          outcome: 'action-invoked-dialog-remains',
-          dialogs: [],
-        }).success,
-      ).toBe(false);
     });
   });
 
@@ -991,5 +886,239 @@ describe('external client API contract (captured openapi fixture)', () => {
     ])('rejects an Operation missing required `%s`', (_key, payload) => {
       expect(operationEnvelopeSchema.safeParse(payload).success).toBe(false);
     });
+  });
+});
+
+describe('external client API native dialogs contract (compiled 0.2.23 fixture)', () => {
+  const nativeSchema = (name: string): SpecSchema => {
+    const schema = nativeDialogSpec.components.schemas[name];
+    expect(schema, `native dialog component schema ${name} missing`).toBeDefined();
+    return schema;
+  };
+
+  it('tracks the compiled 0.2.23 producer capture', () => {
+    expect(nativeDialogSpec.info.version).toBe('0.2.23');
+  });
+
+  it.each([
+    ['DialogIdentity', dialogIdentitySchema],
+    ['DialogList', dialogListSchema],
+    ['InvokeDialogActionRequest', invokeDialogActionRequestSchema],
+    ['InvokeDialogActionResult', invokeDialogActionResultSchema],
+  ] as const)('%s properties and required fields match the current producer', (name, schema) => {
+    const component = nativeSchema(name);
+    expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+    expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+  });
+
+  it('restricts outcomes to the six current status projections', () => {
+    const outcomes = [
+      'dispatched-pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ];
+    expect(nativeSchema('InvokeDialogActionResult').properties?.outcome?.enum).toEqual(outcomes);
+    expect(invokeDialogActionResultSchema.shape.outcome.options).toEqual(outcomes);
+    for (const outcome of [
+      'no-active-dialog',
+      'dismissed',
+      'action-invoked-dialog-remains',
+      'unknown',
+    ]) {
+      expect(invokeDialogActionResultSchema.shape.outcome.safeParse(outcome).success).toBe(false);
+    }
+  });
+
+  it('requires the exact session identity and native dialog-list envelope', () => {
+    const identity = nativeSchema('DialogIdentity');
+    const dialogList = nativeSchema('DialogList');
+
+    expect(Object.keys(identity.properties ?? {}).sort()).toEqual([
+      'className',
+      'objectName',
+      'revision',
+      'sessionId',
+      'title',
+    ]);
+    expect([...(identity.required ?? [])].sort()).toEqual([
+      'className',
+      'objectName',
+      'revision',
+      'sessionId',
+      'title',
+    ]);
+    expect(Object.keys(dialogList.properties ?? {}).sort()).toEqual([
+      'dialogs',
+      'recentActions',
+      'uiSnapshotAvailable',
+    ]);
+    expect([...(dialogList.required ?? [])].sort()).toEqual([
+      'dialogs',
+      'recentActions',
+      'uiSnapshotAvailable',
+    ]);
+    expect(dialogList.properties?.dialogs?.items?.$ref).toBe('#/components/schemas/WindowInfo');
+    expect(dialogList.properties?.recentActions?.items?.$ref).toBe(
+      '#/components/schemas/DialogRequestStatus',
+    );
+    expect(
+      dialogListSchema.safeParse({
+        dialogs: [{ objectName: 'save', title: 'Save', className: 'QDialog' }],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      desktopStateSchema.safeParse({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        uiSnapshotAvailable: true,
+        blockingWindows: [{ objectName: 'save', title: 'Save', className: 'QDialog' }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('publishes capability kinds separately from nine closed invocation variants', () => {
+    const capability = nativeSchema('DialogAction');
+    const invocation = nativeSchema('DialogActionInvocation');
+
+    expect(capability.properties?.kind?.enum).toEqual([
+      'button',
+      'close',
+      'cancel',
+      'choose-file',
+      'choose-files',
+      'choose-directory',
+      'save-file',
+      'choose-color',
+      'submit-print',
+    ]);
+    expect(invocation.oneOf).toHaveLength(9);
+    for (const variant of invocation.oneOf ?? []) {
+      expect(variant.additionalProperties).toBe(false);
+    }
+    expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
+    expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
+    expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
+    expect(
+      dialogActionSchema.safeParse({ kind: 'choose-color', red: 1, green: 2, blue: 3 }).success,
+    ).toBe(true);
+    expect(
+      dialogActionSchema.safeParse({ kind: 'choose-color', red: 1, green: 2, blue: 3, raw: 4 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('requires an opaque request ID and accepts only a strict native invocation', () => {
+    const request = nativeSchema('InvokeDialogActionRequest');
+
+    expect(Object.keys(request.properties ?? {}).sort()).toEqual(['action', 'dialog', 'requestId']);
+    expect([...(request.required ?? [])].sort()).toEqual(['action', 'dialog', 'requestId']);
+    expect(request.properties?.dialog?.$ref).toBe('#/components/schemas/DialogIdentity');
+    expect(request.properties?.action?.$ref).toBe('#/components/schemas/DialogActionInvocation');
+    expect(
+      invokeDialogActionRequestSchema.safeParse({
+        dialog: {
+          objectName: 'dialog',
+          title: 'Save',
+          className: 'QDialog',
+          sessionId: 'session-1',
+          revision: 1,
+        },
+        requestId: 'request-1',
+        action: { kind: 'choose-file', path: '/private/value' },
+      }).success,
+    ).toBe(true);
+    expect(
+      invokeDialogActionRequestSchema.safeParse({
+        dialog: {
+          objectName: 'dialog',
+          title: 'Save',
+          className: 'QDialog',
+          sessionId: 'session-1',
+          revision: 1,
+        },
+        requestId: 'request-1',
+        action: { kind: 'choose-file', path: '/private/value', unknown: true },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('returns a typed safe request status without an action payload echo', () => {
+    const result = nativeSchema('InvokeDialogActionResult');
+    const status = nativeSchema('DialogRequestStatus');
+
+    expect(Object.keys(result.properties ?? {}).sort()).toEqual([
+      'dialog',
+      'dialogs',
+      'outcome',
+      'status',
+    ]);
+    expect([...(result.required ?? [])].sort()).toEqual(['dialog', 'dialogs', 'outcome', 'status']);
+    expect(status.properties?.state?.enum).toEqual([
+      'pending',
+      'completed',
+      'canceled',
+      'failed',
+      'expired',
+      'indeterminate',
+    ]);
+    expect(status.properties?.effect?.enum).toContain('file-choice-returned');
+    const parsed = invokeDialogActionResultSchema.safeParse({
+      outcome: 'completed',
+      dialog: {
+        objectName: 'dialog',
+        title: 'Save',
+        className: 'QMessageBox',
+        sessionId: 'session-1',
+        revision: 1,
+      },
+      status: {
+        sessionId: 'session-1',
+        revision: 1,
+        requestId: 'request-1',
+        state: 'completed',
+        effect: 'file-choice-returned',
+      },
+      action: { kind: 'choose-file', path: '/private/secret' },
+      dialogs: [],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data).not.toHaveProperty('action');
+    }
+  });
+
+  it('keeps the established routes and documents direct typed POST status responses', () => {
+    const paths = nativeDialogSpec.paths as Record<
+      string,
+      {
+        get?: { responses?: Record<string, unknown> };
+        post?: {
+          operationId?: string;
+          requestBody?: { content?: Record<string, { schema?: SpecProperty }> };
+          responses?: Record<string, unknown>;
+        };
+      }
+    >;
+
+    expect(paths[EXTERNAL_API_ROUTES.appDialogs]?.get?.responses).toHaveProperty('200');
+    expect(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.operationId).toBe(
+      'invokeDialogAction',
+    );
+    expect(
+      paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.requestBody?.content?.[
+        'application/json'
+      ]?.schema?.$ref,
+    ).toBe('#/components/schemas/InvokeDialogActionRequest');
+    expect(
+      Object.keys(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses ?? {}),
+    ).toEqual(['200', '400', '401', '403', '421', '500', '503']);
+    expect(paths[EXTERNAL_API_ROUTES.appInvokeDialogAction]?.post?.responses).not.toHaveProperty(
+      '202',
+    );
   });
 });

@@ -23,7 +23,10 @@ describe('get-desktop-state tool', () => {
     expect(tool.name).toBe('get-desktop-state');
     expect(tool.minApiVersion).toBe('0.2.14');
     expect(tool.description).toContain('strongest observed blocking cause');
-    expect(tool.description).toContain('fresh exact identity and actions from get-active-dialogs');
+    expect(tool.description).toContain('registered native dialog blockers');
+    expect(tool.description).toContain(
+      'fresh exact identity and advertised capability from get-active-dialogs',
+    );
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({
       readOnlyHint: true,

@@ -19,7 +19,7 @@ export const getDesktopStateTool = (server: DesktopMcpServer): DesktopTool<typeo
     minApiVersion: '0.2.14',
     title,
     description:
-      'Report whether Tableau Desktop is idle or blocked, the strongest observed blocking cause, all active native activities, UI snapshot completeness, and visible modal or progress window content. When a modal needs action, obtain fresh exact identity and actions from get-active-dialogs before considering invoke-dialog-action.',
+      'Report whether Tableau Desktop is idle or blocked and the strongest observed blocking cause, including registered native dialog blockers that may not be Qt windows. When a dialog needs action, obtain its fresh exact identity and advertised capability from get-active-dialogs before considering invoke-dialog-action. A partial UI snapshot is never evidence that no blocker exists.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

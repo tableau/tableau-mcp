@@ -29,7 +29,7 @@ export function makeExecutorMock(
     getApp: vi.fn(),
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
-      .mockResolvedValue(Ok({ dialogs: [] })),
+      .mockResolvedValue(Ok({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] })),
     getDesktopState: vi.fn<ExternalApiToolExecutor['getDesktopState']>().mockResolvedValue(
       Ok({
         state: 'IDLE',
@@ -41,7 +41,21 @@ export function makeExecutorMock(
     ),
     invokeDialogAction: vi
       .fn<ExternalApiToolExecutor['invokeDialogAction']>()
-      .mockResolvedValue(Ok({ outcome: 'no-active-dialog', dialogs: [] })),
+      .mockImplementation(async ({ dialog, requestId }) =>
+        Ok({
+          outcome: 'failed',
+          dialog,
+          status: {
+            sessionId: dialog.sessionId,
+            revision: dialog.revision,
+            requestId,
+            state: 'failed',
+            effect: 'none',
+            code: 'dialog-not-found',
+          },
+          dialogs: [],
+        }),
+      ),
     getWorkbook: vi.fn(),
     listWorksheets: vi.fn(),
     listDashboards: vi.fn(),

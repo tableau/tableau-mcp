@@ -57,12 +57,12 @@ describe('runExternalApiReadTool', () => {
         return await call('dialog action', async (actionExecutor, actionSignal) => {
           expect(actionExecutor).toBe(executor);
           expect(actionSignal).toBe(extra.signal);
-          return Ok({ outcome: 'dismissed' as const });
+          return Ok({ outcome: 'completed' as const });
         });
       },
     });
 
-    expect(result).toEqual(Ok({ outcome: 'dismissed' }));
+    expect(result).toEqual(Ok({ outcome: 'completed' }));
     expect(sessionResolution.resolveSession).toHaveBeenCalledWith('desktop-action');
     expect(extra.getExecutor).toHaveBeenCalledWith('999');
   });

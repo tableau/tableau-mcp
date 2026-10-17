@@ -125,9 +125,21 @@ describe('desktopCallTimeoutMessage', () => {
     expect(message).toContain('exact returned action');
     expect(message).toContain('at most one invoke-dialog-action call');
     expect(message).toContain('Do not guess or assume Cancel is safe');
-    expect(message).toContain('action-invoked-dialog-remains');
+    expect(message).toContain('status.effect is dialog-remains');
     expect(message).toContain('ask the user to handle the dialog');
     expect(message).toContain('list-instances');
+  });
+
+  it('adds only the recorded native-dialog status correlation to an action timeout', () => {
+    const message = desktopCallTimeoutMessage({
+      budgetMs: 60_000,
+      tool: 'invoke-dialog-action',
+      nativeDialogRequestId: 'a9a3d1b2-1cef-4f67-bd1b-bcf2fcf3e011',
+    });
+
+    expect(message).toContain('requestId=a9a3d1b2-1cef-4f67-bd1b-bcf2fcf3e011');
+    expect(message).toContain('Inspect recentActions before any further action');
+    expect(message).not.toContain('selected-source');
   });
 
   it('does not retry dialog inspection when get-active-dialogs times out', () => {

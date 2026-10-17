@@ -187,6 +187,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           budgetMs: error.budgetMs,
           tool: this.name,
           session: sessionId,
+          nativeDialogRequestId: extra.deadline?.nativeDialogRequestId(),
         });
         void emitToolErrorEvent({
           config: extra.config,

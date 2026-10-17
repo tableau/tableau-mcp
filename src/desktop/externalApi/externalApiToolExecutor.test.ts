@@ -35,7 +35,10 @@ const invokeDialogActionRequest: InvokeDialogActionRequest = {
     objectName: 'saveChangesDialog',
     title: 'Save Changes',
     className: 'QMessageBox',
+    sessionId: 'dialog-session-save-changes',
+    revision: 1,
   },
+  requestId: 'request-qt',
   action: { kind: 'button', label: 'Discard' },
 };
 
@@ -1948,21 +1951,16 @@ describe('ExternalApiToolExecutor', () => {
 
   describe('dialog endpoints', () => {
     it('lists active dialogs with every optional field preserved under read telemetry', async () => {
-      const onRpc = vi.fn();
-      const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server)],
-        onRpc,
-      });
-      await executor.start();
-
-      const result = await executor.getActiveDialogs(signal);
-
-      expect(result.unwrap()).toEqual({
+      const expected = {
         dialogs: [
           {
             objectName: 'saveChangesDialog',
             title: 'Save Changes',
             className: 'QMessageBox',
+            sessionId: 'session-inspected',
+            revision: 4,
+            family: 'qt',
+            status: 'active',
             messageText: 'Do you want to save changes to Regional Sales?',
             informativeText: 'Unsaved changes will be lost if you discard them.',
             detailedText: 'Workbook: Regional Sales',
@@ -1975,7 +1973,24 @@ describe('ExternalApiToolExecutor', () => {
             ],
           },
         ],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      };
+      server.setOverride('GET /v0/app/dialogs', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(expected),
       });
+      const onRpc = vi.fn();
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+        onRpc,
+      });
+      await executor.start();
+
+      const result = await executor.getActiveDialogs(signal);
+
+      expect(result.unwrap()).toEqual(expected);
       expect(server.requests.at(-1)?.path).toBe('/v0/app/dialogs');
       expect(onRpc).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1990,49 +2005,215 @@ describe('ExternalApiToolExecutor', () => {
       server.setOverride('GET /v0/app/dialogs', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ dialogs: [] }),
+        body: JSON.stringify({ dialogs: [], uiSnapshotAvailable: true, recentActions: [] }),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.getActiveDialogs(signal);
 
-      expect(result.unwrap()).toEqual({ dialogs: [] });
+      expect(result.unwrap()).toEqual({
+        dialogs: [],
+        uiSnapshotAvailable: true,
+        recentActions: [],
+      });
+    });
+
+    it.each(['0.2.21', '0.2.22', ''])(
+      'rejects every action on an older or unknown version before POST (%s)',
+      async (apiVersion) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', apiVersion)],
+        });
+        await executor.start();
+
+        const result = await executor.invokeDialogAction(
+          {
+            dialog: {
+              ...invokeDialogActionRequest.dialog,
+              sessionId: 'native-session',
+              revision: 3,
+            },
+            requestId: 'native-request',
+            action: invokeDialogActionRequest.action,
+          },
+          signal,
+        );
+
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error?.code).toBe('dialog-session-stale');
+          expect(error.error?.message).toContain('do not retry or replay');
+        }
+        expect(
+          server.requests.filter(
+            (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+          ),
+        ).toHaveLength(0);
+      },
+    );
+
+    it.each([
+      [
+        'absent session',
+        { ...invokeDialogActionRequest.dialog, sessionId: 'not-current' },
+        invokeDialogActionRequest.action,
+        'dialog-not-found',
+      ],
+      [
+        'stale revision',
+        { ...invokeDialogActionRequest.dialog, revision: 2 },
+        invokeDialogActionRequest.action,
+        'dialog-session-stale',
+      ],
+      [
+        'replacement with the same tuple',
+        { ...invokeDialogActionRequest.dialog, sessionId: 'former-session' },
+        invokeDialogActionRequest.action,
+        'dialog-not-found',
+      ],
+      [
+        'unsupported action',
+        invokeDialogActionRequest.dialog,
+        { kind: 'cancel' },
+        'dialog-action-unsupported',
+      ],
+    ] as const)(
+      'keeps the active dialog unchanged for %s and returns current failed status',
+      async (_case, dialog, action, code) => {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+        });
+        await executor.start();
+        const before = (await executor.getActiveDialogs(signal)).unwrap();
+        const result = (
+          await executor.invokeDialogAction(
+            { ...invokeDialogActionRequest, dialog, action },
+            signal,
+          )
+        ).unwrap();
+        expect(result).toMatchObject({
+          outcome: 'failed',
+          status: {
+            state: 'failed',
+            effect: 'none',
+            code,
+            requestId: invokeDialogActionRequest.requestId,
+          },
+        });
+        expect((await executor.getActiveDialogs(signal)).unwrap()).toEqual(before);
+        expect(
+          server.requests.filter((request) => request.path === '/v0/app:invokeDialogAction'),
+        ).toHaveLength(1);
+      },
+    );
+
+    it('rejects a malformed tuple-only request at executor validation before POST', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
+      await executor.start();
+      const result = await executor.invokeDialogAction(
+        {
+          dialog: {
+            objectName: 'saveChangesDialog',
+            title: 'Save Changes',
+            className: 'QMessageBox',
+          },
+          action: { kind: 'button', label: 'Discard' },
+        } as InvokeDialogActionRequest,
+        signal,
+      );
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') expect(error.error?.code).toBe('invalid-request-body');
+      expect(
+        server.requests.filter((request) => request.path === '/v0/app:invokeDialogAction'),
+      ).toHaveLength(0);
+    });
+
+    it('rejects an older pinned Desktop before reading dialogs', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.21')],
+      });
+      await executor.start();
+      expect((await executor.getActiveDialogs(signal)).isErr()).toBe(true);
+      expect(server.requests.filter((request) => request.path === '/v0/app/dialogs')).toHaveLength(
+        0,
+      );
+    });
+
+    it('rejects an older newly discovered host before POST', async () => {
+      let discoveries = 0;
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [
+          instanceFor(server, 'valid-token', discoveries++ === 0 ? '0.2.23' : '0.2.21'),
+        ],
+      });
+      await executor.start();
+      executor.stop();
+      expect((await executor.invokeDialogAction(invokeDialogActionRequest, signal)).isErr()).toBe(
+        true,
+      );
+      expect(discoveries).toBe(2);
+      expect(
+        server.requests.filter((request) => request.path === '/v0/app:invokeDialogAction'),
+      ).toHaveLength(0);
+    });
+
+    it('rechecks the dialog version after a read discovery rescan', async () => {
+      let discoveries = 0;
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [
+          instanceFor(
+            server,
+            discoveries++ === 0 ? 'stale-token' : 'valid-token',
+            discoveries === 1 ? '0.2.23' : '0.2.21',
+          ),
+        ],
+      });
+      await executor.start();
+      expect((await executor.getActiveDialogs(signal)).isErr()).toBe(true);
+      expect(discoveries).toBe(2);
+      expect(server.requests.filter((request) => request.path === '/v0/app/dialogs')).toHaveLength(
+        1,
+      );
     });
 
     it.each([
-      ['no-active-dialog', { outcome: 'no-active-dialog', dialogs: [] }],
-      [
-        'dismissed',
-        {
-          outcome: 'dismissed',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [],
+      ['dispatched-pending', 'pending', 'none'],
+      ['completed', 'completed', 'dialog-dismissed'],
+      ['completed', 'completed', 'dialog-remains'],
+      ['canceled', 'canceled', 'native-panel-closed'],
+      ['failed', 'failed', 'none'],
+      ['expired', 'expired', 'none'],
+      ['indeterminate', 'indeterminate', 'indeterminate'],
+    ] as const)('returns the %s current result exactly once', async (outcome, state, effect) => {
+      const response = {
+        outcome,
+        dialog: invokeDialogActionRequest.dialog,
+        status: {
+          sessionId: invokeDialogActionRequest.dialog.sessionId,
+          revision: invokeDialogActionRequest.dialog.revision,
+          requestId: invokeDialogActionRequest.requestId,
+          state,
+          effect,
+          ...(state === 'failed' ? { code: 'dialog-not-found' } : {}),
+          ...(state === 'expired' ? { code: 'dialog-session-stale' } : {}),
         },
-      ],
-      [
-        'action-invoked-dialog-remains',
-        {
-          outcome: 'action-invoked-dialog-remains',
-          dialog: invokeDialogActionRequest.dialog,
-          action: invokeDialogActionRequest.action,
-          dialogs: [
-            {
-              ...invokeDialogActionRequest.dialog,
-              messageText: 'The click started validation.',
-              buttons: ['Discard'],
-            },
-          ],
-        },
-      ],
-    ] as const)('returns the %s success exactly once', async (_outcome, response) => {
+        dialogs: [],
+      };
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(response),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2065,7 +2246,9 @@ describe('ExternalApiToolExecutor', () => {
           code,
         }),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2077,6 +2260,37 @@ describe('ExternalApiToolExecutor', () => {
         expect(error.error?.recoverable).toBe(false);
         expect(error.error?.message).not.toContain('outcome is indeterminate');
       }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('does not replay a dialog action after an unauthorized response', async () => {
+      let discoveries = 0;
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [
+          instanceFor(server, discoveries++ === 0 ? 'stale-token' : 'valid-token', '0.2.23'),
+        ],
+      });
+      await executor.start();
+
+      const result = await executor.invokeDialogAction(
+        {
+          dialog: {
+            ...invokeDialogActionRequest.dialog,
+            sessionId: 'dialog-session-save-changes',
+            revision: 1,
+          },
+          requestId: 'native-request',
+          action: invokeDialogActionRequest.action,
+        },
+        signal,
+      );
+
+      expect(result.unwrapErr().type).toBe('unknown');
+      expect(discoveries).toBe(1);
       expect(
         server.requests.filter(
           (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
@@ -2096,7 +2310,9 @@ describe('ExternalApiToolExecutor', () => {
           code: 'internal-error',
         }),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2122,7 +2338,9 @@ describe('ExternalApiToolExecutor', () => {
         contentType: 'text/plain',
         body: 'Desktop failed after receiving the dialog action.',
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2154,7 +2372,9 @@ describe('ExternalApiToolExecutor', () => {
           code: 'api-disabled',
         }),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2177,7 +2397,7 @@ describe('ExternalApiToolExecutor', () => {
     it('emits command telemetry for a dialog action', async () => {
       const onRpc = vi.fn();
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server)],
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
         onRpc,
       });
       await executor.start();
@@ -2195,35 +2415,35 @@ describe('ExternalApiToolExecutor', () => {
       );
     });
 
-    it('rescans once after a 401 and sends the action once with the fresh credential', async () => {
+    it('does not rescan or replay a dialog action after a 401 when fresh credentials are available', async () => {
       const onRpc = vi.fn();
       const discover = vi
         .fn()
-        .mockReturnValueOnce([instanceFor(server, 'stale-token')])
-        .mockReturnValue([instanceFor(server, 'valid-token')]);
+        .mockReturnValueOnce([instanceFor(server, 'stale-token', '0.2.23')])
+        .mockReturnValue([instanceFor(server, 'valid-token', '0.2.23')]);
       const executor = new ExternalApiToolExecutor({ discover, onRpc });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
 
-      expect(result.isOk()).toBe(true);
-      expect(discover).toHaveBeenCalledTimes(2);
+      expect(result.isErr()).toBe(true);
+      expect(discover).toHaveBeenCalledOnce();
       expect(
         server.requests.filter(
           (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(onRpc).toHaveBeenCalledWith(
         expect.objectContaining({
           operation: 'command',
-          transportSuccess: true,
-          rescanCount: 1,
+          transportSuccess: false,
+          rescanCount: 0,
         }),
       );
     });
 
-    it('stops after one credential rescan when a dialog action keeps returning 401', async () => {
-      const discover = vi.fn(() => [instanceFor(server, 'always-stale')]);
+    it('does not replay a dialog action when its credential remains invalid', async () => {
+      const discover = vi.fn(() => [instanceFor(server, 'always-stale', '0.2.23')]);
       const executor = new ExternalApiToolExecutor({ discover });
       await executor.start();
 
@@ -2231,12 +2451,12 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.isErr()).toBe(true);
       expect(String(result.unwrapErr().error)).not.toContain('outcome is indeterminate');
-      expect(discover).toHaveBeenCalledTimes(2);
+      expect(discover).toHaveBeenCalledOnce();
       expect(
         server.requests.filter(
           (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
         ),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
     });
 
     it('treats a malformed 200 as indeterminate without retrying the dialog action', async () => {
@@ -2245,7 +2465,9 @@ describe('ExternalApiToolExecutor', () => {
         contentType: 'application/json',
         body: JSON.stringify({ outcome: 'dismissed' }),
       });
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
+      });
       await executor.start();
 
       const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
@@ -2267,7 +2489,7 @@ describe('ExternalApiToolExecutor', () => {
         throw new TypeError('socket closed before the response arrived');
       });
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server)],
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
         clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch },
       });
       await executor.start();
@@ -2300,7 +2522,7 @@ describe('ExternalApiToolExecutor', () => {
           }),
       );
       const executor = new ExternalApiToolExecutor({
-        discover: () => [instanceFor(server)],
+        discover: () => [instanceFor(server, 'valid-token', '0.2.23')],
         clientOptions: { fetchFn: fetchSpy as unknown as typeof fetch, timeoutMs: 60_000 },
       });
       await executor.start();
@@ -2748,7 +2970,7 @@ describe('ExternalApiToolExecutor', () => {
           expect(commandError.message).toContain('exact returned dialog identity');
           expect(commandError.message).toContain('exact returned action');
           expect(commandError.message).toContain('Do not guess or assume Cancel is safe');
-          expect(commandError.message).toContain('action-invoked-dialog-remains');
+          expect(commandError.message).toContain('status.effect is dialog-remains');
           expect(commandError.message).toContain('ask the user to dismiss the dialog');
           expect(commandError.message).toContain('Save changes before continuing?');
           expect(commandError.recoverable).toBe(false);
@@ -3100,7 +3322,7 @@ function expectOrdinaryDialogRecovery(message: string): void {
   expect(message).toContain('exact returned action');
   expect(message).toContain('at most one invoke-dialog-action call');
   expect(message).toContain('Do not guess or assume Cancel is safe');
-  expect(message).toContain('action-invoked-dialog-remains');
+  expect(message).toContain('status.effect is dialog-remains');
   expect(message).toContain('ask the user to handle the dialog');
   expect(message).toContain('list-instances');
 }

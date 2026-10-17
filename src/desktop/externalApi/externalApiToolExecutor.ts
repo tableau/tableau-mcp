@@ -62,6 +62,7 @@ import {
   ImageResult,
   imageResultSchema,
   InvokeDialogActionRequest,
+  invokeDialogActionRequestSchema,
   InvokeDialogActionResult,
   invokeDialogActionResultSchema,
   LogicalTableList,
@@ -364,9 +365,12 @@ export class ExternalApiToolExecutor {
   }
 
   async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal),
-    );
+    return this.readExternalApi((http) => {
+      if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+        return Promise.resolve(Err(dialogContractVersionError()));
+      }
+      return http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal);
+    });
   }
 
   async getDesktopState(signal: AbortSignal): Promise<Result<DesktopState, ExecuteCommandError>> {
@@ -379,13 +383,32 @@ export class ExternalApiToolExecutor {
     request: InvokeDialogActionRequest,
     signal: AbortSignal,
   ): Promise<Result<InvokeDialogActionResult, ExecuteCommandError>> {
-    const result = await this.withRescan('command', (http) =>
-      http.postJsonForDirectBody(
-        EXTERNAL_API_ROUTES.appInvokeDialogAction,
-        request,
-        invokeDialogActionResultSchema,
-        signal,
-      ),
+    const result = await this.withRescan(
+      'command',
+      (http) => {
+        if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+          return Promise.resolve(Err(dialogContractVersionError()));
+        }
+        const parsed = invokeDialogActionRequestSchema.safeParse(request);
+        if (!parsed.success) {
+          return Promise.resolve(
+            Err({
+              type: 'problem' as const,
+              status: 400,
+              code: 'invalid-request-body',
+              detail:
+                'Dialog actions require the exact observed sessionId and revision, a valid requestId, and an advertised action input.',
+            }),
+          );
+        }
+        return http.postJsonForDirectBody(
+          EXTERNAL_API_ROUTES.appInvokeDialogAction,
+          parsed.data,
+          invokeDialogActionResultSchema,
+          signal,
+        );
+      },
+      false,
     );
     if (result.isErr()) {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
@@ -1141,6 +1164,7 @@ export class ExternalApiToolExecutor {
   private async withRescan<T>(
     operation: DesktopRpcTelemetryEvent['operation'],
     op: (http: ExternalApiHttp) => Promise<Result<T, ExecutorOperationError>>,
+    retryOnUnauthorized = true,
   ): Promise<Result<T, ExecutorOperationError | NoInstance>> {
     const startedAt = performance.now();
     let rescanCount = 0;
@@ -1153,7 +1177,7 @@ export class ExternalApiToolExecutor {
       }
 
       let result = await runOp(op, first.value);
-      if (result.isErr() && result.error.type === 'unauthorized') {
+      if (retryOnUnauthorized && result.isErr() && result.error.type === 'unauthorized') {
         rescanCount = 1;
         log({
           message: 'External Client API returned 401 — rescanning discovery once',
@@ -1195,6 +1219,16 @@ export class ExternalApiToolExecutor {
     }
     return Ok(result.value);
   }
+}
+
+function dialogContractVersionError(): ExternalApiError {
+  return {
+    type: 'problem',
+    status: 409,
+    code: 'dialog-session-stale',
+    detail:
+      'Dialog tools require External Client API 0.2.23 or later. Update Tableau Desktop and inspect dialogs again; do not retry or replay the action.',
+  };
 }
 
 // Route builders throw on an unsafe id; fold that into the Result funnel so nothing is sent.
@@ -1403,7 +1437,8 @@ function mapClientError(
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
             'unambiguous, copy the exact returned dialog identity and exact returned action ' +
             'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
-            'invoke-dialog-action after action-invoked-dialog-remains. If either tool is unavailable, ' +
+            'invoke-dialog-action when status.state is pending or completed, or status.effect is ' +
+            'dialog-remains. Inspect recentActions instead; never replay the request. If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +
             `dismiss the dialog.${describeWindows(error.blockingWindows)}`,
           recoverable: false,

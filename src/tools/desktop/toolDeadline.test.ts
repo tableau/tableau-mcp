@@ -133,10 +133,36 @@ describe('DesktopTool per-call deadline', () => {
       expect(text).toContain(state);
       expect(text).toContain(rule);
       expect(text).not.toContain('at most one invoke-dialog-action call');
+      expect(text).not.toContain('Dialog requestId=');
 
       extra.deadline.dispose();
     },
   );
+
+  it('preserves native dialog status correlation through the outer deadline race', async () => {
+    vi.useFakeTimers();
+    const tool = makeTool('invoke-dialog-action');
+    const extra = makeExtra(undefined, 60_000);
+    const nativeRequestId = 'a9a3d1b2-1cef-4f67-bd1b-bcf2fcf3e011';
+
+    const pending = tool.logAndExecute({
+      extra,
+      args: { session: '31875' },
+      callback: () => {
+        extra.deadline.setNativeDialogRequestId(nativeRequestId);
+        return new Promise(() => undefined);
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await pending;
+    const text = (result.content as Array<{ text: string }>)[0].text;
+
+    expect(text).toContain(`requestId=${nativeRequestId}`);
+    expect(text).toContain('invoke-dialog-action outcome is indeterminate');
+    expect(text).not.toContain('selected-source');
+    extra.deadline.dispose();
+  });
 
   it('aborts the signal the tool handed to Desktop, so the request does not keep running', async () => {
     vi.useFakeTimers();
