@@ -60,6 +60,7 @@ export const desktopToolNames = [
   'format-labels',
   'format-worksheets',
   'format-dashboard-zones',
+  'set-member-colors',
   'author-parameter',
   'get-health',
   'get-worksheet-info',

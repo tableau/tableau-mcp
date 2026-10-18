@@ -84,6 +84,7 @@ import { getExportCustomThemeTool } from './authoring/style/exportCustomTheme.js
 import { getFormatDashboardZonesTool } from './authoring/style/formatDashboardZones.js';
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
 import { getInspectCustomThemeTool } from './authoring/style/inspectCustomTheme.js';
+import { getSetMemberColorsTool } from './authoring/style/setMemberColors.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getInjectTemplateTool } from './authoring/templates/injectTemplate.js';
 import { getAskUserTool } from './local/askUser.js';
@@ -173,6 +174,7 @@ export const desktopToolFactories = [
   getFormatLabelsTool,
   getFormatWorksheetsTool,
   getFormatDashboardZonesTool,
+  getSetMemberColorsTool,
   getAuthorParameterTool,
   getHealthTool,
   getWorksheetInfoTool,

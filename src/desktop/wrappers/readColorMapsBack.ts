@@ -32,7 +32,7 @@ function describeReadError(error: ExecuteCommandError): string {
   return `the document read failed (${error.type})`;
 }
 
-function decodedId(id: string): string {
+export function decodedId(id: string): string {
   try {
     return decodeURIComponent(id);
   } catch {

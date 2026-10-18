@@ -271,7 +271,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
