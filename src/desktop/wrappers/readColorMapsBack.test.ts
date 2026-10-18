@@ -4,8 +4,9 @@ import { Err, Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
+import { formatColorMapCheck } from '../validation/colorMapReadback.js';
 import { READBACK_POLL_INTERVAL_MS, READBACK_POLL_MAX_ATTEMPTS } from './pollReadback.js';
-import { readColorMapsBack } from './readColorMapsBack.js';
+import { readColorBaseline, readColorMapsBack } from './readColorMapsBack.js';
 
 const FIXTURE_DIR = join(
   process.cwd(),
@@ -248,5 +249,223 @@ describe('readColorMapsBack', () => {
     });
     expect(listResult).toMatchObject({ ok: true, status: 'warning' });
     expect(listResult?.message).toContain('could not list workbook datasources');
+  });
+  describe('worksheet <style> maps', () => {
+    afterEach(() => vi.useRealTimers());
+
+    function executorReading(
+      readback: string,
+      id = 'superstore',
+    ): ReturnType<typeof makeExecutorMock> {
+      return makeExecutorMock({
+        listWorkbookDatasources: vi
+          .fn<ExternalApiToolExecutor['listWorkbookDatasources']>()
+          .mockResolvedValue(Ok({ datasources: [{ id, name: id }] })),
+        getDatasourceDocument: vi
+          .fn<ExternalApiToolExecutor['getDatasourceDocument']>()
+          .mockResolvedValue(Ok(document(fixture(readback)))),
+      });
+    }
+
+    it("fails Andy's shape with the placement hint", async () => {
+      vi.useFakeTimers();
+      const executor = executorReading('rb-ws-table-fq-ds.xml');
+      const applied = fixture('apply-ws-table-fq-ws.xml');
+      const promise = readColorMapsBack({
+        appliedXml: applied,
+        baselineXml: applied.replace(/<style>.*<\/style>/, '<style />'),
+        executor,
+        signal,
+      });
+      await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+      const result = await promise;
+      expect(result).toMatchObject({ ok: false, status: 'failed' });
+      expect(result?.message).toContain(
+        '[none:Calculation_B002:nk]: true expected #ff0000, found missing',
+      );
+      expect(result?.message).toContain(
+        "Desktop keeps member colors written in a worksheet's own <style>, and the chart ignores them; put them in the datasource <style> with a datasource-level <column-instance>.",
+      );
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(READBACK_POLL_MAX_ATTEMPTS);
+    });
+
+    it('warns once and never polls when a stale map is re-sent unchanged', async () => {
+      const executor = executorReading('rb-ok-L1-before-ds.xml');
+      const result = await readColorMapsBack({
+        appliedXml: fixture('ok-L1-ws.xml'),
+        baselineXml: fixture('ok-L1-ws.xml'),
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ ok: true, status: 'skipped' });
+      expect(result?.findings).toEqual([
+        expect.objectContaining({
+          severity: 'warning',
+          reason: 'color-worksheet-style-stale',
+          message:
+            "the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Office Supplies #00aa00 (not in the datasource), Technology #d4c37a (not in the datasource), Furniture #ff0000 (not in the datasource)",
+        }),
+      ]);
+      const text = formatColorMapCheck(result!);
+      expect(text).toContain('Note:');
+      expect(text).not.toContain('matched');
+      expect(text).not.toContain('not verified');
+      expect(text).not.toContain('could not be read before the apply');
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fail a stale map beside a dirty-OK datasource with different colors', async () => {
+      const executor = executorReading('rb-ok-L1-dirty-ds.xml');
+      const result = await readColorMapsBack({
+        appliedXml: fixture('ok-L1-ws.xml'),
+        baselineXml: fixture('ok-L1-ws.xml'),
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ ok: true, status: 'skipped' });
+      expect(result?.findings?.[0]?.message).toContain('Furniture #ff0000');
+      expect(result?.findings?.[0]?.message).not.toContain('Technology');
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails only the member that was edited', async () => {
+      vi.useFakeTimers();
+      const executor = executorReading('rb-ok-L1-before-ds.xml');
+      const promise = readColorMapsBack({
+        appliedXml: fixture('ok-L1-ws.xml').replace('#ff0000', '#00ff00'),
+        baselineXml: fixture('ok-L1-ws.xml'),
+        executor,
+        signal,
+      });
+      await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+      const result = await promise;
+      expect(result).toMatchObject({ ok: false, status: 'failed' });
+      const errors = result?.findings?.filter((finding) => finding.severity === 'error');
+      expect(errors).toEqual([
+        expect.objectContaining({
+          message: '[none:Category:nk]: Furniture expected #00ff00, found missing',
+        }),
+      ]);
+      expect(result?.message).toContain("worksheet's own <style>");
+    });
+
+    it('never fails without a baseline, even for a map the datasource lacks', async () => {
+      const executor = executorReading('rb-ws-table-fq-ds.xml');
+      const result = await readColorMapsBack({
+        appliedXml: fixture('apply-ws-table-fq-ws.xml'),
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ ok: true, status: 'skipped' });
+      expect(formatColorMapCheck(result!)).toContain(
+        'The sheet could not be read before the apply, so some of these may be new.',
+      );
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    function withDepsMap(xml: string, members: Array<[string, string]>): string {
+      const maps = members
+        .map(([bucket, hex]) => `<map to='${hex}'><bucket>&quot;${bucket}&quot;</bucket></map>`)
+        .join('');
+      return xml.replace(
+        '</datasource-dependencies>',
+        `<style><style-rule element='mark'><encoding attr='color' field='[none:Category:nk]' type='palette'>${maps}</encoding></style-rule></style></datasource-dependencies>`,
+      );
+    }
+
+    it('passes with the stale note when the datasource matches every requested member', async () => {
+      const live = fixture('ok-L1-ws.xml');
+      const executor = executorReading('rb-ok-L1-dirty-ds.xml');
+      const result = await readColorMapsBack({
+        appliedXml: withDepsMap(live, [['Furniture', '#4e79a7']]),
+        baselineXml: live,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ ok: true, status: 'passed' });
+      const text = formatColorMapCheck(result!);
+      expect(text).toContain('every requested member color matched.');
+      expect(text).toContain("Note: the worksheet's own <style> also lists member colors");
+      expect(text).not.toContain('not verified');
+    });
+
+    it('gives no placement hint for a dropped datasource-level member beside an unchanged stale map', async () => {
+      vi.useFakeTimers();
+      const live = fixture('ok-L1-ws.xml');
+      const executor = executorReading('rb-ok-L1-before-ds.xml');
+      const promise = readColorMapsBack({
+        appliedXml: withDepsMap(live, [['Furniture', '#123456']]),
+        baselineXml: live,
+        executor,
+        signal,
+      });
+      await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+      const result = await promise;
+      expect(result).toMatchObject({ ok: false, status: 'failed' });
+      expect(result?.message).toContain('Furniture expected #123456, found missing');
+      expect(result?.message).not.toContain("worksheet's own <style>");
+    });
+
+    it("fails a real eval agent's table-style map against Desktop's default palette", async () => {
+      vi.useFakeTimers();
+      const applied = fixture('apply-r2-ws.xml');
+      const baseline = applied.replace(/<style-rule element='mark'>.*?<\/style-rule>\s*/s, '');
+      expect(baseline).not.toContain('#ff0000');
+      const executor = executorReading('rb-r2-ds.xml', 'start');
+      const promise = readColorMapsBack({
+        appliedXml: applied,
+        baselineXml: baseline,
+        executor,
+        signal,
+      });
+      await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+      const result = await promise;
+      expect(result).toMatchObject({ ok: false, status: 'failed' });
+      expect(result?.message).toBe(
+        "1 requested member color(s) did not take: [none:Category:nk]: Furniture expected #ff0000, found #f28e2b. Do not tell the user these colors are set. Desktop keeps member colors written in a worksheet's own <style>, and the chart ignores them; put them in the datasource <style> with a datasource-level <column-instance>.",
+      );
+    });
+
+    it('names the datasource color in a stale note and makes no claim', async () => {
+      const applied = fixture('apply-r2-ws.xml');
+      const executor = executorReading('rb-r2-ds.xml', 'start');
+      const result = await readColorMapsBack({
+        appliedXml: applied,
+        baselineXml: applied,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({ ok: true, status: 'skipped' });
+      expect(result?.findings?.[0]?.message).toContain(
+        'Furniture #ff0000 (the chart uses #f28e2b)',
+      );
+    });
+
+    it('treats an unparseable baseline as no baseline', async () => {
+      const applied = fixture('apply-r2-ws.xml');
+      expect(
+        await readColorBaseline({ appliedXml: applied, read: async () => Ok('<<<not xml') }),
+      ).toBeUndefined();
+      expect(await readColorBaseline({ appliedXml: applied, read: async () => Ok(applied) })).toBe(
+        applied,
+      );
+      expect(
+        await readColorBaseline({ appliedXml: applied, read: async () => Err('timeout') }),
+      ).toBeUndefined();
+    });
+
+    it('makes no call for worksheet styles with only numeric buckets', async () => {
+      const executor = makeExecutorMock();
+      const result = await readColorMapsBack({
+        appliedXml:
+          "<worksheet name='S'><table><view><datasource-dependencies datasource='superstore' /></view><style><style-rule element='mark'><encoding attr='color' field='[superstore].[none:Quantity:ok]' type='palette'><map to='#ff0000'><bucket>1</bucket></map></encoding></style-rule></style></table></worksheet>",
+        baselineXml: '<worksheet name="S"><table /></worksheet>',
+        executor,
+        signal,
+      });
+      expect(result).toBeUndefined();
+      expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+      expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+    });
   });
 });

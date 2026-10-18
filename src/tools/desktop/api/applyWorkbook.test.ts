@@ -653,6 +653,123 @@ describe('applyWorkbookTool color map readback', () => {
     expect(executor.getDatasourceDocument).toHaveBeenCalledWith('superstore', expect.anything());
   });
 
+  async function workbookWithSheet(name: string): Promise<string> {
+    const sheet = (await colorFixture(name)).replace(/^<!--.*-->\n/, '');
+    return `<?xml version='1.0' encoding='utf-8' ?><workbook><worksheets>${sheet}</worksheets></workbook>`;
+  }
+
+  async function applyColorWorkbook(
+    workbookXml: string,
+    live: string | undefined,
+    readback: string,
+  ): Promise<Record<string, any>> {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [], documentWarnings: [] }),
+    );
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(Ok({ datasources: [{ id: 'superstore', name: 'superstore' }] })),
+      getDatasourceDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: await colorFixture(readback),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValue(
+          live === undefined
+            ? Err({ type: 'command-timed-out', error: 'timeout' })
+            : Ok({ xml: live, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+    });
+    const pending = getToolResult({
+      session: '12345',
+      workbookXml,
+      mockExecutor: vi.fn().mockResolvedValue(executor),
+    });
+    let settled = false;
+    void pending.finally(() => (settled = true));
+    while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+    const result = await pending;
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    body.getWorkbookDocumentCalls = vi.mocked(executor.getWorkbookDocument).mock.calls.length;
+    return body;
+  }
+
+  it("fails Andy's worksheet-style map with the placement hint", async () => {
+    const andy = await workbookWithSheet('apply-ws-table-fq-ws.xml');
+    const body = await applyColorWorkbook(
+      andy,
+      andy.replace(/<style>.*<\/style>/, '<style />'),
+      'rb-ws-table-fq-ds.xml',
+    );
+
+    expect(body.getWorkbookDocumentCalls).toBe(1);
+    expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+    expect(body.message).toContain('[none:Calculation_B002:nk]: true expected #ff0000');
+    expect(body.message).toContain(
+      "Desktop keeps member colors written in a worksheet's own <style>",
+    );
+  });
+
+  it('makes no claim, only a note, for a stale worksheet map already in the live workbook', async () => {
+    const live = await workbookWithSheet('ok-L1-ws.xml');
+    const body = await applyColorWorkbook(live, live, 'rb-ok-L1-before-ds.xml');
+
+    expect(body.verification.status).toBe('skipped');
+    expect(body.message).toContain(
+      " Note: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Office Supplies #00aa00 (not in the datasource), Technology #d4c37a (not in the datasource), Furniture #ff0000 (not in the datasource).",
+    );
+    expect(body.message).not.toContain('every requested member color matched');
+    expect(body.message).not.toContain('not verified');
+    expect(body.message).not.toContain('could not be read before the apply');
+  });
+
+  it('passes with the note when a stale map sits beside datasource colors that match', async () => {
+    const live = await workbookWithSheet('ok-L1-ws.xml');
+    const applied = live.replace(
+      '</datasource-dependencies>',
+      "<style><style-rule element='mark'><encoding attr='color' field='[none:Category:nk]' type='palette'><map to='#4e79a7'><bucket>&quot;Furniture&quot;</bucket></map></encoding></style-rule></style></datasource-dependencies>",
+    );
+    const body = await applyColorWorkbook(applied, live, 'rb-ok-L1-dirty-ds.xml');
+
+    expect(body.verification.status).toBe('passed');
+    expect(body.message).toContain('every requested member color matched.');
+    expect(body.message).toContain(" Note: the worksheet's own <style> also lists member colors");
+  });
+
+  it('fails a new sheet missing from the baseline, with the placement hint', async () => {
+    const body = await applyColorWorkbook(
+      await workbookWithSheet('apply-ws-table-fq-ws.xml'),
+      '<workbook><worksheets /></workbook>',
+      'rb-ws-table-fq-ds.xml',
+    );
+
+    expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+    expect(body.message).toContain(
+      "Desktop keeps member colors written in a worksheet's own <style>",
+    );
+  });
+
+  it('treats a failed baseline read as no baseline: a note with the unread line, no failure', async () => {
+    const body = await applyColorWorkbook(
+      await workbookWithSheet('apply-ws-table-fq-ws.xml'),
+      undefined,
+      'rb-ws-table-fq-ds.xml',
+    );
+
+    expect(body.verification.status).toBe('skipped');
+    expect(body.message).toContain(
+      'The sheet could not be read before the apply, so some of these may be new.',
+    );
+  });
+
   it('makes no extra Desktop call when the workbook carries no color map', async () => {
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
       Ok({ validationWarnings: [], documentWarnings: [] }),
@@ -669,6 +786,7 @@ describe('applyWorkbookTool color map readback', () => {
     expect(result.isError).toBe(false);
     expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
     expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+    expect(executor.getWorkbookDocument).not.toHaveBeenCalled();
   });
 });
 

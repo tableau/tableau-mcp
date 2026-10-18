@@ -48,7 +48,10 @@ function bucketKey(text: string): string | undefined {
   return raw;
 }
 
-function colorMapsInStyle(style: XmlRecord, datasource: string): ColorMap[] {
+function colorMapsInStyle(
+  style: XmlRecord,
+  resolveDatasource: (rawField: string) => string | undefined,
+): ColorMap[] {
   const maps: ColorMap[] = [];
   for (const rule of records(style['style-rule'])) {
     if (rule['@_element'] !== 'mark') continue;
@@ -58,6 +61,8 @@ function colorMapsInStyle(style: XmlRecord, datasource: string): ColorMap[] {
       if (typeof rawField !== 'string' || rawField.includes('\n') || rawField.includes('&#10;')) {
         continue;
       }
+      const datasource = resolveDatasource(rawField);
+      if (datasource === undefined) continue;
       // A qualified `[ds].[field]` names the same field the datasource keys as `[field]`.
       const qualifier = `[${datasource}].`;
       const field = rawField.startsWith(qualifier) ? rawField.slice(qualifier.length) : rawField;
@@ -117,7 +122,8 @@ export function extractColorMaps(xml: string): ColorMap[] | undefined {
   for (const datasource of datasourceElements(root)) {
     const name = datasource['@_name'];
     if (typeof name !== 'string') continue;
-    for (const style of records(datasource.style)) maps.push(...colorMapsInStyle(style, name));
+    for (const style of records(datasource.style))
+      maps.push(...colorMapsInStyle(style, () => name));
   }
   for (const worksheet of worksheetElements(root)) {
     for (const table of records(worksheet.table)) {
@@ -126,13 +132,16 @@ export function extractColorMaps(xml: string): ColorMap[] | undefined {
           const name = dependencies['@_datasource'];
           if (typeof name !== 'string') continue;
           for (const style of records(dependencies.style)) {
-            maps.push(...colorMapsInStyle(style, name));
+            maps.push(...colorMapsInStyle(style, () => name));
           }
         }
       }
     }
   }
+  return dedupeMaps(maps);
+}
 
+function dedupeMaps(maps: ColorMap[]): ColorMap[] {
   const seen = new Set<string>();
   return maps.filter((map) => {
     const signature = membersSignature(map);
@@ -140,6 +149,146 @@ export function extractColorMaps(xml: string): ColorMap[] | undefined {
     seen.add(signature);
     return true;
   });
+}
+
+// Every `<style>` below a worksheet table except the ones inside `<datasource-dependencies>`.
+function collectTableStyles(node: XmlRecord, out: XmlRecord[]): void {
+  for (const [key, value] of Object.entries(node)) {
+    if (key.startsWith('@_') || key === 'datasource-dependencies') continue;
+    for (const child of records(value)) {
+      if (key === 'style') out.push(child);
+      collectTableStyles(child, out);
+    }
+  }
+}
+
+export const STALE_REASON = 'color-worksheet-style-stale';
+const BASELINE_UNAVAILABLE_REASON = 'color-baseline-unavailable';
+
+// Notes about the sheet's own <style>; they never change whether the requested colors took.
+function isStaleNote(finding: VerificationFinding): boolean {
+  return finding.reason === STALE_REASON || finding.reason === BASELINE_UNAVAILABLE_REASON;
+}
+
+const QUALIFIED_FIELD = /^\[([^\]]+)\]\.\[/;
+
+/**
+ * Categorical color maps a worksheet writes in its own `<style>` (the table's, a pane's, any
+ * depth), which Desktop keeps but the chart ignores. `<datasource-dependencies>` styles are left
+ * to `extractColorMaps`. The datasource comes from the field's `[ds].` prefix, else from the one
+ * non-Parameters datasource the sheet uses; otherwise the map is skipped.
+ */
+export function extractWorksheetStyleColorMaps(xml: string): ColorMap[] {
+  let root: XmlRecord;
+  try {
+    root = parseXML(xml) as XmlRecord;
+  } catch {
+    return [];
+  }
+  const maps: ColorMap[] = [];
+  for (const worksheet of worksheetElements(root)) {
+    for (const table of records(worksheet.table)) {
+      const used = records(table.view).flatMap((view) =>
+        records(view['datasource-dependencies']).flatMap((dependencies) => {
+          const name = dependencies['@_datasource'];
+          return typeof name === 'string' && name !== 'Parameters' ? [name] : [];
+        }),
+      );
+      const sole = new Set(used).size === 1 ? used[0] : undefined;
+      const styles: XmlRecord[] = [];
+      collectTableStyles(table, styles);
+      for (const style of styles) {
+        maps.push(
+          ...colorMapsInStyle(style, (rawField) => QUALIFIED_FIELD.exec(rawField)?.[1] ?? sole),
+        );
+      }
+    }
+  }
+  return dedupeMaps(maps);
+}
+
+function memberIn({
+  maps,
+  map,
+  bucket,
+  hex,
+}: {
+  maps: readonly ColorMap[];
+  map: ColorMap;
+  bucket: string;
+  hex: string;
+}): boolean {
+  return maps.some(
+    (candidate) =>
+      candidate.datasource === map.datasource &&
+      candidate.field === map.field &&
+      candidate.members.get(bucket) === hex,
+  );
+}
+
+/**
+ * Split worksheet-style maps into members the payload newly authored and members already in the
+ * baseline (stale: Desktop keeps them and hands them back on every read). With no baseline every
+ * member is stale, so the check can warn but never fail.
+ */
+export function splitWorksheetStyleColorMaps(
+  maps: readonly ColorMap[],
+  baseline: readonly ColorMap[] | undefined,
+): { authored: ColorMap[]; stale: ColorMap[] } {
+  const authored: ColorMap[] = [];
+  const stale: ColorMap[] = [];
+  for (const map of maps) {
+    const fresh = new Map<string, string>();
+    const old = new Map<string, string>();
+    for (const [bucket, hex] of map.members) {
+      (baseline !== undefined && !memberIn({ maps: baseline, map, bucket, hex }) ? fresh : old).set(
+        bucket,
+        hex,
+      );
+    }
+    if (fresh.size > 0) authored.push({ ...map, members: fresh });
+    if (old.size > 0) stale.push({ ...map, members: old });
+  }
+  return { authored, stale };
+}
+
+/** One warning per field whose stale worksheet-style members the datasource does not carry. */
+export function staleWorksheetStyleFindings(
+  stale: readonly ColorMap[],
+  readback: readonly ColorMap[],
+): VerificationFinding[] {
+  const findings: VerificationFinding[] = [];
+  for (const map of stale) {
+    const unused = [...map.members]
+      .filter(([bucket, hex]) => !memberIn({ maps: readback, map, bucket, hex }))
+      .map(([bucket, hex]) => {
+        const chart = readback
+          .filter((copy) => copy.datasource === map.datasource && copy.field === map.field)
+          .map((copy) => copy.members.get(bucket))
+          .find((value) => value !== undefined);
+        return `${bucket} ${hex} (${chart === undefined ? 'not in the datasource' : `the chart uses ${chart}`})`;
+      });
+    if (unused.length === 0) continue;
+    findings.push({
+      severity: 'warning',
+      source: 'color-map',
+      message: `the worksheet's own <style> also lists member colors for ${map.field} that the chart does not use: ${unused.join(', ')}`,
+      datasource: map.datasource,
+      fieldName: map.field,
+      reason: STALE_REASON,
+    });
+  }
+  return findings;
+}
+
+/** Added beside stale notes when the sheet could not be read before the apply. */
+export function colorBaselineUnavailableFinding(): VerificationFinding {
+  return {
+    severity: 'warning',
+    source: 'color-map',
+    message: 'The sheet could not be read before the apply, so some of these may be new',
+    reason: BASELINE_UNAVAILABLE_REASON,
+  };
 }
 
 /**
@@ -233,47 +382,66 @@ function fieldsMissingColumnInstance(
   return [...missing];
 }
 
-/** Fold color findings into the shared verification shape; errors fail, warnings only warn. */
+/**
+ * Fold color findings into the shared verification shape; errors fail, warnings only warn. Stale
+ * worksheet-style notes ride along in `findings` but never change the status. With no requested
+ * map (`hasIntended: false`) the result is `skipped`: it claims neither a pass nor a failure.
+ */
 export function colorMapVerificationResult(
   findings: readonly VerificationFinding[],
   appliedXml: string,
+  { hasIntended = true, worksheetStylePlacement = false } = {},
 ): ReadbackVerificationResult {
-  const errors = findings.filter((finding) => finding.severity === 'error');
+  const notes = findings.filter(isStaleNote);
+  const checked = findings.filter((finding) => !isStaleNote(finding));
+  if (!hasIntended) return { ok: true, status: 'skipped', findings: [...findings] };
+  const errors = checked.filter((finding) => finding.severity === 'error');
   if (errors.length > 0) {
     const missingInstances = fieldsMissingColumnInstance(errors, appliedXml);
     const hint =
       missingInstances.length === 0
         ? ''
         : ` The datasource needs a <column-instance> for ${missingInstances.join(', ')} next to its <style>.`;
+    const worksheetStyleHint = worksheetStylePlacement
+      ? " Desktop keeps member colors written in a worksheet's own <style>, and the chart ignores them; put them in the datasource <style> with a datasource-level <column-instance>."
+      : '';
     return {
       ok: false,
       status: 'failed',
       message: `${errors.length} requested member color(s) did not take: ${errors
         .map((finding) => finding.message)
-        .join('; ')}. Do not tell the user these colors are set.${hint}`,
+        .join('; ')}. Do not tell the user these colors are set.${hint}${worksheetStyleHint}`,
       findings: [...findings],
     };
   }
-  if (findings.length > 0) {
+  if (checked.length > 0) {
     return {
       ok: true,
       status: 'warning',
-      message: findings.map((finding) => finding.message).join('; '),
+      message: checked.map((finding) => finding.message).join('; '),
       findings: [...findings],
     };
   }
-  return { ok: true, status: 'passed' };
+  return notes.length > 0
+    ? { ok: true, status: 'passed', findings: notes }
+    : { ok: true, status: 'passed' };
 }
 
 /**
  * Merge a color check into a worksheet readback result: a failed color check fails the merged
- * result, a warning adds its findings without changing the status, and a pass changes nothing.
+ * result, a warning turns a passed result into a warning, and a pass or skip only adds its notes.
  */
 export function mergeColorMapVerification(
   base: ReadbackVerificationResult | undefined,
   color: ReadbackVerificationResult | undefined,
 ): ReadbackVerificationResult | undefined {
-  if (color === undefined || color.status === 'passed') return base;
+  if (color === undefined) return base;
+  if (color.status === 'passed' || color.status === 'skipped') {
+    const notes = color.findings ?? [];
+    return base === undefined || notes.length === 0
+      ? base
+      : { ...base, findings: [...(base.findings ?? []), ...notes] };
+  }
   // With no structural readback, a color warning alone must not read as verified.
   if (base === undefined) {
     return color.status === 'failed'
@@ -289,16 +457,32 @@ export function mergeColorMapVerification(
       findings,
     };
   }
-  return { ...base, findings };
+  const merged = { ...base, findings };
+  // A color warning must not leave a passed base reading as fully verified.
+  return base.status === 'passed'
+    ? { ...merged, status: 'warning', message: color.message }
+    : merged;
+}
+
+/** The agent-facing note about member colors the sheet's own `<style>` keeps; empty when none. */
+export function formatStaleWorksheetStyleNote(
+  verification: ReadbackVerificationResult | undefined,
+): string {
+  const findings = verification?.findings ?? [];
+  const stale = findings.filter((finding) => finding.reason === STALE_REASON);
+  if (stale.length === 0) return '';
+  const unread = findings.some((finding) => finding.reason === BASELINE_UNAVAILABLE_REASON);
+  return ` Note: ${stale.map((finding) => finding.message).join('; ')}. Desktop shows those in Edit Colors only. To make the chart use a color, put it in the datasource <style> with a datasource-level <column-instance>.${unread ? ` ${colorBaselineUnavailableFinding().message}.` : ''}`;
 }
 
 /** Host verification text for a color check; a failure is carried by the headline instead. */
 export function formatColorMapCheck(verification: ReadbackVerificationResult): string {
+  const note = formatStaleWorksheetStyleNote(verification);
   if (verification.status === 'passed') {
-    return ' Read back the datasource document: every requested member color matched.';
+    return ` Read back the datasource document: every requested member color matched.${note}`;
   }
   if (verification.status === 'warning') {
-    return ` Requested member colors are not verified: ${verification.message ?? 'color readback unavailable'}.`;
+    return ` Requested member colors are not verified: ${verification.message ?? 'color readback unavailable'}.${note}`;
   }
-  return '';
+  return note;
 }

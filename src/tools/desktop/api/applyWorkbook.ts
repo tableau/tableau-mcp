@@ -4,8 +4,12 @@ import { Ok } from 'ts-results-es';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { formatColorMapCheck } from '../../../desktop/validation/colorMapReadback.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
+import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
-import { readColorMapsBack } from '../../../desktop/wrappers/readColorMapsBack.js';
+import {
+  readColorBaseline,
+  readColorMapsBack,
+} from '../../../desktop/wrappers/readColorMapsBack.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -60,6 +64,11 @@ export const getApplyWorkbookTool = (
           const { xml: workbookXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
+          // Read before the apply, outside the apply lock.
+          const baselineXml = await readColorBaseline({
+            appliedXml: workbookXml,
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+          });
           // A whole-workbook apply names no single artifact, so give the user their sheet back.
           const result = await loadWorkbookXml({
             xml: workbookXml,
@@ -95,6 +104,7 @@ export const getApplyWorkbookTool = (
           const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
           const verification = await readColorMapsBack({
             appliedXml: workbookXml,
+            baselineXml,
             executor,
             signal: extra.signal,
           });

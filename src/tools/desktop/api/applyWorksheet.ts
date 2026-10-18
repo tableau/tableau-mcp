@@ -4,6 +4,7 @@ import { Ok, type Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
+import { worksheetFragmentSimpleId } from '../../../desktop/metadata/sheets.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
   buildTemplateWorksheetArtifact,
@@ -14,7 +15,11 @@ import {
   getTemplateArtifactStore,
   type TemplateArtifactStore,
 } from '../../../desktop/templates/templateArtifactStore.js';
-import { mergeColorMapVerification } from '../../../desktop/validation/colorMapReadback.js';
+import {
+  formatColorMapCheck,
+  formatStaleWorksheetStyleNote,
+  mergeColorMapVerification,
+} from '../../../desktop/validation/colorMapReadback.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -23,11 +28,15 @@ import {
   formatReadbackVerificationWarnings,
   type ReadbackVerificationResult,
 } from '../../../desktop/validation/readback-verify.js';
+import { getWorksheetXml } from '../../../desktop/wrappers/getWorksheetXml.js';
 import {
   loadWorksheetXml,
   resolveCanonicalWorksheetName,
 } from '../../../desktop/wrappers/loadWorksheetXml.js';
-import { readColorMapsBack } from '../../../desktop/wrappers/readColorMapsBack.js';
+import {
+  readColorBaseline,
+  readColorMapsBack,
+} from '../../../desktop/wrappers/readColorMapsBack.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -377,6 +386,18 @@ export const getApplyWorksheetTool = (
           const canonicalWorksheetName = canonical.value;
 
           const executor = await extra.getExecutor(resolvedSession);
+          // Read before the apply, outside the apply lock.
+          const baselineXml = await readColorBaseline({
+            appliedXml: worksheetXml,
+            read: async () =>
+              (
+                await getWorksheetXml({
+                  worksheetName: worksheetFragmentSimpleId(worksheetXml) ?? canonicalWorksheetName,
+                  executor,
+                  signal: extra.signal,
+                })
+              ).map((live) => live.xml),
+          });
           const result = await loadWorksheetXml({
             worksheetName: canonicalWorksheetName,
             xml: worksheetXml,
@@ -405,16 +426,22 @@ export const getApplyWorksheetTool = (
 
           // Desktop moves a worksheet's color map into the datasource, so the color check reads
           // that document; loadWorksheetXml has already released the apply lock.
-          const readbackVerification = result.isOk()
-            ? mergeColorMapVerification(
-                result.value.readbackVerification,
-                await readColorMapsBack({
-                  appliedXml: worksheetXml,
-                  executor,
-                  signal: extra.signal,
-                }),
-              )
+          const colorVerification = result.isOk()
+            ? await readColorMapsBack({
+                appliedXml: worksheetXml,
+                baselineXml,
+                executor,
+                signal: extra.signal,
+              })
             : undefined;
+          const readbackVerification = result.isOk()
+            ? mergeColorMapVerification(result.value.readbackVerification, colorVerification)
+            : undefined;
+          // Before the receipt, whose closing line says nothing unlisted is wrong.
+          const colorNote =
+            colorVerification?.status === 'warning'
+              ? formatColorMapCheck(colorVerification)
+              : formatStaleWorksheetStyleNote(colorVerification);
           // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
           // along so the agent can re-check the rendered chart before moving on.
           const readbackWarning = result.isOk()
@@ -470,8 +497,8 @@ export const getApplyWorksheetTool = (
               {
                 message:
                   readback?.status === 'failed'
-                    ? `Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${hostVerification}`
-                    : `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${hostVerification}`,
+                    ? `Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${colorNote}${hostVerification}`
+                    : `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${colorNote}${hostVerification}`,
                 title: appliedWorksheetName,
                 applied: true as const,
                 retrySafe: false as const,
