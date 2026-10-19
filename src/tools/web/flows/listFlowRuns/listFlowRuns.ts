@@ -17,6 +17,7 @@ import {
 } from '../../../../server/oauth/scopes.js';
 import { getHttpStatus } from '../../../../utils/getHttpStatus.js';
 import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo, TruncationReason } from '../../_lib/truncation.js';
 import { genericFilterDescription } from '../../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
@@ -29,7 +30,6 @@ import {
   needsUiFallback,
   summarizeFlowRunFailures,
 } from '../flowRunFailure.js';
-import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
 import {
   parseAndValidateFlowRunsFilterString,
   ValidatedFlowRunsFilter,
@@ -59,7 +59,7 @@ const DEFAULT_FLOW_RUNS_LIMIT = 100;
  * with `'default-cap'` — unique to this tool — for when the safety backstop
  * (rather than a caller `limit` or admin cap) bound the result.
  */
-export type ListFlowRunsTruncationReason = ListFlowsTruncationReason | 'default-cap';
+export type ListFlowRunsTruncationReason = TruncationReason | 'default-cap';
 
 export type ListFlowRunsResultInfo = {
   returnedCount: number;
