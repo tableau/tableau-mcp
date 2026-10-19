@@ -241,6 +241,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
+    expect(tool.registrationConditions).toEqual(['RequiresPulse']);
   });
 
   it('should handle API errors gracefully', async () => {

@@ -428,10 +428,7 @@ const toolScopeMap: Record<
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
-    conditionApiScopes: new Set([
-      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
-      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
-    ]),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],

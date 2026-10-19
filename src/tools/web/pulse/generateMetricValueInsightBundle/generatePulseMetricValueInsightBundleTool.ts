@@ -33,7 +33,8 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     minRequiredRole: SiteRole.VIEWER,
-    registrationConditions: ['RequiresPulse', 'RequiresPulsePremium'],
+    // Pulse enabled is enough. Tableau+ (RequiresPulsePremium) gates the insight brief, not bundles.
+    registrationConditions: ['RequiresPulse'],
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
