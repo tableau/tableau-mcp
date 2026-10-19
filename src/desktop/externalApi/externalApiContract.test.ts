@@ -14,6 +14,7 @@ import {
   datasourceItemSchema,
   datasourceListSchema,
   desktopStateSchema,
+  dialogActionDescriptorSchema,
   dialogActionSchema,
   dialogIdentitySchema,
   dialogListSchema,
@@ -24,6 +25,7 @@ import {
   invokeDialogActionResultSchema,
   logicalTableItemSchema,
   logicalTableListSchema,
+  nativeWindowInfoSchema,
   operationEnvelopeSchema,
   operationErrorSchema,
   operationWarningSchema,
@@ -37,6 +39,7 @@ import {
   storyboardListSchema,
   summaryDataSchema,
   validationResultSchema,
+  windowInfoSchema,
   workbookDiagnosticsSchema,
   workbookInventorySchema,
   worksheetDiagnosticsSchema,
@@ -60,6 +63,8 @@ import {
  * include that producer addition.
  * The storyboard `:refreshNow` path and 0.2.20 version were projected from the
  * W-24165695 monolith producer contract because no live 0.2.20 capture was available.
+ * The native-dialog fixture is a deterministic 0.2.24 source projection from the pinned
+ * monolith producer change; its review-evidence provenance distinguishes this from a capture.
  * The fixture excludes paths and response schemas for removed Desktop MCP tools;
  * it is not a complete inventory of the producer's endpoints.
  */
@@ -887,18 +892,75 @@ describe('external client API contract (captured openapi fixture)', () => {
     ])('rejects an Operation missing required `%s`', (_key, payload) => {
       expect(operationEnvelopeSchema.safeParse(payload).success).toBe(false);
     });
+
+    it('accepts future shared dialog metadata values in operation envelopes', () => {
+      expect(
+        operationEnvelopeSchema.safeParse({
+          id: 'op-1',
+          kind: 'command.invoke',
+          state: 'RUNNING',
+          blockingWindows: [
+            {
+              objectName: 'future',
+              title: 'Future dialog',
+              className: 'FutureDialog',
+              family: 'future-family',
+              mode: 'future-mode',
+              status: 'future-status',
+            },
+          ],
+        }).success,
+      ).toBe(true);
+    });
   });
 });
 
-describe('external client API native dialogs contract (compiled 0.2.23 fixture)', () => {
+describe('external client API native dialogs contract (source-projected 0.2.24 fixture)', () => {
   const nativeSchema = (name: string): SpecSchema => {
     const schema = nativeDialogSpec.components.schemas[name];
     expect(schema, `native dialog component schema ${name} missing`).toBeDefined();
     return schema;
   };
 
-  it('tracks the compiled 0.2.23 producer capture', () => {
-    expect(nativeDialogSpec.info.version).toBe('0.2.23');
+  it('tracks the source-projected 0.2.24 producer contract', () => {
+    expect(nativeDialogSpec.info.version).toBe('0.2.24');
+  });
+
+  it('accepts future shared metadata but retains native-route enum validation', () => {
+    const futureWindow = {
+      objectName: 'future',
+      title: 'Future dialog',
+      className: 'FutureDialog',
+      family: 'future-family',
+      mode: 'future-mode',
+      status: 'future-status',
+    };
+    expect(windowInfoSchema.safeParse(futureWindow).success).toBe(true);
+    expect(
+      desktopStateSchema.safeParse({
+        state: 'BLOCKED',
+        blockedBy: 'MODAL_DIALOG',
+        uiSnapshotAvailable: true,
+        blockingWindows: [futureWindow],
+      }).success,
+    ).toBe(true);
+    expect(
+      nativeWindowInfoSchema.safeParse({
+        ...futureWindow,
+        sessionId: 'session-1',
+        revision: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      nativeWindowInfoSchema.safeParse({
+        ...futureWindow,
+        sessionId: 'session-1',
+        revision: 1,
+        family: 'file',
+        mode: 'open-file',
+        status: 'active',
+      }).success,
+    ).toBe(true);
   });
 
   it.each([
@@ -997,11 +1059,19 @@ describe('external client API native dialogs contract (compiled 0.2.23 fixture)'
       'choose-color',
       'submit-print',
     ]);
+    expect(capability.properties?.enabled?.type).toBe('boolean');
     expect(invocation.oneOf).toHaveLength(9);
     for (const variant of invocation.oneOf ?? []) {
       expect(variant.additionalProperties).toBe(false);
     }
     expect(dialogActionSchema.safeParse({ kind: 'button', label: 'Discard' }).success).toBe(true);
+    expect(
+      dialogActionDescriptorSchema.safeParse({ kind: 'button', label: 'Discard', enabled: false })
+        .success,
+    ).toBe(true);
+    expect(
+      dialogActionSchema.safeParse({ kind: 'button', label: 'Discard', enabled: false }).success,
+    ).toBe(false);
     expect(dialogActionSchema.safeParse({ kind: 'button' }).success).toBe(false);
     expect(dialogActionSchema.safeParse({ kind: 'close', label: 'X' }).success).toBe(false);
     expect(
@@ -1011,6 +1081,58 @@ describe('external client API native dialogs contract (compiled 0.2.23 fixture)'
       dialogActionSchema.safeParse({ kind: 'choose-color', red: 1, green: 2, blue: 3, raw: 4 })
         .success,
     ).toBe(false);
+  });
+
+  it('keeps choose-directory invocation limited to kind and path', () => {
+    const invocation = nativeSchema('DialogActionInvocation');
+    const directory = invocation.oneOf?.find(
+      (variant) => variant.properties?.kind?.const === 'choose-directory',
+    );
+
+    expect(directory?.required).toEqual(['kind', 'path']);
+    expect(directory?.properties).not.toHaveProperty('filterId');
+    expect(directory?.additionalProperties).toBe(false);
+    expect(
+      dialogActionSchema.safeParse({ kind: 'choose-directory', path: '/tmp/directory' }).success,
+    ).toBe(true);
+    expect(
+      dialogActionSchema.safeParse({
+        kind: 'choose-directory',
+        path: '/tmp/directory',
+        filterId: 'unexpected',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('projects the generic Operation reload-extension routes from the producer metadata', () => {
+    const paths = nativeDialogSpec.paths as Record<
+      string,
+      {
+        post?: {
+          operationId?: string;
+          summary?: string;
+          description?: string;
+          responses?: Record<string, unknown>;
+        };
+      }
+    >;
+
+    expect(paths['/v0/workbook/worksheets/{id}:reloadExtension']?.post).toMatchObject({
+      operationId: 'reloadWorksheetExtension',
+      summary: 'Reload a worksheet extension',
+      responses: {
+        200: expect.anything(),
+        202: expect.anything(),
+      },
+    });
+    expect(paths['/v0/workbook/dashboards/{id}:reloadExtensions']?.post).toMatchObject({
+      operationId: 'reloadDashboardExtensions',
+      summary: 'Reload dashboard extensions',
+      responses: {
+        200: expect.anything(),
+        202: expect.anything(),
+      },
+    });
   });
 
   it('requires an opaque request ID and accepts only a strict native invocation', () => {

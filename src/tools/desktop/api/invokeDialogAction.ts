@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { DIALOG_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import {
   DIALOG_ACTION_KINDS,
   DIALOG_PRINT_RANGES,
@@ -162,7 +163,7 @@ export const getInvokeDialogActionTool = (
   const tool = new DesktopTool({
     server,
     name: 'invoke-dialog-action',
-    minApiVersion: '0.2.23',
+    minApiVersion: DIALOG_MIN_API_VERSION,
     title,
     description:
       'get-active-dialogs context: exact action. Never guess or retry mutations. Pending: inspect.',
@@ -238,13 +239,20 @@ async function invokeDialogAction({
   hasRevision: boolean;
 }): Promise<Result<InvokeDialogActionResult, McpToolError>> {
   if (!parsedAction.success) {
+    const unexpectedKeys = parsedAction.error.issues
+      .flatMap((issue) => (issue.code === z.ZodIssueCode.unrecognized_keys ? issue.keys : []))
+      .filter((key, index, keys) => keys.indexOf(key) === index)
+      .sort();
     throw new McpToolError({
       type: 'invalid_request',
       message:
         'The dialog action must exactly match the advertised action input. Use a flat action ' +
         'object: kind and each input.fields name are sibling keys with their required values. ' +
         'Do not nest values under input, fields or values. Local validation failed; no Desktop ' +
-        'action was dispatched. Do not guess or retry.',
+        'action was dispatched. Do not guess or retry.' +
+        (unexpectedKeys.length === 0
+          ? ''
+          : ` Unsupported action keys: ${unexpectedKeys.join(', ')}.`),
       statusCode: 400,
     });
   }
@@ -286,6 +294,7 @@ async function invokeDialogAction({
   const effectiveRequestId = requestId ?? crypto.randomUUID();
   const generatedNativeRequestId = requestId === undefined ? effectiveRequestId : undefined;
   const request = currentRequest(dialog, effectiveRequestId, parsedAction.data);
+  let unsupportedDialogContractPreflight = false;
   const result = await runExternalApiTool({
     session,
     extra,
@@ -298,7 +307,14 @@ async function invokeDialogAction({
           if (generatedNativeRequestId !== undefined) {
             extra.deadline?.setNativeDialogRequestId(generatedNativeRequestId);
           }
-          return await executor.invokeDialogAction(request, signal);
+          const invocation = await executor.invokeDialogAction(request, signal);
+          // Preserve the executor's typed preflight result before runExternalApiTool converts it
+          // into the public MCP error. No request was sent, so recentActions cannot reconcile it.
+          unsupportedDialogContractPreflight =
+            invocation.isErr() &&
+            invocation.error.type === 'command-failed' &&
+            invocation.error.error?.code === 'unsupported-dialog-contract';
+          return invocation;
         },
         {
           routeMissingError: invokeDialogActionRouteMissingError,
@@ -306,7 +322,11 @@ async function invokeDialogAction({
         },
       ),
   });
-  if (generatedNativeRequestId !== undefined && result.isErr()) {
+  if (
+    generatedNativeRequestId !== undefined &&
+    result.isErr() &&
+    !unsupportedDialogContractPreflight
+  ) {
     result.error.message += `\nDialog requestId=${generatedNativeRequestId}. Inspect recentActions in get-active-dialogs; do not replay.`;
   }
   return result;

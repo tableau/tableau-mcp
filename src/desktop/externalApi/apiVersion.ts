@@ -3,6 +3,8 @@ export type ApiVersionFloor = `${number}.${number}.${number}`;
 export const WORKBOOK_DIAGNOSTICS_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
 export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
 export const DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION: ApiVersionFloor = '0.2.22';
+/** First producer version that serves the native dialog session contract. */
+export const DIALOG_MIN_API_VERSION: ApiVersionFloor = '0.2.24';
 
 export function supportsDashboardVisualRegistration(apiVersion: string | undefined): boolean {
   return (

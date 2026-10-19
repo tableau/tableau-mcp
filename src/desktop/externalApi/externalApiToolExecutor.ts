@@ -16,7 +16,11 @@ import {
   unreachableInstanceMessage,
 } from '../session/unreachableInstance.js';
 import { runAlwaysBlockingValidation } from '../validation/registry.js';
-import { apiVersionAtLeast, SCREENSHOT_MIN_API_VERSION } from './apiVersion.js';
+import {
+  apiVersionAtLeast,
+  DIALOG_MIN_API_VERSION,
+  SCREENSHOT_MIN_API_VERSION,
+} from './apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandArgs,
@@ -366,7 +370,7 @@ export class ExternalApiToolExecutor {
 
   async getActiveDialogs(signal: AbortSignal): Promise<Result<DialogList, ExecuteCommandError>> {
     return this.readExternalApi((http) => {
-      if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+      if (!apiVersionAtLeast(http.apiVersion, DIALOG_MIN_API_VERSION)) {
         return Promise.resolve(Err(dialogContractVersionError()));
       }
       return http.getJson(EXTERNAL_API_ROUTES.appDialogs, dialogListSchema, signal);
@@ -386,7 +390,7 @@ export class ExternalApiToolExecutor {
     const result = await this.withRescan(
       'command',
       (http) => {
-        if (!apiVersionAtLeast(http.apiVersion, '0.2.23')) {
+        if (!apiVersionAtLeast(http.apiVersion, DIALOG_MIN_API_VERSION)) {
           return Promise.resolve(Err(dialogContractVersionError()));
         }
         const parsed = invokeDialogActionRequestSchema.safeParse(request);
@@ -413,7 +417,7 @@ export class ExternalApiToolExecutor {
     if (result.isErr()) {
       return Err(mapInvokeDialogActionError(result.error, this.deps.pid));
     }
-    return Ok(result.value);
+    return mapDialogActionOutcome(result.value);
   }
 
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
@@ -1225,10 +1229,42 @@ function dialogContractVersionError(): ExternalApiError {
   return {
     type: 'problem',
     status: 409,
-    code: 'dialog-session-stale',
-    detail:
-      'Dialog tools require External Client API 0.2.23 or later. Update Tableau Desktop and inspect dialogs again; do not retry or replay the action.',
+    code: 'unsupported-dialog-contract',
+    detail: `Dialog tools require External Client API ${DIALOG_MIN_API_VERSION} or later. Update Tableau Desktop; this build does not support the dialog contract and no dialog action was sent.`,
   };
+}
+
+function mapDialogActionOutcome(
+  result: InvokeDialogActionResult,
+): Result<InvokeDialogActionResult, ExecuteCommandError> {
+  if (
+    result.outcome !== 'failed' &&
+    result.outcome !== 'expired' &&
+    result.status.state !== 'failed' &&
+    result.status.state !== 'expired'
+  ) {
+    return Ok(result);
+  }
+
+  const code =
+    result.status.code ??
+    (result.status.state === 'expired' || result.outcome === 'expired'
+      ? 'dialog-action-expired'
+      : 'dialog-action-failed');
+  const userDisabled = code === 'dialog-action-disabled';
+  const message = userDisabled
+    ? 'The advertised dialog action is disabled. No action was completed; ask the user to choose how to proceed. Do not retry or replay the request.'
+    : 'The dialog action is stale, expired, or no longer active. No action was completed. Do not retry or replay the request; call get-active-dialogs once for fresh read-only inspection before any separately authorized next action.';
+
+  return Err({
+    type: 'command-failed',
+    error: {
+      code,
+      message,
+      recoverable: false,
+      'tableau-error-code': code,
+    },
+  });
 }
 
 // Route builders throw on an unsafe id; fold that into the Result funnel so nothing is sent.
@@ -1435,8 +1471,9 @@ function mapClientError(
             'operation until the dialog is handled and its cause is corrected. Only the dedicated ' +
             'dialog tools can be used while the modal blocks ordinary UI-thread operations: call ' +
             'get-active-dialogs, then, only when the task or user intent makes the choice ' +
-            'unambiguous, copy the exact returned dialog identity and exact returned action ' +
-            'into one invoke-dialog-action call. Do not guess or assume Cancel is safe. Do not retry ' +
+            'unambiguous, copy the exact returned dialog identity, then construct one action from ' +
+            'the chosen action kind and its input.fields names as flat sibling keys. Do not copy ' +
+            'the input descriptor itself or nest input or fields. Do not guess or assume Cancel is safe. Do not retry ' +
             'invoke-dialog-action when status.state is pending or completed, or status.effect is ' +
             'dialog-remains. Inspect recentActions instead; never replay the request. If either tool is unavailable, ' +
             'the identity or intent is ambiguous, or no action is clearly safe, ask the user to ' +

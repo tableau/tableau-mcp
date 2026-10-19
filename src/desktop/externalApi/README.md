@@ -36,15 +36,17 @@ broader historical route inventory, including an archival Qt-only dialog shape. 
 schemas are tested only against the current producer capture; other compatibility tests retain the
 historical fixture.
 
-`__fixtures__/nativeDialogs-openapi.json` is the exact compiled 0.2.23 producer capture for the
-current dialogs contract. It is authoritative for session/revision identity, capability descriptors,
-closed invocation variants, safe request status, and the existing dialog endpoints. It does not
-replace the compatibility snapshot: the current producer capture intentionally does not carry every
-historical route and component. The contract suite tests each fixture only for its stated scope.
+`__fixtures__/nativeDialogs-openapi.json` is a source-projected 0.2.24 fixture for the current
+dialogs contract. Its projection provenance is recorded beside the review evidence; it is not a
+live or compiled OpenAPI capture. It is authoritative for session/revision identity, capability
+descriptors, closed invocation variants, safe request status, and the existing dialog endpoints.
+It does not replace the compatibility snapshot: the current producer fixture intentionally does not
+carry every historical route and component. The contract suite tests each fixture only for its
+stated scope.
 
 ## Current dialog contract
 
-Both dialog tools require External Client API 0.2.23 or later. Qt, file, print, and color dialogs
+Both dialog tools require External Client API 0.2.24 or later. Qt, file, print, and color dialogs
 share a stable `sessionId`/`revision` identity. Every action supplies the observed identity and an
 opaque `requestId`, supplied by the caller or generated once by MCP. The POST returns a direct 200
 response with one of six outcomes: `dispatched-pending`, `completed`, `canceled`, `failed`,

@@ -719,7 +719,7 @@ export const DIALOG_ACTION_INPUTS: Readonly<
       optionalString('filterId'),
     ],
   },
-  'choose-directory': { fields: [requiredString('path'), optionalString('filterId')] },
+  'choose-directory': { fields: [requiredString('path')] },
   'save-file': {
     fields: [
       requiredString('path'),
@@ -798,7 +798,6 @@ export const dialogActionInvocationSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('choose-directory'),
       path: z.string().min(1),
-      filterId: z.string().min(1).optional(),
     })
     .strict(),
   z
@@ -846,7 +845,13 @@ const dialogPrinterSchema = z.object({ id: z.string(), label: z.string() }).pass
 
 /** A GET-only capability descriptor. It never contains a selected path, color, or printer. */
 export const dialogActionDescriptorSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('button'), label: z.string().min(1) }).passthrough(),
+  z
+    .object({
+      kind: z.literal('button'),
+      label: z.string().min(1),
+      enabled: z.boolean().optional(),
+    })
+    .passthrough(),
   z.object({ kind: z.literal('close') }).passthrough(),
   z.object({ kind: z.literal('cancel') }).passthrough(),
   z
@@ -912,9 +917,9 @@ export const windowInfoSchema = z
     // The dialogs route below applies the stricter native-session contract.
     sessionId: z.string().optional(),
     revision: z.number().int().nonnegative().optional(),
-    family: z.enum(['qt', 'file', 'print', 'color']).optional(),
-    mode: z.enum(['open-file', 'open-files', 'save-file', 'choose-directory']).optional(),
-    status: z.enum(['preparing', 'active', 'suspended', 'closing']).optional(),
+    family: z.string().min(1).optional(),
+    mode: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
     actions: z.array(dialogActionDescriptorSchema).optional(),
   })
   .passthrough();
@@ -925,6 +930,7 @@ export const nativeWindowInfoSchema = windowInfoSchema.extend({
   sessionId: z.string(),
   revision: z.number().int().nonnegative(),
   family: z.enum(['qt', 'file', 'print', 'color']),
+  mode: z.enum(['open-file', 'open-files', 'save-file', 'choose-directory']).optional(),
   status: z.enum(['preparing', 'active', 'suspended', 'closing']),
 });
 export type NativeWindowInfo = z.infer<typeof nativeWindowInfoSchema>;

@@ -121,11 +121,11 @@ describe('get-active-dialogs tool', () => {
     vi.clearAllMocks();
   });
 
-  it('declares the read contract and 0.2.23 API floor', () => {
+  it('declares the read contract and 0.2.24 API floor', () => {
     const tool = getActiveDialogsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-active-dialogs');
-    expect(tool.minApiVersion).toBe('0.2.23');
+    expect(tool.minApiVersion).toBe('0.2.24');
     expect(tool.description).toContain('Only active dialogs advertise actions');
     expect(tool.description).toContain('recentActions');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
@@ -157,7 +157,7 @@ describe('get-active-dialogs tool', () => {
 
   it('preserves dialog data and returns invocation fields for native action capabilities', async () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
-    const harness = await startHarness('0.2.23');
+    const harness = await startHarness('0.2.24');
     harness.server.setOverride('GET /v0/app/dialogs', {
       status: 200,
       contentType: 'application/json',
@@ -270,7 +270,7 @@ describe('get-active-dialogs tool', () => {
       const result = await harness.callTool({ session: undefined });
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('0.2.23');
+      expect(result.content[0].text).toContain('0.2.24');
       expect(dialogGets(harness.server)).toHaveLength(0);
     } finally {
       await harness.close();
@@ -319,7 +319,7 @@ function parseResult(result: CallToolResult): DialogList {
   return JSON.parse(result.content[0].text) as DialogList;
 }
 
-async function startHarness(apiVersion = '0.2.23'): Promise<{
+async function startHarness(apiVersion = '0.2.24'): Promise<{
   server: MockExternalApiServer;
   extra: ReturnType<typeof getMockRequestHandlerExtra>;
   callTool: (args: { session: string | undefined }) => Promise<CallToolResult>;
@@ -348,7 +348,7 @@ async function startHarness(apiVersion = '0.2.23'): Promise<{
   };
 }
 
-function instanceFor(server: MockExternalApiServer, apiVersion = '0.2.23'): ExternalApiInstance {
+function instanceFor(server: MockExternalApiServer, apiVersion = '0.2.24'): ExternalApiInstance {
   return {
     baseUrl: server.baseUrl,
     token: 'valid-token',

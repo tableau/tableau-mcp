@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { DIALOG_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { DIALOG_ACTION_INPUTS, DialogList } from '../../../desktop/externalApi/types.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -18,7 +19,7 @@ export const getActiveDialogsTool = (
   const tool = new DesktopTool({
     server,
     name: 'get-active-dialogs',
-    minApiVersion: '0.2.23',
+    minApiVersion: DIALOG_MIN_API_VERSION,
     title,
     description:
       'List blockers. Only active dialogs advertise actions. Copy the exact ' +

@@ -825,8 +825,8 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('refresh-datasource-data')).toBe('0.2.8');
     expect(floors.get('refresh-datasource-extract')).toBe('0.2.8');
     expect(floors.get('show-me')).toBe('0.2.11');
-    expect(floors.get('get-active-dialogs')).toBe('0.2.23');
-    expect(floors.get('invoke-dialog-action')).toBe('0.2.23');
+    expect(floors.get('get-active-dialogs')).toBe('0.2.24');
+    expect(floors.get('invoke-dialog-action')).toBe('0.2.24');
     expect(floors.get('get-desktop-state')).toBe('0.2.14');
     expect(floors.get('get-diagnostics')).toBe('0.2.16');
     expect(floors.get('get-datasource-info')).toBe('0.2.10');
@@ -940,21 +940,21 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     );
   });
 
-  it('a connected 0.2.22 Desktop hides dialog tools and 0.2.23 exposes them', () => {
+  it('a connected 0.2.23 Desktop hides dialog tools and 0.2.24 exposes them', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
     );
-    const at222 = filterToolsByApiVersion(profileTools, '0.2.22').map((tool) => tool.name);
     const at223 = filterToolsByApiVersion(profileTools, '0.2.23').map((tool) => tool.name);
+    const at224 = filterToolsByApiVersion(profileTools, '0.2.24').map((tool) => tool.name);
 
     for (const name of ['get-active-dialogs', 'invoke-dialog-action'] as const) {
-      expect(at222).not.toContain(name);
-      expect(at223).toContain(name);
+      expect(at223).not.toContain(name);
+      expect(at224).toContain(name);
     }
   });
 
-  it('gates dialogs at 0.2.23 independently of the 0.2.14 app-state floor', () => {
+  it('gates dialogs at 0.2.24 independently of the 0.2.14 app-state floor', () => {
     const profileTools = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
@@ -966,6 +966,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(namesAt('0.2.13')).not.toContain('invoke-dialog-action');
     expect(namesAt('0.2.13')).not.toContain('get-desktop-state');
     expect(namesAt('0.2.14')).toContain('get-desktop-state');
+    expect(namesAt('0.2.23')).not.toContain('get-active-dialogs');
+    expect(namesAt('0.2.23')).not.toContain('invoke-dialog-action');
+    expect(namesAt('0.2.24')).toContain('get-active-dialogs');
+    expect(namesAt('0.2.24')).toContain('invoke-dialog-action');
     expect(namesAt('0.3.0')).toContain('get-desktop-state');
     expect(filterToolsByApiVersion(profileTools, undefined)).toBe(profileTools);
     expect(namesAt(undefined)).toContain('get-desktop-state');
