@@ -8,6 +8,7 @@ import {
   extractColorMaps,
   extractWorksheetStyleColorMaps,
   formatColorMapCheck,
+  formatStaleWorksheetStyleLead,
   mergeColorMapVerification,
   splitWorksheetStyleColorMaps,
   staleWorksheetStyleFindings,
@@ -103,10 +104,15 @@ describe('extractColorMaps', () => {
     expect([...(maps?.[0].members ?? [])]).toEqual(CATEGORY_MEMBERS);
   });
 
-  it('keeps copies that differ so a comparison can accept either', () => {
+  it('lets the last copy in document order win per member instead of unioning copies', () => {
     const other = CATEGORY_ENCODING.replace('#9c755f', '#111111');
-    const maps = extractColorMaps(datasourceXml(`${CATEGORY_ENCODING}${other}`));
-    expect(maps).toHaveLength(2);
+    for (const order of [`${CATEGORY_ENCODING}${other}`, `${other}${CATEGORY_ENCODING}`]) {
+      const maps = extractColorMaps(datasourceXml(order));
+      expect(maps).toHaveLength(1);
+      expect(maps?.[0].members.get('Technology')).toBe(
+        order.endsWith(other) ? '#111111' : '#9c755f',
+      );
+    }
   });
 
   it('returns no maps for a readback whose style was dropped', () => {
@@ -154,6 +160,25 @@ describe('extractColorMaps', () => {
     );
     expect([...(extractColorMaps(xml)?.[0].members ?? [])]).toEqual([
       ['Office Supplies', '#b07aa1'],
+    ]);
+  });
+
+  it('skips quoted numbers and dates, leading-dot numbers and any %…% token, but keeps booleans', () => {
+    const xml = datasourceXml(
+      `<encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#59a14f'><bucket>&quot;2019&quot;</bucket></map>
+        <map to='#59a14f'><bucket>&quot;2019-01-01&quot;</bucket></map>
+        <map to='#59a14f'><bucket>&quot;#2019-01-01#&quot;</bucket></map>
+        <map to='#59a14f'><bucket>.5</bucket></map>
+        <map to='#59a14f'><bucket>%missing%</bucket></map>
+        <map to='#59a14f'><bucket>&quot;%null%&quot;</bucket></map>
+        <map to='#ff0000'><bucket>True</bucket></map>
+        <map to='#00ff00'><bucket>&quot;true&quot;</bucket></map>
+      </encoding>`,
+    );
+    expect([...(extractColorMaps(xml)?.[0].members ?? [])]).toEqual([
+      ['True', '#ff0000'],
+      ['true', '#00ff00'],
     ]);
   });
 
@@ -218,12 +243,18 @@ describe('compareColorMaps', () => {
     ]);
   });
 
-  it('passes a member when any readback copy carries the requested color', () => {
-    const stale = CATEGORY_ENCODING.replace('#9c755f', '#4e79a7');
-    const readback = extractColorMaps(datasourceXml(`${stale}${CATEGORY_ENCODING}`)) ?? [];
-    expect(readback).toHaveLength(2);
-    const twoMembers = extractColorMaps(datasourceXml(CATEGORY_ENCODING)) ?? [];
-    expect(compareColorMaps(twoMembers, readback)).toEqual([]);
+  it('reads the first readback copy, which the chart draws (live wb-smoke f1/f2)', () => {
+    const other = CATEGORY_ENCODING.replace('#9c755f', '#4e79a7');
+    const wanted = extractColorMaps(datasourceXml(CATEGORY_ENCODING)) ?? [];
+    const firstWins =
+      extractColorMaps(datasourceXml(`${CATEGORY_ENCODING}${other}`), { winner: 'first' }) ?? [];
+    expect(firstWins).toHaveLength(1);
+    expect(compareColorMaps(wanted, firstWins)).toEqual([]);
+    const lastWins =
+      extractColorMaps(datasourceXml(`${other}${CATEGORY_ENCODING}`), { winner: 'first' }) ?? [];
+    expect(compareColorMaps(wanted, lastWins).map((finding) => finding.message)).toEqual([
+      '[none:Category:nk]: Technology expected #9c755f, found #4e79a7',
+    ]);
   });
 
   it('does not match a readback map for another datasource', () => {
@@ -236,28 +267,26 @@ describe('compareColorMaps', () => {
 });
 
 describe('review regressions', () => {
-  it('passes a bucket when the readback matches either of two differing intended copies', () => {
-    const xml = (sheetHex: string): string => `<workbook><datasources>
+  it('takes the worksheet copy as intended when it follows a differing datasource copy', () => {
+    const xml = `<workbook><datasources>
       <datasource name='superstore'>${styleBlock(CATEGORY_ENCODING)}</datasource>
     </datasources><worksheets><worksheet name='L2'><table><view>
       <datasource-dependencies datasource='superstore'>${styleBlock(
-        CATEGORY_ENCODING.replace('#9c755f', sheetHex),
+        CATEGORY_ENCODING.replace('#9c755f', '#4e79a7'),
       )}</datasource-dependencies>
     </view></table></worksheet></worksheets></workbook>`;
-    const intended = extractColorMaps(xml('#4e79a7')) ?? [];
-    expect(intended).toHaveLength(2);
+    const intended = extractColorMaps(xml) ?? [];
+    expect(intended).toHaveLength(1);
 
     const sheetWon = extractColorMaps(
       datasourceXml(CATEGORY_ENCODING.replace('#9c755f', '#4e79a7')),
     );
     expect(compareColorMaps(intended, sheetWon ?? [])).toEqual([]);
 
-    const neither = extractColorMaps(
-      datasourceXml(CATEGORY_ENCODING.replace('#9c755f', '#111111')),
-    );
-    expect(compareColorMaps(intended, neither ?? []).map((finding) => finding.message)).toEqual([
-      '[none:Category:nk]: Technology expected #9c755f or #4e79a7, found #111111',
-    ]);
+    const datasourceWon = extractColorMaps(datasourceXml(CATEGORY_ENCODING));
+    expect(
+      compareColorMaps(intended, datasourceWon ?? []).map((finding) => finding.message),
+    ).toEqual(['[none:Category:nk]: Technology expected #4e79a7, found #9c755f']);
   });
 
   it('strips the owning datasource qualifier so a qualified field matches the readback key', () => {
@@ -335,6 +364,33 @@ describe('colorMapVerificationResult', () => {
 
   it('omits the hint for a worksheet payload, which has no datasource-level element', () => {
     expect(dropped('apply-L2-ws.xml').message).not.toContain('<column-instance>');
+  });
+
+  it('omits the column-instance hint for [:Measure Names]', () => {
+    const finding = {
+      severity: 'error' as const,
+      source: 'color-map' as const,
+      message: '[:Measure Names]: Sales expected #ff0000, found missing',
+      datasource: 'superstore',
+      fieldName: '[:Measure Names]',
+      reason: 'color-member-missing',
+    };
+    const result = colorMapVerificationResult([finding], '<datasource name="superstore" />');
+    expect(result.message).not.toContain('<column-instance>');
+  });
+
+  it('adds the apply-workbook hint only when asked', () => {
+    const finding = {
+      severity: 'error' as const,
+      source: 'color-map' as const,
+      message: 'x',
+      reason: 'color-mismatch',
+    };
+    const hint = 'apply-workbook does not replace a datasource color map that already exists';
+    expect(colorMapVerificationResult([finding], '<x />').message).not.toContain(hint);
+    expect(
+      colorMapVerificationResult([finding], '<x />', { existingMapNotReplaced: true }).message,
+    ).toContain(hint);
   });
 
   it('warns without failing when only unavailable findings exist', () => {
@@ -456,6 +512,17 @@ describe('extractWorksheetStyleColorMaps', () => {
     ]);
     // The old extractor still sees nothing there.
     expect(extractColorMaps(fixture('apply-ws-table-fq-ws.xml'))).toEqual([]);
+  });
+
+  it('collapses identical sheet-level copies but keeps differing ones across sheets and panes', () => {
+    const sheet = (name: string, hex: string, pane = ''): string =>
+      `<worksheet name='${name}'><table><view><datasource-dependencies datasource='superstore' /></view>${styleBlock(
+        CATEGORY_ENCODING.replace('#59a14f', hex),
+      )}<panes><pane>${pane}</pane></panes></table></worksheet>`;
+    const maps = extractWorksheetStyleColorMaps(
+      `<workbook><worksheets>${sheet('A', '#ff0000')}${sheet('B', '#ff0000')}${sheet('C', '#00ff00')}</worksheets></workbook>`,
+    );
+    expect(maps.map((map) => map.members.get('Furniture'))).toEqual(['#ff0000', '#00ff00']);
   });
 
   it('leaves <datasource-dependencies> styles to extractColorMaps', () => {
@@ -586,11 +653,14 @@ describe('stale worksheet-style notes', () => {
     reason: 'color-worksheet-style-stale',
   };
 
-  it('never turns a passing check into a warning', () => {
+  it('never turns a passing check into a warning, and leads the message instead of trailing it', () => {
     const result = colorMapVerificationResult([stale], '<datasource name="x" />');
     expect(result).toEqual({ ok: true, status: 'passed', findings: [stale] });
     expect(formatColorMapCheck(result)).toBe(
-      " Read back the datasource document: every requested member color matched. Note: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Furniture #ff0000. Desktop shows those in Edit Colors only. To make the chart use a color, put it in the datasource <style> with a datasource-level <column-instance>.",
+      ' Read back the datasource document: every requested member color matched.',
+    );
+    expect(formatStaleWorksheetStyleLead(result)).toBe(
+      "Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set. Details: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Furniture #ff0000. Do not tell the user they are set. To color the chart, put them in the datasource <style> with a datasource-level <column-instance> (apply-datasource). ",
     );
   });
 
@@ -599,8 +669,8 @@ describe('stale worksheet-style notes', () => {
       hasIntended: false,
     });
     expect(result).toMatchObject({ ok: true, status: 'skipped' });
+    expect(formatStaleWorksheetStyleLead(result)).toContain('Do not tell the user they are set.');
     const text = formatColorMapCheck(result);
-    expect(text).toContain('Note: the worksheet');
     expect(text).not.toContain('matched');
     expect(text).not.toContain('not verified');
   });
@@ -612,14 +682,17 @@ describe('stale worksheet-style notes', () => {
       message: 'The sheet could not be read before the apply, so some of these may be new',
       reason: 'color-baseline-unavailable',
     };
-    const text = formatColorMapCheck(
+    const lead = formatStaleWorksheetStyleLead(
       colorMapVerificationResult([stale, unread], '<datasource name="x" />', {
         hasIntended: false,
       }),
     );
-    expect(text).toContain(
-      '<column-instance>. The sheet could not be read before the apply, so some of these may be new.',
+    expect(lead).toContain(
+      '(apply-datasource). The sheet could not be read before the apply, so some of these may be new. ',
     );
+    expect(
+      formatStaleWorksheetStyleLead(colorMapVerificationResult([stale], '<datasource name="x" />')),
+    ).not.toContain('could not be read');
   });
 
   it('keeps notes in the merged findings without changing the base status', () => {

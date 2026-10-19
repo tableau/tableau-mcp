@@ -21,7 +21,8 @@ export interface ColorMap {
 type XmlRecord = Record<string, any>;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-const NUMERIC_BUCKET = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
+const NUMERIC_BUCKET = /^-?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+const ISO_DATE_BUCKET = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?$/;
 
 function isRecord(value: unknown): value is XmlRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -37,15 +38,19 @@ function textValue(value: unknown): string | undefined {
   return undefined;
 }
 
-// String buckets are quoted; numeric, #date# and %null% buckets are reformatted by Desktop on
-// readback, so only string members are compared.
+// Numeric, #date# and %…% buckets (quoted or not) are reformatted by Desktop on readback, so only
+// string members are compared; booleans stay exact because Desktop drops `True` and "true".
 function bucketKey(text: string): string | undefined {
   const raw = text.trim();
-  if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) return raw.slice(1, -1);
-  if (raw === '%null%' || (raw.startsWith('#') && raw.endsWith('#')) || NUMERIC_BUCKET.test(raw)) {
-    return undefined;
-  }
-  return raw;
+  const quoted = raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"');
+  const value = quoted ? raw.slice(1, -1).trim() : raw;
+  const reformatted =
+    NUMERIC_BUCKET.test(value) ||
+    ISO_DATE_BUCKET.test(value) ||
+    (value.length >= 2 && value.startsWith('#') && value.endsWith('#')) ||
+    (value.length >= 2 && value.startsWith('%') && value.endsWith('%'));
+  if (reformatted) return undefined;
+  return quoted ? raw.slice(1, -1) : raw;
 }
 
 function colorMapsInStyle(
@@ -97,17 +102,17 @@ function worksheetElements(root: XmlRecord): XmlRecord[] {
   return [];
 }
 
-function membersSignature(map: ColorMap): string {
-  return JSON.stringify([map.datasource, map.field, [...map.members].sort()]);
-}
-
 /**
  * Every categorical color map an XML document carries, from datasource roots, workbook
- * datasources and worksheet `<datasource-dependencies>`. Identical copies collapse to one; copies
- * that differ are kept so a comparison can accept any of them. `undefined` means the XML could not
+ * datasources and worksheet `<datasource-dependencies>`. Copies of one field collapse to a single
+ * map; per member the last copy in document order wins as the intended color (`winner: 'first'`
+ * for a readback). `undefined` means the XML could not
  * be parsed or is not a datasource, workbook or worksheet document.
  */
-export function extractColorMaps(xml: string): ColorMap[] | undefined {
+export function extractColorMaps(
+  xml: string,
+  { winner = 'last' }: { winner?: 'first' | 'last' } = {},
+): ColorMap[] | undefined {
   let root: XmlRecord;
   try {
     root = parseXML(xml) as XmlRecord;
@@ -138,17 +143,33 @@ export function extractColorMaps(xml: string): ColorMap[] | undefined {
       }
     }
   }
-  return dedupeMaps(maps);
+  return mergeMaps(maps, winner);
 }
 
+// Identical copies collapse; copies that differ are kept, so a comparison can accept any of them.
 function dedupeMaps(maps: ColorMap[]): ColorMap[] {
   const seen = new Set<string>();
   return maps.filter((map) => {
-    const signature = membersSignature(map);
+    const signature = JSON.stringify([map.datasource, map.field, [...map.members].sort()]);
     if (seen.has(signature)) return false;
     seen.add(signature);
     return true;
   });
+}
+
+function mergeMaps(maps: ColorMap[], winner: 'first' | 'last'): ColorMap[] {
+  const merged = new Map<string, ColorMap>();
+  for (const map of maps) {
+    const key = JSON.stringify([map.datasource, map.field]);
+    const entry = merged.get(key);
+    if (entry === undefined) merged.set(key, { ...map, members: new Map(map.members) });
+    else {
+      for (const [bucket, hex] of map.members) {
+        if (winner === 'last' || !entry.members.has(bucket)) entry.members.set(bucket, hex);
+      }
+    }
+  }
+  return [...merged.values()];
 }
 
 // Every `<style>` below a worksheet table except the ones inside `<datasource-dependencies>`.
@@ -170,6 +191,7 @@ function isStaleNote(finding: VerificationFinding): boolean {
   return finding.reason === STALE_REASON || finding.reason === BASELINE_UNAVAILABLE_REASON;
 }
 
+const MEASURE_NAMES = '[:Measure Names]';
 const QUALIFIED_FIELD = /^\[([^\]]+)\]\.\[/;
 
 /**
@@ -371,7 +393,7 @@ function fieldsMissingColumnInstance(
   const elements = datasourceElements(root);
   const missing = new Set<string>();
   for (const finding of findings) {
-    if (finding.fieldName === undefined) continue;
+    if (finding.fieldName === undefined || finding.fieldName === MEASURE_NAMES) continue;
     const element = elements.find((candidate) => candidate['@_name'] === finding.datasource);
     if (element === undefined) continue;
     const hasInstance = records(element['column-instance']).some(
@@ -390,7 +412,7 @@ function fieldsMissingColumnInstance(
 export function colorMapVerificationResult(
   findings: readonly VerificationFinding[],
   appliedXml: string,
-  { hasIntended = true, worksheetStylePlacement = false } = {},
+  { hasIntended = true, worksheetStylePlacement = false, existingMapNotReplaced = false } = {},
 ): ReadbackVerificationResult {
   const notes = findings.filter(isStaleNote);
   const checked = findings.filter((finding) => !isStaleNote(finding));
@@ -405,12 +427,17 @@ export function colorMapVerificationResult(
     const worksheetStyleHint = worksheetStylePlacement
       ? " Desktop keeps member colors written in a worksheet's own <style>, and the chart ignores them; put them in the datasource <style> with a datasource-level <column-instance>."
       : '';
+    const notReplacedHint = existingMapNotReplaced
+      ? ' apply-workbook does not replace a datasource color map that already exists; change member colors with apply-datasource.'
+      : '';
     return {
       ok: false,
       status: 'failed',
       message: `${errors.length} requested member color(s) did not take: ${errors
         .map((finding) => finding.message)
-        .join('; ')}. Do not tell the user these colors are set.${hint}${worksheetStyleHint}`,
+        .join(
+          '; ',
+        )}. Do not tell the user these colors are set.${hint}${worksheetStyleHint}${notReplacedHint}`,
       findings: [...findings],
     };
   }
@@ -464,25 +491,27 @@ export function mergeColorMapVerification(
     : merged;
 }
 
-/** The agent-facing note about member colors the sheet's own `<style>` keeps; empty when none. */
-export function formatStaleWorksheetStyleNote(
+/**
+ * Opens an apply message when the sheet's own `<style>` keeps member colors the chart ignores;
+ * empty when none. Trailing space included, so callers prepend it.
+ */
+export function formatStaleWorksheetStyleLead(
   verification: ReadbackVerificationResult | undefined,
 ): string {
   const findings = verification?.findings ?? [];
   const stale = findings.filter((finding) => finding.reason === STALE_REASON);
   if (stale.length === 0) return '';
   const unread = findings.some((finding) => finding.reason === BASELINE_UNAVAILABLE_REASON);
-  return ` Note: ${stale.map((finding) => finding.message).join('; ')}. Desktop shows those in Edit Colors only. To make the chart use a color, put it in the datasource <style> with a datasource-level <column-instance>.${unread ? ` ${colorBaselineUnavailableFinding().message}.` : ''}`;
+  return `Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set. Details: ${stale.map((finding) => finding.message).join('; ')}. Do not tell the user they are set. To color the chart, put them in the datasource <style> with a datasource-level <column-instance> (apply-datasource).${unread ? ` ${colorBaselineUnavailableFinding().message}.` : ''} `;
 }
 
 /** Host verification text for a color check; a failure is carried by the headline instead. */
 export function formatColorMapCheck(verification: ReadbackVerificationResult): string {
-  const note = formatStaleWorksheetStyleNote(verification);
   if (verification.status === 'passed') {
-    return ` Read back the datasource document: every requested member color matched.${note}`;
+    return ' Read back the datasource document: every requested member color matched.';
   }
   if (verification.status === 'warning') {
-    return ` Requested member colors are not verified: ${verification.message ?? 'color readback unavailable'}.${note}`;
+    return ` Requested member colors are not verified: ${verification.message ?? 'color readback unavailable'}.`;
   }
-  return note;
+  return '';
 }

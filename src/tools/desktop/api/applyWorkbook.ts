@@ -2,7 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
-import { formatColorMapCheck } from '../../../desktop/validation/colorMapReadback.js';
+import {
+  formatColorMapCheck,
+  formatStaleWorksheetStyleLead,
+} from '../../../desktop/validation/colorMapReadback.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
@@ -105,6 +108,7 @@ export const getApplyWorkbookTool = (
           const verification = await readColorMapsBack({
             appliedXml: workbookXml,
             baselineXml,
+            workbookApply: true,
             executor,
             signal: extra.signal,
           });
@@ -179,6 +183,7 @@ export const getApplyWorkbookTool = (
                 );
           return new Ok({
             ...acceptedWithGuidance,
+            message: `${formatStaleWorksheetStyleLead(verification)}${acceptedWithGuidance.message}`,
             ...(diagnostics ? { diagnostics } : {}),
             ...(diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
             ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),

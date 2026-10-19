@@ -1444,7 +1444,10 @@ describe('applyWorksheetTool', () => {
 
       expect(body.verification.status).toBe('passed');
       expect(body.message).toContain(
-        " Note: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Office Supplies #00aa00 (not in the datasource), Technology #d4c37a (not in the datasource), Furniture #ff0000 (not in the datasource). Desktop shows those in Edit Colors only. To make the chart use a color, put it in the datasource <style> with a datasource-level <column-instance>.",
+        "Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set. Details: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Office Supplies #00aa00 (not in the datasource), Technology #d4c37a (not in the datasource), Furniture #ff0000 (not in the datasource). Do not tell the user they are set. To color the chart, put them in the datasource <style> with a datasource-level <column-instance> (apply-datasource). ",
+      );
+      expect(body.message).toMatch(
+        /^Applied, but the member colors in the worksheet's own <style>/,
       );
       expect(body.message).not.toContain('could not be read before the apply');
       expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
@@ -1465,7 +1468,9 @@ describe('applyWorksheetTool', () => {
 
       expect(body.verification).toMatchObject({ ok: true, status: 'passed' });
       expect(body.message).toContain('Successfully applied worksheet update for "L1"');
-      expect(body.message).toContain(" Note: the worksheet's own <style> also lists member colors");
+      expect(body.message).toContain(
+        "Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set.",
+      );
       expect(body.message).not.toContain('not verified');
     });
 
@@ -1519,7 +1524,9 @@ describe('applyWorksheetTool', () => {
 
       expect(body.verification.status).toBe('passed');
       expect(body.message).toContain('Furniture #ff0000 (the chart uses #f28e2b)');
-      expect(body.message.indexOf('Note:')).toBeLessThan(body.message.indexOf('HOST VERIFICATION'));
+      expect(body.message.indexOf('Details:')).toBeLessThan(
+        body.message.indexOf('HOST VERIFICATION'),
+      );
     });
 
     it('treats a failed baseline read as no baseline: warnings only, no tool error', async () => {

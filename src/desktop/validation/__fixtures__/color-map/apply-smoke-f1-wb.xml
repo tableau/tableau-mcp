@@ -1,0 +1,38 @@
+<!-- Live smoke payload f1, trimmed: the federated datasource keeps its Category <column-instance> and <style>; only worksheet L1 is kept. -->
+<workbook><datasources><datasource name='federated.zfru97lfbdy7xggra2seh2uwxf6o'>
+      <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+      <style><style-rule element='mark'><encoding attr='color' field='[none:Category:nk]' type='palette'><map to='#00aa00'><bucket>&quot;Furniture&quot;</bucket></map></encoding><encoding attr='color' field='[none:Category:nk]' type='palette'><map to='#00aa00'><bucket>&quot;Furniture&quot;</bucket></map></encoding></style-rule></style>
+</datasource></datasources><worksheets>
+    <worksheet name='L1'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='Sample - Superstore' name='federated.zfru97lfbdy7xggra2seh2uwxf6o' />
+          </datasources>
+          <datasource-dependencies datasource='federated.zfru97lfbdy7xggra2seh2uwxf6o'>
+            <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+            <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+            <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+            <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+          <style><style-rule element='mark'><encoding attr='color' field='[none:Category:nk]' type='palette'><map to='#ff0000'><bucket>&quot;Furniture&quot;</bucket></map></encoding></style-rule></style>
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Automatic' />
+            <encodings>
+              <color column='[federated.zfru97lfbdy7xggra2seh2uwxf6o].[none:Category:nk]' />
+            </encodings>
+          </pane>
+        </panes>
+        <rows>[federated.zfru97lfbdy7xggra2seh2uwxf6o].[sum:Sales:qk]</rows>
+        <cols>[federated.zfru97lfbdy7xggra2seh2uwxf6o].[none:Category:nk]</cols>
+      </table>
+      <simple-id uuid='{1F3B7AD1-9ED9-4FE9-A1D0-D4D4E0339B42}' />
+    </worksheet>
+</worksheets></workbook>
