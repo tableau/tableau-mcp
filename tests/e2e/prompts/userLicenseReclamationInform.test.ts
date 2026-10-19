@@ -137,7 +137,7 @@ describe('user-license-reclamation-inform prompt', () => {
       );
       expect(text).toContain('**Scope this query to the Step-1 candidates.**');
       expect(text).toContain('Do not fetch all site users.');
-      expect(text).toContain('truncated at the 10000-row limit');
+      expect(text).toContain('truncated at the row limit');
     });
   });
 
