@@ -44,6 +44,7 @@ jobs:
         run: |
           git fetch origin main
           BASE_VERSION=$(git show origin/main:package.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).version)")
+          HEAD_VERSION=$(node -p "require('./package.json').version")
 
           node -e "
             const fs = require('fs');
@@ -53,7 +54,15 @@ jobs:
           "
 
           npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          VERSION=$(node -p "require('./package.json').version")
+
+          # Never lower a version set by hand, e.g. to publish from a long-lived branch like feature/desktop.
+          if [ "$HEAD_VERSION" != "$VERSION" ] && [ "$(printf '%s\n' "$VERSION" "$HEAD_VERSION" | sort -V | tail -n1)" = "$HEAD_VERSION" ]; then
+            echo "Head is already at $HEAD_VERSION, above $VERSION; keeping it"
+            git checkout -- package.json package-lock.json
+            VERSION="$HEAD_VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push if version changed
         env:
