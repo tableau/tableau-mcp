@@ -104,17 +104,30 @@ describe('non-waivable dashboard worksheet-zone crash guard', () => {
     },
   );
 
-  it('still rejects the repaired zone if its referenced worksheet is blank', async () => {
-    const { executor, fragment } = fixture(false, true);
+  it('accepts the repaired zone without populating its registered blank worksheet', async () => {
+    const { executor, fragment, live } = fixture(false, true);
+    const before = new DOMParser()
+      .parseFromString(live(), 'text/xml')
+      .getElementsByTagName('worksheet')[0];
     const result = await loadDashboardXml({
       dashboardName: 'D',
       xml: fragment.replace(' type-v2="worksheet"', ''),
       requireExistingSheet: true,
+      verifyReadback: true,
       focus,
       executor,
       signal,
     });
-    expect(result).toMatchObject({ error: { error: { type: 'sheet-not-rendered' } } });
-    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().verifiedWorksheetNames).toEqual(['A']);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+    expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    const after = new DOMParser()
+      .parseFromString(live(), 'text/xml')
+      .getElementsByTagName('worksheet')[0];
+    expect(new XMLSerializer().serializeToString(after)).toBe(
+      new XMLSerializer().serializeToString(before),
+    );
   });
 });

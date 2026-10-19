@@ -199,10 +199,26 @@ describe('planned dashboard creation through live dashboard apply', () => {
       const apply = await Provider.from(getBuildAndApplyDashboardTool(server).callback);
       const { task_type: _taskType, ...task } = plan.phase4Dashboard.task;
       const applyTask = task;
+      const liveBeforeBlank = live;
+      const blankBefore = ['A', 'B'].map((name) => extractSheetXml(live, name));
+      const writesBefore = vi.mocked(executor.applyWorkbookDocument).mock.calls.length;
       const blank = await apply(applyTask, extra);
-      expect(blank.isError).toBe(true);
-      expect(payloadText(blank)).toContain('no applied mark/encoding');
-      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      if (native) {
+        expect(blank.isError, payloadText(blank)).toBe(false);
+        expect(payload(blank)).toMatchObject({ viewpointState: 'success', viewpointCount: 2 });
+        expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+      } else {
+        expect(blank.isError).toBe(true);
+        expect(payloadText(blank)).toContain('needs worksheet view registrations for A, B');
+        expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      }
+      expect(['A', 'B'].map((name) => extractSheetXml(live, name))).toEqual(blankBefore);
+      expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledTimes(writesBefore);
+
+      // The chart-building workflow starts before placement; keep the blank-placement probe separate.
+      live = liveBeforeBlank;
+      vi.mocked(executor.applyDashboardDocument).mockClear();
 
       // Execute the generated Phase 2 calls through both production tools and their schemas.
       const store = new TemplateArtifactStore({ capacity: 4 });
