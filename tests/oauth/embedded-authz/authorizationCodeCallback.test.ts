@@ -131,6 +131,65 @@ describe('authorization code callback', () => {
       error: 'invalid_request',
       error_description: 'Failed to exchange authorization code',
     });
+
+    // Pending auth is consumed even when the callback fails
+    const retryResponse = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(retryResponse.status).toBe(400);
+    expect(retryResponse.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid state parameter',
+    });
+  });
+
+  it('should reject if the pending authorization is expired', async () => {
+    // Only Date is faked so the store's own TTL timer never fires; expiresAt alone must reject.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { app } = await startServer();
+
+      const authzResponse = await request(app).get('/oauth2/authorize').query({
+        client_id: 'test-client-id',
+        redirect_uri: 'http://localhost:3000',
+        response_type: 'code',
+        code_challenge: 'test-code-challenge',
+        code_challenge_method: 'S256',
+        state: 'test-state',
+      });
+
+      const authzLocation = new URL(authzResponse.headers['location']);
+      const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+
+      mocks.mockGetTokenResult.mockResolvedValue({
+        accessToken: 'test-access-token',
+        refreshToken: 'test-refresh-token',
+        expiresInSeconds: 3600,
+        originHost: '10ax.online.tableau.com',
+      });
+
+      vi.setSystemTime(Date.now() + getConfig().oauth.authzCodeTimeoutMs + 1000);
+
+      const response = await request(app)
+        .get('/Callback')
+        .query({
+          code: 'test-code',
+          state: `${authKey}:${tableauState}`,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        error: 'invalid_request',
+        error_description: 'Invalid state parameter',
+      });
+      expect(mocks.mockGetTokenResult).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should reject if the originHost returned by Tableau does not match the expected server', async () => {
@@ -360,5 +419,18 @@ describe('authorization code callback', () => {
     expect(location.origin).toBe('http://localhost:3000');
     expect(location.searchParams.get('code')).not.toBeNull();
     expect(location.searchParams.get('state')).toBe('test-state');
+
+    const replayResponse = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(replayResponse.status).toBe(400);
+    expect(replayResponse.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid state parameter',
+    });
   });
 });
