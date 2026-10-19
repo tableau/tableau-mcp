@@ -23,6 +23,7 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
@@ -42,8 +43,14 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
+};
+
+type ListViewsResult = GetPageResult<View> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
 };
 
 export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -93,7 +100,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
   The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
-  To get just the count of views matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more views exist; page up to \`totalAvailable\` or filter to reach the rest.`,
     paramsSchema,
     annotations: {
       title: 'List Views',
@@ -107,7 +114,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
 
-      return await listViewsTool.logAndExecute({
+      return await listViewsTool.logAndExecute<ListViewsResult>({
         extra,
         args: {},
         callback: async () => {
@@ -209,6 +216,15 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },
