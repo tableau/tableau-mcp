@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
 import * as episodeEvents from '../../../desktop/episode-events.js';
+import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import type { WorksheetTemplatePlan } from '../../../desktop/templates/buildTemplateWorksheetArtifact.js';
 import {
   TemplateArtifactStore,
@@ -17,6 +18,7 @@ import type {
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
 import * as listWorksheetsModule from '../../../desktop/wrappers/listWorksheets.js';
 import * as loadWorksheetXmlModule from '../../../desktop/wrappers/loadWorksheetXml.js';
+import { READBACK_POLL_INTERVAL_MS } from '../../../desktop/wrappers/pollReadback.js';
 import {
   DesktopCommandExecutionError,
   WorksheetXmlLoadFailedError,
@@ -1258,6 +1260,313 @@ describe('applyWorksheetTool', () => {
         promiseOutcome: 'verified',
       }),
     );
+  });
+
+  describe('color map readback (cached file)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    // `fs` is mocked in this file, so live-shaped fixtures come through the real module.
+    async function colorFixture(name: string): Promise<string> {
+      const fs = await vi.importActual<typeof import('fs')>('fs');
+      return fs.readFileSync(
+        `${process.cwd()}/src/desktop/validation/__fixtures__/color-map/${name}`,
+        'utf8',
+      );
+    }
+
+    async function colorExecutor(readback: string): Promise<ReturnType<typeof makeExecutorMock>> {
+      return makeExecutorMock({
+        listWorkbookDatasources: vi
+          .fn()
+          .mockResolvedValue(Ok({ datasources: [{ id: 'superstore', name: 'superstore' }] })),
+        getDatasourceDocument: vi.fn().mockResolvedValue(
+          Ok({
+            xml: await colorFixture(readback),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+      });
+    }
+
+    it('passes the live L2 payload whose map Desktop moved into the datasource', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = await colorExecutor('rb-L2-ds.xml');
+
+      const result = await getToolResult({
+        session: '12345',
+        worksheetName: 'L2',
+        worksheetXml: await colorFixture('apply-L2-ws.xml'),
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain('Successfully applied worksheet update for "L2"');
+      expect(body.verification).toEqual({ ok: true, status: 'passed' });
+      expect(executor.getDatasourceDocument).toHaveBeenCalledWith('superstore', expect.anything());
+      expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'done' } });
+    });
+
+    it('fails verification when the datasource readback lacks the worksheet color map', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const eventSpy = vi.spyOn(episodeEvents, 'emitWorksheetPromiseEvents');
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = await colorExecutor('rb-L1a-ds.xml');
+
+      const pending = getToolResult({
+        session: '12345',
+        worksheetName: 'L2',
+        worksheetXml: await colorFixture('apply-L2-ws.xml'),
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+      let settled = false;
+      void pending.finally(() => (settled = true));
+      while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+      const result = await pending;
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain(
+        'Desktop applied the worksheet update for "L2", but verification found invalid or dropped worksheet state.',
+      );
+      expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(body.verification.message).toContain('3 requested member color(s) did not take');
+      expect(body.verification.message).toContain('Do not tell the user these colors are set.');
+      expect(body.verification.message).not.toContain('<column-instance>');
+      expect(body.verification.findings).toHaveLength(3);
+      expect(result.structuredContent).toMatchObject({
+        nextAction: { kind: 'prefill', label: 'Verification failed — diagnose listed findings' },
+      });
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          readback: expect.objectContaining({ status: 'failed' }),
+          promiseOutcome: 'failed',
+        }),
+      );
+    });
+
+    const COLOR_SHEET_IDS: Record<string, string> = {
+      B2: '{B0000000-0000-4000-8000-000000000002}',
+      L1: '{1F3B7AD1-9ED9-4FE9-A1D0-D4D4E0339B42}',
+      'Sales by Category': '{6AF06DE3-FABF-4638-92F4-827E9BEF9E9B}',
+    };
+
+    function liveSheetExecutor(
+      readback: string,
+      liveXml: string | Error,
+      sheetName: string,
+    ): Promise<ReturnType<typeof makeExecutorMock>> {
+      return colorExecutor(readback).then((executor) => {
+        // The apply resolves the sheet by its fragment <simple-id>, so the listing must carry it.
+        executor.listWorksheets = vi
+          .fn()
+          .mockResolvedValue(
+            Ok({ worksheets: [{ id: COLOR_SHEET_IDS[sheetName], name: sheetName }] }),
+          );
+        executor.getWorksheetDocument = vi
+          .fn()
+          .mockResolvedValue(
+            liveXml instanceof Error
+              ? Err({ type: 'command-timed-out', error: liveXml })
+              : Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+          );
+        return executor;
+      });
+    }
+
+    async function applyColorSheet(
+      executor: ReturnType<typeof makeExecutorMock>,
+      worksheetXml: string,
+      worksheetName: string,
+    ): Promise<Record<string, any>> {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const pending = getToolResult({
+        session: '12345',
+        worksheetName,
+        worksheetXml,
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+      let settled = false;
+      void pending.finally(() => (settled = true));
+      while (!settled) await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS);
+      const result = await pending;
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text);
+    }
+
+    it("fails Andy's table-style map with the placement hint, reading the baseline first", async () => {
+      const load = vi
+        .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
+        .mockResolvedValue(
+          Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+        );
+      const applied = await colorFixture('apply-ws-table-fq-ws.xml');
+      const executor = await liveSheetExecutor(
+        'rb-ws-table-fq-ds.xml',
+        applied.replace(/<style>.*<\/style>/, '<style />'),
+        'B2',
+      );
+
+      const body = await applyColorSheet(executor, applied, 'B2');
+
+      expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(body.verification.message).toContain(
+        '[none:Calculation_B002:nk]: true expected #ff0000, found missing',
+      );
+      expect(body.verification.message).toContain(
+        "Desktop keeps member colors written in a worksheet's own <style>, and the chart ignores them; put them in the datasource <style> with a datasource-level <column-instance>.",
+      );
+      expect(executor.getWorksheetDocument).toHaveBeenCalledWith(
+        COLOR_SHEET_IDS.B2,
+        expect.anything(),
+      );
+      expect(vi.mocked(executor.getWorksheetDocument).mock.invocationCallOrder[0]).toBeLessThan(
+        load.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('only warns when a stale worksheet map is re-sent unchanged', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const live = await colorFixture('ok-L1-ws.xml');
+      const executor = await liveSheetExecutor('rb-ok-L1-before-ds.xml', live, 'L1');
+
+      const body = await applyColorSheet(executor, live, 'L1');
+
+      expect(body.verification.status).toBe('passed');
+      expect(body.message).toContain(
+        "Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set. Details: the worksheet's own <style> also lists member colors for [none:Category:nk] that the chart does not use: Office Supplies #00aa00 (not in the datasource), Technology #d4c37a (not in the datasource), Furniture #ff0000 (not in the datasource). Do not tell the user they are set. To color the chart, put them in the datasource <style> with a datasource-level <column-instance> (apply-datasource). ",
+      );
+      expect(body.message).toMatch(
+        /^Applied, but the member colors in the worksheet's own <style>/,
+      );
+      expect(body.message).not.toContain('could not be read before the apply');
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a passing check passing when a stale map sits beside matching datasource colors', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const live = await colorFixture('ok-L1-ws.xml');
+      const applied = live.replace(
+        '</datasource-dependencies>',
+        "<style><style-rule element='mark'><encoding attr='color' field='[none:Category:nk]' type='palette'><map to='#4e79a7'><bucket>&quot;Furniture&quot;</bucket></map></encoding></style-rule></style></datasource-dependencies>",
+      );
+      const executor = await liveSheetExecutor('rb-ok-L1-dirty-ds.xml', live, 'L1');
+
+      const body = await applyColorSheet(executor, applied, 'L1');
+
+      expect(body.verification).toMatchObject({ ok: true, status: 'passed' });
+      expect(body.message).toContain('Successfully applied worksheet update for "L1"');
+      expect(body.message).toContain(
+        "Applied, but the member colors in the worksheet's own <style> are not shown on the chart and are not set.",
+      );
+      expect(body.message).not.toContain('not verified');
+    });
+
+    it('fails only the edited member of a stale worksheet map', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const live = await colorFixture('ok-L1-ws.xml');
+      const executor = await liveSheetExecutor('rb-ok-L1-before-ds.xml', live, 'L1');
+
+      const body = await applyColorSheet(executor, live.replace('#ff0000', '#00ff00'), 'L1');
+
+      expect(body.verification).toMatchObject({ ok: false, status: 'failed' });
+      expect(body.verification.message).toContain('1 requested member color(s) did not take');
+      expect(body.verification.message).toContain('Furniture expected #00ff00');
+      expect(body.verification.message).not.toContain('Technology expected');
+    });
+
+    it('does not say "readback clean" when the color readback could not run', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const applied = await colorFixture('apply-r2-ws.xml');
+      const baseline = applied.replace(/<style-rule element='mark'>.*?<\/style-rule>\s*/s, '');
+      const executor = await liveSheetExecutor('rb-r2-ds.xml', baseline, 'Sales by Category');
+      executor.listWorkbookDatasources = vi
+        .fn()
+        .mockResolvedValue(Err({ type: 'command-timed-out', error: 'timeout' }));
+
+      const body = await applyColorSheet(executor, applied, 'Sales by Category');
+
+      expect(body.verification.status).toBe('warning');
+      expect(body.message).toContain('Requested member colors are not verified');
+      expect(body.message).not.toContain('readback clean');
+      expect(body.message.indexOf('not verified')).toBeLessThan(
+        body.message.indexOf('HOST VERIFICATION'),
+      );
+    });
+
+    it('names the chart color in a stale note placed before the receipt', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const applied = await colorFixture('apply-r2-ws.xml');
+      const executor = await liveSheetExecutor('rb-r2-ds.xml', applied, 'Sales by Category');
+      executor.listWorkbookDatasources = vi
+        .fn()
+        .mockResolvedValue(Ok({ datasources: [{ id: 'start', name: 'start' }] }));
+
+      const body = await applyColorSheet(executor, applied, 'Sales by Category');
+
+      expect(body.verification.status).toBe('passed');
+      expect(body.message).toContain('Furniture #ff0000 (the chart uses #f28e2b)');
+      expect(body.message.indexOf('Details:')).toBeLessThan(
+        body.message.indexOf('HOST VERIFICATION'),
+      );
+    });
+
+    it('treats a failed baseline read as no baseline: warnings only, no tool error', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = await liveSheetExecutor('rb-ws-table-fq-ds.xml', new Error('timeout'), 'B2');
+
+      const body = await applyColorSheet(
+        executor,
+        await colorFixture('apply-ws-table-fq-ws.xml'),
+        'B2',
+      );
+
+      expect(body.verification.status).not.toBe('failed');
+      expect(body.message).toContain(
+        'The sheet could not be read before the apply, so some of these may be new.',
+      );
+      expect(executor.getDatasourceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('makes no extra Desktop call for a worksheet payload without a color map', async () => {
+      vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+        Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+      );
+      const executor = makeExecutorMock();
+
+      const result = await getToolResult({
+        session: '12345',
+        worksheetName: 'Sheet 1',
+        worksheetXml: '<worksheet name="Sheet 1"><table></table></worksheet>',
+        mockExecutor: vi.fn().mockResolvedValue(executor),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(executor.listWorkbookDatasources).not.toHaveBeenCalled();
+      expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+      expect(executor.listWorksheets).not.toHaveBeenCalled();
+      expect(executor.getWorksheetDocument).not.toHaveBeenCalled();
+    });
   });
 
   it('closes the sticky edit buffer keyed on the live sheet id after a successful cached-file apply', async () => {
