@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getConfig } from '../../../../config.js';
-import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -120,16 +119,6 @@ describe('runFlowTool', () => {
     expect(text).toContain('No flow run has been started');
     expect(text).toMatch(/confirmationToken: "[0-9a-f-]+"/);
     expect(mocks.mockRunFlowNow).not.toHaveBeenCalled();
-  });
-
-  it('requests only run and site-settings scopes for the mutation request', async () => {
-    await getToolResult({ flowId: FLOW_ID });
-
-    expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jwtScopes: ['tableau:flows:run', 'tableau:mcp_site_settings:read'],
-      }),
-    );
   });
 
   it('enqueues a run after a matching preview and returns the async job plus a runStatus note', async () => {

@@ -162,13 +162,6 @@ export const LIST_FLOW_RUNS_PRIMARY_API_SCOPES: ReadonlyArray<TableauApiScope> =
 ];
 export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tableau:flows:read';
 
-/** Minimum scopes for the Run Flow mutation request itself. Bounded-context flow lookup
- * uses a separate request and obtains its own read scopes only when the context needs it. */
-export const RUN_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
-  'tableau:flows:run',
-  'tableau:mcp_site_settings:read',
-];
-
 /**
  * Minimum scopes needed by `describe-flow`. This is also the tool's complete
  * static scope surface, so both runtime JWT minting and OAuth discovery share
@@ -335,7 +328,7 @@ const toolScopeMap: Record<
   'run-flow': {
     // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
     mcp: ['tableau:mcp:flow:run'],
-    api: new Set([...RUN_FLOW_API_SCOPES, ...RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES]),
+    api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
   },
   'run-flow-task': {
     mcp: ['tableau:mcp:flow:run'],
