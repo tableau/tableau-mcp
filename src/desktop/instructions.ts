@@ -256,12 +256,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use set-member-colors to color specific members; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
       'ask-user',
       'refine-worksheet',
+      'set-member-colors',
       'add-field',
       'apply-worksheet',
     ],

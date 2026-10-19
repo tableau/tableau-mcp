@@ -227,7 +227,15 @@ describe('buildBuckets', () => {
   it('quotes string members and lowercases the color', () => {
     expect(buildBuckets([{ member: 'Furniture', color: '#FF0000' }], 'string')).toEqual({
       ok: true,
-      buckets: [{ member: 'Furniture', bucket: '"Furniture"', color: '#ff0000' }],
+      buckets: [
+        {
+          member: 'Furniture',
+          requested: 'Furniture',
+          bucket: '"Furniture"',
+          color: '#ff0000',
+          via: 'unchecked',
+        },
+      ],
     });
   });
 
@@ -243,8 +251,14 @@ describe('buildBuckets', () => {
     ).toEqual({
       ok: true,
       buckets: [
-        { member: 'true', bucket: 'true', color: '#ff0000' },
-        { member: 'false', bucket: 'false', color: '#00ff00' },
+        { member: 'true', requested: 'TRUE', bucket: 'true', color: '#ff0000', via: 'unchecked' },
+        {
+          member: 'false',
+          requested: 'False',
+          bucket: 'false',
+          color: '#00ff00',
+          via: 'unchecked',
+        },
       ],
     });
   });
@@ -284,13 +298,13 @@ describe('buildBuckets', () => {
           { member: 'Chairs', color: '#00ff00' },
         ],
         'string',
-        existing,
+        { existing },
       ),
-    ).toEqual({
+    ).toMatchObject({
       ok: true,
       buckets: [
-        { member: 'Furniture', bucket: '"Furniture"', color: '#ff0000', known: true },
-        { member: 'Chairs', bucket: '"Chairs"', color: '#00ff00', known: false },
+        { member: 'Furniture', bucket: '"Furniture"', color: '#ff0000', via: 'existing' },
+        { member: 'Chairs', bucket: '"Chairs"', color: '#00ff00', via: 'unchecked' },
       ],
     });
   });
@@ -301,10 +315,10 @@ describe('buildBuckets', () => {
       ['"Furniture"', '"furniture"'],
     ]) {
       expect(
-        buildBuckets([{ member: ' Furniture ', color: '#ff0000' }], 'string', existing),
+        buildBuckets([{ member: ' Furniture ', color: '#ff0000' }], 'string', { existing }),
       ).toMatchObject({ ok: true, buckets: [{ member: 'Furniture', bucket: '"Furniture"' }] });
       expect(
-        buildBuckets([{ member: 'furniture', color: '#ff0000' }], 'string', existing),
+        buildBuckets([{ member: 'furniture', color: '#ff0000' }], 'string', { existing }),
       ).toMatchObject({ ok: true, buckets: [{ bucket: '"furniture"' }] });
     }
   });
@@ -317,8 +331,140 @@ describe('buildBuckets', () => {
           { member: 'FURNITURE', color: '#00ff00' },
         ],
         'string',
-        ['"Furniture"'],
+        { existing: ['"Furniture"'] },
       ),
     ).toMatchObject({ ok: false, message: expect.stringContaining('listed more than once') });
+  });
+
+  it('trims the member it writes and refuses a blank one', () => {
+    expect(buildBuckets([{ member: '  Furniture  ', color: '#ff0000' }], 'string')).toMatchObject({
+      ok: true,
+      buckets: [{ member: 'Furniture', bucket: '"Furniture"' }],
+    });
+    expect(buildBuckets([{ member: '   ', color: '#ff0000' }], 'string')).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('non-empty'),
+    });
+  });
+
+  describe('against the sheet data', () => {
+    const data = { values: ['Europe', 'Asia', 'EU'], complete: true };
+    const build = (
+      member: string,
+      lookup: Parameters<typeof buildBuckets>[2],
+    ): ReturnType<typeof buildBuckets> =>
+      buildBuckets([{ member, color: '#ff0000' }], 'string', lookup);
+
+    it('writes the data spelling for a wrong-case member (the case-sensitive source)', () => {
+      expect(build('europe', { data, existing: ['"europe"'] })).toMatchObject({
+        ok: true,
+        buckets: [{ member: 'Europe', bucket: '"Europe"', via: 'data' }],
+      });
+    });
+
+    it('prefers an exact data value over a case-insensitive hit', () => {
+      expect(build('EU', { data: { values: ['Eu', 'EU'], complete: true } })).toMatchObject({
+        buckets: [{ member: 'EU', via: 'data' }],
+      });
+    });
+
+    it('resolves an alias display value to the raw member', () => {
+      expect(
+        build('eu', {
+          data: { ...data, values: ['Europe', 'Asia'] },
+          aliases: new Map([['EU', ['Europe']]]),
+        }),
+      ).toMatchObject({ buckets: [{ member: 'Europe', requested: 'eu', via: 'alias' }] });
+    });
+
+    it('falls to the existing map only when the data has no hit', () => {
+      const incomplete = { values: ['Africa'], complete: false };
+      expect(build('asia', { data: incomplete, existing: ['"asia"'] })).toMatchObject({
+        buckets: [{ member: 'asia', via: 'existing' }],
+      });
+    });
+
+    it('refuses the whole call, listing data members, when a member matches nothing in complete data', () => {
+      const result = buildBuckets(
+        [
+          { member: 'Europe', color: '#ff0000' },
+          { member: 'Mars', color: '#00ff00' },
+        ],
+        'string',
+        { data },
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        message: expect.stringContaining(
+          "Mars is not in this sheet's data, so nothing was changed.",
+        ),
+      });
+      expect(result.ok === false && result.message).toContain(
+        'Members in the data: Europe, Asia, EU.',
+      );
+      expect(result.ok === false && result.message).toContain('colored from a sheet that shows it');
+    });
+
+    it('writes the raw data value when it has whitespace around it', () => {
+      expect(build('europe', { data: { values: [' Europe'], complete: true } })).toMatchObject({
+        ok: true,
+        buckets: [{ member: ' Europe', bucket: '" Europe"', via: 'data' }],
+      });
+    });
+
+    it('refuses a member that matches two spellings that differ only by case', () => {
+      expect(
+        build('europe', { data: { values: ['Europe', 'EUROPE'], complete: true } }),
+      ).toMatchObject({ ok: false, message: expect.stringContaining('Europe, EUROPE') });
+    });
+
+    it('refuses an alias shared by two raw members, and an alias that clashes with a data value', () => {
+      expect(build('eu', { aliases: new Map([['EU', ['Europe', 'Asia']]]) })).toMatchObject({
+        ok: false,
+        message: expect.stringContaining('Europe, Asia'),
+      });
+      expect(
+        build('eu', {
+          data: { values: ['Europe', 'Eu'], complete: true },
+          aliases: new Map([['EU', ['Europe']]]),
+        }),
+      ).toMatchObject({ ok: false, message: expect.stringContaining('Europe, Eu') });
+    });
+
+    it("refuses an exact data value that is also another member's alias", () => {
+      expect(
+        build('EU', {
+          data: { values: ['Europe', 'EU', 'Asia'], complete: true },
+          aliases: new Map([
+            ['EU', ['Europe']],
+            ['European Union', ['EU']],
+          ]),
+        }),
+      ).toMatchObject({
+        ok: false,
+        message: expect.stringContaining('matches more than one value or alias (EU, Europe)'),
+      });
+    });
+
+    it.each(['Null', 'null', '%null%', '%all%'])('refuses the Null member "%s"', (member) => {
+      expect(build(member, { data })).toMatchObject({
+        ok: false,
+        message: expect.stringContaining('cannot color the Null member'),
+      });
+    });
+
+    it('refuses an alias that points at the Null member', () => {
+      expect(build('none', { data, aliases: new Map([['None', ['%null%']]]) })).toMatchObject({
+        ok: false,
+        message: expect.stringContaining('cannot color the Null member'),
+      });
+    });
+
+    it('does not refuse when the read hit the row cap', () => {
+      expect(build('Mars', { data: { ...data, complete: false } })).toMatchObject({
+        ok: true,
+        buckets: [{ member: 'Mars', via: 'unmatched' }],
+      });
+    });
   });
 });

@@ -186,7 +186,7 @@ describe('spliceMemberColors', () => {
     const doc = datasourceDoc({ instances: STRING_CI, style: DEFAULT_PALETTE_STYLE });
     const existing = existingBuckets(doc, FIELD);
     expect(existing).toEqual(['"Technology"', '"Office Supplies"', '"Furniture"']);
-    const built = buildBuckets([{ member: 'furniture', color: '#FF0000' }], 'string', existing);
+    const built = buildBuckets([{ member: 'furniture', color: '#FF0000' }], 'string', { existing });
     if (!built.ok) throw new Error(built.message);
     const out = spliceMemberColors(doc, { instance: FIELD, instanceXml: STRING_CI }, built.buckets);
     expect(out?.match(/Furniture/gi)).toHaveLength(1);

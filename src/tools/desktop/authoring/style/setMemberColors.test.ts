@@ -50,6 +50,20 @@ type Setup = {
   readError?: ExecuteCommandError;
   signal?: AbortSignal;
   datasources?: Array<{ id: string; name: string }>;
+  /** Summary data the sheet returns; default lists the Category members. `error` fails the read. */
+  summary?:
+    | { columns: Array<string | { name: string; dataType?: string }>; rows: string[][] }
+    | 'error';
+  /** Datasource document returned by the re-read inside the apply lock. */
+  reread?: string;
+  warnings?: Array<{ code: string; message: string }>;
+  /** The first summary read returns no columns, as for a sheet that was never rendered. */
+  neverRendered?: boolean;
+};
+
+const CATEGORY_SUMMARY = {
+  columns: ['Category'],
+  rows: [['Furniture'], ['Office Supplies'], ['Technology']],
 };
 
 async function run(
@@ -63,14 +77,18 @@ async function run(
 }> {
   const baseline = setup.datasource ?? datasourceDoc({ instances: STRING_CI });
   let applied: string | undefined;
+  let reads = 0;
+  let rendered = false;
   const getDatasourceDocument = vi.fn(async () =>
-    applied !== undefined && setup.readError
-      ? Err(setup.readError)
-      : Ok({
-          xml: applied === undefined ? baseline : (setup.afterApply?.(applied) ?? applied),
-          applicationVersion: undefined,
-          xsdPayloadVersion: undefined,
-        }),
+    (reads += 1) === 2 && setup.reread !== undefined
+      ? Ok({ xml: setup.reread, applicationVersion: undefined, xsdPayloadVersion: undefined })
+      : applied !== undefined && setup.readError
+        ? Err(setup.readError)
+        : Ok({
+            xml: applied === undefined ? baseline : (setup.afterApply?.(applied) ?? applied),
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
   );
   const applyDatasourceDocument = vi.fn(async (_id: string, xml: string) => {
     applied = xml;
@@ -80,7 +98,7 @@ async function run(
           command_id: 'c',
           status: 'completed' as const,
           submitted_at: '2026-10-18T00:00:00Z',
-          warnings: [],
+          warnings: setup.warnings ?? [],
         });
   });
   const executor = makeExecutorMock({
@@ -93,6 +111,28 @@ async function run(
       ),
     getDatasourceDocument,
     applyDatasourceDocument,
+    exportWorksheetImage: vi.fn().mockImplementation(async () => {
+      rendered = true;
+      return Ok({});
+    }),
+    getWorksheetSummaryData: vi
+      .fn()
+      .mockImplementation(async (_id, _query, signal?: AbortSignal) => {
+        if (setup.neverRendered && !rendered) return Ok({ columns: [], rows: [] });
+        if (setup.summary === 'error' || signal?.aborted) {
+          return Err({
+            type: 'command-failed' as const,
+            error: { code: 'internal', message: 'no data', recoverable: true },
+          });
+        }
+        const summary = setup.summary ?? CATEGORY_SUMMARY;
+        return Ok({
+          columns: summary.columns.map((column) =>
+            typeof column === 'string' ? { name: column, dataType: 'cstring' } : column,
+          ),
+          rows: summary.rows,
+        });
+      }),
   });
   const tool = getSetMemberColorsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -155,8 +195,7 @@ describe('set-member-colors tool', () => {
     expect(body(result)).toEqual({
       message:
         'Set 2 member color(s) for Category in datasource superstore: Furniture -> #ff0000; Technology -> #0000ff. ' +
-        'Read back the datasource document: every requested member color matched. ' +
-        'A member that is not in the data has no effect.',
+        'Read back the datasource document: every requested member color matched.',
       field: 'Category',
       datasource: 'superstore',
       colors: [
@@ -270,7 +309,7 @@ describe('set-member-colors tool', () => {
     });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain('bad document');
-    expect(getDatasourceDocument).toHaveBeenCalledOnce();
+    expect(getDatasourceDocument).toHaveBeenCalledTimes(2);
   });
 
   it('returns an error, not a success headline, when the readback is interrupted', async () => {
@@ -320,25 +359,355 @@ describe('set-member-colors tool', () => {
     expect(body(result).message).not.toContain('not in the field');
   });
 
-  it("names a member that is not in the field's current color map", async () => {
-    const { result } = await run(
-      {
-        colors: [
-          { member: 'Furniture', color: '#ff0000' },
-          { member: 'Chairs', color: '#00ff00' },
-        ],
-      },
-      { datasource: datasourceDoc({ instances: STRING_CI, style: DEFAULT_PALETTE_STYLE }) },
-    );
-    expect(result.isError).toBe(false);
-    expect(body(result).message).toContain(
-      "Chairs is not in the field's current color map, so it may not be in the data; it has no effect unless the data has that exact value.",
-    );
+  describe('member spelling against the sheet data', () => {
+    const regionSheet = worksheetXml({
+      columns: [{ datatype: 'string', name: '[Region]', role: 'dimension' }],
+      instances: [
+        "<column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />",
+      ],
+      panes: ['[superstore].[none:Region:nk]'],
+    });
+    const regionSummary = { columns: ['Region'], rows: [['Asia'], ['Europe'], ['Europe']] };
+    const regionDoc = (aliases = ''): string =>
+      datasourceDoc({
+        columns: `<column datatype='string' name='[Region]' role='dimension' type='nominal'>${aliases}</column>`,
+        instances:
+          "<column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />",
+      });
+    const region = { sheetXml: regionSheet, summary: regionSummary };
+
+    it('writes the data spelling, not the typed one, on a case-sensitive source (europe -> Europe)', async () => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'europe', color: '#E15759' }] },
+        { ...region, datasource: regionDoc() },
+      );
+      expect(result.isError).toBe(false);
+      const sent = applyDatasourceDocument.mock.calls[0][1];
+      expect(sent).toContain('<bucket>&quot;Europe&quot;</bucket>');
+      expect(sent).not.toContain('&quot;europe&quot;');
+      expect(body(result).colors).toEqual([{ member: 'Europe', color: '#e15759' }]);
+      expect(body(result).message).toContain('Matched members: europe -> Europe.');
+    });
+
+    it('resolves an alias display value to the raw member and says so', async () => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'EU', color: '#e15759' }] },
+        {
+          ...region,
+          datasource: regionDoc("<aliases><alias key='&quot;Europe&quot;' value='EU' /></aliases>"),
+        },
+      );
+      expect(result.isError).toBe(false);
+      expect(applyDatasourceDocument.mock.calls[0][1]).toContain(
+        '<bucket>&quot;Europe&quot;</bucket>',
+      );
+      expect(body(result).message).toContain('Matched members: EU -> Europe (alias).');
+    });
+
+    it('matches an AGG() column for an aggregate calculation', async () => {
+      const { result } = await run(
+        { colors: [{ member: 'favorable', color: '#59a14f' }] },
+        {
+          sheetXml: worksheetXml({
+            panes: ['[superstore].[usr:Calculation_7001:nk]'],
+            columns: [AGG_COLUMN],
+            instances: [AGG_CI],
+          }),
+          datasource: datasourceDoc({ columns: AGG_COLUMN_IN_DATASOURCE }),
+          summary: { columns: ['AGG(Plan Status)'], rows: [['Favorable'], ['Off plan']] },
+        },
+      );
+      expect(result.isError).toBe(false);
+      expect(body(result).colors).toEqual([{ member: 'Favorable', color: '#59a14f' }]);
+    });
+
+    it('refuses before any write when a member is not in the fully read data', async () => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'Mars', color: '#e15759' }] },
+        { ...region, datasource: regionDoc() },
+      );
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain("Mars is not in this sheet's data, so nothing was changed.");
+      expect(text(result)).toContain('Members in the data: Asia, Europe.');
+      expect(applyDatasourceDocument).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['the summary data cannot be read', { summary: 'error' as const }],
+      ['no summary column matches the field', { summary: { columns: ['Other'], rows: [['x']] } }],
+    ])('says members were not checked when %s, and writes as before', async (_label, setup) => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'Mars', color: '#e15759' }] },
+        { sheetXml: regionSheet, datasource: regionDoc(), ...setup },
+      );
+      expect(result.isError).toBe(false);
+      expect(applyDatasourceDocument).toHaveBeenCalledOnce();
+      expect(body(result).message).toContain(
+        'Members could not be checked against the data, so a member that is not in the data has no effect.',
+      );
+    });
+
+    it('keeps a not-found note, without refusing, when the read hit the row cap', async () => {
+      const rows = Array.from({ length: 10000 }, (_, index) => [`R${index}`]);
+      const { result } = await run(
+        { colors: [{ member: 'Mars', color: '#e15759' }] },
+        { sheetXml: regionSheet, datasource: regionDoc(), summary: { columns: ['Region'], rows } },
+      );
+      expect(result.isError).toBe(false);
+      expect(body(result).message).toContain('Mars was not found in the first 10000 rows read');
+    });
+
+    it('reads underlying values, not display aliases', async () => {
+      const { executor } = await run(
+        { colors: [{ member: 'Europe', color: '#e15759' }] },
+        { ...region, datasource: regionDoc() },
+      );
+      expect(executor.getWorksheetSummaryData).toHaveBeenCalledWith(
+        'ws-1',
+        expect.objectContaining({ ignoreAliases: true, maxRows: 10000 }),
+        expect.anything(),
+      );
+    });
+
+    it('reads the data before the datasource document it edits', async () => {
+      const { executor, getDatasourceDocument } = await run(
+        { colors: [{ member: 'Europe', color: '#e15759' }] },
+        { ...region, datasource: regionDoc() },
+      );
+      const summaryOrder = vi.mocked(executor.getWorksheetSummaryData).mock.invocationCallOrder[0];
+      expect(summaryOrder).toBeLessThan(getDatasourceDocument.mock.invocationCallOrder[0]);
+    });
+
+    it.each([
+      [
+        'two columns match the field',
+        { columns: ['Region', 'ATTR(Region)'], rows: [['Asia', 'x']] },
+      ],
+      [
+        'the column is not a string',
+        { columns: [{ name: 'Region', dataType: 'real' }], rows: [['1']] },
+      ],
+    ])('treats the members as unchecked when %s', async (_label, summary) => {
+      const { result } = await run(
+        { colors: [{ member: 'Mars', color: '#e15759' }] },
+        { sheetXml: regionSheet, datasource: regionDoc(), summary },
+      );
+      expect(result.isError).toBe(false);
+      expect(body(result).message).toContain('Members could not be checked against the data');
+    });
+
+    it('treats the members as unchecked when the data read times out', async () => {
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(AbortSignal.abort());
+      try {
+        const { result } = await run(
+          { colors: [{ member: 'Mars', color: '#e15759' }] },
+          { ...region, datasource: regionDoc() },
+        );
+        expect(timeout).toHaveBeenCalledWith(5000);
+        expect(result.isError).toBe(false);
+        expect(body(result).message).toContain('Members could not be checked against the data');
+      } finally {
+        timeout.mockRestore();
+      }
+    });
+
+    it('refuses the Null member before any write', async () => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'Null', color: '#e15759' }] },
+        { ...region, datasource: regionDoc() },
+      );
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain('cannot color the Null member');
+      expect(applyDatasourceDocument).not.toHaveBeenCalled();
+    });
+
+    it('replays the live cstring response: europe -> Europe, Atlantis refused before any write', async () => {
+      const live = {
+        columns: [{ name: 'Region', dataType: 'cstring' }],
+        rows: [['Europe'], ['Asia'], ['Africa'], ['Oceania']],
+      };
+      const ok = await run(
+        { colors: [{ member: 'europe', color: '#e15759' }] },
+        { ...region, datasource: regionDoc(), summary: live },
+      );
+      expect(ok.result.isError).toBe(false);
+      expect(ok.applyDatasourceDocument.mock.calls[0][1]).toContain(
+        '<bucket>&quot;Europe&quot;</bucket>',
+      );
+      expect(body(ok.result).message).toContain('europe -> Europe');
+
+      const refused = await run(
+        { colors: [{ member: 'Atlantis', color: '#e15759' }] },
+        { ...region, datasource: regionDoc(), summary: live },
+      );
+      expect(refused.result.isError).toBe(true);
+      expect(text(refused.result)).toContain('Members in the data: Europe, Asia, Africa, Oceania.');
+      expect(refused.applyDatasourceDocument).not.toHaveBeenCalled();
+    });
+
+    it('exports an image for a never-rendered sheet, then resolves from the data', async () => {
+      const { result, executor } = await run(
+        { colors: [{ member: 'europe', color: '#e15759' }] },
+        { ...region, datasource: regionDoc(), neverRendered: true },
+      );
+      expect(executor.exportWorksheetImage).toHaveBeenCalledOnce();
+      expect(result.isError).toBe(false);
+      expect(body(result).colors).toEqual([{ member: 'Europe', color: '#e15759' }]);
+    });
+
+    it('notes a member that matched only the existing color map when the data was read in full', async () => {
+      const { result } = await run(
+        { colors: [{ member: 'Eurpoe', color: '#e15759' }] },
+        {
+          ...region,
+          datasource: datasourceDoc({
+            instances:
+              "<column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />",
+            style: styleXml(encodingXml('[none:Region:nk]', [['#4e79a7', '&quot;Eurpoe&quot;']])),
+          }),
+        },
+      );
+      expect(result.isError).toBe(false);
+      expect(body(result).message).toContain(
+        "Eurpoe is not in this sheet's data; it matched the field's existing color map.",
+      );
+    });
+
+    it('notes an alias whose raw value is not in the fully read data, and still writes it', async () => {
+      const { result, applyDatasourceDocument } = await run(
+        { colors: [{ member: 'EU', color: '#e15759' }] },
+        {
+          sheetXml: regionSheet,
+          summary: { columns: ['Region'], rows: [['Asia']] },
+          datasource: regionDoc("<aliases><alias key='&quot;Europe&quot;' value='EU' /></aliases>"),
+        },
+      );
+      expect(result.isError).toBe(false);
+      expect(applyDatasourceDocument.mock.calls[0][1]).toContain(
+        '<bucket>&quot;Europe&quot;</bucket>',
+      );
+      expect(body(result).message).toContain(
+        "EU is an alias for Europe, which is not in this sheet's data.",
+      );
+    });
+
+    it('does not read the data for a boolean field', async () => {
+      const { executor } = await run(
+        { colors: [{ member: 'true', color: '#ff0000' }] },
+        {
+          sheetXml: worksheetXml({
+            panes: ['[superstore].[none:Calculation_B001:nk]'],
+            columns: [BOOL_COLUMN],
+            instances: [BOOL_CI],
+          }),
+        },
+      );
+      expect(executor.getWorksheetSummaryData).not.toHaveBeenCalled();
+    });
   });
 
-  it('keeps the generic line when the field has no color map yet', async () => {
-    const { result } = await run(FURNITURE_RED);
-    expect(body(result).message).toContain('A member that is not in the data has no effect.');
+  it('writes the trimmed member and refuses a blank one', async () => {
+    const trimmed = await run({ colors: [{ member: '  Furniture  ', color: '#ff0000' }] });
+    expect(trimmed.result.isError).toBe(false);
+    expect(trimmed.applyDatasourceDocument.mock.calls[0][1]).toContain(
+      '<bucket>&quot;Furniture&quot;</bucket>',
+    );
+    const blank = await run({ colors: [{ member: '   ', color: '#ff0000' }] });
+    expect(blank.result.isError).toBe(true);
+    expect(text(blank.result)).toContain('non-empty');
+    expect(blank.applyDatasourceDocument).not.toHaveBeenCalled();
+  });
+
+  it('applies nothing when the datasource changed between the read and the apply', async () => {
+    const { result, applyDatasourceDocument } = await run(FURNITURE_RED, {
+      reread: datasourceDoc({ instances: STRING_CI }).replace(
+        '</datasource>',
+        '<!-- x --></datasource>',
+      ),
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('The datasource changed during the call');
+    expect(text(result)).toContain('safe to repeat');
+    expect(applyDatasourceDocument).not.toHaveBeenCalled();
+  });
+
+  it("surfaces Desktop's apply warnings in the success message and result", async () => {
+    const warnings = [{ code: 'dropped', message: 'something was dropped' }];
+    const { result } = await run(FURNITURE_RED, { warnings });
+    expect(result.isError).toBe(false);
+    expect(body(result).message).toContain('DESKTOP WARNINGS');
+    expect(body(result).message).toContain('- dropped: something was dropped');
+    expect(body(result).warnings).toEqual(warnings);
+  });
+
+  it('reads back inside the apply lock, so a second call re-reads the first call write', async () => {
+    let doc = datasourceDoc({ instances: STRING_CI });
+    let staleReads = 0;
+    const before = doc;
+    const executor = makeExecutorMock({
+      listWorksheets: vi.fn().mockResolvedValue(Ok({ worksheets: [{ id: 'ws-1', name: 'L1' }] })),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: worksheetXml() })),
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(Ok({ datasources: [{ id: 'superstore', name: 'superstore' }] })),
+      getWorksheetSummaryData: vi.fn().mockResolvedValue(
+        Ok({
+          columns: [{ name: 'Category' }],
+          rows: [['Furniture'], ['Technology']],
+        }),
+      ),
+      // Desktop can show pre-apply state for a moment after an apply settles.
+      getDatasourceDocument: vi.fn(async () =>
+        Ok({
+          xml: staleReads > 0 && staleReads-- ? before : doc,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyDatasourceDocument: vi.fn(async (_id: string, xml: string) => {
+        doc = xml;
+        staleReads = 2;
+        return Ok({
+          command_id: 'c',
+          status: 'completed' as const,
+          submitted_at: '2026-10-18T00:00:00Z',
+          warnings: [],
+        });
+      }),
+    });
+    const callback = await Provider.from(getSetMemberColorsTool(new DesktopMcpServer()).callback);
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi
+        .fn()
+        .mockResolvedValue(executor) as unknown as TableauDesktopToolContext['getExecutor'],
+    };
+    const call = async (member: string, color: string): Promise<CallToolResult> =>
+      await callback(
+        {
+          session: 'requested',
+          worksheetName: 'L1',
+          field: undefined,
+          colors: [{ member, color }],
+        },
+        extra,
+      );
+    const first = call('Furniture', '#ff0000');
+    const second = call('Technology', '#0000ff');
+    await vi.runAllTimersAsync();
+    const results = await Promise.all([first, second]);
+
+    expect(results[0].isError).toBe(false);
+    expect(results[1].isError).toBe(true);
+    expect(text(results[1])).toContain('The datasource changed during the call');
+    expect(executor.applyDatasourceDocument).toHaveBeenCalledOnce();
+  });
+
+  it('is marked destructive, like apply-datasource', async () => {
+    const annotations = await Provider.from(
+      getSetMemberColorsTool(new DesktopMcpServer()).annotations,
+    );
+    expect(annotations?.destructiveHint).toBe(true);
   });
 
   it('names a sheet-level color that differs from the datasource, and only that one', async () => {

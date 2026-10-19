@@ -1,11 +1,15 @@
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
+import { type DataMembers, NULL_TOKEN } from './memberColorsData.js';
 import { attrOf, type Bucket, splitColumnRef } from './memberColorsSplice.js';
 
 type XmlRecord = Record<string, any>;
 
 export type MemberColor = { member: string; color: string };
-/** `known` is set only when the field already has a color map to compare against. */
-export type MatchedBucket = Bucket & { known?: boolean };
+/** `via` says how the member was matched; `unchecked` and `unmatched` mean no data hit. */
+export type MatchedBucket = Bucket & {
+  requested: string;
+  via: 'data' | 'alias' | 'existing' | 'unchecked' | 'unmatched';
+};
 
 export type ColorTarget = {
   datasource: string;
@@ -36,59 +40,109 @@ function stripBrackets(name: string): string {
   return name.replace(/^\[:?/, '').replace(/\]$/, '');
 }
 
+const MEMBER_LIST_LIMIT = 20;
+const NULL_MEMBER =
+  'set-member-colors cannot color the Null member; use Edit Colors in Tableau for it.';
+
 /**
  * Validates the request and returns each member's datasource bucket text, e.g. `"Furniture"`.
- * With `existing` buckets, a string member matches one case-insensitively and takes its spelling.
+ * A string member takes the first hit of: exact data value, alias, unique case-insensitive data
+ * value, existing map bucket. Data beats the map because an old map can hold a bad bucket.
  */
 export function buildBuckets(
   colors: readonly MemberColor[],
   datatype: 'string' | 'boolean',
-  existing?: readonly string[],
+  lookup: {
+    existing?: readonly string[];
+    data?: DataMembers;
+    aliases?: ReadonlyMap<string, readonly string[]>;
+  } = {},
 ): { ok: true; buckets: MatchedBucket[] } | { ok: false; message: string } {
+  const { existing, data, aliases } = lookup;
   const seen = new Set<string>();
   const buckets: MatchedBucket[] = [];
+  const missing: string[] = [];
   for (const { member, color } of colors) {
     if (!HEX_COLOR.test(color)) {
       return { ok: false, message: `Color "${color}" for "${member}" must be #rrggbb.` };
     }
     let bucket: string;
-    let displayMember = member;
-    let known: boolean | undefined;
+    let resolved = member;
+    let via: MatchedBucket['via'] = 'unchecked';
     if (datatype === 'boolean') {
-      displayMember = member.trim().toLowerCase();
-      if (displayMember !== 'true' && displayMember !== 'false') {
+      resolved = member.trim().toLowerCase();
+      if (resolved !== 'true' && resolved !== 'false') {
         return {
           ok: false,
           message: `Member "${member}" is not valid for a boolean field; use true or false.`,
         };
       }
-      bucket = displayMember;
+      bucket = resolved;
     } else {
-      if (member.length === 0 || member.includes('"')) {
+      const trimmed = member.trim();
+      if (trimmed.length === 0 || trimmed.includes('"')) {
         return {
           ok: false,
           message: `Member "${member}" must be non-empty and contain no double quotes.`,
         };
       }
+      const lower = trimmed.toLowerCase();
+      if (lower === 'null' || NULL_TOKEN.test(trimmed)) return { ok: false, message: NULL_MEMBER };
       const unquote = (candidate: string): string => candidate.replace(/^"|"$/g, '').trim();
-      const trimmed = member.trim();
-      const match =
+      const same = (value: string): boolean => value.trim().toLowerCase() === lower;
+      const exactData = data?.values.find((value) => value.trim() === trimmed);
+      const aliasKeys = [...(aliases ?? [])].filter(([value]) => same(value)).flatMap(([, k]) => k);
+      if (aliasKeys.some((key) => NULL_TOKEN.test(key))) return { ok: false, message: NULL_MEMBER };
+      const spellings = [...new Set([...aliasKeys, ...(data?.values.filter(same) ?? [])])];
+      const existingMatch =
         existing?.find((candidate) => unquote(candidate) === trimmed) ??
-        existing?.find((candidate) => unquote(candidate).toLowerCase() === trimmed.toLowerCase());
-      if (match === undefined) {
-        bucket = `"${member}"`;
-        known = existing === undefined ? undefined : false;
-      } else {
-        bucket = match;
-        displayMember = match.replace(/^"|"$/g, '');
-        known = true;
+        existing?.find((candidate) => unquote(candidate).toLowerCase() === lower);
+      const clashing = aliasKeys.filter((key) => key !== exactData);
+      if (exactData !== undefined && clashing.length > 0) {
+        return {
+          ok: false,
+          message: `Member "${member}" matches more than one value or alias (${[exactData, ...new Set(clashing)].join(', ')}); use the exact spelling.`,
+        };
       }
+      if (exactData !== undefined) {
+        resolved = exactData;
+        via = 'data';
+      } else if (spellings.length > 1) {
+        return {
+          ok: false,
+          message: `Member "${member}" matches more than one value or alias (${spellings.join(', ')}); use the exact spelling.`,
+        };
+      } else if (spellings.length === 1) {
+        resolved = spellings[0];
+        via = aliasKeys.length > 0 ? 'alias' : 'data';
+      } else if (existingMatch !== undefined) {
+        resolved = unquote(existingMatch);
+        via = 'existing';
+      } else {
+        resolved = trimmed;
+        via = data === undefined ? 'unchecked' : 'unmatched';
+        if (data?.complete) missing.push(trimmed);
+      }
+      bucket = `"${resolved}"`;
     }
     if (seen.has(bucket)) {
       return { ok: false, message: `Member "${member}" is listed more than once.` };
     }
     seen.add(bucket);
-    buckets.push({ member: displayMember, bucket, color: color.toLowerCase(), known });
+    buckets.push({
+      member: resolved,
+      requested: member.trim(),
+      bucket,
+      color: color.toLowerCase(),
+      via,
+    });
+  }
+  if (missing.length > 0 && data !== undefined) {
+    const shown = data.values.slice(0, MEMBER_LIST_LIMIT).join(', ');
+    return {
+      ok: false,
+      message: `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not in this sheet's data, so nothing was changed. Members in the data: ${shown}${data.values.length > MEMBER_LIST_LIMIT ? ', ...' : ''}. A member filtered out of this sheet can be colored from a sheet that shows it.`,
+    };
   }
   return { ok: true, buckets };
 }

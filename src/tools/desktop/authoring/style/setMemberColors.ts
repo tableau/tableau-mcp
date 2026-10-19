@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import type { ExecuteCommandWarning } from '../../../../desktop/externalApi/executorTypes.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -13,7 +14,9 @@ import {
   formatColorMapCheck,
   staleWorksheetStyleFindings,
 } from '../../../../desktop/validation/colorMapReadback.js';
-import { applyDatasourceXml } from '../../../../desktop/wrappers/applyDatasourceXml.js';
+import { formatDesktopWarnings } from '../../../../desktop/validation/promise-check.js';
+import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorksheetXml } from '../../../../desktop/wrappers/getWorksheetXml.js';
 import { decodedId, readColorMapsBack } from '../../../../desktop/wrappers/readColorMapsBack.js';
 import {
@@ -28,6 +31,7 @@ import {
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { DATA_MAX_ROWS, readAliases, readDataMembers } from './memberColorsData.js';
 import { existingBuckets, spliceMemberColors } from './memberColorsSplice.js';
 import { buildBuckets, resolveColorTarget } from './memberColorsTarget.js';
 
@@ -57,6 +61,7 @@ type SetMemberColorsResult = {
   field: string;
   datasource: string;
   colors: Array<{ member: string; color: string }>;
+  warnings?: ExecuteCommandWarning[];
 };
 
 const title = 'Set Member Colors';
@@ -73,7 +78,7 @@ export const getSetMemberColorsTool = (
     annotations: {
       readOnlyHint: false,
       openWorldHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
     },
     callback: async ({ session, worksheetName, colors, field }, extra): Promise<CallToolResult> => {
@@ -119,6 +124,15 @@ export const getSetMemberColorsTool = (
             ).toErr();
           }
 
+          const data =
+            target.datatype === 'string'
+              ? await readDataMembers({
+                  executor,
+                  worksheetName,
+                  target,
+                  signal: extra.signal,
+                })
+              : undefined;
           const document = await executor.getDatasourceDocument(datasourceId, extra.signal);
           if (document.isErr()) {
             return isRouteMissing(document.error)
@@ -126,11 +140,11 @@ export const getSetMemberColorsTool = (
               : new DesktopCommandExecutionError(document.error).toErr();
           }
 
-          const built = buildBuckets(
-            colors,
-            target.datatype,
-            existingBuckets(document.value.xml, target.instance),
-          );
+          const built = buildBuckets(colors, target.datatype, {
+            existing: existingBuckets(document.value.xml, target.instance),
+            data,
+            aliases: readAliases(document.value.xml, target.column),
+          });
           if (!built.ok) {
             return new ArgsValidationError(built.message).toErr();
           }
@@ -139,24 +153,42 @@ export const getSetMemberColorsTool = (
             return new XmlModificationError('The datasource document could not be edited.').toErr();
           }
 
-          const applied = await applyDatasourceXml({
-            datasourceId,
-            xml: editedXml,
-            executor,
-            signal: extra.signal,
+          const sourceHash = sourceSha256(document.value.xml);
+          const applied = await withApplyLock(async () => {
+            const latest = await executor.getDatasourceDocument(datasourceId, extra.signal);
+            if (latest.isErr()) return { kind: 'error' as const, error: latest.error };
+            if (sourceSha256(latest.value.xml) !== sourceHash) return { kind: 'drift' as const };
+            const result = await executor.applyDatasourceDocument(
+              datasourceId,
+              editedXml,
+              extra.signal,
+            );
+            if (result.isErr()) return { kind: 'error' as const, error: result.error };
+            // Inside the lock: a read after release could see pre-apply state and let a second call overwrite this one.
+            const verification = await readColorMapsBack({
+              appliedXml: editedXml,
+              datasourceId,
+              executor,
+              signal: extra.signal,
+            });
+            return {
+              kind: 'applied' as const,
+              warnings: result.value.warnings ?? [],
+              verification,
+            };
           });
-          if (applied.isErr()) {
+          if (applied.kind === 'drift') {
+            return new XmlModificationError(
+              'The datasource changed during the call, so nothing was applied. The call is safe to repeat.',
+            ).toErr();
+          }
+          if (applied.kind === 'error') {
             return isRouteMissing(applied.error)
               ? endpointNotInThisBuild('datasource document').toErr()
               : new DesktopCommandExecutionError(applied.error).toErr();
           }
 
-          const verification = await readColorMapsBack({
-            appliedXml: editedXml,
-            datasourceId,
-            executor,
-            signal: extra.signal,
-          });
+          const { verification } = applied;
           const members = built.buckets.map(({ member }) => member).join(', ');
           if (verification?.status !== 'passed') {
             const retry =
@@ -171,15 +203,39 @@ export const getSetMemberColorsTool = (
           }
 
           const pairs = built.buckets.map(({ member, color }) => ({ member, color }));
+          const resolvedNote = built.buckets
+            .filter(({ member, requested, via }) => member !== requested && via !== 'unchecked')
+            .map(
+              ({ member, requested, via }) =>
+                `${requested} -> ${member}${via === 'alias' ? ' (alias)' : ''}`,
+            );
           const unmatched = built.buckets
-            .filter(({ known }) => known === false)
+            .filter(({ via }) => via === 'unmatched')
             .map(({ member }) => member);
+          const fromMap = built.buckets
+            .filter(({ via }) => via === 'existing')
+            .map(({ requested }) => requested);
+          const aliasMissing = data?.complete
+            ? built.buckets.filter(
+                ({ member, via }) => via === 'alias' && !data.values.includes(member),
+              )
+            : [];
           const memberNote =
-            unmatched.length > 0
-              ? ` ${unmatched.join(', ')} ${unmatched.length === 1 ? 'is' : 'are'} not in the field's current color map, so ${unmatched.length === 1 ? 'it' : 'they'} may not be in the data; ${unmatched.length === 1 ? 'it has' : 'they have'} no effect unless the data has that exact value.`
-              : built.buckets.every(({ known }) => known === undefined)
-                ? ' A member that is not in the data has no effect.'
-                : '';
+            aliasMissing
+              .map(
+                ({ requested, member }) =>
+                  ` ${requested} is an alias for ${member}, which is not in this sheet's data.`,
+              )
+              .join('') +
+            (data !== undefined && fromMap.length > 0
+              ? ` ${fromMap.join(', ')} ${fromMap.length === 1 ? 'is' : 'are'} not in this sheet's data; ${fromMap.length === 1 ? 'it' : 'they'} matched the field's existing color map.`
+              : '') +
+            (resolvedNote.length > 0 ? ` Matched members: ${resolvedNote.join('; ')}.` : '') +
+            (data === undefined && target.datatype === 'string'
+              ? ' Members could not be checked against the data, so a member that is not in the data has no effect.'
+              : unmatched.length > 0
+                ? ` ${unmatched.join(', ')} ${unmatched.length === 1 ? 'was' : 'were'} not found in the first ${DATA_MAX_ROWS} rows read, so ${unmatched.length === 1 ? 'it' : 'they'} may have no effect.`
+                : '');
           const staleFindings = staleWorksheetStyleFindings(
             extractWorksheetStyleColorMaps(sheet.value.xml).filter(
               (map) => map.datasource === target.datasource && map.field === target.instance,
@@ -197,10 +253,11 @@ export const getSetMemberColorsTool = (
             message:
               `Set ${pairs.length} member color(s) for ${target.label} in datasource ${target.datasource}: ` +
               `${pairs.map(({ member, color }) => `${member} -> ${color}`).join('; ')}.` +
-              `${formatColorMapCheck(verification)}${memberNote}${stale}`,
+              `${formatColorMapCheck(verification)}${memberNote}${stale}${formatDesktopWarnings(applied.warnings)}`,
             field: target.label,
             datasource: target.datasource,
             colors: pairs,
+            ...(applied.warnings.length > 0 ? { warnings: [...applied.warnings] } : {}),
           });
         },
       });
