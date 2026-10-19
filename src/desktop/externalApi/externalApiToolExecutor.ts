@@ -26,6 +26,7 @@ import {
   WorkbookDocument,
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
+import { classifySessionFatalError } from './sessionFatalError.js';
 import {
   ApiRoot,
   apiRootSchema,
@@ -1243,12 +1244,12 @@ function buildCommandStatus(
     const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
     return Err({
       type: 'command-failed',
-      error: {
+      error: classifySessionFatalError({
         code: outcome.envelopeError?.code ?? 'operation-failed',
         message: outcome.envelopeError?.message ?? `Command ${namespace}:${command} failed`,
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-      },
+      }),
       ...(outcome.result !== undefined ? { result: outcome.result } : {}),
       ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
@@ -1364,12 +1365,12 @@ function mapClientError(
       const tableauErrorCode = error.tableauErrorCode ?? error.code;
       return {
         type: 'command-failed',
-        error: {
+        error: classifySessionFatalError({
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
           ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-        },
+        }),
       };
     }
     case 'unauthorized':
