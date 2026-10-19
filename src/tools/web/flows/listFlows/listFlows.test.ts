@@ -5,9 +5,10 @@ import { stubDefaultEnvVars } from '../../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo } from '../../_lib/truncation.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { looksLikeLoginNotFullName } from './flowsFilterUtils.js';
-import { buildTruncationInfo, constrainFlows, getListFlowsTool } from './listFlows.js';
+import { constrainFlows, getListFlowsTool } from './listFlows.js';
 import { mockFlows } from './mockFlows.js';
 
 const mocks = vi.hoisted(() => ({
