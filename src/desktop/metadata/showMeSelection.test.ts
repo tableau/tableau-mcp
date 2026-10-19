@@ -1,3 +1,16 @@
+const { parseXMLSpy } = vi.hoisted(() => ({ parseXMLSpy: vi.fn() }));
+
+vi.mock('./parser.js', async () => {
+  const actual = await vi.importActual<typeof import('./parser.js')>('./parser.js');
+  return {
+    ...actual,
+    parseXML: (...args: Parameters<typeof actual.parseXML>) => {
+      parseXMLSpy();
+      return actual.parseXML(...args);
+    },
+  };
+});
+
 import { resolveShowMeSelection } from './showMeSelection.js';
 
 const xml = `
@@ -31,6 +44,10 @@ const xml = `
 </workbook>`;
 
 describe('resolveShowMeSelection', () => {
+  beforeEach(() => {
+    parseXMLSpy.mockClear();
+  });
+
   it('resolves bare, bracketed, caption-qualified, and NFC-equivalent captions in datasource scope', () => {
     const result = resolveShowMeSelection(xml, {
       dataSource: 'Caf\u00e9 Sales',
@@ -118,6 +135,20 @@ describe('resolveShowMeSelection', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) expect(result.error.message).toContain('was not found');
+  });
+
+  it('parses once for repeated qualified derived identities before reporting candidates', () => {
+    const result = resolveShowMeSelection(xml, {
+      fieldsSelectedInSchemaViewer: [
+        '[federated.sales].[avg:Sales:qk]',
+        '[federated.hidden].[custom:Hidden Sales:qk]',
+        '[Missing Source].[max:Sales:qk]',
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error.message).toContain('Candidates:');
+    expect(parseXMLSpy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown and ambiguous fields without choosing a datasource', () => {

@@ -1,26 +1,27 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { ArgsValidationError } from '../../errors/mcpToolError.js';
-import { listAvailableFields } from './field-builder.js';
+import { listAvailableFieldsFromWorkbook } from './field-builder.js';
 import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
-  resolveUniqueDatasourceName,
+  resolveUniqueDatasourceNameFromWorkbook,
 } from './field-resolver.js';
 import { normalizeArray, parseXML } from './parser.js';
+import type { ParsedWorkbook } from './types.js';
 
 export type ShowMeSelection = {
   dataSource?: string;
   fieldsSelectedInSchemaViewer?: string[];
 };
 
-type AvailableField = ReturnType<typeof listAvailableFields>[number];
+type AvailableField = ReturnType<typeof listAvailableFieldsFromWorkbook>[number];
 
 type DatasourceCandidate = { name: string; caption: string };
 
 type ShowMeIdentityCatalog = {
   baseColumnsByDatasource: Map<string, Set<string>>;
-  declaredInstancesByDatasource: Map<string, Set<string>>;
+  declaredColumnsByInstanceByDatasource: Map<string, Map<string, string>>;
 };
 
 function addIdentity(
@@ -34,15 +35,32 @@ function addIdentity(
   identitiesByDatasource.set(datasource, identities);
 }
 
+function addDeclaredInstance(
+  instancesByDatasource: Map<string, Map<string, string>>,
+  datasource: unknown,
+  instance: unknown,
+  column: unknown,
+): void {
+  if (
+    typeof datasource !== 'string' ||
+    typeof instance !== 'string' ||
+    typeof column !== 'string'
+  ) {
+    return;
+  }
+  const instances = instancesByDatasource.get(datasource) ?? new Map<string, string>();
+  instances.set(instance, column);
+  instancesByDatasource.set(datasource, instances);
+}
+
 /**
  * Keeps the wire-level identity catalog separate from listAvailableFields(): that
  * projection deliberately hides fields from friendly-name discovery, while the
  * native Show Me API still accepts an already-canonical hidden identity.
  */
-function showMeIdentityCatalog(workbookXml: string): ShowMeIdentityCatalog {
-  const workbook = parseXML(workbookXml);
+function showMeIdentityCatalog(workbook: ParsedWorkbook): ShowMeIdentityCatalog {
   const baseColumnsByDatasource = new Map<string, Set<string>>();
-  const declaredInstancesByDatasource = new Map<string, Set<string>>();
+  const declaredColumnsByInstanceByDatasource = new Map<string, Map<string, string>>();
 
   for (const datasource of normalizeArray(workbook.workbook?.datasources?.datasource)) {
     const record = datasource as Record<string, unknown>;
@@ -76,10 +94,12 @@ function showMeIdentityCatalog(workbookXml: string): ShowMeIdentityCatalog {
       );
     }
     for (const instance of normalizeArray(record['column-instance'])) {
-      addIdentity(
-        declaredInstancesByDatasource,
+      const candidate = instance as Record<string, unknown>;
+      addDeclaredInstance(
+        declaredColumnsByInstanceByDatasource,
         datasource,
-        (instance as Record<string, unknown>)['@_name'],
+        candidate['@_name'],
+        candidate['@_column'],
       );
     }
     Object.entries(record)
@@ -88,17 +108,15 @@ function showMeIdentityCatalog(workbookXml: string): ShowMeIdentityCatalog {
   };
   visit(workbook, undefined);
 
-  return { baseColumnsByDatasource, declaredInstancesByDatasource };
+  return { baseColumnsByDatasource, declaredColumnsByInstanceByDatasource };
 }
 
 function datasourceCandidateEntries(
-  workbookXml: string,
+  workbook: ParsedWorkbook,
   fields: AvailableField[],
 ): DatasourceCandidate[] {
   const captions = new Map<string, string>();
-  for (const datasource of normalizeArray(
-    parseXML(workbookXml).workbook?.datasources?.datasource,
-  )) {
+  for (const datasource of normalizeArray(workbook.workbook?.datasources?.datasource)) {
     const record = datasource as Record<string, unknown>;
     const name = record['@_name'];
     const caption = record['@_caption'];
@@ -110,11 +128,11 @@ function datasourceCandidateEntries(
 }
 
 function datasourceCandidates(
-  workbookXml: string,
+  workbook: ParsedWorkbook,
   fields: AvailableField[],
   requestedDatasource?: string,
 ): string[] {
-  const candidates = datasourceCandidateEntries(workbookXml, fields);
+  const candidates = datasourceCandidateEntries(workbook, fields);
   const normalizedRequested = requestedDatasource?.normalize('NFC');
   const matching =
     normalizedRequested === undefined
@@ -131,10 +149,10 @@ function datasourceCandidates(
 
 function datasourceError(
   input: string,
-  workbookXml: string,
+  workbook: ParsedWorkbook,
   fields: AvailableField[],
 ): ArgsValidationError {
-  const available = datasourceCandidates(workbookXml, fields);
+  const available = datasourceCandidates(workbook, fields);
   return new ArgsValidationError(
     `dataSource "${input}" was not found or is ambiguous. Candidates: ${available.join(', ')}. Show Me was not called.`,
   );
@@ -196,62 +214,27 @@ function canonicalIdentity(
   if (catalog.baseColumnsByDatasource.get(datasource)?.has(columnInstanceName)) return true;
   return (
     parseColumnInstanceRef(columnInstanceName) !== null &&
-    catalog.declaredInstancesByDatasource.get(datasource)?.has(columnInstanceName) === true
+    catalog.declaredColumnsByInstanceByDatasource.get(datasource)?.has(columnInstanceName) === true
   );
 }
 
 function derivedField(
-  workbookXml: string,
+  catalog: ShowMeIdentityCatalog,
   fields: AvailableField[],
   columnInstanceName: string,
   datasource: string,
 ): AvailableField | undefined {
   const instance = parseColumnInstanceRef(columnInstanceName);
   if (!instance) return undefined;
-  const field = fields.find(
-    (field) =>
-      field.datasource === datasource && field.columnName === `[${instance.localFieldName}]`,
-  );
-  if (
-    !field ||
-    !hasDeclaredColumnInstance(workbookXml, datasource, field.columnName, columnInstanceName)
-  ) {
+  const declaredColumn = catalog.declaredColumnsByInstanceByDatasource
+    .get(datasource)
+    ?.get(columnInstanceName);
+  if (declaredColumn !== `[${instance.localFieldName}]`) {
     return undefined;
   }
-  return field;
-}
-
-function hasDeclaredColumnInstance(
-  workbookXml: string,
-  datasource: string,
-  column: string,
-  instance: string,
-): boolean {
-  const visit = (node: unknown, currentDatasource: string | undefined): boolean => {
-    if (node === null || typeof node !== 'object') return false;
-    if (Array.isArray(node)) return node.some((item) => visit(item, currentDatasource));
-    const record = node as Record<string, unknown>;
-    const datasourceName =
-      typeof record['@_datasource'] === 'string'
-        ? record['@_datasource']
-        : typeof record['@_name'] === 'string' && record['column-instance'] !== undefined
-          ? record['@_name']
-          : currentDatasource;
-    for (const columnInstance of normalizeArray(record['column-instance'])) {
-      const candidate = columnInstance as Record<string, unknown>;
-      if (
-        datasourceName === datasource &&
-        candidate['@_column'] === column &&
-        candidate['@_name'] === instance
-      ) {
-        return true;
-      }
-    }
-    return Object.entries(record)
-      .filter(([key]) => !key.startsWith('@_') && key !== 'column-instance')
-      .some(([, child]) => visit(child, datasourceName));
-  };
-  return visit(parseXML(workbookXml), undefined);
+  return fields.find(
+    (field) => field.datasource === datasource && field.columnName === declaredColumn,
+  );
 }
 
 /**
@@ -263,15 +246,16 @@ export function resolveShowMeSelection(
   workbookXml: string,
   selection: ShowMeSelection,
 ): Result<ShowMeSelection, ArgsValidationError> {
-  const availableFields = listAvailableFields(workbookXml);
-  const identityCatalog = showMeIdentityCatalog(workbookXml);
+  const workbook = parseXML(workbookXml);
+  const availableFields = listAvailableFieldsFromWorkbook(workbook);
+  const identityCatalog = showMeIdentityCatalog(workbook);
   const resolvedDataSourceResult =
     selection.dataSource === undefined
       ? undefined
-      : resolveUniqueDatasourceName(workbookXml, selection.dataSource);
+      : resolveUniqueDatasourceNameFromWorkbook(workbook, selection.dataSource);
 
   if (selection.dataSource !== undefined && resolvedDataSourceResult === null) {
-    return datasourceError(selection.dataSource, workbookXml, availableFields).toErr();
+    return datasourceError(selection.dataSource, workbook, availableFields).toErr();
   }
   const resolvedDataSource = resolvedDataSourceResult ?? undefined;
 
@@ -286,13 +270,16 @@ export function resolveShowMeSelection(
     let fieldDatasource = resolvedDataSource;
     let qualifierIsInternal = false;
     if (qualified) {
-      const qualifiedDatasource = resolveUniqueDatasourceName(workbookXml, qualified.datasource);
+      const qualifiedDatasource = resolveUniqueDatasourceNameFromWorkbook(
+        workbook,
+        qualified.datasource,
+      );
       if (qualifiedDatasource === null) {
         return fieldError(
           input,
           index,
           `uses datasource "${qualified.datasource}" that was not found or is ambiguous`,
-          datasourceCandidates(workbookXml, availableFields, qualified.datasource),
+          datasourceCandidates(workbook, availableFields, qualified.datasource),
         ).toErr();
       }
       if (fieldDatasource !== undefined && fieldDatasource !== qualifiedDatasource) {
@@ -307,7 +294,12 @@ export function resolveShowMeSelection(
       const canonical =
         canonicalField(availableFields, input, qualifiedDatasource) !== undefined ||
         canonicalIdentity(identityCatalog, fieldInput, qualifiedDatasource);
-      const derived = derivedField(workbookXml, availableFields, fieldInput, qualifiedDatasource);
+      const derived = derivedField(
+        identityCatalog,
+        availableFields,
+        fieldInput,
+        qualifiedDatasource,
+      );
       if (canonical || derived) {
         resolvedFields.push(
           qualifierIsInternal ? input : `[${qualifiedDatasource}].${qualified.columnInstanceName}`,

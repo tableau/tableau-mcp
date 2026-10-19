@@ -10,6 +10,7 @@ import {
   type ParsedColumn,
   ParsedColumnInstance,
   ParsedDatasourceDependencies,
+  type ParsedWorkbook,
 } from './types.js';
 
 export function inferRoleFromType(localType: string | undefined): string {
@@ -303,8 +304,17 @@ export function findAndBuildColumnRef(
 export function listAvailableFields(
   workbookXml: string,
 ): Array<FieldReference & { column_ref: string }> {
-  const workbook = parseXML(workbookXml);
+  return listAvailableFieldsFromWorkbook(parseXML(workbookXml));
+}
 
+/**
+ * List fields from an already-parsed workbook. This preserves the public XML
+ * helper while allowing callers that need multiple metadata projections to
+ * share one parse.
+ */
+export function listAvailableFieldsFromWorkbook(
+  workbook: ParsedWorkbook,
+): Array<FieldReference & { column_ref: string }> {
   // Look at workbook-level datasources
   const datasources = normalizeArray(workbook.workbook?.datasources?.datasource);
   if (datasources.length === 0) {
