@@ -16,6 +16,7 @@ import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
+import { RUN_FLOW_API_SCOPES } from '../../../../server/oauth/scopes.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
 import { EvidenceContext, RegistryEvidence } from '../../_lib/evidence.js';
@@ -142,7 +143,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
           try {
             const job = await useRestApi({
               ...extra,
-              jwtScopes: runFlowTool.requiredApiScopes,
+              jwtScopes: RUN_FLOW_API_SCOPES,
               callback: async (restApi) => {
                 const evidence = new RegistryEvidence();
                 const target = { id: flowId };
