@@ -17,7 +17,7 @@ import {
 } from '../../../desktop/templates/templateArtifactStore.js';
 import {
   formatColorMapCheck,
-  formatStaleWorksheetStyleNote,
+  formatStaleWorksheetStyleLead,
   mergeColorMapVerification,
 } from '../../../desktop/validation/colorMapReadback.js';
 import {
@@ -439,9 +439,8 @@ export const getApplyWorksheetTool = (
             : undefined;
           // Before the receipt, whose closing line says nothing unlisted is wrong.
           const colorNote =
-            colorVerification?.status === 'warning'
-              ? formatColorMapCheck(colorVerification)
-              : formatStaleWorksheetStyleNote(colorVerification);
+            colorVerification?.status === 'warning' ? formatColorMapCheck(colorVerification) : '';
+          const staleLead = formatStaleWorksheetStyleLead(colorVerification);
           // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
           // along so the agent can re-check the rendered chart before moving on.
           const readbackWarning = result.isOk()
@@ -497,8 +496,8 @@ export const getApplyWorksheetTool = (
               {
                 message:
                   readback?.status === 'failed'
-                    ? `Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${colorNote}${hostVerification}`
-                    : `Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${colorNote}${hostVerification}`,
+                    ? `${staleLead}Desktop applied the worksheet update for "${appliedWorksheetName}", but verification found invalid or dropped worksheet state. Diagnose the verification findings; do not retry automatically.${readbackWarning}${colorNote}${hostVerification}`
+                    : `${staleLead}Successfully applied worksheet update for "${appliedWorksheetName}". The worksheet has been updated.${readbackWarning}${colorNote}${hostVerification}`,
                 title: appliedWorksheetName,
                 applied: true as const,
                 retrySafe: false as const,
