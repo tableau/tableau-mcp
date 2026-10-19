@@ -8,13 +8,11 @@ Creates a short-lived presigned S3 PUT URL for a `.tds` or `.tdsx` file. Upload 
 the returned `requiredHeaders` before `expiresAt`, then pass `datasourceUploadId` to
 [Publish Data Source](publish-datasource.md). Requesting a URL does not publish anything to Tableau.
 
-Requires `MCP_S3_BUCKET`, the `authoring-tools` feature flag, and Explorer (Can Publish) or higher.
-Slack clients also require `authoring-with-slack`. The MCP scope is `tableau:mcp:datasource:create`;
-requesting a URL does not call the Tableau REST API.
+Requires `MCP_S3_BUCKET` and Explorer (Can Publish) or higher. The MCP scope is
+`tableau:mcp:datasource:create`; requesting a URL does not call the Tableau REST API.
 
-Use OAuth or server-side authentication. Passthrough sessions omit this tool from discovery, and
-with S3 configured also omit `publish-datasource`. Calls using a cached upload tool still fail
-before issuing a signed URL for Passthrough authentication.
+Use OAuth or server-side authentication. This tool is not available when the caller is authenticated
+via Passthrough auth.
 
 ## Arguments
 

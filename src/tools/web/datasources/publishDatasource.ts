@@ -4,14 +4,9 @@ import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  ArgsValidationError,
-  ProjectNotAllowedError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
-import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PublishedDataSourceResponse } from '../../../sdks/tableau/types/dataSource.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
@@ -19,6 +14,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
+import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   getDatasourceFileType,
   type ResolvedDatasource,
@@ -206,16 +202,4 @@ async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<R
   }
 
   return { fileName, bytes };
-}
-
-function assertProjectAllowedByBoundedContext(
-  projectId: string,
-  boundedContext: BoundedContext,
-): void {
-  const { projectIds } = boundedContext;
-  if (projectIds && !projectIds.has(projectId)) {
-    throw new ProjectNotAllowedError(
-      `Publishing to project with LUID ${projectId} is not allowed by this MCP server's bounded project context.`,
-    );
-  }
 }

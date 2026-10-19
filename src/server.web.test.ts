@@ -325,7 +325,7 @@ describe('server', () => {
     }
   });
 
-  describe('datasource publishing discovery', () => {
+  describe('publishing tool discovery', () => {
     const publishingNames = [
       'request-workbook-upload',
       'request-datasource-upload',
@@ -352,7 +352,7 @@ describe('server', () => {
         { ...mode, s3: true },
       ]),
     )(
-      'filters datasource tools without changing workbook tools for $label with S3=$s3',
+      'registers datasource and workbook publishing tools alike for $label with S3=$s3',
       async ({ auth, s3 }) => {
         vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
         vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
@@ -364,15 +364,7 @@ describe('server', () => {
         const registered = vi
           .mocked(server.mcpServer.registerTool)
           .mock.calls.map((call) => call[0]);
-        const expectedDatasources =
-          auth?.type === 'Passthrough'
-            ? s3
-              ? []
-              : ['publish-datasource']
-            : ['request-datasource-upload', 'publish-datasource'];
-        expect(registered.sort()).toEqual(
-          ['request-workbook-upload', 'publish-workbook', ...expectedDatasources].sort(),
-        );
+        expect(registered.sort()).toEqual([...publishingNames].sort());
       },
     );
   });

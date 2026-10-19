@@ -136,7 +136,7 @@ describe('resolveStagedDatasourceUpload', () => {
     );
   });
 
-  it('preserves a caller-supplied limit above 100 MiB', async () => {
+  it('passes a caller-supplied byte limit to the S3 download', async () => {
     await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
       config,

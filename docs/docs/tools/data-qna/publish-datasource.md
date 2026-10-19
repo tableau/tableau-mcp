@@ -11,9 +11,8 @@ workbook validation endpoint is involved. Preparing or exporting the datasource 
 step; this tool does not embed connection credentials or reconnect a workbook to the published
 source.
 
-Requires the `authoring-tools` feature flag. Slack clients also require `authoring-with-slack`. The
-minimum site role is Explorer (Can Publish); Tableau publish and overwrite permissions apply. The
-MCP scope is `tableau:mcp:datasource:create`; publication uses `tableau:datasources:create` and
+The minimum site role is Explorer (Can Publish); Tableau publish and overwrite permissions apply.
+The MCP scope is `tableau:mcp:datasource:create`; publication uses `tableau:datasources:create` and
 `tableau:file_uploads:create`.
 
 ## Arguments
@@ -35,7 +34,7 @@ filesystems isolated to the caller. Hosted clients can use staged S3 uploads ins
 retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server memory before uploading
 to Tableau. See
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing) for
-the input and project bounds. Passthrough sessions do not advertise this tool when S3 is configured.
+the input and project bounds.
 
 ## Example
 

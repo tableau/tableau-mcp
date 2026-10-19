@@ -210,7 +210,7 @@ describe('publishDatasourceTool', () => {
     );
   });
 
-  it('validates and publishes a local TDS data source file path', async () => {
+  it('uploads and publishes a local TDS data source file path', async () => {
     const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(false);
