@@ -50,6 +50,7 @@ type JwtScopes =
   | 'tableau:datasource_tags:update'
   | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
+  | 'tableau:datasources:create'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
