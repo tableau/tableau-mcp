@@ -81,7 +81,15 @@ describe('cancelFlowRunTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is disabled when the flow write flag is off (state-mutating tool is opt-in)', async () => {
+  it('is disabled when flow-write-tools is off even when the environment controls allow writes', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName !== 'flow-write-tools',
+    );
+    const tool = getCancelFlowRunTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is disabled when the flow write environment control is off', async () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       flowToolsEnabled: true,
       flowWriteToolsEnabled: false,

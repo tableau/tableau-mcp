@@ -547,6 +547,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await isAuthoringAllowedForClient(clientId));
   const flowToolsEnabled =
     config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+  const flowWriteToolsEnabled =
+    config.flowWriteToolsEnabled && (await featureGate.isFeatureEnabled('flow-write-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
@@ -587,8 +589,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // Requires the base flow gate (static + dynamic) and the write opt-in.
-  if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
+  // Write tools additionally require both their environment control and feature flag.
+  if (!flowToolsEnabled || !flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');
     enabledTools.delete('cancel-flow-run');

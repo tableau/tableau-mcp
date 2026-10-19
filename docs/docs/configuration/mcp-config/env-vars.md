@@ -459,21 +459,23 @@ Enables product telemetry for tool usage tracking.
 
 Controls the base gate for the Tableau Prep flow tool family. It controls read-only tool registration directly and is also required for the mutating tools.
 
-- Default: `false`
-- Set to `true` to enable:
+- Default: `true`
+- Enables these read-only tools when the `flow-tools` feature flag is on:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
-  disabled.
-- Setting this to `true` is necessary but not sufficient. The flow tools also require the
-  `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
-  without a redeploy. Both switches must be on for the tools to register; either one turns them
-  off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
-- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled); all flow tools remain subject to the `flow-tools` feature flag.
+- Only the exact value `false` disables them. Unset, empty, and other values leave them enabled.
+- The `flow-tools` feature flag must also be on. It ships as `true` in `features.json` for the
+  built-in feature provider; custom providers control their own flag values.
+- Flags are checked when tools register. Restart after changing `features.json`; reconnect
+  existing sessions after changing a custom provider's flag values.
+- Set `FLOW_TOOLS_ENABLED=false` or turn off `flow-tools` to disable all Flow tools, including
+  the write tools.
+- The mutating tools also require [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled)
+  and the `flow-write-tools` feature flag.
 - When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
   `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via
@@ -504,23 +506,31 @@ Enables admin-only tools that require site administrator permissions.
 
 ## `FLOW_WRITE_TOOLS_ENABLED`
 
-Provides the second opt-in for the content-**mutating** Tableau Prep flow run tools. These tools change site state for other users because a run consumes Tableau Prep Conductor capacity and can overwrite outputs, so they are opt-in.
+Controls registration of the content-**mutating** Tableau Prep flow tools. These tools are enabled
+by default with the built-in feature provider. Every mutation still requires a preview, explicit
+human approval, and the matching confirmation token.
 
-- Default: `false`
-- The base `FLOW_TOOLS_ENABLED=true` gate is also required. If `FLOW_TOOLS_ENABLED=false`, the write tools remain disabled even when this flag is `true`
-- When both flags are `true`, enables:
+- Default: `true`
+- Only the exact value `false` disables this setting. Unset, empty, and other values leave it enabled.
+- The `flow-write-tools` feature flag must also be on. It ships as `true` in `features.json`;
+  custom providers must enable it themselves. An enabled feature flag cannot override an explicit
+  `FLOW_WRITE_TOOLS_ENABLED=false`, and setting the env value to `true` cannot override a disabled flag.
+- The base `FLOW_TOOLS_ENABLED` setting and `flow-tools` feature flag must also be enabled.
+- When all four gates are enabled, registers:
   - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
   - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
   - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
-- When either flag is `false`, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run` for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not advertised
+- When any required gate is off, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run` for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not advertised
 - These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
 - Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
 
-| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
+With the base `FLOW_TOOLS_ENABLED` setting and `flow-tools` flag enabled:
+
+| `FLOW_WRITE_TOOLS_ENABLED` | `flow-write-tools` flag | Registered flow tools |
 | --- | --- | --- |
-| `false` | `false` or `true` | none |
-| `true` | `false` | read-only flow tools |
-| `true` | `true` | read-only and mutating flow tools |
+| unset, empty, or `true` | on | read-only and mutating flow tools |
+| `false` | on or off | read-only flow tools |
+| unset, empty, or `true` | off | read-only flow tools |
 
 <hr />
 

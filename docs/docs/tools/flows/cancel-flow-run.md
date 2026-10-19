@@ -25,7 +25,9 @@ Cancellation is **asynchronous**:
   status may be Completed or Failed rather than Cancelled. Cancellation does **not** undo writes.
 - It does **not** alter the flow definition or its schedule — it requests cancellation for one run.
 
-Only registered when both `FLOW_TOOLS_ENABLED=true` and `FLOW_WRITE_TOOLS_ENABLED=true`.
+Enabled by default with the built-in feature provider. Registration requires both the `flow-tools`
+and `flow-write-tools` feature flags to be on, and neither `FLOW_TOOLS_ENABLED` nor
+`FLOW_WRITE_TOOLS_ENABLED` may be set to `false`.
 
 ## Two-phase confirmation
 

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MockedFunction } from 'vitest';
 
+import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
@@ -339,7 +340,22 @@ describe('server', () => {
     }
   });
 
-  it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {
+  const readFlowToolNames = [
+    'list-flows',
+    'get-flow',
+    'list-flow-runs',
+    'list-flow-tasks',
+    'describe-flow',
+    'get-flow-task',
+  ];
+  const writeFlowToolNames = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
+
+  it('registers all nine flow tools with shipped feature defaults and unset environment controls', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', undefined);
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => features[featureName as keyof typeof features] ?? false,
+    );
     const server = getServer();
     await server.registerTools();
 
@@ -347,14 +363,9 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // Flow tools are gated off by default...
-    expect(registeredToolNames).not.toContain('list-flows');
-    expect(registeredToolNames).not.toContain('get-flow');
-    expect(registeredToolNames).not.toContain('list-flow-runs');
-    expect(registeredToolNames).not.toContain('list-flow-tasks');
-    expect(registeredToolNames).not.toContain('describe-flow');
-    expect(registeredToolNames).not.toContain('get-flow-task');
-    // ...while unrelated tools stay registered.
+    for (const toolName of [...readFlowToolNames, ...writeFlowToolNames]) {
+      expect(registeredToolNames).toContain(toolName);
+    }
     expect(registeredToolNames).toContain('list-datasources');
   });
 
@@ -400,11 +411,11 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should register mutating flow tools only when both static gates and the flow-tools feature flag are enabled', async () => {
+  it('should register mutating flow tools when both environment controls and feature flags are enabled', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'flow-tools',
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((featureName: string) =>
+      ['flow-tools', 'flow-write-tools'].includes(featureName),
     );
     const server = getServer();
     await server.registerTools();
@@ -432,7 +443,7 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('cancel-flow-run');
   });
 
-  it('should register read-only flow tools but not mutating flow tools when FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
+  it('should register read-only flow tools but not mutating flow tools when the write feature flag is off', async () => {
     vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (featureName: string) => featureName === 'flow-tools',
@@ -454,6 +465,41 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('run-flow-task');
     expect(registeredToolNames).not.toContain('cancel-flow-run');
   });
+
+  it.each(
+    [false, true].flatMap((baseEnv) =>
+      [false, true].flatMap((baseFlag) =>
+        [false, true].flatMap((writeEnv) =>
+          [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
+        ),
+      ),
+    ),
+  )(
+    'registers flow tools for base env=$baseEnv, base FF=$baseFlag, write env=$writeEnv, write FF=$writeFlag',
+    async ({ baseEnv, baseFlag, writeEnv, writeFlag }) => {
+      vi.stubEnv('FLOW_TOOLS_ENABLED', String(baseEnv));
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', String(writeEnv));
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) =>
+          (featureName === 'flow-tools' && baseFlag) ||
+          (featureName === 'flow-write-tools' && writeFlag),
+      );
+      const server = getServer();
+      await server.registerTools();
+      const registeredToolNames: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+
+      for (const toolName of readFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(baseEnv && baseFlag);
+      }
+      for (const toolName of writeFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(
+          baseEnv && baseFlag && writeEnv && writeFlag,
+        );
+      }
+    },
+  );
 
   describe('admin tools', () => {
     const adminToolNames = [

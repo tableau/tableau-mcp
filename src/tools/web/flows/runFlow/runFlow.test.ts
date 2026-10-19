@@ -90,6 +90,14 @@ describe('runFlowTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
+  it('is disabled when flow-write-tools is off even when the environment controls allow writes', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(
+      async (featureName: string) => featureName !== 'flow-write-tools',
+    );
+    const tool = getRunFlowTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
   it('previews without enqueueing and returns a confirmation token', async () => {
     const result = await getToolResult({ flowId: FLOW_ID, runMode: 'incremental' });
     expect(result.isError).toBe(false);

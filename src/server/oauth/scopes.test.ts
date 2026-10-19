@@ -823,6 +823,46 @@ describe('scopes', () => {
   });
 
   describe('flowWriteToolsEnabled gating', () => {
+    it.each(
+      [false, true].flatMap((baseEnv) =>
+        [false, true].flatMap((baseFlag) =>
+          [false, true].flatMap((writeEnv) =>
+            [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
+          ),
+        ),
+      ),
+    )(
+      'advertises matching scopes for base env=$baseEnv, base FF=$baseFlag, write env=$writeEnv, write FF=$writeFlag',
+      async ({ baseEnv, baseFlag, writeEnv, writeFlag }) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          flowToolsEnabled: baseEnv,
+          flowWriteToolsEnabled: writeEnv,
+        } as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            (featureName === 'flow-tools' && baseFlag) ||
+            (featureName === 'flow-write-tools' && writeFlag),
+        );
+
+        const mcp = await getSupportedMcpScopes();
+        const api = await getSupportedApiScopes();
+        const readEnabled = baseEnv && baseFlag;
+        const writeEnabled = readEnabled && writeEnv && writeFlag;
+        expect(mcp.includes('tableau:mcp:flow:read')).toBe(readEnabled);
+        for (const scope of ['tableau:mcp:flow:run', 'tableau:mcp:flow:cancel'] as const) {
+          expect(mcp.includes(scope)).toBe(writeEnabled);
+        }
+        for (const scope of [
+          'tableau:flows:run',
+          'tableau:flow_tasks:run',
+          'tableau:flow_runs:update',
+        ] as const) {
+          expect(api.includes(scope)).toBe(writeEnabled);
+        }
+      },
+    );
+
     it('includes the flow run mcp + api scopes when flowWriteToolsEnabled and flow-tools are enabled', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
       mockGetConfig.mockReturnValue({
