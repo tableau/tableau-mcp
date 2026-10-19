@@ -71,7 +71,7 @@ describe('requestStagedDatasourceUpload', () => {
     'rejects unsupported filename %j before presigning',
     async (fileName) => {
       await expect(requestStagedDatasourceUpload({ fileName, config })).rejects.toThrow(
-        'filename must end in .tds or .tdsx',
+        'Data source upload filename must end in .tds or .tdsx.',
       );
       expect(mocks.createPresignedPutUrlToS3).not.toHaveBeenCalled();
     },
@@ -153,7 +153,9 @@ describe('resolveStagedDatasourceUpload', () => {
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
-    ).rejects.toThrow('Data source upload not found');
+    ).rejects.toThrow(
+      'Data source upload not found. Upload the data source bytes before publishing.',
+    );
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(2);
   });
 
@@ -161,7 +163,7 @@ describe('resolveStagedDatasourceUpload', () => {
     'rejects invalid upload id %j before S3 lookup',
     async (datasourceUploadId) => {
       await expect(resolveStagedDatasourceUpload({ datasourceUploadId, config })).rejects.toThrow(
-        'upload id is invalid',
+        'Data source upload id is invalid.',
       );
       expect(mocks.downloadObjectFromS3IfExists).not.toHaveBeenCalled();
     },
@@ -172,7 +174,7 @@ describe('resolveStagedDatasourceUpload', () => {
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
-    ).rejects.toThrow('must not be empty');
+    ).rejects.toThrow('Data source upload bytes must not be empty.');
     expect(mocks.downloadObjectFromS3IfExists).toHaveBeenCalledTimes(1);
   });
 
@@ -183,7 +185,7 @@ describe('resolveStagedDatasourceUpload', () => {
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, config }),
-    ).rejects.toThrow('must not be empty');
+    ).rejects.toThrow('Data source upload bytes must not be empty.');
   });
 
   it('propagates S3 errors without treating a failed download as a missing object', async () => {
@@ -209,7 +211,7 @@ describe('buildDatasourceUploadS3Key', () => {
 
   it('rejects an invalid upload id', () => {
     expect(() => buildDatasourceUploadS3Key('base', '../other', 'tds')).toThrow(
-      'upload id is invalid',
+      'Data source upload id is invalid.',
     );
   });
 });

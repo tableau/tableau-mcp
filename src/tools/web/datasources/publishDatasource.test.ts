@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -267,6 +268,43 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
 
+  it('rejects local data source file paths on HTTP transport before signing in or reading the file', async () => {
+    const result = await getToolResult(validLocalArgs, {
+      bucketS3Enabled: false,
+      transport: 'http',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to set MCP_S3_BUCKET.',
+    );
+    expect(useRestApi).not.toHaveBeenCalled();
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local data source file paths on HTTP transport even when staged S3 uploads are configured', async () => {
+    const result = await getToolResult(validLocalArgs, {
+      bucketS3Enabled: true,
+      transport: 'http',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('only supported when the MCP server runs over stdio');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+  });
+
+  it('publishes a staged upload on HTTP transport', async () => {
+    const result = await getToolResult(validArgs, { transport: 'http' });
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockPublishDatasource).toHaveBeenCalledOnce();
+  });
+
   it('returns an args-validation error when local data source path is neither tds nor tdsx', async () => {
     const result = await getToolResult(
       {
@@ -374,7 +412,11 @@ async function getToolResult(
     projectId: string;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
+  options: {
+    boundedProjectIds?: Set<string> | null;
+    bucketS3Enabled?: boolean;
+    transport?: 'stdio' | 'http';
+  } = {},
 ): Promise<CallToolResult> {
   const tool = getPublishDatasourceTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -393,9 +435,11 @@ async function getToolResult(
 function getMockExtra({
   boundedProjectIds = null,
   bucketS3Enabled = true,
+  transport = 'stdio',
 }: {
   boundedProjectIds?: Set<string> | null;
   bucketS3Enabled?: boolean;
+  transport?: 'stdio' | 'http';
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
@@ -411,6 +455,7 @@ function getMockExtra({
     }),
     config: {
       ...extra.config,
+      transport,
       bucketS3: {
         enabled: bucketS3Enabled,
         bucket: 'tableau-workbooks',

@@ -11,6 +11,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { PublishedDataSourceResponse } from '../../../sdks/tableau/types/dataSource.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { type TransportName } from '../../../transports.js';
 import { Provider } from '../../../utils/provider.js';
 import { type BucketS3Config } from '../s3Client.js';
 import { WebTool } from '../tool.js';
@@ -34,7 +35,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Path to a local TDS or TDSX data source file on the MCP server filesystem. Only supported when staged S3 uploads are not configured.',
+      'Path to a local TDS or TDSX data source file on the MCP server filesystem. Only supported when the MCP server runs over stdio and staged S3 uploads are not configured. On HTTP servers, use datasourceUploadId.',
     ),
   name: z.string().min(1).describe('The name to give the published data source.'),
   projectId: z
@@ -63,7 +64,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
     name: 'publish-datasource',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      'Publishes a TDS or TDSX data source from a local file path or staged upload id to the specified Tableau project. Use list-projects to discover project IDs. The data source is uploaded and then validated by Tableau as part of publishing.',
+      'Publishes a TDS or TDSX data source from a staged upload id, or from a local file path when the MCP server runs over stdio, to the specified Tableau project. Use list-projects to discover project IDs. The data source is uploaded and then validated by Tableau as part of publishing.',
     paramsSchema,
     annotations: {
       title: 'Publish Data Source',
@@ -94,15 +95,18 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
           const configWithOverrides = await extra.getConfigWithOverrides();
           assertProjectAllowedByBoundedContext(projectId, configWithOverrides.boundedContext);
 
+          const input = validateDatasourceInput({
+            config: extra.config.bucketS3,
+            transport: extra.config.transport,
+            datasourceUploadId,
+            datasourceFilePath,
+          });
+
           const result = await useRestApi<PublishDatasourceResult>({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              const resolvedDatasourceFile = await resolveDatasourceInput({
-                config: extra.config.bucketS3,
-                datasourceUploadId,
-                datasourceFilePath,
-              });
+              const resolvedDatasourceFile = await loadDatasourceFile(input, extra.config.bucketS3);
               const fileType = getDatasourceFileType(resolvedDatasourceFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -148,15 +152,21 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
   return tool;
 };
 
-async function resolveDatasourceInput({
+type DatasourceInput =
+  | { source: 'local'; datasourceFilePath: string }
+  | { source: 'staged'; datasourceUploadId: string };
+
+function validateDatasourceInput({
   config,
+  transport,
   datasourceUploadId,
   datasourceFilePath,
 }: {
   config: BucketS3Config & { enabled: boolean };
+  transport: TransportName;
   datasourceUploadId?: string;
   datasourceFilePath?: string;
-}): Promise<ResolvedDatasource> {
+}): DatasourceInput {
   if (datasourceUploadId && datasourceFilePath) {
     throw new ArgsValidationError(
       'Provide either datasourceFilePath or datasourceUploadId, not both.',
@@ -164,17 +174,22 @@ async function resolveDatasourceInput({
   }
 
   if (datasourceFilePath) {
+    if (transport !== 'stdio') {
+      throw new ArgsValidationError(
+        'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to set MCP_S3_BUCKET.',
+      );
+    }
     if (config.enabled) {
       throw new ArgsValidationError(
         'datasourceFilePath is only supported when staged S3 uploads are not configured. Call request-datasource-upload first and pass datasourceUploadId.',
       );
     }
-    return await resolveLocalDatasourceFile(datasourceFilePath);
+    return { source: 'local', datasourceFilePath };
   }
 
   if (!datasourceUploadId) {
     throw new ArgsValidationError(
-      'Either datasourceFilePath or datasourceUploadId must be provided. For local MCP servers, pass datasourceFilePath. For hosted clients, call request-datasource-upload first and pass datasourceUploadId.',
+      'Either datasourceFilePath or datasourceUploadId must be provided. For local stdio MCP servers, pass datasourceFilePath. For hosted clients, call request-datasource-upload first and pass datasourceUploadId.',
     );
   }
   if (!config.enabled) {
@@ -182,10 +197,19 @@ async function resolveDatasourceInput({
       'MCP_S3_BUCKET must be configured before publishing staged data source uploads.',
     );
   }
-  return await resolveStagedDatasourceUpload({
-    datasourceUploadId,
-    config,
-  });
+  return { source: 'staged', datasourceUploadId };
+}
+
+async function loadDatasourceFile(
+  input: DatasourceInput,
+  config: BucketS3Config,
+): Promise<ResolvedDatasource> {
+  return input.source === 'local'
+    ? await resolveLocalDatasourceFile(input.datasourceFilePath)
+    : await resolveStagedDatasourceUpload({
+        datasourceUploadId: input.datasourceUploadId,
+        config,
+      });
 }
 
 async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {
