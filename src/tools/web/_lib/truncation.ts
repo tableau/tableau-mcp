@@ -50,10 +50,3 @@ export function buildTruncationInfo({
     truncationReason: adminCapWasBinding ? 'admin-cap' : 'requested-limit',
   };
 }
-
-const MAX_INT32 = 2147483647;
-
-export function getProbeRowLimit(rowLimit: number): number {
-  // VDS's rowLimit integer width is unknown; don't overflow a 32-bit int.
-  return Math.min(rowLimit + 1, MAX_INT32);
-}

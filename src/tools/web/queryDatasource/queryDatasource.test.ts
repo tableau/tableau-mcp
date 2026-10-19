@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
 import { Query, queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
@@ -107,6 +108,18 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
+  });
+
+  it('should bound limit so that limit + 1 fits in a 32-bit int', async () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
+    const schema = z.object(await Provider.from(queryDatasourceTool.paramsSchema));
+    const base = {
+      datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      query: { fields: [{ fieldCaption: 'Category' }] },
+    };
+
+    expect(schema.safeParse({ ...base, limit: 2147483646 }).success).toBe(true);
+    expect(schema.safeParse({ ...base, limit: 2147483647 }).success).toBe(false);
   });
 
   it('should return error when query args fail validation', async () => {
@@ -255,6 +268,15 @@ describe('queryDatasourceTool', () => {
       expect(parsed.mcp).toEqual({
         resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
       });
+    });
+
+    it('should keep the requested rowLimit within int32 for a maximal cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2147483647');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(2147483647);
     });
 
     it('should not report truncation when exactly the limit rows match', async () => {

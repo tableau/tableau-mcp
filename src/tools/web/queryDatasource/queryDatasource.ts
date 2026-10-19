@@ -25,7 +25,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
-import { buildTruncationInfo, getProbeRowLimit, TruncationReason } from '../_lib/truncation.js';
+import { buildTruncationInfo, TruncationReason } from '../_lib/truncation.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -46,6 +46,8 @@ import {
 import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
+const MAX_INT32 = 2147483647;
+
 const paramsSchema = {
   datasourceLuid: luidSchema,
   workbookLuid: luidSchema
@@ -58,6 +60,8 @@ const paramsSchema = {
     .number()
     .int()
     .min(1)
+    // VDS's rowLimit width is unverified; keep limit + 1 within int32.
+    .max(MAX_INT32 - 1)
     .optional()
     .describe(
       "Max rows to return. When a row limit applies (this or a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason 'admin-cap' means a server cap cut them — narrow filters or aggregate.",
@@ -132,16 +136,17 @@ export const getQueryDatasourceTool = (
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
-            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            ? Math.min(maxResultLimit, limit ?? MAX_INT32 - 1)
             : limit;
 
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
           const options: QueryRequest['options'] = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
             ...(rules.dontSpecifyRowLimits || rowLimit === undefined
               ? {}
-              : { rowLimit: getProbeRowLimit(rowLimit) }),
+              : { rowLimit: rowLimit + 1 }),
           };
 
           const credentials = getDatasourceCredentials(datasourceLuid);
