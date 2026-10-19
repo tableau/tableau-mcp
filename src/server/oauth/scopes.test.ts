@@ -824,9 +824,9 @@ describe('scopes', () => {
 
   describe('flowWriteToolsEnabled gating', () => {
     it.each(
-      [false, true].flatMap((baseEnv) =>
+      [undefined, false, true].flatMap((baseEnv) =>
         [false, true].flatMap((baseFlag) =>
-          [false, true].flatMap((writeEnv) =>
+          [undefined, false, true].flatMap((writeEnv) =>
             [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
           ),
         ),
@@ -847,8 +847,8 @@ describe('scopes', () => {
 
         const mcp = await getSupportedMcpScopes();
         const api = await getSupportedApiScopes();
-        const readEnabled = baseEnv || baseFlag;
-        const writeEnabled = readEnabled && (writeEnv || writeFlag);
+        const readEnabled = baseEnv ?? baseFlag;
+        const writeEnabled = readEnabled && (writeEnv ?? writeFlag);
         expect(mcp.includes('tableau:mcp:flow:read')).toBe(readEnabled);
         for (const scope of ['tableau:mcp:flow:run', 'tableau:mcp:flow:cancel'] as const) {
           expect(mcp.includes(scope)).toBe(writeEnabled);

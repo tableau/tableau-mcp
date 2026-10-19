@@ -10,6 +10,14 @@ const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
+
+// Mirrors parseOptionalBoolean in src/config.ts: only "true" or "false" overrides the flag.
+function envOverride(value: string | undefined): boolean | undefined {
+  return value === 'true' ? true : value === 'false' ? false : undefined;
+}
+const flowReadExpected = envOverride(process.env.FLOW_TOOLS_ENABLED) ?? flowToolsEnabled;
+const flowWriteExpected =
+  flowReadExpected && (envOverride(process.env.FLOW_WRITE_TOOLS_ENABLED) ?? flowWriteToolsEnabled);
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
@@ -60,7 +68,6 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Either the environment opt-in or the feature flag enables the Flow family.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
@@ -98,8 +105,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out Flow tools when neither enablement route is on.
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' && !flowToolsEnabled) {
+      // Flow tools follow FLOW_TOOLS_ENABLED when set, otherwise the flow-tools flag.
+      if (!flowReadExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -122,8 +129,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Writes require either their environment opt-in or their feature flag.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true' && !flowWriteToolsEnabled) {
+      // Writes also follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise the flow-write-tools flag.
+      if (!flowWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
@@ -258,7 +265,6 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Either the environment opt-in or the feature flag enables the Flow family.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
@@ -300,8 +306,8 @@ describe('server', () => {
         );
       }
 
-      // Filter out Flow tools when neither enablement route is on.
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' && !flowToolsEnabled) {
+      // Flow tools follow FLOW_TOOLS_ENABLED when set, otherwise the flow-tools flag.
+      if (!flowReadExpected) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -328,8 +334,8 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Writes require either their environment opt-in or their feature flag.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true' && !flowWriteToolsEnabled) {
+      // Writes also follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise the flow-write-tools flag.
+      if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),
         );

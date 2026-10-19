@@ -97,11 +97,13 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
-  flowToolsEnabled: boolean;
+  // Undefined when FLOW_TOOLS_ENABLED is unset, so the flow-tools feature flag decides.
+  flowToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   // Environment override for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
-  flowWriteToolsEnabled: boolean;
+  // Undefined when FLOW_WRITE_TOOLS_ENABLED is unset, so the flow-write-tools feature flag decides.
+  flowWriteToolsEnabled: boolean | undefined;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -391,14 +393,14 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Explicit environment overrides supplement the Flow feature flags. The shipped flags
-    // enable Flow tools by default; EXCLUDE_TOOLS controls self-hosted opt-outs.
-    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED override their feature flags only when set to
+    // true or false. Any other value defers to the flag, which ships on for self-hosted installs.
+    this.flowToolsEnabled = parseOptionalBoolean(flowToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
+    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
@@ -549,6 +551,16 @@ export class Config extends BaseConfig {
     this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
+}
+
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return undefined;
 }
 
 function validateServer(server: string): void {

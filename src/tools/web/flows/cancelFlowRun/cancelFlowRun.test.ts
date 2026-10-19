@@ -75,9 +75,9 @@ describe('cancelFlowRunTool', () => {
   });
 
   it.each(
-    [false, true].flatMap((baseEnv) =>
+    [undefined, false, true].flatMap((baseEnv) =>
       [false, true].flatMap((baseFlag) =>
-        [false, true].flatMap((writeEnv) =>
+        [undefined, false, true].flatMap((writeEnv) =>
           [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
         ),
       ),
@@ -97,7 +97,7 @@ describe('cancelFlowRunTool', () => {
       );
       const tool = getCancelFlowRunTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(
-        !((baseEnv || baseFlag) && (writeEnv || writeFlag)),
+        !((baseEnv ?? baseFlag) && (writeEnv ?? writeFlag)),
       );
     },
   );

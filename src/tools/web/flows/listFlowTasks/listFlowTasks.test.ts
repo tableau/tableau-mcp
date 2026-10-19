@@ -66,8 +66,10 @@ describe('listFlowTasksTool', () => {
   });
 
   it.each([
+    { envEnabled: undefined, flagEnabled: false, enabled: false },
+    { envEnabled: undefined, flagEnabled: true, enabled: true },
     { envEnabled: false, flagEnabled: false, enabled: false },
-    { envEnabled: false, flagEnabled: true, enabled: true },
+    { envEnabled: false, flagEnabled: true, enabled: false },
     { envEnabled: true, flagEnabled: false, enabled: true },
     { envEnabled: true, flagEnabled: true, enabled: true },
   ])(

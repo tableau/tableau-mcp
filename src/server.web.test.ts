@@ -429,9 +429,9 @@ describe('server', () => {
   );
 
   it.each(
-    [false, true].flatMap((baseEnv) =>
+    [undefined, false, true].flatMap((baseEnv) =>
       [false, true].flatMap((baseFlag) =>
-        [false, true].flatMap((writeEnv) =>
+        [undefined, false, true].flatMap((writeEnv) =>
           [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
         ),
       ),
@@ -439,8 +439,8 @@ describe('server', () => {
   )(
     'registers flow tools for base env=$baseEnv, base FF=$baseFlag, write env=$writeEnv, write FF=$writeFlag',
     async ({ baseEnv, baseFlag, writeEnv, writeFlag }) => {
-      vi.stubEnv('FLOW_TOOLS_ENABLED', String(baseEnv));
-      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', String(writeEnv));
+      vi.stubEnv('FLOW_TOOLS_ENABLED', baseEnv?.toString());
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', writeEnv?.toString());
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
         (featureName: string) =>
           (featureName === 'flow-tools' && baseFlag) ||
@@ -453,11 +453,11 @@ describe('server', () => {
         .mock.calls.map((call) => call[0]);
 
       for (const toolName of readFlowToolNames) {
-        expect(registeredToolNames.includes(toolName)).toBe(baseEnv || baseFlag);
+        expect(registeredToolNames.includes(toolName)).toBe(baseEnv ?? baseFlag);
       }
       for (const toolName of writeFlowToolNames) {
         expect(registeredToolNames.includes(toolName)).toBe(
-          (baseEnv || baseFlag) && (writeEnv || writeFlag),
+          (baseEnv ?? baseFlag) && (writeEnv ?? writeFlag),
         );
       }
     },

@@ -54,10 +54,9 @@ describe('flows tool descriptions (eval)', () => {
   afterAll(resetEnv);
 
   beforeEach(async () => {
-    // Enable the Flow flags through the custom provider and keep these evals read-only.
+    // Enable Flow tools through the custom provider and keep these evals read-only.
     mcpServer = await getMcpServer({
       ...getDefaultEnv(),
-      FLOW_TOOLS_ENABLED: 'true',
       EXCLUDE_TOOLS: 'run-flow,run-flow-task,cancel-flow-run',
       FEATURE_GATE_PROVIDER: 'custom',
       FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({

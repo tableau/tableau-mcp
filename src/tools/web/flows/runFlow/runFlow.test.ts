@@ -85,9 +85,9 @@ describe('runFlowTool', () => {
   });
 
   it.each(
-    [false, true].flatMap((baseEnv) =>
+    [undefined, false, true].flatMap((baseEnv) =>
       [false, true].flatMap((baseFlag) =>
-        [false, true].flatMap((writeEnv) =>
+        [undefined, false, true].flatMap((writeEnv) =>
           [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
         ),
       ),
@@ -107,7 +107,7 @@ describe('runFlowTool', () => {
       );
       const tool = getRunFlowTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(
-        !((baseEnv || baseFlag) && (writeEnv || writeFlag)),
+        !((baseEnv ?? baseFlag) && (writeEnv ?? writeFlag)),
       );
     },
   );

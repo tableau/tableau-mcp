@@ -296,12 +296,18 @@ describe('Config', () => {
     expect(config.breakGlassDisableGlobally).toBe(true);
   });
 
-  it.each([undefined, '', 'true', 'false', 'yes'])(
-    'enables the flow environment override only when FLOW_TOOLS_ENABLED is true (%s)',
-    (value) => {
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the flow environment override only when FLOW_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
       vi.stubEnv('FLOW_TOOLS_ENABLED', value);
 
-      expect(new Config().flowToolsEnabled).toBe(value === 'true');
+      expect(new Config().flowToolsEnabled).toBe(expected);
     },
   );
 
@@ -317,12 +323,18 @@ describe('Config', () => {
     expect(config.insightsToolsEnabled).toBe(true);
   });
 
-  it.each([undefined, '', 'true', 'false', 'yes'])(
-    'enables the flow write environment override only when FLOW_WRITE_TOOLS_ENABLED is true (%s)',
-    (value) => {
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the flow write environment override only when FLOW_WRITE_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
       vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', value);
 
-      expect(new Config().flowWriteToolsEnabled).toBe(value === 'true');
+      expect(new Config().flowWriteToolsEnabled).toBe(expected);
     },
   );
 

@@ -457,8 +457,8 @@ Enables product telemetry for tool usage tracking.
 
 ## `FLOW_TOOLS_ENABLED`
 
-Provides an explicit environment opt-in for the Tableau Prep flow tool family, as an alternative
-to the `flow-tools` feature flag. Either enablement route allows these read-only tools:
+Controls the Tableau Prep flow tool family. Flow tools are enabled by default, including these
+read-only tools:
 
 - [`list-flows`](../../tools/flows/list-flows.md)
 - [`get-flow`](../../tools/flows/get-flow.md)
@@ -467,19 +467,13 @@ to the `flow-tools` feature flag. Either enablement route allows these read-only
 - [`describe-flow`](../../tools/flows/describe-flow.md)
 - [`get-flow-task`](../../tools/flows/get-flow-task.md)
 
-- Environment default: `false`. Only the exact value `true` enables the environment opt-in.
-- The `flow-tools` flag ships as `true` in `features.json`, so self-hosted installs have Flow tools
-  available without setting this variable. Hosted deployments use their configured feature provider's values.
-- Leave the environment opt-in unset or `false` to let the feature flag control rollout. Setting
-  it to `true` enables the family even when the flag is off; setting it to `false` does not veto an enabled flag.
-- To disable all Flow tools, use [`EXCLUDE_TOOLS=flow`](#exclude_tools), through environment
-  configuration or supported site settings. Individual tool names can also be excluded.
-- Writes additionally require either [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled)
-  or the `flow-write-tools` flag to be on.
-- Flags are checked when tools register. Restart after changing `features.json`; reconnect
-  existing sessions after changing a custom provider's flag values.
-- When the base enablement routes are both off, Flow tools are not registered and their Flow
-  OAuth scopes are not advertised.
+- Default: unset, which enables Flow tools.
+- Set to `false` to disable all Flow tools, including the mutating tools controlled by
+  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled).
+- Set to `true` to enable Flow tools explicitly. Any other value is treated as unset.
+- When disabled, Flow tools are not registered and their Flow OAuth scopes are not advertised.
+- [`EXCLUDE_TOOLS`](#exclude_tools) can still remove individual Flow tools, or all of them with
+  `EXCLUDE_TOOLS=flow`.
 
 <hr />
 
@@ -506,39 +500,27 @@ Enables admin-only tools that require site administrator permissions.
 
 ## `FLOW_WRITE_TOOLS_ENABLED`
 
-Provides an explicit environment opt-in for the content-**mutating** Flow tools, as an alternative
-to the `flow-write-tools` feature flag. The base Flow family must also be enabled through either
-of its enablement routes above. Every mutation requires a preview, explicit human approval, and
-the matching confirmation token.
+Controls the content-**mutating** Flow tools. They are enabled by default when the Flow tools are
+enabled through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled). Every mutation requires a preview,
+explicit human approval, and the matching confirmation token.
 
-- Environment default: `false`. Only the exact value `true` enables the environment opt-in.
-- The `flow-write-tools` flag ships as `true` in `features.json`, so self-hosted installs include
-  writes by default. Hosted deployments can roll reads and writes out independently through their flags.
-- Leave both Flow environment opt-ins unset or `false` for hosted flag control. An explicit
-  environment value of `true` enables its corresponding route even when the flag is off.
-- For hosted availability at launch, configure both flags on in the hosted provider. The hosted
-  team can then turn off just `flow-write-tools` to keep reads, or turn off `flow-tools` to remove
-  the entire family, while the environment opt-ins remain unset or `false`.
-- When both the base and write enablement routes allow access, registers:
+- Default: unset, which enables the mutating Flow tools.
+- Set to `false` to disable them while keeping the read-only Flow tools.
+- Set to `true` to enable them explicitly. Any other value is treated as unset.
+- `FLOW_TOOLS_ENABLED=false` disables these tools regardless of this setting.
+- When enabled, registers:
   - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
   - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
   - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
-- If the base family is disabled, or both write enablement routes are off, write tools are not
-  registered and their write OAuth scopes are not advertised.
-- To disable writes while keeping reads, use
-  `EXCLUDE_TOOLS=run-flow,run-flow-task,cancel-flow-run` in environment configuration or supported
-  site settings. Exclusions apply even when both flags and environment opt-ins are on.
-- `FLOW_WRITE_TOOLS_ENABLED=false` alone does not disable writes when the write flag is on.
+- When disabled, these tools are not registered and their write OAuth scopes are not advertised.
 - These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
 - Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
 
-With the base family enabled and no Flow tool exclusions:
-
-| `FLOW_WRITE_TOOLS_ENABLED` | `flow-write-tools` flag | Registered flow tools |
+| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
 | --- | --- | --- |
-| unset, empty, or `false` | off | read-only flow tools |
-| unset, empty, or `false` | on | read-only and mutating flow tools |
-| `true` | on or off | read-only and mutating flow tools |
+| unset or `true` | unset or `true` | read-only and mutating flow tools |
+| unset or `true` | `false` | read-only flow tools |
+| `false` | any value | none |
 
 <hr />
 
