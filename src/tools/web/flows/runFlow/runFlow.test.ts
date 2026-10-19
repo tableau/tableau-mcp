@@ -84,19 +84,33 @@ describe('runFlowTool', () => {
     expect(annotations?.idempotentHint).toBe(false);
   });
 
-  it('is disabled when the flow-tools feature flag is off', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getRunFlowTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('is disabled when flow-write-tools is off even when the environment controls allow writes', async () => {
-    mocks.mockIsFeatureEnabled.mockImplementation(
-      async (featureName: string) => featureName !== 'flow-write-tools',
-    );
-    const tool = getRunFlowTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each(
+    [false, true].flatMap((baseEnv) =>
+      [false, true].flatMap((baseFlag) =>
+        [false, true].flatMap((writeEnv) =>
+          [false, true].map((writeFlag) => ({ baseEnv, baseFlag, writeEnv, writeFlag })),
+        ),
+      ),
+    ),
+  )(
+    'resolves write availability for base env=$baseEnv, base FF=$baseFlag, write env=$writeEnv, write FF=$writeFlag',
+    async ({ baseEnv, baseFlag, writeEnv, writeFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowToolsEnabled: baseEnv,
+        flowWriteToolsEnabled: writeEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          (featureName === 'flow-tools' && baseFlag) ||
+          (featureName === 'flow-write-tools' && writeFlag),
+      );
+      const tool = getRunFlowTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(
+        !((baseEnv || baseFlag) && (writeEnv || writeFlag)),
+      );
+    },
+  );
 
   it('previews without enqueueing and returns a confirmation token', async () => {
     const result = await getToolResult({ flowId: FLOW_ID, runMode: 'incremental' });

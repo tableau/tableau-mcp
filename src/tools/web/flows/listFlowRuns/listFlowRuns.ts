@@ -133,7 +133,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))),
     ),
     description: `
   Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one execution attempt with its \`status\` (Pending, InProgress, Success, Failed, Cancelled), \`startedAt\`/\`completedAt\` timestamps, \`progress\`, the \`flowId\` it belongs to, the \`backgroundJobId\`, and — on \`Failed\` runs, REST API 3.30+ — a \`failureReason\` giving the cause. Use this tool to answer questions about flow execution outcomes — e.g. "why did my flow fail", "which flows failed recently and why", "show the run history for flow X", "what's still running".

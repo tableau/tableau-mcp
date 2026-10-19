@@ -19,9 +19,10 @@ an ad-hoc run with caller-chosen output steps.
 :::warning[This tool changes server state]
 
 It runs the flow (consuming Tableau Prep Conductor capacity and overwriting outputs) and is **not
-idempotent**. Enabled by default with the built-in feature provider. Registration requires both
-the `flow-tools` and `flow-write-tools` feature flags to be on, and neither `FLOW_TOOLS_ENABLED`
-nor `FLOW_WRITE_TOOLS_ENABLED` may be set to `false`.
+idempotent**. Enabled by default with the built-in feature provider. Registration requires the
+base family (`flow-tools` on or `FLOW_TOOLS_ENABLED=true`) and writes (`flow-write-tools` on or
+`FLOW_WRITE_TOOLS_ENABLED=true`) to be enabled. To disable writes, set
+`EXCLUDE_TOOLS=run-flow,run-flow-task,cancel-flow-run`.
 
 ## Two-phase confirmation
 

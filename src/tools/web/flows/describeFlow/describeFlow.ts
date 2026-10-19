@@ -78,7 +78,7 @@ export const getDescribeFlowTool = (
     minRequiredRole: SiteRole.EXPLORER,
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))),
     ),
     description: `
   Explains what a Tableau Prep flow actually *does* by reading and summarizing the flow's underlying document (the design of the flow itself, not just its catalog metadata). Use this when a user asks "what does this flow do?", "where does this flow get its data?", "what does it output?", "walk me through this flow", or wants to understand a flow's logic, sources, destinations, or shape without opening Tableau Prep.

@@ -31,7 +31,7 @@ export const getGetFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     minRequiredRole: SiteRole.VIEWER,
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))),
     ),
     description: `
   Retrieves a single scheduled flow run task (the **schedule** for a Tableau Prep flow) by its task id. A flow run task describes when/how often a flow is configured to run — NOT a record of past executions (for run history use \`list-flow-runs\`).

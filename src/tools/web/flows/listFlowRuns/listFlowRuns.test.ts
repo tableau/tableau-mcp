@@ -113,26 +113,23 @@ describe('listFlowRunsTool', () => {
     expect(tool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
   });
 
-  it('should be enabled when flow tools are turned on', async () => {
-    const tool = getListFlowRunsTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = getListFlowRunsTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('should be disabled when the flow-tools feature flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getListFlowRunsTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
-  });
+  it.each([
+    { envEnabled: false, flagEnabled: false, enabled: false },
+    { envEnabled: false, flagEnabled: true, enabled: true },
+    { envEnabled: true, flagEnabled: false, enabled: true },
+    { envEnabled: true, flagEnabled: true, enabled: true },
+  ])(
+    'resolves flow availability for env=$envEnabled and FF=$flagEnabled',
+    async ({ envEnabled, flagEnabled, enabled }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowToolsEnabled: envEnabled,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flagEnabled);
+      const tool = getListFlowRunsTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!enabled);
+    },
+  );
 
   it('lists flow runs with the default completedAt:desc sort and the server filter', async () => {
     mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);

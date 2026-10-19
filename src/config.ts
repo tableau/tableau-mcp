@@ -100,7 +100,7 @@ export class Config extends BaseConfig {
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // Environment control for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
+  // Environment override for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
   flowWriteToolsEnabled: boolean;
   bucketS3: {
     enabled: boolean;
@@ -391,14 +391,14 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Flow tools are enabled by default. An explicit false or the flow-tools feature flag
-    // can disable them; write tools additionally require their own environment control and flag.
-    this.flowToolsEnabled = flowToolsEnabled !== 'false';
+    // Explicit environment overrides supplement the Flow feature flags. The shipped flags
+    // enable Flow tools by default; EXCLUDE_TOOLS controls self-hosted opt-outs.
+    this.flowToolsEnabled = flowToolsEnabled === 'true';
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled !== 'false';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived

@@ -644,7 +644,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable Tableau Prep flow MCP tools',
     description:
-      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). describe-flow additionally requires Tableau Server 2026.3+ and the server feature flag `features.getFlowDocumentRestApi`. This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Enabled by default; set to "false" to disable all Flow tools. The "flow-tools" feature flag must also be on.',
+      'Alternative opt-in for the Tableau Prep flow family: FLOW_TOOLS_ENABLED=true or the flow-tools feature flag enables reads and the base gate for writes. Defaults to "false"; the built-in feature flag ships on. Use EXCLUDE_TOOLS=flow to disable all Flow tools. describe-flow additionally requires Tableau Server 2026.3+ and features.getFlowDocumentRestApi.',
     required: false,
     sensitive: false,
   },
@@ -662,7 +662,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable content-mutating flow MCP tools',
     description:
-      'Enables run-flow, run-flow-task, and cancel-flow-run by default. Set to "false" to disable these tools. Requires both the flow-tools and flow-write-tools feature flags to be on, and FLOW_TOOLS_ENABLED must not be "false". Mutations require a preview, human approval, and a matching confirmation token.',
+      'Alternative write opt-in: FLOW_WRITE_TOOLS_ENABLED=true or the flow-write-tools feature flag enables run-flow, run-flow-task, and cancel-flow-run when the base family is enabled. Defaults to "false"; the built-in feature flag ships on. Use EXCLUDE_TOOLS=run-flow,run-flow-task,cancel-flow-run to disable writes. Mutations require preview and human confirmation.',
     required: false,
     sensitive: false,
   },

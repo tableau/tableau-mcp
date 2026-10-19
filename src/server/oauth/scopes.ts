@@ -546,9 +546,9 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     (await featureGate.isFeatureEnabled('authoring-tools')) &&
     (await isAuthoringAllowedForClient(clientId));
   const flowToolsEnabled =
-    config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+    config.flowToolsEnabled || (await featureGate.isFeatureEnabled('flow-tools'));
   const flowWriteToolsEnabled =
-    config.flowWriteToolsEnabled && (await featureGate.isFeatureEnabled('flow-write-tools'));
+    config.flowWriteToolsEnabled || (await featureGate.isFeatureEnabled('flow-write-tools'));
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
@@ -577,7 +577,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag. When disabled they
+  // Flow tools accept either FLOW_TOOLS_ENABLED or the flow-tools feature flag. When disabled they
   // are not registered, so their scopes must not be advertised or enforced either — otherwise a
   // client could be asked to hold scopes for tools that don't exist.
   if (!flowToolsEnabled) {
@@ -589,7 +589,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // Write tools additionally require both their environment control and feature flag.
+  // Write tools additionally require their environment override or write feature flag.
   if (!flowToolsEnabled || !flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');

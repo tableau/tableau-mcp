@@ -58,7 +58,7 @@ describe('flows tool descriptions (eval)', () => {
     mcpServer = await getMcpServer({
       ...getDefaultEnv(),
       FLOW_TOOLS_ENABLED: 'true',
-      FLOW_WRITE_TOOLS_ENABLED: 'false',
+      EXCLUDE_TOOLS: 'run-flow,run-flow-task,cancel-flow-run',
       FEATURE_GATE_PROVIDER: 'custom',
       FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
         module: './tests/e2e/fixtures/flowToolsFeatureGate.cjs',

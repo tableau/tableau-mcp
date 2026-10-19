@@ -90,7 +90,7 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     minRequiredRole: SiteRole.VIEWER,
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))),
     ),
     description: `
   Retrieves detailed information about a specific Tableau Prep flow, including the flow's metadata (name, description, owner, project, tags, parameters), its output step IDs and names, and optionally its input connections and recent run history. This is the primary tool to use when a user asks about a specific flow's structure, contents, recent runs, or input data sources.

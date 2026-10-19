@@ -60,13 +60,14 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'run-flow',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    // Both flow environment controls and feature flags must allow writes.
+    // Reads and writes each accept their environment override or feature flag.
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled ||
-        !config.flowWriteToolsEnabled ||
-        !(await getFeatureGate().isFeatureEnabled('flow-tools')) ||
-        !(await getFeatureGate().isFeatureEnabled('flow-write-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))) ||
+        !(
+          config.flowWriteToolsEnabled ||
+          (await getFeatureGate().isFeatureEnabled('flow-write-tools'))
+        ),
     ),
     description: `
   Runs a Tableau Prep flow **on demand** ("Run Now") through a required two-phase confirmation. The preview describes the run without enqueuing it; the confirmed call enqueues the flow and returns immediately with an async job. The flow executes its output steps (all of them unless you pass \`outputStepIds\`), writing to its configured outputs.

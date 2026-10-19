@@ -60,7 +60,7 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
+      // Either the environment opt-in or the feature flag enables the Flow family.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
@@ -98,8 +98,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED === 'false' || !flowToolsEnabled) {
+      // Filter out Flow tools when neither enablement route is on.
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' && !flowToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -122,8 +122,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Either the environment opt-out or the write feature flag can disable writes.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED === 'false' || !flowWriteToolsEnabled) {
+      // Writes require either their environment opt-in or their feature flag.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true' && !flowWriteToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
@@ -258,7 +258,7 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
+      // Either the environment opt-in or the feature flag enables the Flow family.
       const flowTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
@@ -300,8 +300,8 @@ describe('server', () => {
         );
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED === 'false' || !flowToolsEnabled) {
+      // Filter out Flow tools when neither enablement route is on.
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true' && !flowToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
@@ -328,8 +328,8 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Either the environment opt-out or the write feature flag can disable writes.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED === 'false' || !flowWriteToolsEnabled) {
+      // Writes require either their environment opt-in or their feature flag.
+      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true' && !flowWriteToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),
         );

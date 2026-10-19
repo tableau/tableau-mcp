@@ -297,11 +297,11 @@ describe('Config', () => {
   });
 
   it.each([undefined, '', 'true', 'false', 'yes'])(
-    'enables flow tools unless FLOW_TOOLS_ENABLED is explicitly false (%s)',
+    'enables the flow environment override only when FLOW_TOOLS_ENABLED is true (%s)',
     (value) => {
       vi.stubEnv('FLOW_TOOLS_ENABLED', value);
 
-      expect(new Config().flowToolsEnabled).toBe(value !== 'false');
+      expect(new Config().flowToolsEnabled).toBe(value === 'true');
     },
   );
 
@@ -318,11 +318,11 @@ describe('Config', () => {
   });
 
   it.each([undefined, '', 'true', 'false', 'yes'])(
-    'enables flow write tools unless FLOW_WRITE_TOOLS_ENABLED is explicitly false (%s)',
+    'enables the flow write environment override only when FLOW_WRITE_TOOLS_ENABLED is true (%s)',
     (value) => {
       vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', value);
 
-      expect(new Config().flowWriteToolsEnabled).toBe(value !== 'false');
+      expect(new Config().flowWriteToolsEnabled).toBe(value === 'true');
     },
   );
 

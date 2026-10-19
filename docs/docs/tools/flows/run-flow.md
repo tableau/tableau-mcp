@@ -15,7 +15,7 @@ flow or its runs, use [Get Flow](get-flow.md) / [List Flow Runs](list-flow-runs.
 
 :::warning[This tool changes server state]
 
-A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. It is **not idempotent** — each confirmed call enqueues another run. The tool is enabled by default with the built-in feature provider. Registration requires both the `flow-tools` and `flow-write-tools` feature flags to be on, and neither `FLOW_TOOLS_ENABLED` nor `FLOW_WRITE_TOOLS_ENABLED` may be set to `false`.
+A confirmed run consumes warehouse + Tableau Prep Conductor capacity and overwrites the flow's outputs. It is **not idempotent** — each confirmed call enqueues another run. The tool is enabled by default with the built-in feature provider. Registration requires the base family (`flow-tools` on or `FLOW_TOOLS_ENABLED=true`) and writes (`flow-write-tools` on or `FLOW_WRITE_TOOLS_ENABLED=true`) to be enabled. To disable writes, set `EXCLUDE_TOOLS=run-flow,run-flow-task,cancel-flow-run`.
 
 :::
 

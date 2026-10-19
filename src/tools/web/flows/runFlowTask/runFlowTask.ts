@@ -37,13 +37,14 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     server,
     name: 'run-flow-task',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    // Both flow environment controls and feature flags must allow writes.
+    // Reads and writes each accept their environment override or feature flag.
     disabled: new Provider(
       async () =>
-        !config.flowToolsEnabled ||
-        !config.flowWriteToolsEnabled ||
-        !(await getFeatureGate().isFeatureEnabled('flow-tools')) ||
-        !(await getFeatureGate().isFeatureEnabled('flow-write-tools')),
+        !(config.flowToolsEnabled || (await getFeatureGate().isFeatureEnabled('flow-tools'))) ||
+        !(
+          config.flowWriteToolsEnabled ||
+          (await getFeatureGate().isFeatureEnabled('flow-write-tools'))
+        ),
     ),
     description: `
   Runs an **existing scheduled flow run task** now ("Run Now" on a schedule), by task id. The task runs with the output steps and parameters it was configured with; a suspended task is resumed. This ENQUEUES the run and returns immediately with an async job — the run is NOT finished when this tool returns.
