@@ -76,12 +76,13 @@ describe('cancelFlowRunTool', () => {
   });
 
   it('is disabled when the flow-tools feature flag is off', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockIsFeatureEnabled.mockImplementation(async (name) => name !== 'flow-tools');
     const tool = getCancelFlowRunTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is disabled when flow writes are explicitly disabled', async () => {
+  it('is disabled when the environment setting and flow-write-tools flag are off', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (name) => name !== 'flow-write-tools');
     vi.mocked(getConfig).mockReturnValueOnce({
       flowToolsEnabled: true,
       flowWriteToolsEnabled: false,
@@ -91,6 +92,25 @@ describe('cancelFlowRunTool', () => {
     } as unknown as ReturnType<typeof getConfig>);
     const tool = getCancelFlowRunTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled by flow-write-tools when the environment setting is off', async () => {
+    vi.mocked(getConfig).mockReturnValueOnce({
+      flowToolsEnabled: true,
+      flowWriteToolsEnabled: false,
+      productTelemetryEnabled: false,
+      productTelemetryEndpoint: 'https://test.com',
+      server: 'https://test.tableau.com',
+    } as unknown as ReturnType<typeof getConfig>);
+    const tool = getCancelFlowRunTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-write-tools');
+  });
+
+  it('is enabled by the environment setting when flow-write-tools is off', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (name) => name !== 'flow-write-tools');
+    const tool = getCancelFlowRunTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('previews without requesting cancellation and returns a confirmation token', async () => {

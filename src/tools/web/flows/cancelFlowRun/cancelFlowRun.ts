@@ -41,8 +41,9 @@ export const getCancelFlowRunTool = (server: WebMcpServer): WebTool<typeof param
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
-        !config.flowWriteToolsEnabled ||
-        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(await getFeatureGate().isFeatureEnabled('flow-tools')) ||
+        (!config.flowWriteToolsEnabled &&
+          !(await getFeatureGate().isFeatureEnabled('flow-write-tools'))),
     ),
     description: `
   Requests cancellation of a **queued or in-progress Tableau Prep flow run**, by flow *run* id (not flow id). This is the counterpart to \`run-flow\` / \`run-flow-task\`: use it for a run you started that has not reached a terminal state. The request may be accepted while the run is executing, but the final status can still be Completed or Failed if the run is already finishing.

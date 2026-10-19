@@ -470,9 +470,11 @@ Controls the Tableau Prep flow tool family, including reads, runs, and cancellat
 - Set to the exact value `false` to disable all flow tools. Any other value, including unset
   or empty, leaves this setting enabled.
 - The `flow-tools` feature flag also defaults to `true` in the bundled `features.json`.
-  Deployments can disable it through their feature-gate provider.
+  Deployments can disable it through their feature-gate provider. Both this flag and
+  `FLOW_TOOLS_ENABLED` must be enabled for flow tools to register.
 - The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled),
-  which defaults to `true`.
+  which defaults to `true`; the `flow-write-tools` feature flag can enable them when this
+  environment setting is `false`.
 - When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
   `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
 - When enabled, individual flow tools can still be excluded via
@@ -507,9 +509,10 @@ Controls flow runs and cancellation. A confirmed run consumes Tableau Prep Condu
 
 - Default: `true`
 - Set to the exact value `false` to disable the mutating tools. Any other value, including unset
-  or empty, leaves this setting enabled.
-- The base `FLOW_TOOLS_ENABLED` setting is also required. If `FLOW_TOOLS_ENABLED=false`, the
-  mutating tools remain disabled even when this setting is `true`.
+  or empty, leaves this setting enabled. When this setting is `false`, the `flow-write-tools`
+  feature flag can enable the mutating tools instead.
+- The base `FLOW_TOOLS_ENABLED` setting and `flow-tools` feature flag are also required. If either
+  base gate is disabled, the mutating tools remain disabled.
 - Applies to:
   - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
   - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
@@ -518,11 +521,12 @@ Controls flow runs and cancellation. A confirmed run consumes Tableau Prep Condu
 - These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
 - Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
 
-| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Flow tool configuration |
-| --- | --- | --- |
-| `false` | `false` or `true` | none |
-| `true` | `false` | read-only flow tools |
-| `true` | `true` | read-only and mutating flow tools |
+| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | `flow-write-tools` flag | Flow tool configuration |
+| --- | --- | --- | --- |
+| `false` | any | any | none |
+| `true` | `false` | `false` | read-only flow tools |
+| `true` | `false` | `true` | read-only and mutating flow tools |
+| `true` | `true` | any | read-only and mutating flow tools |
 
 <hr />
 

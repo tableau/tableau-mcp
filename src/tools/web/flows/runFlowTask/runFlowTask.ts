@@ -40,8 +40,9 @@ export const getRunFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     disabled: new Provider(
       async () =>
         !config.flowToolsEnabled ||
-        !config.flowWriteToolsEnabled ||
-        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
+        !(await getFeatureGate().isFeatureEnabled('flow-tools')) ||
+        (!config.flowWriteToolsEnabled &&
+          !(await getFeatureGate().isFeatureEnabled('flow-write-tools'))),
     ),
     description: `
   Runs an **existing scheduled flow run task** now ("Run Now" on a schedule), by task id. The task runs with the output steps and parameters it was configured with; a suspended task is resumed. This ENQUEUES the run and returns immediately with an async job — the run is NOT finished when this tool returns.

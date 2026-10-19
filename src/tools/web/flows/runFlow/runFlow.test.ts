@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { getConfig } from '../../../../config.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -85,9 +86,28 @@ describe('runFlowTool', () => {
   });
 
   it('is disabled when the flow-tools feature flag is off', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockIsFeatureEnabled.mockImplementation(async (name) => name !== 'flow-tools');
     const tool = getRunFlowTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled by flow-write-tools when the environment setting is off', async () => {
+    vi.mocked(getConfig).mockReturnValueOnce({
+      flowToolsEnabled: true,
+      flowWriteToolsEnabled: false,
+      productTelemetryEnabled: false,
+      productTelemetryEndpoint: 'https://test.com',
+      server: 'https://test.tableau.com',
+    } as unknown as ReturnType<typeof getConfig>);
+    const tool = getRunFlowTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-write-tools');
+  });
+
+  it('is enabled by the environment setting when flow-write-tools is off', async () => {
+    mocks.mockIsFeatureEnabled.mockImplementation(async (name) => name !== 'flow-write-tools');
+    const tool = getRunFlowTool(new WebMcpServer());
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
   it('previews without enqueueing and returns a confirmation token', async () => {

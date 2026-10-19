@@ -662,7 +662,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable content-mutating flow MCP tools',
     description:
-      'Controls run-flow, run-flow-task, and cancel-flow-run. Defaults to "true"; set to "false" to disable these mutating tools. FLOW_TOOLS_ENABLED must also be enabled. Mutations require a preview followed by explicit human approval and a matching confirmation token.',
+      'Controls run-flow, run-flow-task, and cancel-flow-run. Defaults to "true"; set to "false" to disable these mutating tools. The flow-write-tools feature flag can also enable these tools when this setting is false. FLOW_TOOLS_ENABLED and the flow-tools feature flag must also be enabled. Mutations require a preview followed by explicit human approval and a matching confirmation token.',
     required: false,
     sensitive: false,
   },
