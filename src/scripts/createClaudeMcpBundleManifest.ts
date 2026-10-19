@@ -662,7 +662,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable content-mutating flow MCP tools',
     description:
-      'run-flow, run-flow-task, and cancel-flow-run are enabled by default when flow tools are enabled. Set to "false" to disable them while keeping read-only flow tools. Mutations require preview and human confirmation.',
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default when flow tools are enabled. Set to "false" to disable them while keeping read-only flow tools. Mutations require a preview followed by explicit human approval and a matching single-use confirmation token.',
     required: false,
     sensitive: false,
   },
