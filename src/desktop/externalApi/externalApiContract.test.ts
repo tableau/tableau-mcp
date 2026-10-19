@@ -3,6 +3,7 @@ import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { startMockExternalApiServer } from './mockExternalApiServer.js';
 import {
   apiRootSchema,
   appInfoSchema,
@@ -948,6 +949,37 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(option.properties).not.toHaveProperty('recommendation');
       expect(option.properties).not.toHaveProperty('rating');
       expect(option.properties).not.toHaveProperty('isDefault');
+    });
+  });
+
+  describe('Show Me mock identity boundary', () => {
+    it('accepts hidden canonical identities and declared instances while rejecting captions and fabricated instances', async () => {
+      const server = await startMockExternalApiServer({
+        token: 'show-me-contract-token',
+        workbookXml: `<workbook><datasources>
+          <datasource name="federated.hidden" caption="Hidden Source">
+            <column name="[Hidden Sales]" caption="Hidden Sales" datatype="real" role="measure" type="quantitative" hidden="true" />
+          </datasource>
+        </datasources><worksheets><worksheet name="Hidden"><table><view>
+          <datasource-dependencies datasource="federated.hidden">
+            <column-instance name="[custom:Hidden Sales:qk]" column="[Hidden Sales]" />
+          </datasource-dependencies>
+        </view></table></worksheet></worksheets></workbook>`,
+      });
+      const request = async (field: string): Promise<Response> =>
+        await fetch(
+          `${server.baseUrl}/v0/workbook/worksheets/sheet-sales/showMe?${new URLSearchParams({ fieldsSelectedInSchemaViewer: field })}`,
+          { headers: { Authorization: 'Bearer show-me-contract-token' } },
+        );
+
+      try {
+        expect((await request('[federated.hidden].[Hidden Sales]')).status).toBe(200);
+        expect((await request('[federated.hidden].[custom:Hidden Sales:qk]')).status).toBe(200);
+        expect((await request('[Hidden Source].[Hidden Sales]')).status).toBe(400);
+        expect((await request('[federated.hidden].[sum:Hidden Sales:qk]')).status).toBe(400);
+      } finally {
+        await server.close();
+      }
     });
   });
 

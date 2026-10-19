@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetShowMeRequest } from '../../../desktop/externalApi/types.js';
+import { resolveShowMeSelection } from '../../../desktop/metadata/showMeSelection.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -12,16 +13,15 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  worksheet: z.string().min(1).describe('Worksheet name or stable id used for discovery.'),
-  showMeType: z.string().min(1).describe('Applicable showMeType returned by Show Me discovery.'),
-  dataSource: z
-    .string()
-    .optional()
-    .describe('Same optional internal datasource name used for discovery.'),
+  worksheet: z.string().min(1).describe('Worksheet name or stable id.'),
+  showMeType: z.string().min(1).describe('Applicable showMeType returned by discovery.'),
+  dataSource: z.string().optional().describe('Same optional datasource name or caption.'),
   fieldsSelectedInSchemaViewer: z
     .array(z.string())
     .optional()
-    .describe('Same ordered qualified field names used for discovery; omit if discovery did.'),
+    .describe(
+      'Same optional fields. Captions and [datasource caption].[field] resolve; omit if discovery did, [] selects none.',
+    ),
 };
 const title = 'Show Me';
 
@@ -69,17 +69,35 @@ export const getShowMeTool = (server: DesktopMcpServer): DesktopTool<typeof para
                   return resolved.error.toErr();
                 }
 
-                const request: WorksheetShowMeRequest = {
-                  showMeType,
-                  ...(dataSource !== undefined ? { dataSource } : {}),
-                  ...(fieldsSelectedInSchemaViewer !== undefined
-                    ? { fieldsSelectedInSchemaViewer }
-                    : {}),
-                };
+                const needsMetadata =
+                  dataSource !== undefined || fieldsSelectedInSchemaViewer !== undefined;
+                let selection: { dataSource?: string; fieldsSelectedInSchemaViewer?: string[] } =
+                  {};
+                let expectedInstanceId: string | undefined;
+                if (needsMetadata) {
+                  const metadata = await call(
+                    'workbook document',
+                    async (executor, signal) => await executor.getWorkbookDocument(signal),
+                  );
+                  if (metadata.isErr()) return metadata;
+                  const resolvedSelection = resolveShowMeSelection(metadata.value.xml, {
+                    dataSource,
+                    fieldsSelectedInSchemaViewer,
+                  });
+                  if (resolvedSelection.isErr()) return resolvedSelection.error.toErr();
+                  selection = resolvedSelection.value;
+                  expectedInstanceId = metadata.value.instanceId;
+                }
+                const request: WorksheetShowMeRequest = { showMeType, ...selection };
                 const result = await call(
                   'show-me',
                   async (executor, signal) =>
-                    await executor.showMeWorksheet(resolved.value.id, request, signal),
+                    await executor.showMeWorksheet(
+                      resolved.value.id,
+                      request,
+                      signal,
+                      expectedInstanceId,
+                    ),
                 );
                 if (result.isErr()) {
                   return result;

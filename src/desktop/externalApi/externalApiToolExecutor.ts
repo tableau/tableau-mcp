@@ -481,7 +481,7 @@ export class ExternalApiToolExecutor {
     signal: AbortSignal,
     expectedInstanceId: string,
   ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
-    const result = await this.withRescan('read', (http) => {
+    const result = await this.withRescan('read', async (http) => {
       if (http.instanceId !== expectedInstanceId) {
         return Promise.resolve(
           Err({
@@ -501,14 +501,24 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     query: ShowMeOptionsQuery,
     signal: AbortSignal,
+    expectedInstanceId?: string,
   ): Promise<Result<ShowMeOptionsResult, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(
+    const result = await this.withRescan('read', async (http) => {
+      if (expectedInstanceId !== undefined && http.instanceId !== expectedInstanceId) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: expectedInstanceId,
+          actual: http.instanceId,
+        });
+      }
+      return await http.getJson(
         worksheetShowMeOptionsRoute(worksheetId, query),
         showMeOptionsResultSchema,
         signal,
-      ),
-    );
+      );
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
   }
 
   async getDashboard(
@@ -826,10 +836,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     request: WorksheetShowMeRequest,
     signal: AbortSignal,
+    expectedInstanceId?: string,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetShowMeRoute(worksheetId), request, signal),
       'show-me-worksheet',
+      { expectedInstanceId },
     );
   }
 
