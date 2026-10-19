@@ -164,6 +164,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'list-dashboards',
       'ask-user',
       'refine-worksheet',
+      'set-member-colors',
       'add-field',
       'apply-worksheet',
     ]);

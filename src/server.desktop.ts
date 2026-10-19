@@ -184,6 +184,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-action',
     'format-worksheets',
     'format-dashboard-zones',
+    'set-member-colors',
     'read-knowledge-resource',
     'search-knowledge',
   ]);

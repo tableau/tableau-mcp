@@ -256,12 +256,13 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
     action:
-      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
+      'use existing-sheet tools only: list-worksheets -> list-dashboards -> ask-user if ambiguous. Use refine-worksheet for top-N, sort, explicit mark-type changes, or operation=round_bar on compatible ordinary vertical or horizontal simple or stacked bars; grouped, dual-axis, and specialty bars are excluded. Use set-member-colors to color specific members; add-field -> apply-worksheet for color, size, detail, Rows, or Columns. Never use shell commands or raw whole-workbook XML where refine-worksheet applies. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
       'ask-user',
       'refine-worksheet',
+      'set-member-colors',
       'add-field',
       'apply-worksheet',
     ],
@@ -271,7 +272,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
