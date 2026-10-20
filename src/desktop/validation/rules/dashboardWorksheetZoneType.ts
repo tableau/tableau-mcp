@@ -17,7 +17,7 @@ export const dashboardWorksheetZoneTypeRule: ValidationRule = {
 
     // The agent added this type after a missing-visual-doc rejection.
     // Worksheet zones use their name with no type-v2 attribute. The invented
-    // "worksheet" type bypassed the render guard, loaded blank, and later hit
+    // "worksheet" type loaded without a visual document and later hit
     // VisualDocEditorImpl::PendingDeleteEditFactory::Create on zone removal.
     const zones = xpath.select(WORKSHEET_ZONE_TYPE, doc as unknown as Node) as Element[];
     return zones.map((zone) => ({
@@ -30,8 +30,11 @@ export const dashboardWorksheetZoneTypeRule: ValidationRule = {
       xpath: WORKSHEET_ZONE_TYPE,
       suggestion:
         'Remove type-v2="worksheet" and keep name="Worksheet Name" on the zone. ' +
-        'If Tableau reports a missing visual representation, inspect and populate the referenced ' +
-        'live worksheet before retrying; changing the zone type does not fix a missing visual doc.',
+        'If Tableau reports a missing visual representation, inspect worksheet view registration ' +
+        'in the dashboard window, not marks or fields: blank worksheets are valid. ' +
+        'Desktop API 0.2.22 and newer registers submitted worksheet zones through dashboard apply; ' +
+        'on older or unknown versions, add the worksheets to the dashboard in Desktop and re-read ' +
+        'before retrying. Changing the zone type does not fix a missing visual doc.',
     }));
   },
 };

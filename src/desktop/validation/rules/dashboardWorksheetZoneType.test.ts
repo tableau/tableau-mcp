@@ -21,6 +21,10 @@ describe('dashboard-worksheet-zone-type', () => {
     expect(issues[0].message).toContain('Pipeline Trend');
     expect(issues[1].message).toContain('Pipeline by Region');
     expect(issues[0].suggestion).toContain('missing visual representation');
+    expect(issues[0].suggestion).toContain('dashboard window');
+    expect(issues[0].suggestion).toContain('0.2.22');
+    expect(issues[0].suggestion).toContain('blank');
+    expect(issues[0].suggestion).not.toContain('populate');
   });
 
   it('leaves canonical worksheet, visual, layout, and object zones alone', () => {
