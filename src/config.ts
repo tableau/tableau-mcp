@@ -99,9 +99,9 @@ export class Config extends BaseConfig {
   pendingDeletionMaxAgeDays: number;
   flowToolsEnabled: boolean | undefined;
   flowReadToolsEnabled: boolean | undefined;
+  flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  flowWriteToolsEnabled: boolean | undefined;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -180,9 +180,9 @@ export class Config extends BaseConfig {
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -394,11 +394,11 @@ export class Config extends BaseConfig {
     );
     this.flowToolsEnabled = parseOptionalBoolean(flowToolsEnabled);
     this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
+    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived

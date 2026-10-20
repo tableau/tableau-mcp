@@ -457,16 +457,16 @@ Enables product telemetry for tool usage tracking.
 
 ## `FLOW_TOOLS_ENABLED`
 
-Controls the whole Tableau Prep flow tool family. Flow tools are enabled by default.
+Controls all Tableau Prep flow tools. Flow tools are enabled by default.
 
-- Default: unset, which enables Flow tools.
-- Set to `false` to disable all Flow tools: the read-only tools controlled by
+- Default: unset, which enables flow tools.
+- Set to `false` to disable all flow tools, including the read-only tools controlled by
   [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled) and the mutating tools controlled by
   [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled).
-- Set to `true` to enable Flow tools explicitly. Any other value is treated as unset.
-- Each group of Flow tools requires this setting and its own setting.
-- [`EXCLUDE_TOOLS`](#exclude_tools) can still remove individual Flow tools, or all of them with
-  `EXCLUDE_TOOLS=flow`.
+- Set to `true` to enable flow tools explicitly. Any other value is treated as unset.
+- The read-only and mutating flow tools each require this setting and their own setting.
+- You can still remove individual flow tools with [`EXCLUDE_TOOLS`](#exclude_tools), or remove all
+  of them with `EXCLUDE_TOOLS=flow`.
 
 | `FLOW_TOOLS_ENABLED` | `FLOW_READ_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
 | --- | --- | --- | --- |
@@ -480,11 +480,11 @@ Controls the whole Tableau Prep flow tool family. Flow tools are enabled by defa
 
 ## `FLOW_READ_TOOLS_ENABLED`
 
-Controls the read-only Flow tools. They are enabled by default when the Flow tools are enabled
-through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled).
+Controls the read-only flow tools. They are enabled by default when flow tools are enabled through
+[`FLOW_TOOLS_ENABLED`](#flow_tools_enabled).
 
-- Default: unset, which enables the read-only Flow tools.
-- Set to `false` to disable them while keeping the mutating Flow tools.
+- Default: unset, which enables the read-only flow tools.
+- Set to `false` to disable them and keep the mutating flow tools.
 - Set to `true` to enable them explicitly. Any other value is treated as unset.
 - `FLOW_TOOLS_ENABLED=false` disables these tools regardless of this setting.
 - When enabled, registers:
@@ -494,8 +494,33 @@ through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled).
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- When disabled, these tools are not registered, and their OAuth scopes (`tableau:mcp:flow:read`
-  and the REST API scopes the read tools use) are neither advertised nor accepted.
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is neither
+  advertised nor accepted. REST API scopes that an enabled tool still uses stay advertised. For
+  example, `run-flow` uses `tableau:flows:read`.
+
+<hr />
+
+## `FLOW_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** flow tools. They are enabled by default when flow tools are
+enabled through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled). A confirmed run consumes Tableau Prep
+Conductor capacity and can overwrite flow outputs. Each tool previews the change first and returns
+a single-use confirmation token. The tool makes the change only when it's called again with that
+token, after the user approves the preview.
+
+- Default: unset, which enables the mutating flow tools.
+- Set to `false` to disable them and keep the read-only flow tools.
+- Set to `true` to enable them explicitly. Any other value is treated as unset.
+- `FLOW_TOOLS_ENABLED=false` disables these tools regardless of this setting.
+- When enabled, registers:
+  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
+  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
+  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:run` and
+  `tableau:mcp:flow:cancel` scopes are neither advertised nor accepted. Their REST API scopes
+  (`tableau:flows:run`, `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised.
+- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context.
+- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details.
 
 <hr />
 
@@ -517,30 +542,6 @@ Enables admin-only tools that require site administrator permissions.
   - ServerAdministrator
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
   have the required permissions.
-
-<hr />
-
-## `FLOW_WRITE_TOOLS_ENABLED`
-
-Controls the content-**mutating** Flow tools. They are enabled by default when the Flow tools are
-enabled through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled). A confirmed run consumes Tableau Prep
-Conductor capacity and can overwrite outputs. Every mutation requires a preview, explicit human
-approval, and the matching single-use confirmation token.
-
-- Default: unset, which enables the mutating Flow tools.
-- Set to `false` to disable them while keeping the read-only Flow tools.
-- Set to `true` to enable them explicitly. Any other value is treated as unset.
-- `FLOW_TOOLS_ENABLED=false` disables these tools regardless of this setting.
-- When enabled, registers:
-  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
-  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
-  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
-- When disabled, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run`
-  for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding
-  `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not
-  advertised.
-- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
-- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
 
 <hr />
 

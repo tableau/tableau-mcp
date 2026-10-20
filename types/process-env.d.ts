@@ -79,8 +79,8 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   PENDING_DELETION_MAX_AGE_DAYS: string | undefined;
   FLOW_TOOLS_ENABLED: string | undefined;
   FLOW_READ_TOOLS_ENABLED: string | undefined;
-  INSIGHTS_TOOLS_ENABLED: string | undefined;
   FLOW_WRITE_TOOLS_ENABLED: string | undefined;
+  INSIGHTS_TOOLS_ENABLED: string | undefined;
   ADMIN_GATE_CACHE_TTL_MINUTES: string | undefined;
   STALE_CONTENT_MIN_AGE_DAYS: string | undefined;
   STALE_CONTENT_MAX_ROWS: string | undefined;

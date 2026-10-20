@@ -644,7 +644,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable Tableau Prep flow MCP tools',
     description:
-      'Tableau Prep flow tools are enabled by default. Set to "false" to disable all flow tools, including run-flow, run-flow-task, and cancel-flow-run. describe-flow additionally requires Tableau Server 2026.3+ and features.getFlowDocumentRestApi.',
+      'Tableau Prep flow tools are enabled by default. Set to "false" to disable all flow tools, both read-only and mutating. describe-flow also requires Tableau Server 2026.3 or later and the server feature flag features.getFlowDocumentRestApi.',
     required: false,
     sensitive: false,
   },
@@ -653,7 +653,16 @@ const envVars = {
     type: 'boolean',
     title: 'Enable read-only flow MCP tools',
     description:
-      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default when flow tools are enabled. Set to "false" to disable them while keeping the mutating flow tools.',
+      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default when flow tools are enabled. Set to "false" to disable them and keep the mutating flow tools.',
+    required: false,
+    sensitive: false,
+  },
+  FLOW_WRITE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable content-mutating flow MCP tools',
+    description:
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default when flow tools are enabled. Set to "false" to disable them and keep the read-only flow tools. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
     required: false,
     sensitive: false,
   },
@@ -663,15 +672,6 @@ const envVars = {
     title: 'Enable insight-cards MCP tools',
     description:
       'Registers the datasource-context insight tools (generate-insight-cards). Disabled by default; set to "true" to enable them.',
-    required: false,
-    sensitive: false,
-  },
-  FLOW_WRITE_TOOLS_ENABLED: {
-    includeInUserConfig: false,
-    type: 'boolean',
-    title: 'Enable content-mutating flow MCP tools',
-    description:
-      'run-flow, run-flow-task, and cancel-flow-run are enabled by default when flow tools are enabled. Set to "false" to disable them while keeping read-only flow tools. Mutations require a preview followed by explicit human approval and a matching single-use confirmation token.',
     required: false,
     sensitive: false,
   },

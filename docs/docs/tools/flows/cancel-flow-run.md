@@ -27,7 +27,7 @@ Cancellation is **asynchronous**:
 
 Enabled by default. Set
 [`FLOW_WRITE_TOOLS_ENABLED=false`](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled)
-to disable the mutating Flow tools.
+to disable the mutating flow tools.
 
 ## Two-phase confirmation
 
