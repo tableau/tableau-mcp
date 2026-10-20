@@ -212,6 +212,91 @@ describe('listViewsTool', () => {
     expect(result.content[0].text).toContain(errorMessage);
   });
 
+  describe('mcp.resultInfo (server cap hides views)', () => {
+    function mockFullPage(rawTotal: number): void {
+      mocks.mockQueryViewsForSiteData.mockResolvedValue({
+        pagination: { pageNumber: 1, pageSize: MAX_PAGE_SIZE, totalAvailable: rawTotal },
+        views: Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+          ...mockView,
+          id: `view-${i}`,
+          project: { id: i % 2 === 0 ? 'p1' : 'p2' },
+        })),
+      });
+    }
+
+    async function getParsed(params: {
+      limit?: number;
+      maxResultLimit: number | null;
+      projectIds?: Set<string>;
+    }): Promise<any> {
+      const extra = getMockRequestHandlerExtra();
+      const config = new OverridableConfig({});
+      vi.spyOn(config, 'getMaxResultLimit').mockReturnValue(params.maxResultLimit);
+      if (params.projectIds) {
+        config.boundedContext = { ...config.boundedContext, projectIds: params.projectIds };
+      }
+      extra.getConfigWithOverrides = vi.fn().mockResolvedValue(config);
+
+      const callback = await Provider.from(getListViewsTool(new WebMcpServer()).callback);
+      const result = await callback(
+        { filter: 'name:eq:Overview', pageNumber: undefined, limit: params.limit },
+        extra,
+      );
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('reports admin-cap when the cap is below the raw total', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ maxResultLimit: 700 });
+
+      expect(parsed.data).toHaveLength(700);
+      expect(parsed.totalAvailable).toBe(700);
+      expect(Object.keys(parsed).sort()).toEqual(['data', 'mcp', 'totalAvailable']);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 700, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('reports admin-cap on a limit: 1 count call under a binding cap', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ limit: 1, maxResultLimit: 700 });
+
+      expect(parsed.totalAvailable).toBe(700);
+      expect(parsed.mcp.resultInfo.returnedCount).toBe(1);
+      expect(parsed.mcp.resultInfo.truncationReason).toBe('admin-cap');
+    });
+
+    it('counts returnedCount after the bounded-context filter', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ maxResultLimit: 700, projectIds: new Set(['p1']) });
+
+      expect(parsed.data).toHaveLength(350);
+      expect(parsed.totalAvailable).toBe(700);
+      expect(parsed.mcp.resultInfo.returnedCount).toBe(350);
+    });
+
+    it('omits mcp with no cap, a non-binding cap, or only a caller limit', async () => {
+      mockFullPage(2600);
+
+      const noCap = await getParsed({ maxResultLimit: null });
+      const nonBindingCap = await getParsed({ maxResultLimit: 2600 });
+      const limitOnly = await getParsed({ limit: 1, maxResultLimit: null });
+
+      expect(noCap).not.toHaveProperty('mcp');
+      expect(Object.keys(noCap).sort()).toEqual(['data', 'totalAvailable']);
+      expect(nonBindingCap).not.toHaveProperty('mcp');
+      expect(Object.keys(nonBindingCap).sort()).toEqual(['data', 'totalAvailable']);
+      expect(nonBindingCap.totalAvailable).toBe(2600);
+      expect(limitOnly).not.toHaveProperty('mcp');
+      expect(limitOnly.totalAvailable).toBe(2600);
+    });
+  });
+
   describe('INCLUDE_VIEW_IDS fast path (fetch by ID)', () => {
     function makeAxiosError(status: number): Error {
       return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -349,7 +434,7 @@ describe('listViewsTool', () => {
         pageNumber?: number;
         limit?: number;
         maxResultLimit?: number | null;
-      }): Promise<{ ids: Array<string>; totalAvailable: number }> {
+      }): Promise<{ ids: Array<string>; totalAvailable: number; parsed: any }> {
         const result = await getToolResult(params);
         expect(result.isError).toBe(false);
         invariant(result.content[0].type === 'text');
@@ -357,6 +442,7 @@ describe('listViewsTool', () => {
         return {
           ids: parsed.data.map((v: { id: string }) => v.id),
           totalAvailable: parsed.totalAvailable,
+          parsed,
         };
       }
 
@@ -393,6 +479,54 @@ describe('listViewsTool', () => {
         const page2 = await getPageOfIds({ pageNumber: 2, maxResultLimit: 1200 });
         expect(page2.ids).toEqual(viewIdsFrom(1000, 1200));
         expect(page2.totalAvailable).toBe(1200);
+      });
+
+      it('reports admin-cap in mcp.resultInfo when the cap hides allowed views', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed: p1 } = await getPageOfIds({ maxResultLimit: 1200 });
+        expect(Object.keys(p1).sort()).toEqual(['data', 'mcp', 'totalAvailable']);
+        expect(p1.mcp).toEqual({
+          resultInfo: { returnedCount: 1000, truncated: true, truncationReason: 'admin-cap' },
+        });
+
+        const { parsed: p2 } = await getPageOfIds({ pageNumber: 2, maxResultLimit: 1200 });
+        expect(p2.mcp.resultInfo).toEqual({
+          returnedCount: 200,
+          truncated: true,
+          truncationReason: 'admin-cap',
+        });
+      });
+
+      it('reports admin-cap on a limit: 1 call under a binding cap', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed } = await getPageOfIds({ limit: 1, maxResultLimit: 1200 });
+
+        expect(parsed.totalAvailable).toBe(1200);
+        expect(parsed.mcp.resultInfo).toEqual({
+          returnedCount: 1,
+          truncated: true,
+          truncationReason: 'admin-cap',
+        });
+      });
+
+      it('omits mcp when the cap equals the allowed count', async () => {
+        stubAllowedViews(viewIdsFrom(0, 3));
+
+        const { parsed } = await getPageOfIds({ maxResultLimit: 3 });
+
+        expect(Object.keys(parsed).sort()).toEqual(['data', 'totalAvailable']);
+        expect(parsed.totalAvailable).toBe(3);
+      });
+
+      it('omits mcp when there is no cap', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed } = await getPageOfIds({ maxResultLimit: null });
+
+        expect(Object.keys(parsed).sort()).toEqual(['data', 'totalAvailable']);
+        expect(parsed.totalAvailable).toBe(1500);
       });
 
       it('skips 403/404 views and backfills pages with the next allowed views', async () => {
