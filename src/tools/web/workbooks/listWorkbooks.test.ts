@@ -222,6 +222,90 @@ describe('listWorkbooksTool', () => {
     expect(result.content[0].text).toContain(errorMessage);
   });
 
+  describe('mcp.resultInfo (server cap hides workbooks)', () => {
+    function mockFullPage(rawTotal: number): void {
+      mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+        pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: rawTotal },
+        workbooks: Array.from({ length: 1000 }, (_, i) => ({
+          ...mockWorkbook,
+          id: `workbook-${i}`,
+          project: { name: 'Project', id: i % 2 === 0 ? 'p1' : 'p2' },
+        })),
+      });
+    }
+
+    async function getParsed(params: {
+      limit?: number;
+      maxResultLimit: number | null;
+      projectIds?: Set<string>;
+    }): Promise<any> {
+      const extra = getMockRequestHandlerExtra();
+      const config = new OverridableConfig({});
+      vi.spyOn(config, 'getMaxResultLimit').mockReturnValue(params.maxResultLimit);
+      if (params.projectIds) {
+        config.boundedContext = { ...config.boundedContext, projectIds: params.projectIds };
+      }
+      extra.getConfigWithOverrides = vi.fn().mockResolvedValue(config);
+
+      const result = await getToolResult(
+        { filter: 'name:eq:Superstore', limit: params.limit },
+        extra,
+      );
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('reports admin-cap when the cap is below the raw total', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ maxResultLimit: 700 });
+
+      expect(parsed.data).toHaveLength(700);
+      expect(parsed.totalAvailable).toBe(700);
+      expect(Object.keys(parsed).sort()).toEqual(['data', 'mcp', 'totalAvailable']);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 700, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('reports admin-cap on a limit: 1 count call under a binding cap', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ limit: 1, maxResultLimit: 700 });
+
+      expect(parsed.totalAvailable).toBe(700);
+      expect(parsed.mcp.resultInfo.returnedCount).toBe(1);
+      expect(parsed.mcp.resultInfo.truncationReason).toBe('admin-cap');
+    });
+
+    it('counts returnedCount after the bounded-context filter', async () => {
+      mockFullPage(2600);
+
+      const parsed = await getParsed({ maxResultLimit: 700, projectIds: new Set(['p1']) });
+
+      expect(parsed.data).toHaveLength(350);
+      expect(parsed.totalAvailable).toBe(700);
+      expect(parsed.mcp.resultInfo.returnedCount).toBe(350);
+    });
+
+    it('omits mcp with no cap, a non-binding cap, or only a caller limit', async () => {
+      mockFullPage(2600);
+
+      const noCap = await getParsed({ maxResultLimit: null });
+      const nonBindingCap = await getParsed({ maxResultLimit: 2600 });
+      const limitOnly = await getParsed({ limit: 1, maxResultLimit: null });
+
+      expect(noCap).not.toHaveProperty('mcp');
+      expect(Object.keys(noCap).sort()).toEqual(['data', 'totalAvailable']);
+      expect(nonBindingCap).not.toHaveProperty('mcp');
+      expect(Object.keys(nonBindingCap).sort()).toEqual(['data', 'totalAvailable']);
+      expect(nonBindingCap.totalAvailable).toBe(2600);
+      expect(limitOnly).not.toHaveProperty('mcp');
+      expect(limitOnly.totalAvailable).toBe(2600);
+    });
+  });
+
   describe('constrainWorkbooks', () => {
     it('should return empty result when no workbooks are found', () => {
       const result = constrainWorkbooks({
