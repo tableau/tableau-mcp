@@ -139,15 +139,16 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                 const viewIds = configWithOverrides.boundedContext.viewIds;
                 let page: GetPageResult<View>;
                 if (viewIds !== null && !validatedFilter) {
-                  const effectiveLimit = maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? MAX_PAGE_SIZE)
-                    : limit;
-                  const views = await fetchAllowedViewsById({
-                    restApi,
-                    viewIds,
-                    limit: effectiveLimit,
+                  const allowedViews = await fetchAllowedViewsById({ restApi, viewIds });
+                  page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => ({
+                      pagination: { pageNumber, pageSize, totalAvailable: allowedViews.length },
+                      data: allowedViews.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+                    }),
                   });
-                  page = { data: views, totalAvailable: views.length };
                 } else {
                   page = await getPage({
                     pageNumber,
@@ -290,17 +291,15 @@ export function constrainViews({
  * result matches the slow path, where such views simply never appear in Query Views for Site. Any
  * other failure (5xx, network, etc.) propagates so genuine errors aren't hidden.
  *
- * All views are fetched before slicing to `limit` so that omitted (403/404) views are backfilled by
- * other allowed views rather than leaving the result short.
+ * All views are fetched before the caller pages over them so that omitted (403/404) views are
+ * backfilled by other allowed views rather than leaving a page short.
  */
 async function fetchAllowedViewsById({
   restApi,
   viewIds,
-  limit,
 }: {
   restApi: RestApi;
   viewIds: Set<string>;
-  limit: number | undefined;
 }): Promise<Array<View>> {
   const ids = [...viewIds];
   const results = await Promise.allSettled(
@@ -333,7 +332,7 @@ async function fetchAllowedViewsById({
     throw result.reason;
   });
 
-  return limit !== undefined ? views.slice(0, limit) : views;
+  return views;
 }
 
 function flattenViewUsage(views: Array<View>): Array<View> {

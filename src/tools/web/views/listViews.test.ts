@@ -409,6 +409,108 @@ describe('listViewsTool', () => {
       const parsed = JSON.parse(`${result.content[0].text}`);
       expect(parsed.data).toHaveLength(1);
     });
+
+    describe('paging', () => {
+      // Stubs INCLUDE_VIEW_IDS with `ids` (in order); `view-*` IDs resolve, others get that status.
+      function stubAllowedViews(
+        ids: Array<string>,
+        errorStatusById: Record<string, number> = {},
+      ): void {
+        vi.stubEnv('INCLUDE_VIEW_IDS', ids.join(','));
+        mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) => {
+          const status = errorStatusById[viewId];
+          if (status) {
+            throw makeAxiosError(status);
+          }
+          return { ...mockView, id: viewId };
+        });
+      }
+
+      function viewIdsFrom(start: number, end: number): Array<string> {
+        return Array.from({ length: end - start }, (_, i) => `view-${start + i}`);
+      }
+
+      async function getPageOfIds(params: {
+        pageNumber?: number;
+        limit?: number;
+        maxResultLimit?: number | null;
+      }): Promise<{ ids: Array<string>; totalAvailable: number }> {
+        const result = await getToolResult(params);
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        const parsed = JSON.parse(`${result.content[0].text}`);
+        return {
+          ids: parsed.data.map((v: { id: string }) => v.id),
+          totalAvailable: parsed.totalAvailable,
+        };
+      }
+
+      it('returns 1000 views per page in order and reports the full count', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const page1 = await getPageOfIds({});
+        expect(page1.ids).toEqual(viewIdsFrom(0, 1000));
+        expect(page1.totalAvailable).toBe(1500);
+
+        const page2 = await getPageOfIds({ pageNumber: 2 });
+        expect(page2.ids).toEqual(viewIdsFrom(1000, 1500));
+        expect(page2.totalAvailable).toBe(1500);
+
+        expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+      });
+
+      it('reports the full count when limit is 1', async () => {
+        stubAllowedViews(viewIdsFrom(0, 3));
+
+        const page = await getPageOfIds({ limit: 1 });
+
+        expect(page.ids).toEqual(['view-0']);
+        expect(page.totalAvailable).toBe(3);
+      });
+
+      it('caps totalAvailable and trims the data when maxResultLimit is below the allowed count', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const page1 = await getPageOfIds({ maxResultLimit: 1200 });
+        expect(page1.ids).toEqual(viewIdsFrom(0, 1000));
+        expect(page1.totalAvailable).toBe(1200);
+
+        const page2 = await getPageOfIds({ pageNumber: 2, maxResultLimit: 1200 });
+        expect(page2.ids).toEqual(viewIdsFrom(1000, 1200));
+        expect(page2.totalAvailable).toBe(1200);
+      });
+
+      it('skips 403/404 views and backfills pages with the next allowed views', async () => {
+        stubAllowedViews(
+          ['forbidden', ...viewIdsFrom(0, 500), 'missing', ...viewIdsFrom(500, 1001)],
+          {
+            forbidden: 403,
+            missing: 404,
+          },
+        );
+
+        const page1 = await getPageOfIds({});
+        expect(page1.ids).toEqual(viewIdsFrom(0, 1000));
+        expect(page1.totalAvailable).toBe(1001);
+
+        const page2 = await getPageOfIds({ pageNumber: 2 });
+        expect(page2.ids).toEqual(['view-1000']);
+        expect(page2.totalAvailable).toBe(1001);
+
+        const limited = await getPageOfIds({ limit: 2 });
+        expect(limited.ids).toEqual(['view-0', 'view-1']);
+        expect(limited.totalAvailable).toBe(1001);
+      });
+
+      it('keeps the INCLUDE_VIEW_IDS order', async () => {
+        stubAllowedViews(['view-c', 'view-a', 'view-b']);
+
+        const page = await getPageOfIds({});
+
+        expect(page.ids).toEqual(['view-c', 'view-a', 'view-b']);
+        expect(page.totalAvailable).toBe(3);
+      });
+    });
   });
 
   describe('constrainViews', () => {
