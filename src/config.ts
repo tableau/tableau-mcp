@@ -97,12 +97,9 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
-  // Undefined when FLOW_TOOLS_ENABLED is unset, so the flow-tools feature flag decides.
   flowToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // Environment override for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
-  // Undefined when FLOW_WRITE_TOOLS_ENABLED is unset, so the flow-write-tools feature flag decides.
   flowWriteToolsEnabled: boolean | undefined;
   bucketS3: {
     enabled: boolean;
@@ -393,8 +390,6 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED override their feature flags only when set to
-    // true or false. Any other value defers to the flag, which ships on for self-hosted installs.
     this.flowToolsEnabled = parseOptionalBoolean(flowToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
