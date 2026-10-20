@@ -1,3 +1,6 @@
+// VDS's rowLimit width is unverified, so tools keep the limit + 1 probe within int32.
+export const MAX_INT32 = 2147483647;
+
 /**
  * Why a tool result was cut short. Only set when `truncated` is `true`.
  *

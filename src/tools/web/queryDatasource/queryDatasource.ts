@@ -25,7 +25,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
-import { buildTruncationInfo, TruncationReason } from '../_lib/truncation.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -45,8 +45,6 @@ import {
 } from './validators/validateContextFilters.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
-
-const MAX_INT32 = 2147483647;
 
 const paramsSchema = {
   datasourceLuid: luidSchema,

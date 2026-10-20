@@ -152,6 +152,9 @@ describe('user-license-reclamation-inform prompt', () => {
     }
     const { text } = result.messages[0].content;
     expect(text).toContain('If the TS Events query returns exactly 10000 rows');
+    expect(text).toContain(
+      'If the TS Events query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true',
+    );
     expect(text).toContain('wrongly kept as a candidate');
   });
 
@@ -206,8 +209,23 @@ describe('user-license-reclamation-inform prompt', () => {
       throw new Error('expected text content');
     }
     const { text } = result.messages[0].content;
-    expect(text).toContain('truncated at the 10000-row limit');
+    expect(text).toContain('truncated at the row limit');
     expect(text).toContain('could be falsely listed as inactive');
+    expect(text).toContain(
+      'If the TS Users query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true',
+    );
+  });
+
+  it('names no fixed row count in the truncation warnings, so a lower server cap is not misreported', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).not.toContain('10000-row limit');
+    expect(text).not.toContain('more than 10000 Access events');
+    expect(text).not.toContain('exceeds 10000.');
   });
 
   it('fails loud when the ts-users query returns 0 rows (scoping likely not applied)', async () => {
