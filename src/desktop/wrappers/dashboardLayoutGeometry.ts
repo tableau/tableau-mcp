@@ -295,7 +295,166 @@ function normalizeBasic(before: Bounds[], target: Bounds): Bounds[] | undefined 
   return rects;
 }
 
+function isVisual(zone: Element): boolean {
+  return (
+    !!zone.getAttribute('name') &&
+    (!zone.hasAttribute('type-v2') || zone.getAttribute('type-v2') === 'visual')
+  );
+}
+
+type PrimaryMetric = { initial: number; unbounded: boolean; manual: boolean; fixed: number };
+
+function primaryMetric(
+  zone: Element,
+  axis: number,
+  readback = false,
+): PrimaryMetric | null | undefined {
+  const manual = zone.getAttribute('is-fixed') === 'true';
+  const fixedMetric = (pixels: number): number | undefined => {
+    const size = pixelUnits(zone, pixels, axis);
+    const margins = spacing(zone)?.[0];
+    if (size === undefined || !margins) return;
+    const converted = pixelUnits(zone, margins[axis] + margins[axis + 2], axis);
+    if (converted === undefined) return;
+    const total = size + converted;
+    return total >= 0 && total <= maxInt ? total : undefined;
+  };
+  if (manual) {
+    const request = zone.hasAttribute('fixed-size') ? integer(zone.getAttribute('fixed-size')) : 0;
+    if (request === undefined || request < 0) return null;
+    const fixed = request > 0 ? fixedMetric(request) : 0;
+    if (fixed === undefined) return null;
+    if (fixed > 0) return { initial: fixed, unbounded: false, manual, fixed };
+  }
+  if (zone.getAttribute('type-v2') === 'empty') {
+    // Empty zones have no layout-info provider; FlowInfo uses the native 32px default.
+    const initial = pixelUnits(zone, 32, axis);
+    return initial === undefined ? undefined : { initial, unbounded: !manual, manual, fixed: 0 };
+  }
+  if (!isVisual(zone)) return;
+  const cache = elements(zone).find((child) => child.tagName === 'layout-cache');
+  if (!cache) return;
+  const dimension = axis === 0 ? 'width' : 'height';
+  const suffix = axis === 0 ? 'w' : 'h';
+  const type = cache.getAttribute(`type-${suffix}`);
+  if (type !== 'fixed' && type !== 'scalable') return null;
+  const raw = cache.getAttribute(type === 'fixed' ? `fixed-size-${suffix}` : `min${dimension}`);
+  // Parser-default scalable minima are zero; the formatter omits 300px cache values.
+  const pixels = raw === null ? (readback || type === 'fixed' ? 300 : 0) : integer(raw);
+  if (pixels === undefined || pixels < 0) return null;
+  const initial = type === 'fixed' ? fixedMetric(pixels) : pixelUnits(zone, pixels, axis);
+  if (initial === undefined) return null;
+  return initial < 0 || initial > maxInt
+    ? null
+    : {
+        initial,
+        unbounded: type === 'scalable' && cache.getAttribute(`has-max-size-${suffix}`) !== 'true',
+        manual,
+        fixed: type === 'fixed' ? initial : 0,
+      };
+}
+
+function primaryAllocationMatches(
+  expected: Element[],
+  actual: Element[],
+  sizes: number[],
+  length: number,
+  axis: number,
+): boolean | undefined {
+  const metrics = expected.map((zone) => primaryMetric(zone, axis));
+  if (metrics.includes(null)) return false;
+  const hasManual = expected.some((zone) => zone.getAttribute('is-fixed') === 'true');
+  const emptyIndices = expected.flatMap((zone, index) =>
+    zone.getAttribute('type-v2') === 'empty' && zone.getAttribute('is-fixed') !== 'true'
+      ? [index]
+      : [],
+  );
+  const firstEmpty = emptyIndices.find((index) => index !== sizes.length - 1);
+  if (firstEmpty !== undefined) {
+    for (const index of emptyIndices) {
+      const difference = sizes[index] - sizes[firstEmpty];
+      if (
+        index === sizes.length - 1
+          ? difference < -2 || (!hasManual && difference > sizes.length + 1)
+          : Math.abs(difference) > 2
+      )
+        return false;
+    }
+  }
+  if (emptyIndices.length === sizes.length && metrics.some((metric) => metric === undefined)) {
+    const share = Math.floor(length / sizes.length);
+    const remainder = length % sizes.length;
+    return [0, remainder].some((tail) =>
+      sizes.every(
+        (size, index) => Math.abs(size - share - (index === sizes.length - 1 ? tail : 0)) <= 1,
+      ),
+    );
+  }
+  // Nonmanual ShrinkZones water-fills at a cap >= floor(client / childCount).
+  // Readback metrics may reject an impossible allocation, never authorize one.
+  const smallest = pixelUnits(expected[0], 32, axis);
+  const minimumShare = hasManual
+    ? Math.min(smallest ?? 0, Math.floor(length / sizes.length))
+    : Math.floor(length / sizes.length);
+  for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis, true))]) {
+    if (candidates.includes(null)) return false;
+    if (
+      candidates.some(
+        (metric, index) =>
+          metric && !metric.manual && sizes[index] + 1 < Math.min(metric.initial, minimumShare),
+      )
+    )
+      return false;
+  }
+  if (metrics.some((metric) => metric === undefined)) return;
+  const known = metrics as PrimaryMetric[];
+  const total = known.reduce((sum, metric) => sum + metric.initial, 0);
+  if (total > maxInt) return false;
+  let allocated: number[];
+  if (total <= length) {
+    const unbounded = known.filter((metric) => metric.unbounded).length;
+    const extra = unbounded > 0 ? Math.floor((length - total) / unbounded) : 0;
+    allocated = known.map((metric) => metric.initial + (metric.unbounded ? extra : 0));
+    if (axis === 0 && known.length === 1 && !known[0].unbounded) allocated[0] = length;
+  } else {
+    const manual = known.filter((metric) => metric.manual);
+    if (manual.length > 0 && smallest === undefined) return false;
+    const budget = Math.max(
+      length - (known.length - manual.length) * (smallest ?? 0),
+      Math.floor(length / known.length) * manual.length,
+    );
+    const waterFill = (values: number[], capacity: number): { cap: number; used: number } => {
+      const sorted = [...values].sort((a, b) => a - b);
+      let used = 0;
+      let cap = 0;
+      for (let index = 0; index < sorted.length; index++) {
+        cap = Math.floor((capacity - used) / (sorted.length - index));
+        if (sorted[index] > cap) {
+          used += (sorted.length - index) * cap;
+          break;
+        }
+        used += sorted[index];
+      }
+      return { cap, used };
+    };
+    const fixed = waterFill(
+      manual.map((metric) => metric.fixed),
+      budget,
+    );
+    const automatic = waterFill(
+      known.filter((metric) => !metric.manual).map((metric) => metric.initial),
+      length - fixed.used,
+    );
+    allocated = known.map((metric) =>
+      metric.manual ? Math.min(metric.fixed, fixed.cap) : Math.min(metric.initial, automatic.cap),
+    );
+    allocated[allocated.length - 1] += length - allocated.reduce((sum, size) => sum + size, 0);
+  }
+  return allocated.every((size, index) => Math.abs(size - sizes[index]) <= 1);
+}
+
 function singleHorizontalHeight(expected: Element, client: Bounds): number | undefined {
+  if (!isVisual(expected)) return;
   const cache = elements(expected).find((child) => child.tagName === 'layout-cache');
   if (!cache || cache.getAttribute('type-h') !== 'fixed') return;
   if (cache.getAttribute('type-w') !== 'fixed' || isTrue(expected.getAttribute('is-fixed'))) return;
@@ -388,12 +547,24 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
       Math.abs(old[axis + 2] - old[axis] - (current[axis + 2] - current[axis])) <= 1
     );
   });
-  // Without live text/worksheet metrics, changed primary allocations are only
-  // verified when they fill the client. Retained allocations may leave a tail,
+  const primaryAllocation =
+    visible.length > 0 && !primaryUnchanged
+      ? primaryAllocationMatches(
+          indices.map((index) => before[index]),
+          indices.map((index) => after[index]),
+          visible.map((rect) => rect[axis + 2] - rect[axis]),
+          client[axis + 2] - client[axis],
+          axis,
+        )
+      : undefined;
+  if (primaryAllocation === false) return false;
+  // Without a complete sizing model, changed primary allocations must fill the
+  // client. Retained allocations may leave a tail,
   // as fixed-only flows do. Native integer division leaves < childCount units.
   if (
     visible.length > 0 &&
     !primaryUnchanged &&
+    primaryAllocation !== true &&
     Math.abs(visible[visible.length - 1][axis + 2] - client[axis + 2]) >
       Math.max(1, visible.length - 1)
   )

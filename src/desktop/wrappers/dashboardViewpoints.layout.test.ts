@@ -1,3 +1,11 @@
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
+
+import {
+  readbackReflowDashboard,
+  REFLOW_DASHBOARD_NAME,
+  reflowWorkbook,
+  submittedReflowDashboard,
+} from './dashboardReflowFixtures.js';
 import { createDashboardReadbackVerifier } from './dashboardViewpoints.js';
 
 type Rect = [x: number, y: number, width: number, height: number];
@@ -32,6 +40,18 @@ function workbook(
 
 function basic(content: string, inset = 0): string {
   return workbook(zone(1, full, 'type-v2="layout-basic"', content + spacing(inset)));
+}
+
+function registerWorksheets(xml: string, names: string[]): string {
+  return xml
+    .replace(
+      '<workbook>',
+      `<workbook><worksheets>${names.map((name) => `<worksheet name="${name}"/>`).join('')}</worksheets>`,
+    )
+    .replace(
+      '<viewpoints/>',
+      `<viewpoints>${names.map((name) => `<viewpoint name="${name}"/>`).join('')}</viewpoints>`,
+    );
 }
 
 function verify(expected: string, actual: string): boolean {
@@ -175,14 +195,14 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
     axis,
   );
 
-  it('accepts changed primary allocation within the complete client rectangle', () => {
+  it('accepts equal native primary allocation for empty zones', () => {
     expect(
       verify(
         expected,
         flowChildren(
           [
-            [0, 0, 100000, 10000],
-            [0, 10000, 100000, 90000],
+            [0, 0, 100000, 50000],
+            [0, 50000, 100000, 50000],
           ],
           axis,
         ),
@@ -219,6 +239,20 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
         [0, 1, 100000, 1],
       ] as Rect[],
     },
+    {
+      name: 'one-unit first empty tile with complete client filling',
+      rects: [
+        [0, 0, 100000, 1],
+        [0, 1, 100000, 99999],
+      ] as Rect[],
+    },
+    {
+      name: 'one-unit last empty tile with complete client filling',
+      rects: [
+        [0, 0, 100000, 99999],
+        [0, 99999, 100000, 1],
+      ] as Rect[],
+    },
   ])('rejects $name with explicit zero spacing', ({ rects }) => {
     expect(verify(expected, flowChildren(rects, axis))).toBe(false);
   });
@@ -234,8 +268,8 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
     );
     const after = flowChildren(
       [
-        [1000, 1000, 98000, 10000],
-        [1000, 11000, 98000, 88000],
+        [1000, 1000, 98000, 49000],
+        [1000, 50000, 98000, 49000],
       ],
       axis,
       10,
@@ -245,8 +279,16 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
 
   it('retains legitimate trailing space when all flow children have fixed sizes', () => {
     const cells = [
-      zone(3, transpose([0, 0, 100000, 10000], axis), 'type-v2="empty" fixed-size="100"'),
-      zone(4, transpose([0, 10000, 100000, 10000], axis), 'type-v2="empty" fixed-size="100"'),
+      zone(
+        3,
+        transpose([0, 0, 100000, 10000], axis),
+        'type-v2="empty" is-fixed="true" fixed-size="100"',
+      ),
+      zone(
+        4,
+        transpose([0, 10000, 100000, 10000], axis),
+        'type-v2="empty" is-fixed="true" fixed-size="100"',
+      ),
     ].join('');
     const before = basic(flow(2, [1000, 1000, 98000, 98000], cells, axis));
     const after = basic(flow(2, full, cells, axis));
@@ -273,6 +315,241 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
     expect(
       verify(render([20000, 16000, 16000, 16000, 16000, 16000]), render(Array(6).fill(16666))),
     ).toBe(true);
+  });
+});
+
+describe.each<Axis>(['vert', 'horz'])('submitted %s primary allocation metrics', (axis) => {
+  function cachedFlow(sizes: number[], caches: string[]): string {
+    let offset = 0;
+    const cells = sizes.map((size, index) => {
+      const rect = transpose([0, offset, 100000, size], axis);
+      offset += size;
+      return zone(
+        index + 2,
+        rect,
+        `type-v2="visual" name="Sheet ${index + 1}"`,
+        `<layout-cache ${caches[index]}/>`,
+      );
+    });
+    return registerWorksheets(
+      workbook(flow(1, full, cells.join(''), axis)),
+      sizes.map((_, index) => `Sheet ${index + 1}`),
+    );
+  }
+
+  function scalableFlow(sizes: number[], minima = sizes.map(() => 0)): string {
+    return cachedFlow(
+      sizes,
+      minima.map(
+        (minimum) =>
+          `type-h="scalable" type-w="scalable" minheight="${minimum}" minwidth="${minimum}" has-max-size-h="false" has-max-size-w="false"`,
+      ),
+    );
+  }
+
+  it('accepts equal native allocation from identical submitted unbounded scalable metrics', () => {
+    const expected = scalableFlow([30000, 70000]);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, scalableFlow([50000, 50000]))).toBe(true);
+  });
+
+  it.each([1, 99999])(
+    'rejects a one-unit tile at split %s despite complete client filling',
+    (split) => {
+      const expected = scalableFlow([50000, 50000]);
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, scalableFlow([split, 100000 - split]))).toBe(false);
+    },
+  );
+
+  it('grows unequal submitted minima by the same native extra allocation', () => {
+    const expected = scalableFlow([30000, 70000], [100, 300]);
+    expect(verify(expected, scalableFlow([40000, 60000], [100, 300]))).toBe(true);
+    expect(verify(expected, scalableFlow([50000, 50000], [100, 300]))).toBe(false);
+  });
+
+  it('allows native shrinking below oversubscribed submitted scalable minima', () => {
+    const expected = scalableFlow([20000, 80000], [600, 900]);
+    expect(verify(expected, scalableFlow([50000, 50000], [600, 900]))).toBe(true);
+    expect(verify(expected, scalableFlow([40000, 60000], [600, 900]))).toBe(false);
+  });
+
+  it('assigns native shrink rounding remainder to the last child in document order', () => {
+    const minima = Array(7).fill(200);
+    const expected = scalableFlow([10000, 10000, 10000, 10000, 20000, 20000, 20000], minima);
+    expect(
+      verify(expected, scalableFlow([14285, 14285, 14285, 14285, 14285, 14285, 14290], minima)),
+    ).toBe(true);
+    expect(
+      verify(expected, scalableFlow([14290, 14285, 14285, 14285, 14285, 14285, 14285], minima)),
+    ).toBe(false);
+  });
+
+  it('accepts changed fixed-cache allocation with native trailing space', () => {
+    const caches = Array(2).fill(
+      'type-w="fixed" type-h="fixed" fixed-size-w="100" fixed-size-h="100"',
+    );
+    const expected = cachedFlow([50000, 50000], caches);
+    expect(verify(expected, cachedFlow([10000, 10000], caches))).toBe(true);
+  });
+
+  it('leaves bounded scalable children at their initial size while unbounded children grow', () => {
+    const caches = [
+      'type-w="scalable" type-h="scalable" minwidth="100" minheight="100" has-max-size-w="true" has-max-size-h="true" maxwidth="200" maxheight="200"',
+      'type-w="scalable" type-h="scalable" minwidth="100" minheight="100" has-max-size-w="false" has-max-size-h="false"',
+    ];
+    const expected = cachedFlow([50000, 50000], caches);
+    expect(verify(expected, cachedFlow([10000, 90000], caches))).toBe(true);
+    expect(verify(expected, cachedFlow([20000, 80000], caches))).toBe(false);
+  });
+
+  it('uses native scalable cache defaults when minimum and maximum flags are omitted', () => {
+    const caches = Array(2).fill('type-w="scalable" type-h="scalable"');
+    const expected = cachedFlow([30000, 70000], caches);
+    expect(verify(expected, cachedFlow([50000, 50000], caches))).toBe(true);
+    expect(verify(expected, cachedFlow([1, 99999], caches))).toBe(false);
+  });
+});
+
+describe('captured worksheet primary allocation', () => {
+  const readback = reflowWorkbook(readbackReflowDashboard);
+  const collapsed = (() => {
+    const doc = new DOMParser().parseFromString(readback, 'text/xml');
+    const zones = Array.from(doc.getElementsByTagName('zone'));
+    const title = zones.find((element) => element.getAttribute('id') === '6')!;
+    const worksheet = zones.find((element) => element.getAttribute('id') === '7')!;
+    title.setAttribute('h', '99999');
+    worksheet.setAttribute('y', '99999');
+    worksheet.setAttribute('h', '1');
+    return new XMLSerializer().serializeToString(doc);
+  })();
+
+  it('rejects the worksheet collapse against its submitted scalable minimum', () => {
+    const matches = createDashboardReadbackVerifier(readback, REFLOW_DASHBOARD_NAME);
+    expect(matches(readback)).toBe(true);
+    expect(matches(collapsed)).toBe(false);
+  });
+
+  it('uses native readback metrics to reject a collapse without authorizing arbitrary reflow', () => {
+    const submitted = reflowWorkbook(submittedReflowDashboard);
+    const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);
+    expect(matches(readback)).toBe(true);
+    expect(matches(collapsed)).toBe(false);
+  });
+
+  function readbackMinimum(xml: string, value: string | null): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const worksheet = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === '7',
+    )!;
+    const cache = worksheet.getElementsByTagName('layout-cache')[0];
+    if (value === null) cache.removeAttribute('minheight');
+    else cache.setAttribute('minheight', value);
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  it('rejects a collapsed worksheet when native readback omits its minimum', () => {
+    const submitted = reflowWorkbook(submittedReflowDashboard);
+    const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);
+    expect(matches(readbackMinimum(readback, null))).toBe(true);
+    expect(matches(readbackMinimum(collapsed, null))).toBe(false);
+  });
+
+  it('rejects a malformed native readback minimum instead of treating it as unknown', () => {
+    const submitted = reflowWorkbook(submittedReflowDashboard);
+    const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);
+    expect(matches(readback)).toBe(true);
+    expect(matches(readbackMinimum(readback, 'bad'))).toBe(false);
+  });
+});
+
+describe.each<Axis>(['vert', 'horz'])('native %s empty-zone allocation boundaries', (axis) => {
+  function emptyCells(sizes: number[], fixedIndex = -1, manual = false): string {
+    let offset = 0;
+    return sizes
+      .map((size, index) => {
+        const rect = transpose([0, offset, 100000, size], axis);
+        offset += size;
+        const fixed =
+          index === fixedIndex ? ` fixed-size="200"${manual ? ' is-fixed="true"' : ''}` : '';
+        return zone(index + 3, rect, `type-v2="empty"${fixed}`);
+      })
+      .join('');
+  }
+
+  it('rejects one-unit allocation with a dynamic owning primary dimension', () => {
+    const size =
+      axis === 'vert'
+        ? 'minwidth="1000" maxwidth="1000" minheight="800" maxheight="1200"'
+        : 'minwidth="800" maxwidth="1200" minheight="1000" maxheight="1000"';
+    const render = (sizes: number[]): string =>
+      workbook(flow(2, full, emptyCells(sizes), axis), size);
+    const expected = render([50000, 50000]);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, render([1, 99999]))).toBe(false);
+  });
+
+  it.each([false, true].flatMap((manual) => [1, 10000].map((split) => ({ manual, split }))))(
+    'checks automatic siblings around an unchanged fixed-size tile (manual=$manual, split=$split)',
+    ({ manual, split }) => {
+      const render = (sizes: number[]): string =>
+        workbook(flow(2, full, emptyCells(sizes, 2, manual), axis));
+      const expected = render([20000, 20000, 20000, 20000, 20000]);
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, render([split, 40000 - split, 20000, 20000, 20000]))).toBe(false);
+    },
+  );
+
+  it('retains native automatic allocation beside an active manually fixed empty tile', () => {
+    const cells = emptyCells([40000, 20000, 40000], 1, true);
+    const before = basic(flow(2, [1000, 1000, 98000, 98000], cells, axis));
+    const after = basic(flow(2, full, cells, axis));
+    expect(verify(before, after)).toBe(true);
+  });
+
+  it('does not activate native manual sizing from the numeric is-fixed value', () => {
+    const cells = emptyCells([20000, 20000, 20000, 20000, 20000], 2).replace(
+      'fixed-size="200"',
+      'fixed-size="400" is-fixed="1"',
+    );
+    const before = basic(flow(2, [1000, 1000, 98000, 98000], cells, axis));
+    const after = basic(flow(2, full, cells, axis));
+    expect(verify(before, after)).toBe(true);
+  });
+
+  it('shrinks an oversized manual tile while reserving native minimum space for automatic siblings', () => {
+    const render = (sizes: number[]): string =>
+      workbook(
+        flow(
+          2,
+          full,
+          emptyCells(sizes, 0, true).replace('fixed-size="200"', 'fixed-size="1200"'),
+          axis,
+        ),
+      );
+    const expected = render([93600, 2000, 4400]);
+    expect(verify(expected, render([93600, 3200, 3200]))).toBe(true);
+    expect(verify(expected, render([93600, 4000, 2400]))).toBe(false);
+  });
+
+  it('rejects unequal empty siblings around unknown text metrics without a manual tile', () => {
+    const render = (sizes: [number, number, number]): string => {
+      const [first, text, last] = sizes;
+      const cells = [
+        zone(3, transpose([0, 0, 100000, first], axis), 'type-v2="empty"'),
+        zone(
+          4,
+          transpose([0, first, 100000, text], axis),
+          'type-v2="text"',
+          '<formatted-text><run>Title</run></formatted-text>',
+        ),
+        zone(5, transpose([0, first + text, 100000, last], axis), 'type-v2="empty"'),
+      ].join('');
+      return workbook(flow(2, full, cells, axis));
+    };
+    const expected = render([49000, 2000, 49000]);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, render([3200, 3200, 93600]))).toBe(false);
   });
 });
 
@@ -326,17 +603,20 @@ describe('independent authored coordinate guards', () => {
           40000 + (movedOrigin ? 0 : delta),
         ];
         const last: Rect = [0, 70000 + delta, 100000, 30000 - delta];
-        return workbook(
-          flow(
-            1,
-            full,
-            [
-              zone(2, transpose(first, axis), 'type-v2="empty"'),
-              zone(3, transpose(fixed, axis), `type-v2="empty" ${setting}`),
-              zone(4, transpose(last, axis), 'type-v2="empty"'),
-            ].join(''),
-            axis,
+        return registerWorksheets(
+          workbook(
+            flow(
+              1,
+              full,
+              [
+                zone(2, transpose(first, axis), 'type-v2="visual" name="Before"'),
+                zone(3, transpose(fixed, axis), `type-v2="visual" name="Fixed" ${setting}`),
+                zone(4, transpose(last, axis), 'type-v2="visual" name="After"'),
+              ].join(''),
+              axis,
+            ),
           ),
+          ['Before', 'Fixed', 'After'],
         );
       };
       const expected = render(false);
@@ -573,11 +853,27 @@ describe('readback geometry semantics and native integer range', () => {
 
 describe('native single-horizontal fixed-height fitting', () => {
   function render(rect: Rect, cache = '', style = ''): string {
-    return workbook(
-      flow(1, full, zone(2, rect, 'type-v2="empty"', cache + style), 'horz'),
-      'minwidth="1000" maxwidth="1000" minheight="800" maxheight="800"',
+    return registerWorksheets(
+      workbook(
+        flow(1, full, zone(2, rect, 'type-v2="visual" name="Sheet"', cache + style), 'horz'),
+        'minwidth="1000" maxwidth="1000" minheight="800" maxheight="800"',
+      ),
+      ['Sheet'],
     );
   }
+
+  it('does not fit an empty zone from cached visual metrics', () => {
+    const cache =
+      '<layout-cache type-w="fixed" fixed-size-w="100" type-h="fixed" fixed-size-h="100"/>';
+    const renderEmpty = (rect: Rect): string =>
+      workbook(
+        flow(1, full, zone(2, rect, 'type-v2="empty"', cache), 'horz'),
+        'minwidth="1000" maxwidth="1000" minheight="800" maxheight="800"',
+      );
+    const expected = renderEmpty(full);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, renderEmpty([0, 0, 100000, 12500]))).toBe(false);
+  });
 
   it.each(['type-w="fixed" fixed-size-w="100"', 'type-w="fixed" fixed-size-w="300"'])(
     'accepts fitting from submitted fixed-height metrics with %s',
@@ -695,8 +991,8 @@ describe('shipped tiled strategy hints', () => {
       [0, 30000, 100000, 70000],
     ]).replace('id="1"', 'id="1" layout-strategy-id="flow"');
     const actual = flowChildren([
-      [0, 0, 100000, 10000],
-      [0, 10000, 100000, 90000],
+      [0, 0, 100000, 50000],
+      [0, 50000, 100000, 50000],
     ]);
     expect(verify(expected, actual)).toBe(true);
   });
