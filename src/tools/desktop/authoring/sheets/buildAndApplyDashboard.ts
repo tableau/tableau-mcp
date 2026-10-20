@@ -1,22 +1,29 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkCacheFileArg } from '../../../../desktop/cachePath.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { checkSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
-import { parsedXmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
-  CacheSessionMismatchError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-  IncompleteOperationError,
+} from '../../../../errors/mcpToolError.desktop.js';
+import {
+  CacheSessionMismatchError,
   WorkbookNotFoundError,
 } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import { type WithDesktopWarnings, withDesktopWarnings } from '../../api/applyPreamble.js';
+import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
-import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
+import {
+  buildDashboardXml,
+  computeZones,
+  layoutSpecSchema,
+  validateLayoutSpec,
+} from './dashboardZones.js';
 
 const paramsSchema = {
   session: z.string().optional(),
@@ -45,7 +52,7 @@ export const getBuildAndApplyDashboardTool = (
     server,
     name: 'build-and-apply-dashboard',
     title,
-    description: 'Edit dashboard; registered views required.',
+    description: 'Build/apply; older Desktop needs views.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -65,21 +72,27 @@ export const getBuildAndApplyDashboardTool = (
       },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute<BuildAndApplyDashboardResult>({
+      return await tool.logAndExecute<WithDesktopWarnings<BuildAndApplyDashboardResult>>({
         extra,
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
         args: { session, dashboardName, dashboardFile, workbookFile, layoutSpec, worksheetNames },
         callback: async () => {
-          if (!existsSync(workbookFile)) {
-            return new WorkbookNotFoundError(
-              `Workbook cache file not found: ${workbookFile}`,
-            ).toErr();
-          }
+          const checkedWorkbook = checkCacheFileArg(
+            'workbookFile',
+            workbookFile,
+            (path) => new WorkbookNotFoundError(`Workbook cache file not found: ${path}`),
+          );
+          if (checkedWorkbook.isErr()) return checkedWorkbook.error.toErr();
 
-          if (!existsSync(dashboardFile)) {
-            return new WorkbookNotFoundError(
-              `Dashboard cache file not found: ${dashboardFile}`,
-            ).toErr();
-          }
+          const checkedDashboard = checkCacheFileArg(
+            'dashboardFile',
+            dashboardFile,
+            (path) => new WorkbookNotFoundError(`Dashboard cache file not found: ${path}`),
+          );
+          if (checkedDashboard.isErr()) return checkedDashboard.error.toErr();
+
+          const layoutError = validateLayoutSpec(layoutSpec, titleText);
+          if (layoutError) return layoutError.toErr();
 
           // The direct and batched dashboard paths share one zone builder.
           const zones = computeZones(titleText, layoutSpec);
@@ -90,20 +103,20 @@ export const getBuildAndApplyDashboardTool = (
           }
           const resolvedSession = sessionResult.value;
 
-          // Cross-instance cache-bleed guard (W9): refuse caches produced by a different
+          // Cross-instance cache-bleed guard: refuse caches produced by a different
           // (or restarted) Desktop session before applying either one.
-          const wbSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+          const wbSidecar = checkSidecar(checkedWorkbook.value, resolvedSession, 'workbook');
           if (!wbSidecar.ok) {
             return new CacheSessionMismatchError(wbSidecar.message!).toErr();
           }
-          const dashSidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+          const dashSidecar = checkSidecar(checkedDashboard.value, resolvedSession, 'dashboard');
           if (!dashSidecar.ok) {
             return new CacheSessionMismatchError(dashSidecar.message!).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
 
-          // Check all requested registrations before a surgical write and verify its readback.
+          // The shared wrapper checks registration support and verifies the surgical write's readback.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
@@ -129,32 +142,20 @@ export const getBuildAndApplyDashboardTool = (
             }
           }
 
-          const verifiedNames = dashboardApplyResult.value.verifiedWorksheetNames;
-          if (
-            !verifiedNames ||
-            !worksheetNames.every((name) =>
-              verifiedNames.some((verified) => parsedXmlNamesEqual(name, verified)),
-            )
-          ) {
-            return new IncompleteOperationError({
-              dashboardName,
-              dashboardApplied: true,
-              stage: 'viewpoint-verification',
-              viewpoints: { state: 'unknown', requested: worksheetNames },
-              guidance:
-                'Dashboard apply completed without confirming every requested viewpoint. ' +
-                'Re-read the live dashboard before retrying. Do not replace the workbook to inject viewpoints.',
-            }).toErr();
-          }
-
-          return new Ok({
-            message: `Successfully built and applied dashboard "${dashboardName}".`,
-            dashboardName,
-            kpiCount: layoutSpec.kpis.length,
-            chartCount: layoutSpec.charts.length,
-            viewpointCount: worksheetNames.length,
-            viewpointState: 'success',
-          });
+          return new Ok(
+            withDesktopWarnings(
+              {
+                message: `Successfully built and applied dashboard "${dashboardName}".`,
+                dashboardName,
+                kpiCount: layoutSpec.kpis.length,
+                chartCount: layoutSpec.charts.length,
+                viewpointCount: worksheetNames.length,
+                viewpointState: 'success',
+              },
+              dashboardApplyResult.value.documentWarnings,
+              `Built and applied dashboard "${dashboardName}"`,
+            ),
+          );
         },
       });
     },

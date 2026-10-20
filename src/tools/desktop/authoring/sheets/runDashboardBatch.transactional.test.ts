@@ -6,7 +6,6 @@ import type {
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
 import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
-import { listSheets } from '../../../../desktop/metadata/sheets.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -14,6 +13,7 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -41,6 +41,10 @@ const BASELINE = `<?xml version="1.0"?>
     <window class="dashboard" name="Keep"><viewpoints><viewpoint name="Existing"/></viewpoints></window>
   </windows>
 </workbook>`;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('run-dashboard-batch transactional apply', () => {
   beforeEach(() => {
@@ -87,7 +91,7 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
     expect(harness.getCalls()).toBe(4); // baseline, guard, shared readback, validated focus read
-    expect(listSheets(harness.posts[0]!)).toEqual(
+    expect(worksheetNames(harness.posts[0]!)).toEqual(
       expect.arrayContaining(['Existing', 'New A', 'New B']),
     );
     expect(listWorkbookDashboards(harness.posts[0]!)).toEqual(['Keep', 'Executive Overview']);
@@ -105,6 +109,23 @@ describe('run-dashboard-batch transactional apply', () => {
         { operation: 'dashboard', state: 'applied', replaced: true },
       ],
     });
+  });
+
+  it('hides the Start Page before activating the built dashboard', async () => {
+    const harness = statefulExecutor({ desktopApiVersion: '0.2.11' });
+
+    const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({ applied: true });
+    const hide = vi.mocked(harness.executor.setStartPageVisibility);
+    const goto = vi.mocked(harness.executor.executeCommand);
+    expect(hide).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal));
+    const gotoIndex = goto.mock.calls.findIndex(
+      ([params]) => params.command === 'goto-sheet' && params.args?.Sheet === 'Executive Overview',
+    );
+    expect(gotoIndex).toBeGreaterThanOrEqual(0);
+    expect(hide.mock.invocationCallOrder[0]).toBeLessThan(goto.mock.invocationCallOrder[gotoIndex]);
   });
 
   it('waits past a stale same-name dashboard before accepting a compose-only replacement', async () => {
@@ -279,12 +300,14 @@ function statefulExecutor({
   readbackTransform,
   staleReadbackCount = 0,
   afterApplyDispatch,
+  desktopApiVersion,
 }: {
   guardedReadXml?: string;
   failAfterDispatch?: boolean;
   readbackTransform?: (xml: string) => string;
   staleReadbackCount?: number;
   afterApplyDispatch?: () => void;
+  desktopApiVersion?: string;
 } = {}): {
   executor: ExternalApiToolExecutor;
   posts: string[];
@@ -327,6 +350,10 @@ function statefulExecutor({
     executeCommand: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
+    desktopApiVersion,
+    setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean) =>
+      Ok({ isStartPageVisible }),
+    ),
   } as unknown as ExternalApiToolExecutor;
   return { executor, posts, current: () => current, getCalls: () => getCalls };
 }
@@ -363,4 +390,8 @@ function artifactStore(
 function bodyOf(result: CallToolResult): Record<string, any> {
   invariant(result.content[0]?.type === 'text');
   return JSON.parse(result.content[0].text) as Record<string, any>;
+}
+
+function worksheetNames(xml: string): string[] {
+  return [...xml.matchAll(/<worksheet\s[^>]*?\bname=["']([^"']+)["']/g)].map((m) => m[1]);
 }

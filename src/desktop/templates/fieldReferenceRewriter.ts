@@ -2,7 +2,12 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
 
-import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
+import {
+  canonicalShortDerivation,
+  columnInstancePrefixLength,
+  resolveDerivation,
+} from '../derivations.js';
+import { pruneShelfLeaves } from '../metadata/shelfTree.js';
 
 // =============================================================================
 // LOCKSTEP-CORE CANDIDATE — shared DOM-structural field-reference rewriter.
@@ -11,7 +16,7 @@ import { canonicalShortDerivation, resolveDerivation } from '../derivations.js';
 // both this repo (tableau-mcp) and the source authoring repo (agent-to-tableau-
 // desktop) are converging onto. It is intentionally PURE — no fs, no MCP, no
 // zod, no logging — and its imports are kept minimal and repo-agnostic
-// (@xmldom/xmldom + xpath + node crypto) so a future step can promote it to a
+// (@xmldom/xmldom + xpath + node crypto + the pure ../metadata/shelfTree.js) so a future step can promote it to a
 // byte-identical shared core imported by both repos. Do NOT add repo-specific
 // imports (config, logging, error types, zod) here; keep those in callers.
 //
@@ -183,21 +188,24 @@ export function rewriteFieldReferencesWithDiagnostics(
   // Parse a mapped column-instance value into the actual field info we write.
   // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role],
   // with an optional trailing table-calc index after the role.
-  // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
-  // real Tableau writes) keeps its wrappers instead of being read as field "sum".
-  // Anchoring the role to Tableau's role markers prevents an optional trailing index
-  // ([pcto:sum:Sales:qk:3]) from being mistaken for the role and shifting the field to qk.
+  // Only a table-calc wrapper may be followed by another prefix, so field names may hold ':'.
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/^\[(.+):([^:]+):(nk|ok|qk)(?::[^:\]]+)?\]$/);
-    if (!match) {
-      return null;
-    }
-
-    const [, derivShortRaw, actualFieldName, role] = match;
+    if (!strippedInstance.startsWith('[') || !strippedInstance.endsWith(']')) return null;
+    const parts = strippedInstance.slice(1, -1).split(':');
+    const isRole = (part: string): boolean => part === 'nk' || part === 'ok' || part === 'qk';
+    const roleIndex = [parts.length - 1, parts.length - 2].find(
+      (index) => index >= 2 && isRole(parts[index]) && parts[parts.length - 1] !== '',
+    );
+    if (roleIndex === undefined) return null;
+    const derivationEnd = Math.max(columnInstancePrefixLength(parts, roleIndex), 1);
+    const derivShortRaw = parts.slice(0, derivationEnd).join(':');
+    const actualFieldName = parts.slice(derivationEnd, roleIndex).join(':');
+    if (actualFieldName === '') return null;
+    const role = parts[roleIndex];
     const derivation = derivShortRaw.toLowerCase();
     const derivationAttr = resolveDerivation(derivation);
     return { name: actualFieldName, derivation, derivationAttr, role };
@@ -844,10 +852,9 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
         (node): node is Text => node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE,
       )) {
         if (!referencesTemplateField(text.data, templateField)) continue;
-        const kept = text.data
-          .split(/\s+\/\s+/)
-          .filter((pill) => !referencesTemplateField(pill, templateField));
-        text.data = kept.join(' / ');
+        text.data = pruneShelfLeaves(text.data, (pill) =>
+          referencesTemplateField(pill, templateField),
+        );
       }
     }
   }
@@ -1091,9 +1098,10 @@ function parseInstanceName(
       break;
     }
   }
-  if (roleIdx < 1) return null;
-  const field = parts[roleIdx - 1];
-  const deriv = parts.slice(0, roleIdx - 1).join(':');
+  if (roleIdx < 2) return null;
+  const derivationEnd = Math.max(columnInstancePrefixLength(parts, roleIdx), 1);
+  const field = parts.slice(derivationEnd, roleIdx).join(':');
+  const deriv = parts.slice(0, derivationEnd).join(':');
   const trailing = parts.slice(roleIdx).join(':');
   if (!deriv || !field) return null;
   return { deriv, field, trailing };
@@ -1204,10 +1212,9 @@ function rewriteFormulaFieldRefs(formula: string, baseTarget: Record<string, str
 /**
  * Derive an honest caption for a calc column whose FORMULA field refs were
  * remapped to different base fields while its human caption still names the
- * template's original fields. Live defect (Ben, 2026-07-09 test1.twbx): the
- * correlation-scatter calc kept caption "Profit Ratio" after its formula was
- * rebound to SUM([Profit])/SUM([Discount]) — a second, wrong "Profit Ratio"
- * beside the datasource's real one. Strategy, first hit wins:
+ * template's original fields. Live defect: the correlation-scatter calc kept caption
+ * "Profit Ratio" after its formula was rebound to SUM([Profit])/SUM([Discount]) — a
+ * second, wrong "Profit Ratio" beside the datasource's real one. Strategy, first hit wins:
  *   1. whole-word-replace remapped old field names inside the caption;
  *   2. humanize the rewritten formula (AGG([X]) → X) when the result is a
  *      short, plain field expression;
@@ -1230,7 +1237,7 @@ function deriveRemappedCalcCaption(
   let replaced = caption;
   for (const [oldName, newName] of changedPairs) {
     const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    replaced = replaced.replace(new RegExp(`\\b${escaped}\\b`, 'g'), newName);
+    replaced = replaced.replace(new RegExp(`\\b${escaped}\\b`, 'g'), () => newName);
   }
   if (replaced !== caption) return replaced;
 

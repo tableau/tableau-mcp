@@ -240,6 +240,71 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
+  it('warns, without failing, about a mapping key that matches no slot and suggests a near match', () => {
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        Longitude: '[Superstore].[sum:Longitude:qk]',
+        Latitude: '[Superstore].[sum:Latitude:qk]',
+        Detail: '[Superstore].[none:City:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+        LATITUDE: '[Superstore].[sum:Latitude:qk]',
+        LONGITUDE: '[Superstore].[sum:Longitude:qk]',
+      },
+      SUMMARY,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(result.warnings).toContainEqual(expect.stringContaining("'LATITUDE' matches no slot"));
+    expect(result.warnings.join('\n')).toContain("Did you mean 'latitude'?");
+    expect(result.warnings.join('\n')).toContain("'LONGITUDE' matches no slot");
+  });
+
+  describe('bare template_field mapping key shared by two slots', () => {
+    const DUP = {
+      ...LATLON,
+      template: 'x-dup',
+      slots: [
+        { ...LATLON.slots[2], slot_id: 'dim', template_field: 'Dim' },
+        { ...LATLON.slots[3], slot_id: 'm_sum', template_field: 'Measure', derivation: 'sum' },
+        {
+          ...LATLON.slots[3],
+          slot_id: 'm_avg',
+          template_field: 'Measure',
+          derivation: 'avg',
+          required: false,
+        },
+      ],
+    } satisfies RuntimeTemplateDescriptor;
+
+    it('warns that the shared bare key is ambiguous and names the keys that work', () => {
+      const result = bindExplicitTemplate(
+        'x-dup',
+        { Dim: '[Superstore].[none:City:nk]', Measure: '[Superstore].[sum:Sales:qk]' },
+        SUMMARY,
+        { manifests: manifests(DUP) },
+      );
+
+      const text = result.warnings.join('\n');
+      expect(text).toContain("'Measure' is ambiguous");
+      expect(text).toContain('Measure@sum');
+      expect(text).toContain('m_sum');
+      expect(text).not.toContain("'Dim'");
+    });
+
+    it('does not warn when the qualified key is used', () => {
+      const result = bindExplicitTemplate(
+        'x-dup',
+        { Dim: '[Superstore].[none:City:nk]', 'Measure@sum': '[Superstore].[sum:Sales:qk]' },
+        SUMMARY,
+        { manifests: manifests(DUP) },
+      );
+
+      expect(result.warnings).toEqual([]);
+    });
+  });
+
   it('keeps a single ordered field valid for kpi-text', () => {
     const result = bindExplicitTemplate(KPI.template, ['[Superstore].[sum:Sales:qk]'], SUMMARY, {
       manifests: manifests(KPI),

@@ -10,6 +10,7 @@ export type Session = {
   clientInfo: ClientInfo;
   capabilities: ClientCapabilitiesWithUiExtension;
   clientId: string | undefined;
+  authBinding: string;
 };
 
 const sessions: { [sessionId: string]: Session } = {};
@@ -18,15 +19,17 @@ export const createSession = ({
   clientInfo,
   capabilities,
   clientId,
+  authBinding,
 }: {
   clientInfo: ClientInfo;
   capabilities: ClientCapabilitiesWithUiExtension;
   clientId: string | undefined;
+  authBinding: string;
 }): StreamableHTTPServerTransport => {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sessionId) => {
-      sessions[sessionId] = { transport, clientInfo, capabilities, clientId };
+      sessions[sessionId] = { transport, clientInfo, capabilities, clientId, authBinding };
       log({ message: `Session created: ${sessionId}`, level: 'debug', logger: 'session' });
     },
   });

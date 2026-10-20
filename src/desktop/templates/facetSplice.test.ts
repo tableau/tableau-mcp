@@ -4,20 +4,17 @@ import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 
-// W28-C — apply-path facet splice ported from a2td (server/tools/facet-splice.test.ts):
-// a BOUND optional facet slot must RENDER (land a pill on the trellis shelf), while
-// every un-faceted apply stays byte-identical.
+// Apply-path facet splice: a BOUND optional facet slot must RENDER (land a pill on the
+// trellis shelf), while every un-faceted apply stays byte-identical.
 //
-// tmcp adaptation notes (behavior parity with a2td is the goal):
-//   - a2td's single `replaceFieldReferences` chokepoint was deleted in tmcp; each apply
-//     path (inject-template, build-and-apply-worksheet) now composes the splice with the
+// Notes:
+//   - There is no single `replaceFieldReferences` chokepoint; each apply path
+//     (inject-template, build-and-apply-worksheet) now composes the splice with the
 //     frozen core inline. `apply()` below reproduces that exact two-stage pipeline
 //     (splice BEFORE rewrite) so the integration pins run the shipped composition.
 //   - The product-path check uses the runtime XML and descriptor derived from the shipped
 //     TBM. Focused splice cases use minimal XML fixtures so they can exercise an optional
 //     facet contract independently of any one shipped chart.
-//   - a2td's validateXmlWellFormed(x).valid === true maps to
-//     wellFormedXmlRule.validate(x).length === 0.
 
 const trendXml = `<workbook><worksheets><worksheet name="{{TITLE}}"><table><view>
   <datasources><datasource name="{{DATASOURCE}}" /></datasources>
@@ -241,6 +238,27 @@ describe('desktop/templates/facetSplice', () => {
           DS,
         ),
       ).toThrow(/trellis shelf/i);
+    });
+  });
+
+  describe('spliceBoundFacet — colon-named dimension on a shelf', () => {
+    const colonDim = `<workbook><worksheets><worksheet name='{{TITLE}}'>
+  <table><view>
+    <datasources><datasource name='{{DATASOURCE}}' /></datasources>
+    <datasource-dependencies datasource='{{DATASOURCE}}'>
+      <column datatype='real' name='[A]' role='measure' type='quantitative' />
+      <column datatype='string' name='[Min: Duration]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
+    </datasource-dependencies>
+  </view></table>
+  <rows>[{{DATASOURCE}}].[sum:A:qk]</rows>
+  <cols>[{{DATASOURCE}}].[none:Min: Duration:nk]</cols>
+</worksheet></worksheets></workbook>`;
+
+    it('resolves the dimension shelf from an undeclared instance whose field holds a colon', () => {
+      const out = spliceBoundFacet(colonDim, { Facet: `[${DS}].[none:Cat:nk]` });
+
+      expect(out).toMatch(/<cols>\[\{\{DATASOURCE\}\}\]\.\[none:Facet:nk\] \/ /);
     });
   });
 

@@ -12,8 +12,14 @@ flat object of the shape `{ data, totalAvailable }` (see
 and increment `pageNumber` on each subsequent call until you have collected
 `totalAvailable` items.
 
-To get the **count** of data sources matching the request, read `totalAvailable` from a single
-call (for example, `pageNumber: 1`) without paging through every item.
+To get the **count** of data sources matching the request, read `totalAvailable` from a single call
+(for example, with `limit: 1`) without paging through every item; your own `limit` does not change
+it. When a server cap
+([`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit) or
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)) hides some data
+sources, `totalAvailable` stops at the cap and the response includes `mcp.resultInfo` with
+`truncationReason: "admin-cap"`. More data sources exist than `totalAvailable` shows: you can page
+up to `totalAvailable`, and you need a `filter` to reach the rest.
 
 ## APIs called
 
@@ -40,8 +46,9 @@ for example, to request a partial final page. It does not fetch across pages.
 
 Example: `600`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
-the overall cap on how many results can be paginated through across all pages.
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit) and
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits), the overall cap
+on how many results can be paginated through across all pages.
 
 <hr />
 
@@ -81,4 +88,8 @@ The response fields are:
 
 - `data`: the data sources on the requested page (at most 1000, or fewer when `limit` or a
   server cap applies).
-- `totalAvailable`: the number of data sources available for pagination (Your own `limit` argument does not affect this value).
+- `totalAvailable`: the number of data sources available for pagination, never more than a server
+  cap. Your own `limit` argument does not affect this value.
+- `mcp.resultInfo`: present only when a server cap hides data sources:
+  `{ returnedCount, truncated: true, truncationReason: "admin-cap" }`. `returnedCount` is the
+  number of items in `data`.

@@ -153,6 +153,19 @@ describe('readCachedXmlTool', () => {
       expect(dashByName.content[0].text).toContain("<zone name='Sales'/>");
     });
 
+    it.each([
+      ['worksheet', { worksheet: 'Nope &amp; Co' }, 'list-worksheets'],
+      ['dashboard', { dashboard: 'Nope &amp; Co' }, 'list-dashboards'],
+    ])('not-found %s selector says to use the plain name', async (kind, selectors, listTool) => {
+      const result = await getResult(CACHED_FILE, selectors);
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`No <${kind} name="Nope &amp; Co"> element found`);
+      expect(result.content[0].text).toContain(`plain ${kind} name (A & B), not the XML-escaped`);
+      expect(result.content[0].text).toContain(listTool);
+    });
+
     it('rejects a worksheetName/worksheet conflict without reading', async () => {
       vi.mocked(cachePathModule.readContainedCacheTextFile).mockClear();
       const result = await getResult(CACHED_FILE, { worksheetName: 'Sales', worksheet: 'Profit' });
@@ -188,7 +201,7 @@ describe('readCachedXmlTool', () => {
     });
   });
 
-  describe('ambiguous selector rejection (Andy-lens "please")', () => {
+  describe('ambiguous selector rejection', () => {
     beforeEach(() => {
       vi.mocked(cachePathModule.readContainedCacheTextFile).mockReturnValue({
         ok: true,

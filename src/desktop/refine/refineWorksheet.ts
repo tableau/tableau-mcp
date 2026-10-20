@@ -157,8 +157,11 @@ export function planMarkType(
     return refuse('the worksheet mark has no class attribute to change safely.');
   }
 
-  const patchedMark = markTag.replace(/(\s)class=(?:'[^']*'|"[^"]*")/, `$1class='${markClass}'`);
-  return { ok: true, xml: xml.replace(markTag, patchedMark), markClass };
+  const patchedMark = markTag.replace(
+    /(\s)class=(?:'[^']*'|"[^"]*")/,
+    (_m, space: string) => `${space}class='${markClass}'`,
+  );
+  return { ok: true, xml: xml.replace(markTag, () => patchedMark), markClass };
 }
 
 /**
@@ -369,18 +372,21 @@ function insertFilterAndSlices(xml: string, filterXml: string, sliceColumn: stri
 
   if (/<slices\b[^>]*\/>/.test(out)) {
     // Empty self-closing <slices/> -> expand with the one entry.
-    out = out.replace(/<slices\b[^>]*\/>/, `<slices>${sliceEntry}</slices>`);
+    out = out.replace(/<slices\b[^>]*\/>/, () => `<slices>${sliceEntry}</slices>`);
   } else if (/<slices>[\s\S]*?<\/slices>/.test(out)) {
     // Existing <slices>...</slices> -> append the entry unless the CI is already listed.
     if (!out.includes(sliceColumn)) {
-      out = out.replace(/<\/slices>/, `${sliceEntry}</slices>`);
+      out = out.replace(/<\/slices>/, () => `${sliceEntry}</slices>`);
     }
   } else if (/<aggregation\b/.test(out)) {
     // No slices node -> create one immediately before <aggregation>, matching its indent.
-    out = out.replace(/(\s*)(<aggregation\b)/, `$1<slices>${sliceEntry}</slices>$1$2`);
+    out = out.replace(
+      /(\s*)(<aggregation\b)/,
+      (_m, indent: string, agg: string) => `${indent}<slices>${sliceEntry}</slices>${indent}${agg}`,
+    );
   } else {
     // No aggregation anchor either -> place slices right after the filter.
-    out = out.replace(filterXml, `${filterXml}\n      <slices>${sliceEntry}</slices>`);
+    out = out.replace(filterXml, () => `${filterXml}\n      <slices>${sliceEntry}</slices>`);
   }
   return out;
 }
@@ -444,13 +450,15 @@ export function planTopN(
     );
   }
 
-  const ds = datasourceName(xml);
-  if (!ds) return refuse('could not determine the worksheet datasource name.');
+  const rawDs = datasourceName(xml);
+  if (!rawDs) return refuse('could not determine the worksheet datasource name.');
 
-  const dim = dims[0];
+  // Regex captures are still XML-escaped; decode so escapeXml below runs exactly once.
+  const ds = decodeXmlEntities(rawDs);
+  const dim = { ...dims[0], name: decodeXmlEntities(dims[0].name) };
   const measure = measures[0];
   const func = AGG_DERIVATIONS[measure.derivation];
-  const expression = `${func}(${measure.column})`;
+  const expression = `${func}(${decodeXmlEntities(measure.column)})`;
   const direction: SortDirection = end === 'top' ? 'DESC' : 'ASC';
   // Returned raw (used for the readback xpath + tool label); escaped only at insertion.
   const filterColumn = `[${ds}].${dim.name}`;
@@ -635,7 +643,7 @@ function planComputedSortByRefs(
 
   const out =
     targetSorts.length === 1
-      ? xml.replace(targetSorts[0].tag, node)
+      ? xml.replace(targetSorts[0].tag, () => node)
       : xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
   return { ok: true, xml: out, column: opts.column, using: opts.using, direction: opts.direction };
 }
@@ -685,11 +693,11 @@ export function planSortDirection(
   const column = attrVal(tag, 'column');
   let newTag: string;
   if (/\bdirection=(?:'[^']*'|"[^"]*")/.test(tag)) {
-    newTag = tag.replace(/\bdirection=(?:'[^']*'|"[^"]*")/, `direction='${direction}'`);
+    newTag = tag.replace(/\bdirection=(?:'[^']*'|"[^"]*")/, () => `direction='${direction}'`);
   } else {
-    newTag = tag.replace(/\s*\/>$/, ` direction='${direction}' />`);
+    newTag = tag.replace(/\s*\/>$/, () => ` direction='${direction}' />`);
   }
-  const out = xml.replace(tag, newTag);
+  const out = xml.replace(tag, () => newTag);
   return { ok: true, xml: out, column, direction };
 }
 

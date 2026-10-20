@@ -5,6 +5,84 @@ const REPO_ROOT = path.join(__dirname, '..', '..');
 const WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'upload-binaries.yml');
 const CLEANUP_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'cleanup-releases.yml');
 
+const UNTRUSTED_EXPRESSION =
+  /\$\{\{(?:(?!\}\})[\s\S])*?\bgithub\s*(\.|\[)\s*['"]?(event|head_ref)\b/;
+
+function runBlocks(workflow: string): string[] {
+  const lines = workflow.split('\n');
+  const blocks: string[] = [];
+  lines.forEach((line, index) => {
+    const match = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(line);
+    if (!match) {
+      return;
+    }
+    const indent = match[1].length;
+    const body = [match[2]];
+    for (const next of lines.slice(index + 1)) {
+      if (next.trim() !== '' && next.search(/\S/) <= indent) {
+        break;
+      }
+      body.push(next);
+    }
+    blocks.push(body.join('\n'));
+  });
+  return blocks;
+}
+
+function hasUntrustedInterpolation(workflow: string): boolean {
+  return runBlocks(workflow).some((block) => UNTRUSTED_EXPRESSION.test(block));
+}
+
+function workflowFiles(): string[] {
+  const workflowsDir = path.join(REPO_ROOT, '.github', 'workflows');
+  const actionsDir = path.join(REPO_ROOT, '.github', 'actions');
+  const workflows = fs
+    .readdirSync(workflowsDir)
+    .filter((name) => name.endsWith('.yml'))
+    .map((name) => path.join(workflowsDir, name));
+  const actions = fs.existsSync(actionsDir)
+    ? fs
+        .readdirSync(actionsDir)
+        .map((name) => path.join(actionsDir, name, 'action.yml'))
+        .filter((file) => fs.existsSync(file))
+    : [];
+  return [...workflows, ...actions];
+}
+
+describe('release workflows', () => {
+  it('pass github.event and head_ref values to shell steps through env, not inline', () => {
+    const files = workflowFiles();
+
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      expect(hasUntrustedInterpolation(fs.readFileSync(file, 'utf8')), file).toBe(false);
+    }
+  });
+
+  it.each([
+    ['plain event field', 'steps:\n  - run: echo ${{ github.event.release.tag_name }}'],
+    [
+      'format() wrapper',
+      "steps:\n  - run: echo ${{ format('{0}', github.event.release.tag_name) }}",
+    ],
+    ['bracket syntax', "steps:\n  - run: echo ${{ github['event'].release.tag_name }}"],
+    ['head_ref', 'steps:\n  - run: echo ${{ github.head_ref }}'],
+    [
+      'multi-line block after "-   run:"',
+      'steps:\n  -   run: |\n      git fetch\n      echo ${{ github.event.pull_request.title }}\n',
+    ],
+  ])('flags %s in a run block', (_name, yaml) => {
+    expect(hasUntrustedInterpolation(yaml)).toBe(true);
+  });
+
+  it('allows the same expressions in env and with', () => {
+    const yaml =
+      'steps:\n  - env:\n      TAG: ${{ github.event.release.tag_name }}\n    run: echo "$TAG"\n';
+
+    expect(hasUntrustedInterpolation(yaml)).toBe(false);
+  });
+});
+
 describe('SEA release workflow', () => {
   it('uses the asset-generating SEA builder instead of the static asset-less config', () => {
     const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
@@ -49,9 +127,14 @@ describe('SEA release workflow', () => {
     expect(workflow).toContain(
       "if: github.event_name == 'release' && github.event.action == 'published'",
     );
-    expect(workflow.match(/if:\s*github\.event_name == 'release'/g)).toHaveLength(4);
+    const smokeWebSteps = workflow
+      .split(/^ {6}- name: /m)
+      .filter((step) => step.startsWith('Smoke web SEA'));
+    expect(smokeWebSteps).toHaveLength(3);
+    for (const step of smokeWebSteps) {
+      expect(step).toMatch(/^ {8}if: github\.event_name != 'pull_request'$/m);
+    }
     expect(workflow.match(/name:\s*Smoke Desktop SEA/g)).toHaveLength(3);
-    expect(workflow).not.toMatch(/run:[^\n]*github\.event\.release\.tag_name/);
     expect(workflow).toContain('GH_REPO: ${{ github.repository }}');
     expect(workflow).toContain('gh release upload "$RELEASE_TAG"');
   });
@@ -70,6 +153,7 @@ describe('release asset cleanup workflow', () => {
       .join('\n');
     const preservedNames = [
       'tableau-mcp.zip',
+      'tableau-mcp.tar.gz',
       'tableau-mcp-macos-arm64.tar.gz',
       'tableau-mcp-macos-x64.tar.gz',
     ];

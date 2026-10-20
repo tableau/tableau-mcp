@@ -4,8 +4,8 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as configModule from '../../../../config.desktop.js';
-import * as cachePathModule from '../../../../desktop/cachePath.js';
 import * as discoveryModule from '../../../../desktop/externalApi/discovery.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as metadataModule from '../../../../desktop/metadata/index.js';
 import * as cacheFingerprintModule from '../../../../desktop/wrappers/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
@@ -20,7 +20,10 @@ import {
 import { DesktopMcpServer, DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
-import { mockContainedCacheReadFromFs } from '../../api/applyPreamble.testUtils.js';
+import {
+  mockCacheFileArgsFromFs,
+  mockContainedCacheReadFromFs,
+} from '../../api/applyPreamble.testUtils.js';
 import { getApplyWorksheetTool } from '../../api/applyWorksheet.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
@@ -28,11 +31,16 @@ import * as refreshWorkbookCacheModule from './refreshWorkbookCache.js';
 import { getRemoveFieldTool } from './removeField.js';
 import * as removeFieldResultModule from './removeFieldResult.js';
 
-vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof cachePathModule>()),
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+  writeCacheTextFile: (path: string, text: string) => writeFileSync(path, text, 'utf-8'),
   readContainedCacheTextFile: vi.fn(),
 }));
+vi.mock('../../../../desktop/metadata/index.js');
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../../../../desktop/wrappers/listWorksheets.js');
@@ -67,6 +75,7 @@ function mockPinnedSession(desktopSessionId: string | undefined): void {
 
 describe('removeFieldTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     mockContainedCacheReadFromFs();
     vi.mocked(cacheFingerprintModule.sidecarPath).mockImplementation((file) => `${file}.meta.json`);
@@ -173,7 +182,6 @@ describe('removeFieldTool', () => {
       expect(result.content[0].text).toContain('read-cached-xml');
       expect(result.content[0].text).toContain('get-worksheet-xml');
       expect(writeFileSync).not.toHaveBeenCalled();
-      expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
       expect(getWorksheetXmlModule.getWorksheetXml).not.toHaveBeenCalled();
     },
   );
@@ -229,7 +237,23 @@ describe('removeFieldTool', () => {
     expect(metadataModule.removeFieldFromRows).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);
   });
 
-  it('writes a fingerprint sidecar after updating the worksheet cache file', async () => {
+  it('redacts connection credentials in the worksheet cache file', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(
+      "<worksheet><connection password='hunter2' username='y'/></worksheet>",
+    );
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
+
+    const written = vi.mocked(writeFileSync).mock.calls.find(([path]) => path === WORKSHEET_FILE);
+    invariant(written);
+    expect(String(written[1])).not.toContain('hunter2');
+    expect(String(written[1])).toContain(REDACTED_CREDENTIAL_SENTINEL);
+  });
+
+  it('writes the modified XML to the worksheet cache file', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
@@ -237,10 +261,7 @@ describe('removeFieldTool', () => {
 
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
-      WORKSHEET_FILE,
-      SESSION,
-    );
+    expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, expect.any(String), 'utf-8');
   });
 
   it('does not write the draft when building the result snapshot fails', async () => {
@@ -265,7 +286,6 @@ describe('removeFieldTool', () => {
         new XmlModificationError('Cannot read resulting placements').message,
       );
       expect(writeFileSync).not.toHaveBeenCalled();
-      expect(cacheFingerprintModule.restampSidecarAfterEdit).not.toHaveBeenCalled();
     } finally {
       formatter.mockRestore();
     }
@@ -363,27 +383,38 @@ describe('removeFieldTool', () => {
     },
   );
 
-  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+  it('uses the pinned session for the live lookup when no session is passed', async () => {
     mockPinnedSession(SESSION);
+    const fragment = '<worksheet name="Sheet 1"><table/></worksheet>';
+    vi.mocked(getWorksheetXmlModule.getWorksheetXml).mockResolvedValue(
+      Ok({ xml: fragment, name: 'Sheet 1' }),
+    );
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(readFileSync).mockReturnValue(fragment);
     vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
+    const extra = getMockRequestHandlerExtra();
+    const tool = getRemoveFieldTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
 
-    await getResult({
-      worksheetFile: WORKSHEET_FILE,
-      target: 'rows',
-      columnRef: COLUMN_REF,
-      session: undefined,
-    });
-
-    expect(cacheFingerprintModule.restampSidecarAfterEdit).toHaveBeenCalledWith(
-      WORKSHEET_FILE,
-      SESSION,
+    const result = await callback(
+      {
+        session: undefined as unknown as string,
+        worksheetName: 'Sheet 1',
+        worksheetFile: undefined,
+        target: 'rows',
+        columnRef: COLUMN_REF,
+        encodingType: undefined,
+      },
+      extra,
     );
+
+    expect(result.isError).toBe(false);
+    expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
+    expect(writeFileSync).toHaveBeenCalledWith(expect.any(String), MODIFIED_XML, 'utf-8');
   });
 
-  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
+  it('rejects and writes nothing when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
       { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],

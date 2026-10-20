@@ -36,6 +36,21 @@ authentication failures.
 
 :::
 
+### Site
+
+:::warning
+
+With `AUTH=passthrough`, [`SITE_NAME`](../env-vars.md#site_name) does not restrict which site a token
+may belong to, and a request without a token is rejected. REST calls and per-site state, such as
+[site settings](../site-settings.md), use the site part of the token. Site settings are cached under that site only when it matches the
+session site Tableau validated. The server does not compare the token's site to `SITE_NAME`.
+
+`SITE_NAME` applies only to requests with no auth info: PAT, UAT, and direct-trust over HTTP, an
+embedded-OAuth `X-Tableau-Auth` request with no access token, and stdio. When `ENABLE_PASSTHROUGH_AUTH` is set beside [OAuth](oauth.md), a request without a
+passthrough token uses the site of its OAuth token.
+
+:::
+
 ### JWT Scopes
 
 :::warning
@@ -54,11 +69,14 @@ In versions of Tableau older than 2026.2, the JWT must also contain the `tableau
 
 :::warning
 
-If [`OAuth`](oauth.md) is enabled, **all** requests to the MCP server must include the
-`X-Tableau-Auth` header, otherwise the client will be considered unauthorized and will be forced to
-authenticate using OAuth. This even includes MCP lifecycle requests like the
+When passthrough is enabled as an option with `ENABLE_PASSTHROUGH_AUTH` and [`OAuth`](oauth.md) is
+the primary `AUTH` method, **all** requests to the MCP server must include the `X-Tableau-Auth`
+header or authenticate using OAuth. This includes MCP lifecycle requests like the
 [Initialization request](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization),
 even though it does not make any downstream Tableau REST API calls.
+
+With `AUTH=passthrough`, OAuth is disabled and there is no OAuth fallback, even if `OAUTH_ISSUER`
+remains set from another deployment.
 
 :::
 
@@ -83,8 +101,12 @@ for more details.
   it the only accepted method: every request must carry a token in the `X-Tableau-Auth` header or the
   `workgroup_session_id` cookie, and requests without one are rejected with `401 invalid_token`.
 - Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
+- Requires [`TRANSPORT`](../env-vars.md#transport) to be `http`; the server refuses to start with
+  `stdio`.
 - Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the token is
   absent.
+- Does not require `OAUTH_ISSUER` or `DANGEROUSLY_DISABLE_OAUTH`; a configured `OAUTH_ISSUER` does
+  not enable OAuth in this mode.
 
 <hr />
 

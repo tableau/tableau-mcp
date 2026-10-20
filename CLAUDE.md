@@ -279,6 +279,8 @@ Check in code:
 if (getFeatureGate().isFeatureEnabled('my-feature')) { ... }
 ```
 
+Feature flags gate in-development features and are internal: customers don't know about them. Never mention a feature flag in user-facing docs (`docs/`), tool/prompt descriptions, or the bundle manifest. Document only the customer-facing config (e.g. env vars).
+
 ## Code Style
 
 - Keep code comments concise: explain the non-obvious WHY only. Never restate what the code already makes obvious.
@@ -293,10 +295,14 @@ if (getFeatureGate().isFeatureEnabled('my-feature')) { ... }
 
 ## NPM Package
 
-Published as `@tableau/mcp-server` with:
+Published as the Web-only `@tableau/mcp-server` package. Keep the Desktop entry point and Desktop
+data out of its tarball. The package has:
 - Binary: `tableau-mcp-server` → `build/index.js`
 - Exports: main entry + `./tracing` for APM
 - Requires Node.js >= 22.7.5
+
+Desktop remains available through `npm run build:desktop` from a clone and through the standalone
+Desktop executable built by the release archive workflow.
 
 ## Documentation
 

@@ -12,11 +12,8 @@ import {
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
@@ -383,7 +380,8 @@ function storySignature(xml: string): string {
 
 function upsertAttribute(tag: string, name: string, value: string): string {
   const pattern = new RegExp(`(\\s${name}\\s*=\\s*)(['"])(.*?)\\2`, 'i');
-  if (pattern.test(tag)) return tag.replace(pattern, `$1'${escapeXml(value)}'`);
+  if (pattern.test(tag))
+    return tag.replace(pattern, (_m, pre: string) => `${pre}'${escapeXml(value)}'`);
   return tag.replace(/\s*\/?\s*>$/, (close) => ` ${name}='${escapeXml(value)}'${close}`);
 }
 

@@ -1,10 +1,10 @@
 /**
  * Validation rule: date-field-bound-as-string
  *
- * Live eval failure (casepack-e4-mau-line): a monthly active users line chart passed
- * structural checks while binding Month on the time axis as `[none:month:nk]` — a
- * raw nominal string pill. The visual rendered as a flat categorical axis, not a
- * temporal axis, so the analytical answer was wrong even though the shelves existed.
+ * Live eval failure: a monthly active users line chart passed structural checks while
+ * binding Month on the time axis as `[none:month:nk]` — a raw nominal string pill. The
+ * visual rendered as a flat categorical axis, not a temporal axis, so the analytical
+ * answer was wrong even though the shelves existed.
  *
  * Precision boundary:
  *   - Only fields whose datasource metadata declares `datatype='date'`/`datetime`

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { START_PAGE_MIN_API_VERSION } from '../../../desktop/externalApi/apiVersion.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -27,7 +28,7 @@ export const getSetStartPageVisibilityTool = (
   const setStartPageVisibilityTool = new DesktopTool({
     server,
     name: 'set-start-page-visibility',
-    minApiVersion: '0.2.11',
+    minApiVersion: START_PAGE_MIN_API_VERSION,
     title,
     description:
       "Show or hide Tableau Desktop's Start Page and return its actual resulting visibility.",

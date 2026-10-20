@@ -18,6 +18,7 @@ import { z } from 'zod';
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { isAdminToolsEnabled } from './features/adminTools.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { log } from './logging/logger.js';
@@ -29,10 +30,12 @@ import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { registerSkills } from './skills/index.js';
 import { getClientDisplayName } from './telemetry/clientDisplayName.js';
 import { getCurrentUserSiteRole } from './tools/web/adminGate.js';
 import {
   checkRegistrationConditions,
+  getIndeterminateConditionWarning,
   getUnmetConditionInstructions,
   RegistrationCondition,
   RegistrationContext,
@@ -47,6 +50,7 @@ import {
 } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getDirname } from './utils/getDirname.js';
+import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
@@ -71,23 +75,52 @@ const loadWebToolsParamsSchema = {
 };
 
 export type LoadWebToolsResult = {
-  status: 'loaded' | 'already-loaded';
+  // 'partial': a retryable failure dropped some requested tools; call load-web-tools again.
+  status: 'loaded' | 'already-loaded' | 'partial';
   toolNames: WebToolName[];
+  // Retryable problems for the requested group (a retry may add tools).
+  warnings?: string[];
+  // Deliberate omissions for the requested group (conditions not met); retrying will not help.
+  notes?: string[];
 };
+
+type CollectedMessage = { message: string; toolNames: string[] };
+
+type CollectedTools = {
+  tools: Array<WebTool<any>>;
+  warnings: CollectedMessage[];
+  notes: CollectedMessage[];
+  // Tools hidden by a failure that a retry could fix, not by role, config or conditions.
+  transientlyOmittedToolNames: string[];
+};
+
+export function buildLoadWebToolsDescription(): string {
+  const groups = webToolGroupNames
+    .map((groupName) => `${groupName} (${webToolGroups[groupName].join(', ')})`)
+    .join('; ');
+  return (
+    'Load a Tableau web tool group so its tools become available. Use group "all" to load every ' +
+    'group. If the result status is "partial", some tools were left out for a temporary reason; call ' +
+    `load-web-tools again with the same group to retry. Groups and their tools: ${groups}.`
+  );
+}
 
 const BASE_INSTRUCTIONS =
   'Tableau MCP exposes tools for exploring and querying Tableau Cloud/Server content: ' +
   'datasources, workbooks, views, Pulse metrics, and content search.';
 
-// Admin/site-health guidance. Advertised only when ADMIN_TOOLS_ENABLED is set (config.adminToolsEnabled).
+// Admin/site-health guidance. Appended in registerTools only when admin tools are enabled.
 // This is safe with no role lookup: the per-call assertAdmin gate still rejects any non-admin at execution,
 // so listing the capability menu leaks nothing. Tied to GENERIC admin-health intent so a generic prompt
 // (e.g. "what should I watch as an admin?") elicits these instead of only by-name requests.
 const ADMIN_INSTRUCTIONS =
-  'This server also has site-administration capabilities, exposed as named MCP prompts (retrieve them ' +
-  'by name via prompts/get) that package multi-step admin workflows with their built-in safety ' +
-  'scaffolding. For general admin/site-health, governance, cleanup, or cost/license questions, invoke ' +
-  'the matching prompt by name rather than reconstructing the workflow from raw tool calls. Each ' +
+  'This server also has site-administration capabilities, exposed as named MCP prompts that package ' +
+  'multi-step admin workflows with their built-in safety scaffolding. Each workflow is also readable ' +
+  'as an MCP resource at tableau-mcp://admin-workflows/<prompt-name>. For general admin/site-health, ' +
+  'governance, cleanup, or cost/license questions, read the matching workflow resource and follow it ' +
+  'rather than reconstructing the workflow from raw tool calls; users can also run it as the ' +
+  'slash-command prompt of the same name. If you cannot read MCP resources, tell the user which ' +
+  'prompt to run as a slash command instead. Each ' +
   'concern has an "-inform" prompt (read-only report) and, where changes can be applied, an "-apply" ' +
   'prompt (destructive: dry-run by default, requires explicit human-in-the-loop confirmation before ' +
   'any write or delete). The exact prompt names are: stale-content-cleanup-inform and ' +
@@ -105,31 +138,26 @@ const ADMIN_INSTRUCTIONS =
 // Appended to the initialize instructions when the caller's site role could not be fetched (after
 // retries) and that failure hid one or more role-gated tools. Signals that the incomplete tool set
 // is a transient error, not a permissions decision, so the user can reconnect to retry.
-const SITE_ROLE_UNAVAILABLE_WARNING =
+const RECONNECT_ADVICE =
+  'Disconnect and reconnect to retry; if it persists, contact your Tableau administrator.';
+const RELOAD_ADVICE =
+  'Call load-web-tools again to retry; if it persists, contact your Tableau administrator.';
+
+const siteRoleUnavailableWarning = (retryAdvice: string): string =>
   "WARNING: Some tools were omitted from this session because the current user's Tableau site " +
   'role could not be determined after multiple attempts. This is likely a transient error rather ' +
-  'than a permissions problem. Disconnect and reconnect to retry; if it persists, contact your ' +
-  'Tableau administrator.';
+  `than a permissions problem. ${retryAdvice}`;
 
 /**
- * Single source of truth for the web server's `initialize` instructions string. Returns the base
- * guidance, with the admin/site-health guidance appended only when ADMIN_TOOLS_ENABLED is set.
- *
- * ADMIN_TOOLS_ENABLED is read straight from env (matching Config's exact semantics in config.ts:
- * `ADMIN_TOOLS_ENABLED === 'true'`) rather than via getConfig(). The instructions string depends
- * ONLY on this flag, and it is composed at handshake/registration-independent construction time —
- * eagerly building the full Config here would newly require SERVER to be set and would consume test
- * getConfig() mocks. Direct env read keeps composition side-effect-free.
+ * Base `initialize` instructions for the web server. Admin guidance is not included here: it depends
+ * on an async feature-gate check, so registerTools appends it via appendInstructions().
  *
  * Both the default/web path (WebMcpServer constructs its own McpServer) and the combined path
- * (index.combined.ts supplies a pre-built McpServer) MUST feed instructions through this function.
- * The SDK reads `instructions` only from the McpServer constructor options (it is never settable
- * post-construction), so a supplied McpServer that was not built with these instructions would
- * silently drop them — see the guard in server.ts.
+ * (index.combined.ts supplies a pre-built McpServer) MUST construct with this string — see the
+ * guard in server.ts.
  */
 export function buildWebInstructions(): string {
-  const adminToolsEnabled = process.env.ADMIN_TOOLS_ENABLED === 'true';
-  return adminToolsEnabled ? `${BASE_INSTRUCTIONS} ${ADMIN_INSTRUCTIONS}` : BASE_INSTRUCTIONS;
+  return BASE_INSTRUCTIONS;
 }
 
 export class WebMcpServer extends Server {
@@ -165,11 +193,15 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    // Lazy loading is meaningless on stateless HTTP: the per-request server is
-    // discarded as the response closes, so tools hydrated by the loader would
-    // register on a corpse. Fall back to the eager surface there.
+    // Appended before tool filtering so any registration warnings follow the admin guidance.
+    if (await isAdminToolsEnabled(config)) {
+      this.appendInstructions(ADMIN_INSTRUCTIONS);
+    }
+
+    // Only a shared combined server can retain tools loaded after startup.
     const statelessHttp = config.transport === 'http' && config.disableSessionManagement;
-    if (config.toolProfile === 'combined-lean' && !statelessHttp) {
+    const sharedStatefulServer = !this.ownsMcpServer && !statelessHttp;
+    if (config.toolProfile === 'combined-lean' && sharedStatefulServer) {
       this._registerLoadWebToolsTool();
     } else {
       for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
@@ -177,8 +209,9 @@ export class WebMcpServer extends Server {
       }
     }
 
-    registerPrompts(this);
+    await registerPrompts(this);
     await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   /**
@@ -219,21 +252,49 @@ export class WebMcpServer extends Server {
       groupNames.flatMap((groupName) => [...webToolGroups[groupName]]),
     );
 
-    const toolsToRegister = (await this._getToolsToRegister(tableauAuthInfo)).filter(
+    const collected = await this._collectToolsToRegister(tableauAuthInfo, RELOAD_ADVICE);
+    const forRequested = (entries: CollectedMessage[]): string[] =>
+      entries
+        .filter((entry) =>
+          entry.toolNames.some((name) => requestedToolNames.has(name as WebToolName)),
+        )
+        .map((entry) => entry.message);
+    const warnings = forRequested(collected.warnings);
+    const notes = forRequested(collected.notes);
+    const transientlyOmitted = new Set<string>(
+      collected.transientlyOmittedToolNames.filter((name) =>
+        requestedToolNames.has(name as WebToolName),
+      ),
+    );
+
+    const toolsToRegister = collected.tools.filter(
       (tool) =>
         requestedToolNames.has(tool.name) && !this._registeredLazyWebToolNames.has(tool.name),
     );
 
     for (const tool of toolsToRegister) {
-      if (await this._registerWebTool(tool)) {
-        this._registeredLazyWebToolNames.add(tool.name);
+      try {
+        if (await this._registerWebTool(tool)) {
+          this._registeredLazyWebToolNames.add(tool.name);
+        }
+      } catch (error) {
+        transientlyOmitted.add(tool.name);
+        warnings.push(`Failed to register ${tool.name}: ${getExceptionMessage(error)}`);
       }
     }
+    // Tools left out on purpose still count as loaded; only a retryable failure keeps a group open.
     for (const groupName of groupNames) {
-      this._loadedLazyWebToolGroups.add(groupName);
+      if (!webToolGroups[groupName].some((toolName) => transientlyOmitted.has(toolName))) {
+        this._loadedLazyWebToolGroups.add(groupName);
+      }
     }
 
-    return { status: 'loaded', toolNames: this._loadedLazyToolNames(groupNames) };
+    return {
+      status: transientlyOmitted.size > 0 ? 'partial' : 'loaded',
+      toolNames: this._loadedLazyToolNames(groupNames),
+      ...(warnings.length > 0 && { warnings }),
+      ...(notes.length > 0 && { notes }),
+    };
   };
 
   private _loadedLazyToolNames = (groupNames: readonly WebToolGroupName[]): WebToolName[] =>
@@ -246,7 +307,7 @@ export class WebMcpServer extends Server {
       LOAD_WEB_TOOLS_TOOL_NAME,
       {
         title: 'Load Web Tools',
-        description: 'Load a Tableau web tool group.',
+        description: buildLoadWebToolsDescription(),
         inputSchema: loadWebToolsParamsSchema,
         annotations: {
           title: 'Load Web Tools',
@@ -342,7 +403,23 @@ export class WebMcpServer extends Server {
   protected _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<WebTool<any>>> => {
+    const { tools, warnings, notes } = await this._collectToolsToRegister(
+      tableauAuthInfo,
+      RECONNECT_ADVICE,
+    );
+    for (const { message } of [...warnings, ...notes]) {
+      this.appendInstructions(message);
+    }
+    return tools;
+  };
+
+  private _collectToolsToRegister = async (
+    tableauAuthInfo?: TableauAuthInfo,
+    retryAdvice: string = RECONNECT_ADVICE,
+  ): Promise<CollectedTools> => {
     const config = getConfig();
+    const warnings: CollectedMessage[] = [];
+    const notes: CollectedMessage[] = [];
     // Constructing args for invoking REST APIs outside of tool context
     const restApiArgs: RestApiArgs = {
       server: this,
@@ -388,6 +465,7 @@ export class WebMcpServer extends Server {
     // rather than because the caller's role was genuinely too low.
     const toolsOmittedForRoleFetchFailure: string[] = [];
     const toolsOmittedFromUnmetConditions = new Map<RegistrationCondition, string[]>();
+    const toolsOmittedForIndeterminateConditions = new Map<RegistrationCondition, string[]>();
 
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
@@ -414,10 +492,12 @@ export class WebMcpServer extends Server {
         );
         if (!conditionCheckResult.registrationConditionsMet) {
           // Appends this tool to list of tools that failed under a particular condition
-          const toolList =
-            toolsOmittedFromUnmetConditions.get(conditionCheckResult.failingCondition) || [];
+          const omitted = conditionCheckResult.indeterminate
+            ? toolsOmittedForIndeterminateConditions
+            : toolsOmittedFromUnmetConditions;
+          const toolList = omitted.get(conditionCheckResult.failingCondition) || [];
           toolList.push(tool.name);
-          toolsOmittedFromUnmetConditions.set(conditionCheckResult.failingCondition, toolList);
+          omitted.set(conditionCheckResult.failingCondition, toolList);
           continue;
         }
       }
@@ -434,9 +514,10 @@ export class WebMcpServer extends Server {
           `session: ${toolsOmittedForRoleFetchFailure.join(', ')}.`,
       });
 
-      // Client-facing counterpart: surface the omission in the initialize instructions so the user
-      // knows the tool set is incomplete due to a fetch failure (not their permissions).
-      this.appendInstructions(SITE_ROLE_UNAVAILABLE_WARNING);
+      warnings.push({
+        message: siteRoleUnavailableWarning(retryAdvice),
+        toolNames: toolsOmittedForRoleFetchFailure,
+      });
     }
 
     if (toolsOmittedFromUnmetConditions.size > 0) {
@@ -458,12 +539,34 @@ export class WebMcpServer extends Server {
 
       // Appending one explanation per distinct unmet condition to initialization message, so a client has
       // context on why some tools were not registered.
-      for (const condition of toolsOmittedFromUnmetConditions.keys()) {
-        this.appendInstructions(getUnmetConditionInstructions(condition));
+      for (const [condition, toolNames] of toolsOmittedFromUnmetConditions) {
+        notes.push({ message: getUnmetConditionInstructions(condition), toolNames });
       }
     }
 
-    return toolsToRegister;
+    for (const [condition, toolNames] of toolsOmittedForIndeterminateConditions) {
+      log({
+        level: 'warning',
+        logger: 'server',
+        message:
+          `${toolNames.length} tool(s) were omitted because the ${condition} check could not be ` +
+          `completed: ${toolNames.join(', ')}.`,
+      });
+      warnings.push({
+        message: getIndeterminateConditionWarning(condition, retryAdvice),
+        toolNames,
+      });
+    }
+
+    return {
+      tools: toolsToRegister,
+      warnings,
+      notes,
+      transientlyOmittedToolNames: [
+        ...toolsOmittedForRoleFetchFailure,
+        ...[...toolsOmittedForIndeterminateConditions.values()].flat(),
+      ],
+    };
   };
 
   private _registerTool = async (

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';

@@ -15,7 +15,7 @@ import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { worksheetDocumentState } from '../metadata/worksheetRenderState.js';
 import { introducedBlockingValidationIssues, runValidation } from '../validation/registry.js';
 import { type ValidationContext, type ValidationIssue } from '../validation/types.js';
-import { parseOuterElement, xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual, parseOuterElement } from '../xmlElement.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { sourceSha256 } from './cacheFingerprint.js';
 
@@ -88,8 +88,7 @@ export async function preparePerSheetApply({
 
   const listResult = await listSheetsOfKind(kind, client, signal);
   if (listResult.isErr()) {
-    // A missing list route means the per-sheet POST route is missing too (they ship together) —
-    // let the caller take the whole-workbook path instead of surfacing a route error.
+    // A missing list route means the per-sheet POST route is missing too (they ship together).
     if (isRouteMissing(listResult.error)) {
       return Ok('route-missing');
     }
@@ -245,7 +244,7 @@ function retitleFragment(
         error: new Error(`The ${kind} fragment has no root name.`),
       });
     }
-    if (xmlNamesEqual(outer.name, currentName)) {
+    if (parsedXmlNamesEqual(outer.name, currentName)) {
       return Ok(fragmentXml);
     }
 

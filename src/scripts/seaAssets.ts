@@ -17,6 +17,7 @@ export const ALWAYS_EMBEDDED_FILES: readonly string[] = [
   'features.json',
   'web/apps/dist/mcp-app.html',
   'web/apps/dist/hitl-confirm.html',
+  'templates/data-app-template.zip',
 ];
 
 async function walkFiles(dir: string): Promise<string[]> {

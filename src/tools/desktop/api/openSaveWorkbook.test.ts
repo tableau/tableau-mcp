@@ -82,16 +82,42 @@ describe('open-file / save-workbook tools', () => {
     }
   });
 
-  it('save-workbook reports the workbook was not saved when unsaved changes remain', async () => {
+  it('save-workbook reports an in place save that left unsaved changes as an error', async () => {
     const harness = await startHarness(getSaveWorkbookTool);
     try {
       setUnsaved(harness.server);
       const result = await harness.callTool({});
-      expect(result.isError).toBeFalsy();
-      expect(messageOf(result)).toContain('was not saved');
+      expect(result.isError).toBe(true);
+      const message = messageOf(result);
+      expect(message).toContain('The save did not complete');
+      expect(message).toContain('A Save dialog may have been dismissed');
+      expect(message).toContain('Do not retry without filePath unless the user is at the machine');
+      expect(message).not.toContain('Saved the open workbook');
+      expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+      expect(result.structuredContent).toMatchObject({
+        message: expect.stringContaining('did not complete'),
+      });
     } finally {
       await harness.close();
     }
+  });
+
+  it('save-workbook with a path trusts the completed status even when the workbook stays dirty', async () => {
+    const harness = await startHarness(getSaveWorkbookTool);
+    try {
+      setUnsaved(harness.server);
+      const result = await harness.callTool({ filePath: '/Users/me/Copy.twbx' });
+      expect(result.isError).toBeFalsy();
+      expect(messageOf(result)).toBe('Saved a copy to "/Users/me/Copy.twbx".');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('save-workbook is marked destructive because an in place save overwrites the file', () => {
+    expect(getSaveWorkbookTool(new DesktopMcpServer()).annotations).toMatchObject({
+      destructiveHint: true,
+    });
   });
 });
 

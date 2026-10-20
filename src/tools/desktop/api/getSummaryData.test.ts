@@ -222,6 +222,72 @@ describe('fetchWorksheetSummaryData', () => {
     expect(result.error.error.message).toContain('matches more than one returned column');
     expect(result.error.error.message).toContain('SUM(Sales), AGG(Sales)');
   });
+
+  describe('column names that contain parentheses', () => {
+    async function project(
+      columns: unknown[],
+      requested: string[],
+    ): Promise<Awaited<ReturnType<typeof fetchWorksheetSummaryData>>> {
+      return await fetchWorksheetSummaryData({
+        read: summaryReadReturning({ columns, rows: [columns.map((_, index) => index)] }),
+        worksheet: 'Sales by Region',
+        maxRows: 200,
+        columns: requested,
+      });
+    }
+
+    it('matches "Sales (USD)" to the aggregate header SUM(Sales (USD))', async () => {
+      const result = await project(
+        [{ name: 'Region' }, { name: 'SUM(Sales (USD))' }],
+        ['Sales (USD)'],
+      );
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error('expected a projection');
+      expect(result.value.columns).toEqual([{ name: 'SUM(Sales (USD))' }]);
+    });
+
+    it('does not match "USD" to a dimension header "Sales (USD)"', async () => {
+      const result = await project([{ name: 'Sales (USD)' }], ['USD']);
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('expected an unmatched column error');
+      expect(result.error.error.message).toContain('was not returned by the worksheet');
+    });
+
+    it('is not ambiguous when "Sales (USD)" and "Profit (USD)" are both returned', async () => {
+      const result = await project(
+        [{ name: 'Sales (USD)' }, { name: 'Profit (USD)' }],
+        ['Sales (USD)'],
+      );
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error('expected a projection');
+      expect(result.value.columns).toEqual([{ name: 'Sales (USD)' }]);
+    });
+
+    it('is not ambiguous when a bracketed request names one of two parenthesized headers', async () => {
+      const result = await project(
+        [{ name: 'SUM(Sales (USD))' }, { name: 'SUM(Profit (USD))' }],
+        ['[Sales (USD)]'],
+      );
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error('expected a projection');
+      expect(result.value.columns).toEqual([{ name: 'SUM(Sales (USD))' }]);
+    });
+
+    it.each([
+      ['CNTD(Customer)', 'Customer'],
+      ['YEAR(Order Date)', 'Order Date'],
+    ])('matches the header %s to the bare name %s', async (header, bare) => {
+      const result = await project([{ name: header }], [bare]);
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error('expected a projection');
+      expect(result.value.columns).toEqual([{ name: header }]);
+    });
+  });
 });
 
 // A minimal read that resolves the sole worksheet and returns the given summary payload, for

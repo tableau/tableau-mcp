@@ -11,10 +11,12 @@ import { WorksheetSort } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
-import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 import { resolveShelfField } from './resolveShelfField.js';
 
 const paramsSchema = {
@@ -59,6 +61,7 @@ export const getSortWorksheetTool = (
       return await sortWorksheetTool.logAndExecute({
         extra,
         args: { session, worksheet, fieldName, direction, sortType, clearSort },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -153,16 +156,25 @@ export const getSortWorksheetTool = (
             }
 
             const { name: worksheetName, column } = resolvedResult.value;
-            return new Ok({
-              worksheet: { id: resolvedResult.value.id, name: worksheetName },
-              fieldName: column,
-              message:
-                result.value.status === 'completed'
-                  ? clearSort
-                    ? `Desktop accepted the request to clear the sort on "${column}" in worksheet "${worksheetName}". The result was not independently verified.`
-                    : `Desktop accepted the request to sort worksheet "${worksheetName}" by "${column}". The result was not independently verified.`
-                  : `Requested sort on worksheet "${worksheetName}"; Desktop is still applying it.`,
-            });
+            const completed = result.value.status === 'completed';
+            const subject = !completed
+              ? `Requested sort on worksheet "${worksheetName}"; Desktop is still applying it`
+              : clearSort
+                ? `Desktop accepted the request to clear the sort on "${column}" in worksheet "${worksheetName}"`
+                : `Desktop accepted the request to sort worksheet "${worksheetName}" by "${column}"`;
+            const note = completed ? ' The result was not independently verified.' : '';
+            return new Ok(
+              commandOk(
+                {
+                  worksheet: { id: resolvedResult.value.id, name: worksheetName },
+                  fieldName: column,
+                  message: `${subject}.${note}`,
+                },
+                result.value,
+                subject,
+                note,
+              ),
+            );
           });
         },
       });

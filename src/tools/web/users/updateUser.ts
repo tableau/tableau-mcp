@@ -4,9 +4,13 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { RouteSafetyError } from '../../../sdks/routeSafety/core.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { RegistryEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
@@ -24,10 +28,7 @@ const VALID_SITE_ROLES = [
 ] as const;
 
 const paramsSchema = {
-  userId: z
-    .string()
-    .uuid('userId must be a valid UUID')
-    .describe('The LUID of the user to update. Obtain from list-users.'),
+  userId: luidSchema.describe('The LUID of the user to update. Obtain from list-users.'),
   siteRole: z
     .enum(VALID_SITE_ROLES)
     .describe(
@@ -60,11 +61,11 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
     server,
     name: 'update-user',
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     description: `
   Updates the site role of a user on the Tableau site. Primary use case: downgrade inactive users to "Unlicensed" to reclaim licenses.
 
-  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag to be enabled.
+  This tool is restricted to Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` environment variable to be enabled.
 
   This tool is **two-phase** to protect against accidental role changes:
 
@@ -175,6 +176,8 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
               } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 recordOutcome({ ok: false, failureDetail: message });
+                // Let the shared tool error path map it to a 400 args-validation error.
+                if (err instanceof RouteSafetyError) throw err;
                 return new UnknownError(
                   `Failed to update user '${args.userId}': ${message}`,
                 ).toErr();

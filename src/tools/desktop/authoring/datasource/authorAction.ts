@@ -6,15 +6,22 @@ import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-sum
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
+import {
+  actionNamesMatch,
+  appendedActionsError,
+  editedActionSettingsMatch,
+  editRecoveryError,
+  parseXmlBoolean,
+  readWorkbookActions,
+  removeWorkbookAction,
+  WorkbookAction,
+} from './authorActionLifecycle.js';
 import {
   DatasourceElement,
   findDatasourceElements,
@@ -23,7 +30,8 @@ import {
 } from './authorCalcCore.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
-const modeSchema = z.enum(['parameter', 'set', 'url', 'filter']);
+const modeSchema = z.enum(['parameter', 'set', 'url', 'filter', 'highlight']);
+const highlightBySchema = z.enum(['all-fields', 'dates-and-times']);
 const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
 const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 const urlTargetSchema = z.enum(['default-zone-or-browser', 'browser', 'specific-zone']);
@@ -56,49 +64,39 @@ const sourceFieldAggregationSchema = z.enum([
 export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema>;
 
 // Primitives in, action XML server-side, readback out. An action wires a mark
-// interaction on a source sheet to a target parameter, set, URL, or filter.
-// PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
-// document round-trip — the action survived readback with the target-parameter link
-// intact. This is the interactivity layer over the key signature.
+// interaction on a source sheet to a target parameter, set, URL, filter, or highlight.
+// Full workbook applies replace the action list. Editing keeps the selected action's
+// internal name so persisted references and undo/redo track the same action.
 const paramsSchema = {
   session: sessionParam(),
+  operation: z
+    .enum(['create', 'edit', 'delete'])
+    .optional()
+    .describe('Default create; edit needs mode.'),
+  actionName: z.string().optional().describe('edit/delete: internal name.'),
   mode: modeSchema
-    .default('parameter')
+    .optional()
     .describe(
-      'Target driven, and the field it needs: parameter (sourceField+targetParameter), ' +
-        'set (targetSet), url (url), filter (targetSheet).',
+      'parameter:sourceField+targetParameter;set:targetSet;url;filter/highlight:targetSheet',
     ),
-  caption: z.string().describe(''),
-  sourceWorksheet: z.string().describe(''),
-  sourceField: z
-    .string()
-    .optional()
-    .describe('parameter, required: exact shelf ref, e.g. [federated.<id>].[sum:Sales].'),
-  targetParameter: z
-    .string()
-    .optional()
-    .describe('parameter, required: parameter to set, qualified [Parameters].[Parameter 1].'),
-  targetSet: z.string().optional().describe('set, required: set whose membership marks change.'),
-  targetSheet: z
-    .string()
-    .optional()
-    .describe('filter, required: sheet/dashboard the marks filter.'),
+  caption: z.string().optional().describe(''),
+  sourceWorksheet: z.string().optional().describe(''),
+  sourceField: z.string().optional().describe('parameter:ref'),
+  targetParameter: z.string().optional().describe('[Parameters].[Name].'),
+  targetSet: z.string().optional().describe('set'),
+  targetSheet: z.string().optional().describe('filter/highlight.'),
   filterFields: z.array(z.string()).optional().describe(''),
+  highlightFields: z.array(z.string()).optional().describe('Captions.'),
+  highlightBy: highlightBySchema.optional().describe('Omit with highlightFields.'),
   datasource: z.string().optional().describe('Internal name or caption.'),
   setMembership: setMembershipSchema.default('assign').describe(''),
-  clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
-  sourceFieldAggregation: sourceFieldAggregationSchema
-    .optional()
-    .describe('parameter: how to aggregate the source field. Default attr.'),
-  onClear: onClearSchema
-    .optional()
-    .describe(
-      'parameter: keep-current or set-value on clear. Default: set-value iff clearValue set.',
-    ),
-  clearValue: z.string().optional().describe('parameter: reset value on clear; no datetime.'),
+  clearSelection: clearSelectionSchema.optional().describe('filter/set; highlight: show-all only.'),
+  sourceFieldAggregation: sourceFieldAggregationSchema.optional().describe('Default attr.'),
+  onClear: onClearSchema.optional().describe('Default set-value if clearValue set.'),
+  clearValue: z.string().optional().describe('Reset on clear; no datetime.'),
   singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
-  url: z.string().optional().describe('URL for url mode, raw. <[Field Name]> = value.'),
+  url: z.string().optional().describe('Raw URL; <[Field]> substitutes.'),
   sourceDashboard: z.string().optional().describe(''),
   excludeSourceSheets: z.array(z.string()).optional().describe(''),
   excludeTargetSheets: z.array(z.string()).optional().describe(''),
@@ -134,6 +132,18 @@ type AuthorActionResult = AuthorActionResultBase &
         url: string;
       }
     | {
+        mode: 'highlight';
+        targetSheet: string;
+        sourceWorksheet: string;
+        sourceDashboard: string;
+        activation: z.infer<typeof activationSchema>;
+        clearSelection: 'show-all';
+        highlightFields: string[];
+        highlightBy: z.infer<typeof highlightBySchema> | 'selected-fields';
+        excludeSourceSheets: string[];
+        excludeTargetSheets: string[];
+      }
+    | {
         mode: 'filter';
         targetSheet: string;
         sourceWorksheet: string;
@@ -161,12 +171,14 @@ export type AuthorActionRawArgs = z.infer<z.ZodObject<typeof paramsSchema>>;
 
 type AuthorActionInputBase = {
   session?: string;
+  operation: 'create' | 'edit';
+  actionName?: string;
   caption: string;
   sourceWorksheet: string;
   activation: z.infer<typeof activationSchema>;
 };
 
-type AuthorActionInput = AuthorActionInputBase &
+type AuthorActionDefinition = AuthorActionInputBase &
   (
     | {
         mode: 'parameter';
@@ -194,6 +206,17 @@ type AuthorActionInput = AuthorActionInputBase &
         excludeSourceSheets: string[];
       }
     | {
+        mode: 'highlight';
+        sourceDashboard: string;
+        targetSheet: string;
+        highlightFields?: string[];
+        highlightBy?: z.infer<typeof highlightBySchema>;
+        datasource?: string;
+        clearSelection: 'show-all';
+        excludeSourceSheets: string[];
+        excludeTargetSheets: string[];
+      }
+    | {
         mode: 'filter';
         sourceDashboard: string;
         targetSheet: string;
@@ -206,14 +229,50 @@ type AuthorActionInput = AuthorActionInputBase &
       }
   );
 
+type DeleteActionInput = {
+  operation: 'delete';
+  mode?: never;
+  session?: string;
+  actionName: string;
+};
+type AuthorActionInput = AuthorActionDefinition | DeleteActionInput;
+type DeleteActionResult = { operation: 'delete'; actionName: string; caption: string };
+
 // Owns the input-only guards (required fields, forbidden mode/field combos); XML-dependent
 // enumerated recovery checks stay in the callback, which needs the live workbook.
 export function parseAuthorActionArgs(
   args: AuthorActionRawArgs,
 ): Result<AuthorActionInput, ArgsValidationError> {
+  const operation = args.operation ?? 'create';
+  const actionName = args.actionName?.trim() || undefined;
+  if (operation !== 'create' && !actionName) {
+    return new ArgsValidationError(
+      'actionName is required for edit/delete; use the exact internal name returned by author-action',
+    ).toErr();
+  }
+  if (operation === 'create' && actionName !== undefined) {
+    return new ArgsValidationError('actionName is only allowed for edit/delete').toErr();
+  }
+  if (operation === 'delete') {
+    return new Ok({ operation, actionName: actionName!, session: args.session });
+  }
+  if (operation === 'edit' && args.mode === undefined) {
+    return new ArgsValidationError(
+      'mode is required for edit; pass the complete replacement definition',
+    ).toErr();
+  }
+  const mode = args.mode ?? 'parameter';
+  if (
+    args.caption === undefined ||
+    args.caption.trim().length === 0 ||
+    args.sourceWorksheet === undefined
+  ) {
+    return new ArgsValidationError(
+      'caption and sourceWorksheet are required for create/edit; edit replaces the full definition (sourceWorksheet may be empty for a dashboard source)',
+    ).toErr();
+  }
   const {
     session,
-    mode,
     caption,
     sourceWorksheet,
     sourceField,
@@ -221,9 +280,11 @@ export function parseAuthorActionArgs(
     targetSet,
     targetSheet,
     filterFields,
+    highlightFields,
+    highlightBy,
     datasource,
     setMembership,
-    clearSelection,
+    clearSelection: requestedClearSelection,
     sourceFieldAggregation,
     clearValue,
     onClear,
@@ -237,6 +298,9 @@ export function parseAuthorActionArgs(
     zoneId,
     urlEncode,
   } = args;
+
+  const clearSelection =
+    requestedClearSelection ?? (mode === 'highlight' ? 'show-all' : 'do-nothing');
 
   const effectiveSourceSheet = sourceWorksheet.trim();
   const effectiveSourceDashboard = sourceDashboard?.trim() ?? '';
@@ -255,19 +319,31 @@ export function parseAuthorActionArgs(
   if (caption.trim().length === 0) {
     return new ArgsValidationError('caption empty').toErr();
   }
-  if (mode !== 'url' && mode !== 'filter' && effectiveSourceSheet.length === 0) {
+  if (
+    mode !== 'url' &&
+    mode !== 'filter' &&
+    mode !== 'highlight' &&
+    effectiveSourceSheet.length === 0
+  ) {
     return new ArgsValidationError('sourceWorksheet empty').toErr();
   }
-  if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter') {
-    return new ArgsValidationError('excludeTargetSheets is only allowed in filter mode').toErr();
+  if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter' && mode !== 'highlight') {
+    return new ArgsValidationError(
+      'excludeTargetSheets is only allowed in filter or highlight mode',
+    ).toErr();
+  }
+  if (mode !== 'highlight' && (highlightFields !== undefined || highlightBy !== undefined)) {
+    return new ArgsValidationError(
+      'highlightFields/highlightBy are only allowed in highlight mode',
+    ).toErr();
   }
   if (onClear !== undefined && mode !== 'parameter') {
     return new ArgsValidationError('onClear is only allowed in parameter mode').toErr();
   }
   if (effectiveExcludedSourceSheets.length > 0) {
-    if (mode !== 'url' && mode !== 'filter') {
+    if (mode !== 'url' && mode !== 'filter' && mode !== 'highlight') {
       return new ArgsValidationError(
-        'excludeSourceSheets is only allowed in url or filter mode',
+        'excludeSourceSheets is only allowed in url, filter, or highlight mode',
       ).toErr();
     }
     if (hasSourceWorksheet || !hasSourceDashboard) {
@@ -277,7 +353,73 @@ export function parseAuthorActionArgs(
     }
   }
 
-  const base: AuthorActionInputBase = { session, caption, sourceWorksheet, activation };
+  const base: AuthorActionInputBase = {
+    session,
+    operation,
+    actionName,
+    caption,
+    sourceWorksheet,
+    activation,
+  };
+
+  if (mode === 'highlight') {
+    if (
+      hasTargetParameter ||
+      hasTargetSet ||
+      hasUrl ||
+      filterFields !== undefined ||
+      sourceField !== undefined ||
+      sourceFieldAggregation !== undefined ||
+      clearValue !== undefined ||
+      setMembership !== 'assign' ||
+      singleSelect !== undefined ||
+      urlTarget !== undefined ||
+      zoneId !== undefined ||
+      urlEncode !== undefined
+    ) {
+      return new ArgsValidationError(
+        'highlight mode only accepts highlight fields and a targetSheet; parameter, set, filter, and URL options are not allowed',
+      ).toErr();
+    }
+    if (targetSheet === undefined || targetSheet.trim().length === 0) {
+      return new ArgsValidationError('targetSheet is required in highlight mode').toErr();
+    }
+    if (!hasSourceWorksheet && !hasSourceDashboard) {
+      return new ArgsValidationError(
+        'highlight mode requires a source: set sourceWorksheet, sourceDashboard, or both',
+      ).toErr();
+    }
+    if (clearSelection !== 'show-all') {
+      return new ArgsValidationError(
+        'highlight mode supports only clearSelection show-all; Desktop always clears highlighting when the selection clears',
+      ).toErr();
+    }
+    if (
+      highlightFields !== undefined &&
+      (highlightFields.length === 0 || highlightFields.some((field) => field.trim().length === 0))
+    ) {
+      return new ArgsValidationError(
+        'highlightFields must contain nonempty field names; omit it for All Fields',
+      ).toErr();
+    }
+    if (highlightFields !== undefined && highlightBy !== undefined) {
+      return new ArgsValidationError(
+        'highlightFields and highlightBy are mutually exclusive',
+      ).toErr();
+    }
+    return new Ok({
+      ...base,
+      mode,
+      sourceDashboard: effectiveSourceDashboard,
+      targetSheet,
+      highlightFields,
+      highlightBy,
+      datasource,
+      clearSelection,
+      excludeSourceSheets: effectiveExcludedSourceSheets,
+      excludeTargetSheets: effectiveExcludedTargetSheets,
+    });
+  }
 
   if (mode === 'url') {
     if (url === undefined || url.trim().length === 0) {
@@ -409,16 +551,16 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'author-action',
     title,
-    description: 'Wire a mark interaction to a target. Pick mode and pass its required field.',
+    description: 'Create/edit: full mode; omitted options reset; delete: actionName.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
       openWorldHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
-      return await tool.logAndExecute<AuthorActionResult>({
+      return await tool.logAndExecute<AuthorActionResult | DeleteActionResult>({
         extra,
         args,
         callback: async () => {
@@ -428,31 +570,81 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const input = parsed.value;
 
-          const { caption, sourceWorksheet, activation } = input;
-          const effectiveSourceSheet = sourceWorksheet.trim();
-          const effectiveSourceDashboard =
-            input.mode === 'url' || input.mode === 'filter' ? input.sourceDashboard.trim() : '';
-          const hasSourceWorksheet = effectiveSourceSheet.length > 0;
-          const hasSourceDashboard = effectiveSourceDashboard.length > 0;
-          const effectiveTargetSheet = input.mode === 'filter' ? input.targetSheet.trim() : '';
-          const effectiveExcludedSourceSheets =
-            input.mode === 'url' || input.mode === 'filter' ? input.excludeSourceSheets : [];
-          const effectiveExcludedTargetSheets =
-            input.mode === 'filter' ? input.excludeTargetSheets : [];
-
           const sessionResult = resolveSession(input.session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-
+          if (sessionResult.isErr()) return sessionResult.error.toErr();
           const executor = await extra.getExecutor(sessionResult.value);
           const readResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (readResult.isErr()) {
             return new DesktopCommandExecutionError(readResult.error).toErr();
           }
-
           const liveXml = readResult.value;
-          if (hasActionCaption(liveXml, caption)) {
+          const baselineActions = readWorkbookActions(liveXml);
+          if (baselineActions.isErr()) return baselineActions.error.toErr();
+          // Size guards compare the retained document: the removed definition can be large.
+          // The apply still uses the original live document for its stale-state check.
+          let xmlWithoutSelectedAction = liveXml;
+          let originalAction: WorkbookAction | undefined;
+          if (input.operation !== 'create') {
+            const removed = removeWorkbookAction(liveXml, input.actionName!);
+            if (removed.isErr()) return removed.error.toErr();
+            xmlWithoutSelectedAction = removed.value.xml;
+            originalAction = removed.value.action;
+            if (input.operation === 'delete') {
+              const validation = validateWorkbookDocumentApply(
+                xmlWithoutSelectedAction,
+                xmlWithoutSelectedAction,
+              );
+              if (!validation.ok) return new ArgsValidationError(validation.message).toErr();
+              const remainingNames = baselineActions.value
+                .filter((action) => action.name !== input.actionName)
+                .map((action) => action.name);
+              const outcome = await applyAndVerify({
+                xml: xmlWithoutSelectedAction,
+                baselineXml: liveXml,
+                settled: (xml) => {
+                  const actions = readWorkbookActions(xml);
+                  return actions.isOk() && actionNamesMatch(actions.value, remainingNames);
+                },
+                executor,
+                signal: extra.signal,
+              });
+              if (outcome.status === 'failed') return outcome.error.toErr();
+              if (outcome.status === 'not-applied') {
+                const appendError = appendedActionsError(
+                  outcome.workbookXml,
+                  baselineActions.value,
+                );
+                if (appendError) return appendError.toErr();
+                return new XmlModificationError(
+                  'action deletion did not survive readback, or other action identities changed; this requires Desktop support for replacing workbook actions',
+                ).toErr();
+              }
+              return new Ok({
+                operation: 'delete' as const,
+                actionName: input.actionName,
+                caption: removed.value.action.caption,
+              });
+            }
+          }
+
+          const { caption, sourceWorksheet, activation } = input;
+          const effectiveSourceSheet = sourceWorksheet.trim();
+          const effectiveSourceDashboard =
+            input.mode === 'url' || input.mode === 'filter' || input.mode === 'highlight'
+              ? input.sourceDashboard.trim()
+              : '';
+          const hasSourceWorksheet = effectiveSourceSheet.length > 0;
+          const hasSourceDashboard = effectiveSourceDashboard.length > 0;
+          const effectiveTargetSheet =
+            input.mode === 'filter' || input.mode === 'highlight' ? input.targetSheet.trim() : '';
+          const effectiveExcludedSourceSheets =
+            input.mode === 'url' || input.mode === 'filter' || input.mode === 'highlight'
+              ? input.excludeSourceSheets
+              : [];
+          const effectiveExcludedTargetSheets =
+            input.mode === 'filter' || input.mode === 'highlight' ? input.excludeTargetSheets : [];
+
+          if (hasActionCaption(xmlWithoutSelectedAction, caption)) {
             return new ArgsValidationError(
               'caption collision — pick a new caption or edit the existing action',
             ).toErr();
@@ -534,7 +726,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
           }
-          if (input.mode === 'url' || input.mode === 'filter') {
+          if (input.mode === 'url' || input.mode === 'filter' || input.mode === 'highlight') {
             // Worksheet, dashboard, and story names share one namespace, so a source name
             // is unambiguously one kind. Emitting <source worksheet='<dashboard>'> (a
             // dashboard name in the worksheet slot) persists cleanly but makes Tableau raise
@@ -555,7 +747,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               ).toErr();
             }
           }
-          if (input.mode === 'filter') {
+          if (input.mode === 'filter' || input.mode === 'highlight') {
             if (effectiveSourceSheet.length > 0 && !worksheetNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
                 `sourceWorksheet "${effectiveSourceSheet}" was not found. Available worksheets: ${worksheetNames.size > 0 ? [...worksheetNames].join(', ') : 'none'}`,
@@ -619,6 +811,37 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
+          let highlightAction: HighlightAction | undefined;
+          if (input.mode === 'highlight') {
+            const fieldsResult = resolveHighlightFields(
+              liveXml,
+              input.highlightFields,
+              input.datasource,
+            );
+            if (fieldsResult.isErr()) return fieldsResult.error.toErr();
+            highlightAction = {
+              target: effectiveTargetSheet,
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
+              sourceExcludeSheets: effectiveExcludedSourceSheets,
+              targetExcludeSheets: effectiveExcludedTargetSheets,
+              activation,
+              autoClear: input.clearSelection === 'show-all',
+              fieldCaptions: fieldsResult.value,
+              specialFields:
+                input.highlightFields === undefined
+                  ? input.highlightBy === 'dates-and-times'
+                    ? 'date-time'
+                    : 'all'
+                  : undefined,
+            };
+            if (hasHighlightAction(xmlWithoutSelectedAction, highlightAction)) {
+              return new ArgsValidationError(
+                'an identical highlight action (same source, target, fields, and behavior) already exists',
+              ).toErr();
+            }
+          }
+
           let filterDependencies:
             | { datasourceName: string; datasourceXml: string; columnsXml: string[] }
             | undefined;
@@ -674,25 +897,16 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           if (
-            input.mode === 'url' &&
-            hasUrlActionDuplicate(
-              liveXml,
-              input.url.trim(),
-              effectiveSourceSheet,
-              effectiveSourceDashboard,
-            )
+            input.mode === 'filter' &&
+            hasFilterActionDuplicate(xmlWithoutSelectedAction, filterAction!)
           ) {
-            return new ArgsValidationError(
-              'an identical URL action (same url and same source) already exists',
-            ).toErr();
-          }
-          if (input.mode === 'filter' && hasFilterActionDuplicate(liveXml, filterAction!)) {
             return new ArgsValidationError(
               'an identical filter action (same source, target, fields, and behavior) already exists',
             ).toErr();
           }
 
-          const actionName = nextActionName(liveXml);
+          const actionName =
+            input.operation === 'edit' ? input.actionName! : nextActionName(liveXml);
           let target: string;
           let actionXml: string;
           if (input.mode === 'set') {
@@ -728,6 +942,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           } else if (input.mode === 'filter') {
             target = filterAction!.target;
             actionXml = renderFilterAction(caption, actionName, filterAction!);
+          } else if (input.mode === 'highlight') {
+            target = highlightAction!.target;
+            actionXml = renderHighlightAction(caption, actionName, highlightAction!);
           } else {
             // Emit the internal token resolved during the existence check, so a caption argument
             // serializes as the [Parameters].[Parameter N] Tableau can resolve. Readback compares
@@ -744,21 +961,49 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               encodedClearValue,
             });
           }
-          const editResult = spliceActionIntoWorkbook(liveXml, actionXml, filterDependencies);
+          // Enabled state isn't an authoring option; editing must retain it.
+          if (originalAction?.enabled === false) {
+            actionXml = actionXml.replace(/^<([\w-]+)/, "<$1 enabled='false'");
+          }
+          if (
+            input.mode === 'url' &&
+            hasUrlActionDuplicate(baselineActions.value, actionName, actionXml, target)
+          ) {
+            return new ArgsValidationError(
+              'an identical URL action (same source, URL, and behavior) already exists',
+            ).toErr();
+          }
+          const editResult = spliceActionIntoWorkbook(
+            xmlWithoutSelectedAction,
+            actionXml,
+            filterDependencies,
+          );
           if (editResult.isErr()) {
             return editResult.error.toErr();
           }
           const editedXml = editResult.value;
 
-          const validation = validateWorkbookDocumentApply(editedXml, liveXml);
+          const validation = validateWorkbookDocumentApply(editedXml, xmlWithoutSelectedAction);
           if (!validation.ok) {
             return new ArgsValidationError(validation.message).toErr();
           }
 
           const targetParamLanded = (xml: string): boolean => {
+            const actions = readWorkbookActions(xml);
+            const expectedNames = baselineActions.value.map((action) => action.name);
+            if (input.operation === 'create') expectedNames.push(actionName);
+            if (actions.isErr() || !actionNamesMatch(actions.value, expectedNames)) return false;
+            const selected = actions.value.find((action) => action.name === actionName);
+            if (selected === undefined) return false;
+            const actionReadback = selected.xml;
+            if (input.operation === 'edit' && !editedActionSettingsMatch(actionReadback, actionXml))
+              return false;
+            if (input.mode === 'highlight') {
+              return hasHighlightAction(actionReadback, highlightAction!, caption);
+            }
             if (input.mode === 'set') {
               return hasActionWithTargetParam(
-                xml,
+                actionReadback,
                 'edit-group-action',
                 caption,
                 'target-group',
@@ -766,7 +1011,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               );
             }
             if (input.mode === 'url') {
-              return hasUrlActionWithLink(xml, caption, target);
+              return hasUrlActionWithLink(actionReadback, caption, target);
             }
             if (input.mode === 'filter') {
               // Verify every semantic renderFilterAction serialized, not just the target, so the
@@ -774,7 +1019,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               // For a specific-field filter also confirm the sibling <datasources>/
               // <datasource-dependencies> survived — without them the <link> resolves no fields.
               return (
-                hasFilterAction(xml, caption, filterAction!) &&
+                hasFilterAction(actionReadback, caption, filterAction!) &&
                 hasFilterDependencies(xml, filterDependencies)
               );
             }
@@ -782,12 +1027,18 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             // round-tripped intact — a dropped <agg-type>/<clear-option> must fail readback.
             return (
               hasActionWithTargetParam(
-                xml,
+                actionReadback,
                 'edit-parameter-action',
                 caption,
                 'target-parameter',
                 target,
-              ) && hasParameterActionSettings(xml, caption, effectiveAggregation, encodedClearValue)
+              ) &&
+              hasParameterActionSettings(
+                actionReadback,
+                caption,
+                effectiveAggregation,
+                encodedClearValue,
+              )
             );
           };
           const outcome = await applyAndVerify({
@@ -801,14 +1052,22 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             return outcome.error.toErr();
           }
           if (outcome.status === 'not-applied') {
+            if (input.operation === 'edit' && originalAction !== undefined) {
+              const appendError = appendedActionsError(outcome.workbookXml, baselineActions.value);
+              if (appendError) return appendError.toErr();
+              const recoveryError = editRecoveryError(outcome.workbookXml, originalAction);
+              if (recoveryError) return recoveryError.toErr();
+            }
             return new XmlModificationError(
               input.mode === 'set'
                 ? 'action applied but the target-group param did not survive readback'
                 : input.mode === 'url'
                   ? 'action applied but the <link> URL did not survive readback (it may have been dropped or rewritten as a command action)'
-                  : input.mode === 'filter'
-                    ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, single-select, or the field datasource/dependency declarations may have been dropped or rewritten)'
-                    : 'action applied but the target-parameter param did not survive readback',
+                  : input.mode === 'highlight'
+                    ? 'action applied but did not survive readback with the requested highlight semantics (brush target, fields, source scope, activation, clearing behavior, or exclusions changed)'
+                    : input.mode === 'filter'
+                      ? 'action applied but did not survive readback with the requested filter semantics (the tsl-filter target/link, source scope, activation, clearing behavior, exclusions, single-select, or the field datasource/dependency declarations may have been dropped or rewritten)'
+                      : 'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 
@@ -830,6 +1089,31 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               target,
               url: target,
               hint: 'readback verified the <link> URL action; the source sheet/dashboard must expose marks that drive the action, and any <[Field]> references must resolve on the source view',
+            });
+          }
+          if (input.mode === 'highlight') {
+            return new Ok({
+              actionName,
+              caption,
+              mode: input.mode,
+              target,
+              targetSheet: target,
+              sourceWorksheet: effectiveSourceSheet,
+              sourceDashboard: effectiveSourceDashboard,
+              activation,
+              clearSelection: input.clearSelection,
+              highlightFields: highlightAction!.fieldCaptions,
+              highlightBy:
+                input.highlightFields === undefined
+                  ? (input.highlightBy ?? 'all-fields')
+                  : 'selected-fields',
+              excludeSourceSheets: effectiveExcludedSourceSheets,
+              excludeTargetSheets: effectiveExcludedTargetSheets,
+              hint:
+                `readback verified the brush action targeting '${target}'; matching fields must be present in the source and target views. Test the requested click, hover, or tooltip menu interaction to confirm highlighting.` +
+                (worksheetNames.has(target)
+                  ? ' This targets the standalone worksheet. To highlight its dashboard instance, target the dashboard and exclude the other sheets.'
+                  : ''),
             });
           }
           if (input.mode === 'filter') {
@@ -1002,7 +1286,7 @@ function renderSourceAttrs(sourceWorksheet: string, sourceDashboard: string): st
 
 // Serialize the whole <source> element. Source-sheet opt-outs (<exclude-sheet> children) narrow
 // which sheets on a dashboard source fire the action; they open/close the element, otherwise it
-// self-closes. Shared by url and filter modes so the two paths emit identical source XML.
+// self-closes. Shared by url, filter, and highlight modes.
 function renderSourceElement(
   sourceWorksheet: string,
   sourceDashboard: string,
@@ -1020,7 +1304,7 @@ function renderSourceElement(
 
 // Serializes the <activation> element uniformly for every action type:
 // click ('on-select') and hover ('on-hover') write a type attribute; the tooltip-menu trigger
-// ('on-menu') writes none. auto-clear (the filter clear-on-empty flag) is written when set.
+// ('on-menu') writes none. auto-clear resets filter/highlight state when set.
 function renderActivation(activation: z.infer<typeof activationSchema>, autoClear = false): string {
   const autoClearAttr = autoClear ? " auto-clear='true'" : '';
   const typeAttr = activation === 'on-menu' ? '' : ` type='${activation}'`;
@@ -1608,45 +1892,170 @@ function hasUrlActionWithLink(xml: string, caption: string, expression: string):
   });
 }
 
-// Shared skeleton for the action-dedup guards: iterate every <action> block and report a
-// duplicate when the block's <source> worksheet/dashboard match (attribute-order-independent,
-// via getAttr) AND the type-specific predicate accepts the block's non-source content.
-function hasDuplicateActionForSource(
-  xml: string,
-  sourceWorksheet: string,
-  sourceDashboard: string,
-  matchesTypeSpecific: (block: string) => boolean,
+// Reuse readback's semantic checks so distinct URL interactions can share a destination.
+function hasUrlActionDuplicate(
+  actions: WorkbookAction[],
+  actionName: string,
+  actionXml: string,
+  expression: string,
 ): boolean {
-  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
-    const block = match[0];
-    if (!matchesTypeSpecific(block)) {
-      return false;
-    }
-    const sourceTag = block.match(/<source\b[^>]*>/)?.[0];
-    const existingWorksheet =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'worksheet') ?? '');
-    const existingDashboard =
-      sourceTag === undefined ? '' : unescapeXml(getAttr(sourceTag, 'dashboard') ?? '');
-    return existingWorksheet === sourceWorksheet && existingDashboard === sourceDashboard;
-  });
+  return actions.some(
+    (action) =>
+      action.name !== actionName &&
+      hasUrlActionWithLink(action.xml, action.caption, expression) &&
+      editedActionSettingsMatch(action.xml, actionXml),
+  );
 }
 
-// Dedup guard: the document-apply path appends, so a same-url + same-source action
-// authored under a different caption would silently double. Caption collision is
-// handled separately by hasActionCaption.
-function hasUrlActionDuplicate(
+type HighlightAction = {
+  target: string;
+  sourceWorksheet: string;
+  sourceDashboard: string;
+  sourceExcludeSheets: string[];
+  targetExcludeSheets: string[];
+  activation: z.infer<typeof activationSchema>;
+  autoClear: boolean;
+  fieldCaptions: string[];
+  specialFields?: 'all' | 'date-time';
+};
+
+// BrushScriptDescription matches captions, unlike the internal locators used by filter actions.
+// Resolve against workbook metadata before apply; a typo must not degrade to All Fields.
+function resolveHighlightFields(
   xml: string,
-  expression: string,
-  sourceWorksheet: string,
-  sourceDashboard: string,
-): boolean {
-  return hasDuplicateActionForSource(xml, sourceWorksheet, sourceDashboard, (block) => {
-    const linkTag = block.match(/<link\b[^>]*>/)?.[0];
-    if (linkTag === undefined) {
-      return false;
+  requested: string[] | undefined,
+  datasource: string | undefined,
+): Result<string[], ArgsValidationError> {
+  if (requested === undefined) return new Ok([]);
+  let datasourceName: string | undefined;
+  if (datasource !== undefined) {
+    const selected = selectTargetDatasource(xml, datasource);
+    if (selected.isErr()) return selected.error.toErr();
+    datasourceName = selected.value.name;
+  }
+  const fields = summarizeSchema(xml).fields.filter(
+    (field) =>
+      field.datasource !== 'Parameters' &&
+      (datasourceName === undefined || field.datasource === datasourceName),
+  );
+  const captions: string[] = [];
+  for (const raw of requested) {
+    const token = normalizeReferenceToken(raw).normalize('NFC');
+    const exactCaptions = fields.filter(
+      (field) => field.name.normalize('NFC') === raw.trim().normalize('NFC'),
+    );
+    // Captions take precedence over internal names, including before stripping brackets.
+    const captionMatches =
+      exactCaptions.length > 0
+        ? exactCaptions
+        : fields.filter((field) => field.name.normalize('NFC') === token);
+    const matches =
+      captionMatches.length > 0
+        ? captionMatches
+        : fields.filter((field) => bareName(field.columnName).normalize('NFC') === token);
+    const names = [...new Set(matches.map((field) => field.name))];
+    if (names.length !== 1) {
+      return new ArgsValidationError(
+        `Highlight field "${raw}" ${names.length === 0 ? 'was not found' : 'is ambiguous; pass datasource'}. Available fields: ${[...new Set(fields.map((field) => field.name))].join(', ') || 'none'}`,
+      ).toErr();
     }
-    const linkExpression = getAttr(linkTag, 'expression');
-    return linkExpression !== undefined && unescapeXml(linkExpression) === expression;
+    if (!captions.includes(names[0])) captions.push(names[0]);
+  }
+  return new Ok(captions);
+}
+
+// ScriptDescription::ListToString escapes backslashes first, then commas within each item.
+function renderActionList(items: string[]): string {
+  return items.map((item) => item.replace(/\\/g, '\\\\').replace(/,/g, '\\,')).join(',');
+}
+
+function parseActionList(value: string | undefined): string[] {
+  if (value === undefined || value === '') return [];
+  const items: string[] = [];
+  let item = '';
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '\\' && (value[i + 1] === '\\' || value[i + 1] === ',')) {
+      item += value[++i];
+    } else if (char === ',') {
+      items.push(item);
+      item = '';
+    } else {
+      item += char;
+    }
+  }
+  items.push(item);
+  return items;
+}
+
+function renderHighlightAction(
+  caption: string,
+  actionName: string,
+  action: HighlightAction,
+): string {
+  const params: string[] = [];
+  if (action.targetExcludeSheets.length > 0) {
+    params.push(
+      `<param name='exclude' value='${escapeXml(renderActionList(action.targetExcludeSheets))}' />`,
+    );
+  }
+  if (action.specialFields === undefined) {
+    params.push(
+      `<param name='field-captions' value='${escapeXml(renderActionList(action.fieldCaptions))}' />`,
+    );
+  } else {
+    params.push(`<param name='special-fields' value='${action.specialFields}' />`);
+  }
+  // ScriptDescription::SetList/GetList special-case target as a single raw name.
+  params.push(`<param name='target' value='${escapeXml(action.target)}' />`);
+  return (
+    `<action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
+    renderActivation(action.activation, action.autoClear) +
+    renderSourceElement(
+      action.sourceWorksheet,
+      action.sourceDashboard,
+      action.sourceExcludeSheets,
+    ) +
+    `<command command='tsc:brush'>${params.join('')}</command></action>`
+  );
+}
+
+// The same complete identity powers retry deduplication and readback verification.
+function hasHighlightAction(xml: string, expected: HighlightAction, caption?: string): boolean {
+  return [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)].some((match) => {
+    const block = match[0];
+    const opening = block.match(/^<action\b[^>]*>/)?.[0] ?? '';
+    if (caption !== undefined && unescapeXml(getAttr(opening, 'caption') ?? '') !== caption)
+      return false;
+    const command = block.match(/<command\b[^>]*>([\s\S]*?)<\/command>/);
+    if (command === null || getAttr(command[0], 'command') !== 'tsc:brush' || /<link\b/.test(block))
+      return false;
+    const params = new Map<string, string>();
+    for (const param of command[1].matchAll(/<param\b[^>]*>/g)) {
+      const name = getAttr(param[0], 'name');
+      if (name !== undefined) params.set(name, unescapeXml(getAttr(param[0], 'value') ?? ''));
+    }
+    const source = block.match(/<source\b[^>]*>/)?.[0] ?? '';
+    const activation = block.match(/<activation\b[^>]*>/)?.[0] ?? '';
+    return (
+      getAttr(source, 'type') === 'sheet' &&
+      unescapeXml(getAttr(source, 'worksheet') ?? '') === expected.sourceWorksheet &&
+      unescapeXml(getAttr(source, 'dashboard') ?? '') === expected.sourceDashboard &&
+      isSameSheetSet(buildSourceExcludeSheetNames(block), expected.sourceExcludeSheets) &&
+      getAttr(activation, 'type') ===
+        (expected.activation === 'on-menu' ? undefined : expected.activation) &&
+      parseXmlBoolean(getAttr(activation, 'auto-clear'), false) === expected.autoClear &&
+      params.get('target') === expected.target &&
+      isSameSheetSet(parseActionList(params.get('exclude')), expected.targetExcludeSheets) &&
+      params.get('special-fields') === expected.specialFields &&
+      (expected.specialFields === undefined
+        ? params.has('field-captions')
+        : !params.has('field-captions')) &&
+      isSameSheetSet(parseActionList(params.get('field-captions')), expected.fieldCaptions) &&
+      !params.has('single-select') &&
+      !params.has('on-empty') &&
+      (!params.has('should-brush') || params.get('should-brush') !== 'off')
+    );
   });
 }
 
@@ -1720,7 +2129,8 @@ function filterActionMatches(block: string, expected: FilterAction): boolean {
   const expectedType = expected.activation === 'on-menu' ? undefined : expected.activation;
   const activationTag = block.match(/<activation\b[^>]*>/)?.[0];
   const activationType = activationTag === undefined ? undefined : getAttr(activationTag, 'type');
-  const autoClear = activationTag !== undefined && getAttr(activationTag, 'auto-clear') === 'true';
+  const autoClear =
+    activationTag !== undefined && parseXmlBoolean(getAttr(activationTag, 'auto-clear'), false);
 
   // Command params, keyed by name so presence/value checks ignore serialized order.
   const params = new Map<string, string>();
@@ -1792,7 +2202,7 @@ function hasFilterDependencies(
   if (deps === undefined || deps.columnsXml.length === 0) {
     return true;
   }
-  const actionsBlock = xml.match(/<actions>[\s\S]*?<\/actions>/)?.[0];
+  const actionsBlock = xml.match(/<actions\b[^>]*>[\s\S]*?<\/actions>/)?.[0];
   if (actionsBlock === undefined) {
     return false;
   }
@@ -1839,16 +2249,25 @@ function hasFilterDependencies(
 // </datasources> when none exists yet.
 type ActionsSite =
   | { kind: 'existing'; innerStart: number; close: number }
+  | { kind: 'empty'; start: number; end: number; opening: string }
   | { kind: 'fresh'; insertAt: number };
 
 function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
-  const actionsOpen = xml.indexOf('<actions>');
-  if (actionsOpen !== -1) {
-    const close = xml.indexOf('</actions>', actionsOpen);
+  const opening = /<actions\b[^>]*>/.exec(xml);
+  if (opening !== null) {
+    if (/\/\s*>$/.test(opening[0])) {
+      return new Ok({
+        kind: 'empty',
+        start: opening.index,
+        end: opening.index + opening[0].length,
+        opening: opening[0].replace(/\/\s*>$/, '>'),
+      });
+    }
+    const close = xml.indexOf('</actions>', opening.index + opening[0].length);
     if (close === -1) {
       return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
     }
-    return new Ok({ kind: 'existing', innerStart: actionsOpen + '<actions>'.length, close });
+    return new Ok({ kind: 'existing', innerStart: opening.index + opening[0].length, close });
   }
 
   const dsClose = xml.indexOf('</datasources>');
@@ -1878,7 +2297,7 @@ function actionFamilyIndex(actionXml: string): number {
   if (actionXml.startsWith('<edit-parameter-action')) return 4;
   if (actionXml.startsWith('<edit-group-action')) return 3;
   if (actionXml.startsWith('<nav-action')) return 2;
-  return 0; // legacy <action> (url + filter)
+  return 0; // legacy <action> (url + filter + highlight)
 }
 
 // Offset within the <actions> body at which a new element of `familyIndex` belongs:
@@ -1945,6 +2364,11 @@ function spliceActionIntoWorkbook(
       : `${actionXml}` +
         mergeActionDatasources('', deps.datasourceName, deps.datasourceXml) +
         mergeDependencyBlocks([], deps.datasourceName, deps.columnsXml);
+  if (site.kind === 'empty') {
+    return new Ok(
+      `${xml.slice(0, site.start)}${site.opening}${actionsBody}</actions>${xml.slice(site.end)}`,
+    );
+  }
   return new Ok(
     `${xml.slice(0, site.insertAt)}<actions>${actionsBody}</actions>${xml.slice(site.insertAt)}`,
   );
@@ -1966,7 +2390,7 @@ function mergeActionDatasources(
   if (present) {
     return existing;
   }
-  return existing.replace('</datasources>', `${datasourceXml}</datasources>`);
+  return existing.replace('</datasources>', () => `${datasourceXml}</datasources>`);
 }
 
 // Add the columns to the <datasource-dependencies> block for this datasource, creating the block if
@@ -2001,7 +2425,7 @@ function mergeDependencyBlocks(
   if (additions.length > 0) {
     merged[index] = block.replace(
       '</datasource-dependencies>',
-      `${additions.join('')}</datasource-dependencies>`,
+      () => `${additions.join('')}</datasource-dependencies>`,
     );
   }
   return merged.join('');

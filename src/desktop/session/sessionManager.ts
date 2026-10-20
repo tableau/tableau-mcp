@@ -1,17 +1,18 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDesktopConfig } from '../../config.desktop.js';
+import { ArgsValidationError, ServiceUnavailableError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../episode-events.js';
 import { discoverInstances } from '../externalApi/discovery.js';
 import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
+import { buildDesktopUserAgent } from '../externalApi/userAgent.js';
 import { parseSessionPid } from './parseSessionPid.js';
 import { CACHED_XML_WARNING, noInstanceFoundMessage } from './unreachableInstance.js';
 
 export type DesktopConnection = {
   sessionId: string;
   executor: ExternalApiToolExecutor;
-  lastAccess: number;
 };
 
 export const EXTERNAL_API_UNAVAILABLE_MESSAGE =
@@ -22,7 +23,7 @@ export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
 
 export type DesktopUnavailableReason = 'pinned-unreachable' | 'stale-session' | 'no-api';
 
-export class ExternalClientApiUnavailableError extends Error {
+export class ExternalClientApiUnavailableError extends ServiceUnavailableError {
   constructor(sessionId: string | number, reason: DesktopUnavailableReason = 'no-api') {
     super(ExternalClientApiUnavailableError.messageFor(sessionId, reason));
     this.name = 'ExternalClientApiUnavailableError';
@@ -53,7 +54,9 @@ export class SessionManager {
     if (!session) {
       const sessionIdResult = parseSessionId(sessionId);
       if (sessionIdResult.isErr()) {
-        throw new Error(`Invalid session ID: ${sessionId}. Expected numeric Tableau Desktop PID.`);
+        throw new ArgsValidationError(
+          `Invalid session ID: ${sessionId}. Expected numeric Tableau Desktop PID.`,
+        );
       }
 
       const pid = sessionIdResult.value;
@@ -63,7 +66,10 @@ export class SessionManager {
       const executor = new ExternalApiToolExecutor({
         pid,
         discover,
-        clientOptions: { timeoutMs: config.desktopCallTimeoutMs },
+        clientOptions: {
+          timeoutMs: config.desktopCallTimeoutMs,
+          userAgent: buildDesktopUserAgent(config.userAgentPrefix),
+        },
         onRpc: async (event) => {
           await emitEpisodeEvent(config, {
             type: 'desktop_rpc',
@@ -87,7 +93,6 @@ export class SessionManager {
       session = {
         sessionId,
         executor,
-        lastAccess: Date.now(),
       };
 
       this.sessions.set(sessionId, session);
@@ -103,7 +108,6 @@ export class SessionManager {
       });
     }
 
-    session.lastAccess = Date.now();
     return session.executor;
   }
 }

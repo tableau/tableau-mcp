@@ -56,7 +56,9 @@ describe('searchExamplesTool', () => {
     await getResult({ query: 'sort', max_results: 3 });
 
     expect(diffCorpusModule.searchDiffCorpusFormatted).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({
+        examples: expect.arrayContaining([expect.objectContaining({ id: expect.any(String) })]),
+      }),
       'sort',
       3,
     );

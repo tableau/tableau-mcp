@@ -1,8 +1,8 @@
-import { writeFileSync } from 'fs';
-
+import { resolveCacheFileArg } from '../../../../desktop/cachePath.js';
+import { writeRedactedXmlCacheFileArg } from '../../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { FileReadError, McpToolError, UnknownError } from '../../../../errors/mcpToolError.js';
+import { McpToolError, UnknownError } from '../../../../errors/mcpToolError.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { TableauDesktopRequestHandlerExtra } from '../../toolContext.js';
 
@@ -45,7 +45,7 @@ const inflightWorkbookRefreshes = new Map<string, Promise<RefreshResult>>();
  */
 export async function refreshWorkbookCache({
   extra,
-  workbookFile,
+  workbookFile: requestedWorkbookFile,
   resolvedSession,
   action,
 }: {
@@ -54,6 +54,13 @@ export async function refreshWorkbookCache({
   resolvedSession: string;
   action: string;
 }): Promise<RefreshResult> {
+  // Contain before the live round trip so an outside path never reaches Desktop or a write.
+  const contained = resolveCacheFileArg('workbookFile', requestedWorkbookFile);
+  if (contained.isErr()) {
+    return { ok: false, reason: getExceptionMessage(contained.error), error: contained.error };
+  }
+  const workbookFile = contained.value;
+
   const inflight = inflightWorkbookRefreshes.get(workbookFile);
   if (inflight) return inflight;
 
@@ -72,12 +79,11 @@ export async function refreshWorkbookCache({
     }
 
     const xml = result.value;
-    try {
-      writeFileSync(workbookFile, xml, 'utf-8');
-      writeSidecar(workbookFile, resolvedSession, sourceSha256(xml));
-    } catch (error) {
-      return { ok: false, reason: getExceptionMessage(error), error: new FileReadError(error) };
+    const written = writeRedactedXmlCacheFileArg('workbookFile', workbookFile, xml);
+    if (written.isErr()) {
+      return { ok: false, reason: getExceptionMessage(written.error), error: written.error };
     }
+    writeSidecar(written.value, resolvedSession, sourceSha256(xml));
     return { ok: true, xml };
   })();
 

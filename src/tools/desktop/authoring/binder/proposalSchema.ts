@@ -25,7 +25,7 @@ import {
 // closed instead of being quietly accepted with the extra dropped.
 export const bindingSchema = z
   .object({
-    slot_id: z.string().describe(''),
+    slot_id: z.string(),
     field: z.string().describe('Exact llm_input.fields[].name'),
     derivation: z.enum(DERIVATION_SHORT_FORMS).optional(),
   })
@@ -39,7 +39,7 @@ export const proposalSchema = z
     // the no-LLM Call-1 title is capped (makeTitle). The library's own declared contract
     // (PROPOSAL_OUTPUT_SCHEMA.title.maxLength = 80) is the sole enforcer, so mirror it at the
     // tool boundary or a filled proposal slips an over-long title straight past the gate.
-    // WATCH-CLASS (control chars, M10 Finding 2): the title is substituted verbatim into
+    // WATCH-CLASS (control chars): the title is substituted verbatim into
     // XML; C0 controls / DEL are illegal in XML 1.0 even when escaped (NUL cannot appear at
     // all), so reject them here. The regex + message are shared with the library's makeTitle
     // strip (TITLE_CONTROL_CHAR_RE) so the tool boundary and the Call-1 generator agree.
@@ -62,7 +62,7 @@ export const proposalSchema = z
       .optional(),
     top_n: z.number().int().positive().optional(),
     bin_size: z.number().finite().positive().optional(),
-    // Declarative interactive dimension filters (m7 order-of-operations). Mirrors the
+    // Declarative interactive dimension filters. Mirrors the
     // library's FilterSpec / PROPOSAL_OUTPUT_SCHEMA `filters` sibling. `.strict()` on each
     // filter object matches the advertised additionalProperties:false so a smuggled key
     // fails closed rather than being silently dropped (the watch-class fail-open this file
@@ -83,6 +83,4 @@ export const proposalSchema = z
     template_parameters: z.record(z.string(), z.string()).optional(),
   })
   .strict()
-  .describe(
-    'Call 2: reuse ask/target and returned template/slots. top-level auto_apply:true; top_n ranks; context scopes filters.',
-  );
+  .describe('Use call_2_contract.');

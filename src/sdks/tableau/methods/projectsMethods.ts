@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { projectsApis } from '../apis/projectsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
@@ -16,7 +15,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class ProjectsMethods extends AuthenticatedMethods<typeof projectsApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, projectsApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, projectsApis, { axiosConfig }), creds);
   }
 
   /**
@@ -26,6 +25,7 @@ export default class ProjectsMethods extends AuthenticatedMethods<typeof project
    *
    * @param siteId - The Tableau site ID
    * @param filter - The filter string to filter projects by
+   * @param capability - Only return projects the user has this effective capability on. `Write` returns projects the user can publish or create content into.
    * @param pageSize - The number of items to return in one response. The minimum is 1. The maximum is 1000. The default is 100.
    * @param pageNumber - The offset for paging. The default is 1.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects
@@ -33,17 +33,19 @@ export default class ProjectsMethods extends AuthenticatedMethods<typeof project
   queryProjects = async ({
     siteId,
     filter,
+    capability,
     pageSize,
     pageNumber,
   }: {
     siteId: string;
     filter: string;
+    capability?: 'Write';
     pageSize?: number;
     pageNumber?: number;
   }): Promise<{ pagination: Pagination; projects: Project[] }> => {
     const response = await this._apiClient.queryProjects({
       params: { siteId },
-      queries: { filter, pageSize, pageNumber },
+      queries: { filter, capability, pageSize, pageNumber },
       ...this.authHeader,
     });
     return {

@@ -1,21 +1,21 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { loadDashboardXml } from '../../../../desktop/wrappers/loadDashboardXml.js';
-import { parsedXmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
-  ArgsValidationError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-  FileReadError,
-  IncompleteOperationError,
-  WorkbookNotFoundError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import {
+  runApplyPreamble,
+  type WithDesktopWarnings,
+  withDesktopWarnings,
+} from '../../api/applyPreamble.js';
 import { artifactFileParam, sessionParam } from '../../params.js';
+import { jsonToolResult } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
 
 const paramsSchema = {
@@ -40,7 +40,7 @@ export const getApplyDashboardWithViewpointsTool = (
     server,
     name: 'apply-dashboard-with-viewpoints',
     title,
-    description: 'Apply an existing dashboard layout; requires registered worksheet views.',
+    description: 'Apply a dashboard layout; older Desktop versions require registered views.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -52,38 +52,34 @@ export const getApplyDashboardWithViewpointsTool = (
       { session, dashboardName, dashboardFile, worksheetNames },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute<ApplyDashboardWithViewpointsResult>({
+      return await tool.logAndExecute<WithDesktopWarnings<ApplyDashboardWithViewpointsResult>>({
         extra,
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
         args: { session, dashboardName, dashboardFile, worksheetNames },
         callback: async () => {
-          if (!existsSync(dashboardFile)) {
-            return new WorkbookNotFoundError(
-              `Cached dashboard file not found: ${dashboardFile}`,
-            ).toErr();
+          const preamble = runApplyPreamble({
+            kind: 'dashboard',
+            file: dashboardFile,
+            session,
+            emptyPathGuidance: 'Use a cached dashboard path from get-dashboard-xml.',
+            notFoundGuidance: 'Provide an existing cached dashboard path.',
+          });
+          if (preamble.isErr()) {
+            return preamble;
           }
-
-          let dashboardXml: string;
-          try {
-            dashboardXml = readFileSync(dashboardFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const { xml: dashboardXml, resolvedSession, sourceHash } = preamble.value;
 
           if (!dashboardXml.trim()) {
             return new ArgsValidationError(`Dashboard file is empty: ${dashboardFile}`).toErr();
           }
 
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
 
-          // Check all requested registrations before a surgical write and verify its readback.
+          // Check registration support before a surgical write and verify its readback.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            expectedSourceHash: sourceHash,
             worksheetNames,
             requireExistingSheet: true,
             verifyReadback: true,
@@ -106,30 +102,18 @@ export const getApplyDashboardWithViewpointsTool = (
             }
           }
 
-          const verifiedNames = dashboardApplyResult.value.verifiedWorksheetNames;
-          if (
-            !verifiedNames ||
-            !worksheetNames.every((name) =>
-              verifiedNames.some((verified) => parsedXmlNamesEqual(name, verified)),
-            )
-          ) {
-            return new IncompleteOperationError({
-              dashboardName,
-              dashboardApplied: true,
-              stage: 'viewpoint-verification',
-              viewpoints: { state: 'unknown', requested: worksheetNames },
-              guidance:
-                'Dashboard apply completed without confirming every requested viewpoint. ' +
-                'Re-read the live dashboard before retrying. Do not replace the workbook to inject viewpoints.',
-            }).toErr();
-          }
-
-          return new Ok({
-            message: `Successfully applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s).`,
-            dashboardName,
-            viewpointCount: worksheetNames.length,
-            viewpointState: 'success',
-          });
+          return new Ok(
+            withDesktopWarnings(
+              {
+                message: `Successfully applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s).`,
+                dashboardName,
+                viewpointCount: worksheetNames.length,
+                viewpointState: 'success',
+              },
+              dashboardApplyResult.value.documentWarnings,
+              `Applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s)`,
+            ),
+          );
         },
       });
     },

@@ -4,7 +4,7 @@ import type { MockedFunction } from 'vitest';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
-import { serverName, WebMcpServer } from './server.web.js';
+import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
@@ -17,7 +17,7 @@ import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationCondi
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -88,6 +88,7 @@ describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
@@ -110,12 +111,25 @@ describe('server', () => {
   function getServer(opts?: {
     capabilities?: ClientCapabilitiesWithUiExtension;
     clientId?: string;
+    shared?: boolean;
   }): WebMcpServer {
+    const mcpServer = opts?.shared
+      ? new McpServer(
+          { name: 'combined-test', version: '0.0.0' },
+          { capabilities: { tools: {} }, instructions: buildWebInstructions() },
+        )
+      : undefined;
+    if (mcpServer) {
+      (mcpServer.server as unknown as { _instructions?: string })._instructions =
+        buildWebInstructions();
+    }
     const server = new WebMcpServer({
+      mcpServer,
       capabilities: opts?.capabilities,
       clientId: opts?.clientId,
     });
     server.mcpServer.registerTool = vi.fn();
+    server.mcpServer.registerPrompt = vi.fn();
     return server;
   }
 
@@ -224,90 +238,109 @@ describe('server', () => {
     expect(server.mcpServer.server.registerCapabilities).not.toHaveBeenCalled();
   });
 
-  // The server-level `instructions` string (surfaced by the SDK in the `initialize` result) is
-  // passed to the McpServer constructor's second options object. McpServer is globally mocked
-  // (see testSetup.ts), so assert on the constructor arguments the mock captured.
-  function getConstructedInstructions(): string | undefined {
-    const calls = vi.mocked(McpServer).mock.calls;
-    const lastCall = calls[calls.length - 1];
-    return (lastCall?.[1] as { instructions?: string } | undefined)?.instructions;
+  const adminPromptNamesInInstructions = [
+    'stale-content-cleanup-inform',
+    'stale-content-cleanup-apply',
+    'job-optimization-inform',
+    'extract-optimization-apply',
+    'user-license-reclamation-inform',
+    'user-license-reclamation-apply',
+  ];
+
+  // McpServer is globally mocked (see testSetup.ts) and does not copy the constructor's
+  // `instructions` into `server._instructions` like the real SDK, so seed it to mirror the handshake.
+  async function getRegisteredInstructions(): Promise<string> {
+    vi.mocked(McpServer).mockClear();
+    const server = getServer();
+    const constructorOptions = vi.mocked(McpServer).mock.calls[0]?.[1] as
+      | { instructions?: string }
+      | undefined;
+    const sdkServer = server.mcpServer.server as unknown as { _instructions?: string };
+    sdkServer._instructions = constructorOptions?.instructions;
+    await server.registerTools();
+    return sdkServer._instructions ?? '';
   }
 
-  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true"', () => {
-    vi.mocked(McpServer).mockClear();
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-    new WebMcpServer();
-    const instructions = getConstructedInstructions();
+  // Admin tools are enabled when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is on, so
+  // each of these scenarios (both on, env-only, flag-only) surfaces the full admin guidance block.
+  it.each([
+    {
+      scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+      env: 'true',
+      flag: true,
+    },
+    {
+      scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
+      env: 'true',
+      flag: false,
+    },
+    {
+      scenario: 'the admin-tools flag is ON but ADMIN_TOOLS_ENABLED is unset',
+      env: undefined,
+      flag: true,
+    },
+  ])(
+    'should include admin site-health guidance in instructions when $scenario',
+    async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const instructions = await getRegisteredInstructions();
 
-    expect(instructions).toBeTruthy();
-    // Admin capability menu + generic-intent tie-in.
-    expect(instructions).toContain('site-administration capabilities');
-    expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('query-admin-insights');
-    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
-    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
-    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
-    for (const promptName of [
-      'stale-content-cleanup-inform',
-      'stale-content-cleanup-apply',
-      'job-optimization-inform',
-      'extract-optimization-apply',
-      'user-license-reclamation-inform',
-      'user-license-reclamation-apply',
-    ]) {
-      expect(instructions).toContain(promptName);
-    }
-    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
-    expect(instructions).toContain('read-only report');
-    expect(instructions).toContain('dry-run by default');
-    // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
-    // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
-    // so a future edit that drops the rendering guidance can't silently pass.
-    expect(instructions).toContain('present them as Markdown tables');
-    expect(instructions).toContain('to a chat or Slack surface');
-    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
-    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
-    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
+      // Admin capability menu + generic-intent tie-in.
+      expect(instructions).toContain('site-administration capabilities');
+      expect(instructions).toContain('general admin/site-health');
+      expect(instructions).toContain('query-admin-insights');
+      // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+      // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+      // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+      for (const promptName of adminPromptNamesInInstructions) {
+        expect(instructions).toContain(promptName);
+      }
+      // The model cannot call prompts/get (prompts are user-invoked slash commands), so the
+      // instructions point it at the model-readable workflow resources instead (W-23757369).
+      expect(instructions).not.toContain('prompts/get');
+      expect(instructions).toContain('tableau-mcp://admin-workflows/<prompt-name>');
+      expect(instructions).toContain('slash-command prompt');
+      expect(instructions).toContain('If you cannot read MCP resources');
+      // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+      expect(instructions).toContain('read-only report');
+      expect(instructions).toContain('dry-run by default');
+      // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
+      // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
+      // so a future edit that drops the rendering guidance can't silently pass.
+      expect(instructions).toContain('present them as Markdown tables');
+      expect(instructions).toContain('to a chat or Slack surface');
+      // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+      // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+      expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
 
-    // The clause belongs to the admin block specifically: it must be appended after the base
-    // guidance and after the admin lead-in, never spliced into the base sentence.
-    expect(instructions!.startsWith('Tableau MCP exposes tools')).toBe(true);
-    const adminStart = instructions!.indexOf('site-administration capabilities');
-    const clauseStart = instructions!.indexOf('present them as Markdown tables');
-    expect(adminStart).toBeGreaterThan(-1);
-    expect(clauseStart).toBeGreaterThan(adminStart);
-  });
+      // The admin block is appended after the base guidance, never spliced into the base sentence.
+      expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
+      const adminStart = instructions.indexOf('site-administration capabilities');
+      const clauseStart = instructions.indexOf('present them as Markdown tables');
+      expect(adminStart).toBeGreaterThan(-1);
+      expect(clauseStart).toBeGreaterThan(adminStart);
+    },
+  );
 
-  it('should omit admin guidance from instructions when ADMIN_TOOLS_ENABLED is unset', () => {
-    vi.mocked(McpServer).mockClear();
+  it('should omit admin guidance from instructions when both ADMIN_TOOLS_ENABLED and the admin-tools flag are off', async () => {
     vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
-    new WebMcpServer();
-    const instructions = getConstructedInstructions();
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
+    const instructions = await getRegisteredInstructions();
 
     // Base guidance is still present...
-    expect(instructions).toBeTruthy();
     expect(instructions).toContain('Tableau MCP exposes tools');
-    // ...but nothing about admin capabilities.
+    // ...but nothing from the admin-only block.
     expect(instructions).not.toContain('site-administration capabilities');
     expect(instructions).not.toContain('general admin/site-health');
     expect(instructions).not.toContain('query-admin-insights');
-    // The named admin prompts are part of the admin-only block and must also be absent.
-    for (const promptName of [
-      'stale-content-cleanup-inform',
-      'stale-content-cleanup-apply',
-      'job-optimization-inform',
-      'extract-optimization-apply',
-      'user-license-reclamation-inform',
-      'user-license-reclamation-apply',
-    ]) {
+    for (const promptName of adminPromptNamesInInstructions) {
       expect(instructions).not.toContain(promptName);
     }
-    // The admin-only output-formatting nudge is also absent (assert on the distinctive clause
-    // slice, not the bare words, so we're certain the whole admin block — not just a keyword —
-    // stayed out of the base instructions).
-    expect(instructions).not.toContain('present them as Markdown tables');
     expect(instructions).not.toContain('Markdown tables');
-    // The admin-invocation nudge is part of the admin-only block and must also be absent.
+    expect(instructions).not.toContain('tableau-mcp://admin-workflows/');
     expect(instructions).not.toContain(
       'Do not require the user to state or re-confirm admin status',
     );
@@ -447,6 +480,110 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('run-flow');
     expect(registeredToolNames).not.toContain('run-flow-task');
     expect(registeredToolNames).not.toContain('cancel-flow-run');
+  });
+
+  describe('admin tools', () => {
+    const adminToolNames = [
+      'list-extract-refresh-tasks',
+      'update-cloud-extract-refresh-task',
+      'list-jobs',
+      'list-users',
+      'update-user',
+      'query-admin-insights',
+      'delete-content',
+    ];
+    const adminPromptNames = [
+      'stale-content-cleanup-inform',
+      'stale-content-cleanup-apply',
+      'job-optimization-inform',
+      'extract-optimization-apply',
+      'user-license-reclamation-inform',
+      'user-license-reclamation-apply',
+    ];
+
+    const adminWorkflowResourceUris = adminPromptNames.map(
+      (name) => `tableau-mcp://admin-workflows/${name}`,
+    );
+
+    async function getRegisteredNames(): Promise<{
+      tools: string[];
+      prompts: string[];
+      resourceUris: string[];
+    }> {
+      const server = getServer();
+      await server.registerTools();
+      return {
+        tools: vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
+        prompts: vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0]),
+        resourceUris: vi
+          .mocked(server.mcpServer.registerResource)
+          .mock.calls.map((call) => String(call[1])),
+      };
+    }
+
+    // Admin tools/prompts register when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is
+    // on — every enabling scenario registers the same admin surface.
+    it.each([
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+        env: 'true',
+        flag: true,
+      },
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
+        env: 'true',
+        flag: false,
+      },
+      {
+        scenario: 'the admin-tools flag is ON but ADMIN_TOOLS_ENABLED is unset',
+        env: undefined,
+        flag: true,
+      },
+    ])('should register admin tools and prompts when $scenario', async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const { tools, prompts } = await getRegisteredNames();
+
+      expect(tools).toEqual(expect.arrayContaining(adminToolNames));
+      expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
+    });
+
+    it('should register a workflow resource per admin prompt without adding any tool', async () => {
+      const { tools: toolsWithoutAdmin } = await getRegisteredNames();
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'admin-tools',
+      );
+      const { tools, prompts, resourceUris } = await getRegisteredNames();
+
+      expect(resourceUris).toEqual(adminWorkflowResourceUris);
+      expect(resourceUris).toHaveLength(prompts.length);
+      // The only tools added by enabling admin are the pre-existing admin tools — no workflow tool.
+      expect(tools.filter((name) => !toolsWithoutAdmin.includes(name)).sort()).toEqual(
+        [...adminToolNames].sort(),
+      );
+      expect(tools.every((name) => webToolNames.includes(name as WebToolName))).toBe(true);
+    });
+
+    it('should not register workflow resources when admin tools are disabled', async () => {
+      // Admin tools are disabled only when BOTH the env var and the flag are off.
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      const { resourceUris } = await getRegisteredNames();
+      expect(resourceUris).toEqual([]);
+    });
+
+    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED and the admin-tools flag are both off', async () => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      const { tools, prompts } = await getRegisteredNames();
+
+      for (const name of adminToolNames) {
+        expect(tools).not.toContain(name);
+      }
+      expect(prompts).toEqual([]);
+      expect(tools).toContain('list-datasources');
+    });
   });
 
   it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {
@@ -709,7 +846,7 @@ describe('server', () => {
         (featureName: string) => featureName === 'mcp-apps',
       );
 
-      const server = getServer({ clientId });
+      const server = getServer({ clientId, shared: true });
       const mockAppTool = createMockAppTool({ name: 'delete-content' });
       vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
@@ -731,6 +868,192 @@ describe('server', () => {
       );
     },
   );
+
+  it('registers admin instructions, prompts and skills on the combined-lean shared stateful path', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'admin-tools' || featureName === 'skills-over-mcp',
+    );
+
+    const server = getServer({ shared: true });
+    await server.registerTools();
+
+    const instructions =
+      (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+    expect(instructions).toContain('site-administration capabilities');
+    expect(vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining(['stale-content-cleanup-inform', 'user-license-reclamation-apply']),
+    );
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+    expect(
+      vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.some(([name]) => String(name).startsWith('skill://')),
+    ).toBe(true);
+    expect(vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0])).toEqual([
+      'load-web-tools',
+    ]);
+  });
+
+  describe('combined-lean group loading', () => {
+    const contentTool = (): WebTool<any> =>
+      ({ ...createMockAdminTool(), name: 'delete-content' }) as WebTool<any>;
+
+    async function setup(): Promise<WebMcpServer> {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      return server;
+    }
+
+    const registered = (server: WebMcpServer): string[] =>
+      vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
+
+    it('returns the role-fetch warning in the tool result, keeps the group retryable, and leaves instructions alone', async () => {
+      const server = await setup();
+      const before = getInstructions(server);
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('site role could not be determined'),
+      ]);
+      expect(first.warnings?.[0]).toContain('Call load-web-tools again');
+      expect(first.warnings?.[0]).not.toContain('reconnect');
+      expect(getInstructions(server)).toBe(before);
+
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+      expect(second.warnings).toBeUndefined();
+      expect(registered(server)).toContain('delete-content');
+
+      const third = await server.loadWebTools('content');
+      expect(third.status).toBe('already-loaded');
+    });
+
+    it('treats a tool omitted for a low role as loaded so the role is not refetched', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockClear().mockResolvedValue('Viewer');
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first).toEqual({ status: 'loaded', toolNames: [] });
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('already-loaded');
+      expect(mocks.mockGetCurrentUserSiteRole).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a registration error as a warning and retries the group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+      vi.mocked(server.mcpServer.registerTool).mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('Failed to register delete-content: boom'),
+      ]);
+
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+    });
+
+    const pulseTool = (): WebTool<any> =>
+      ({
+        ...createMockConditionalTool(),
+        name: 'list-all-pulse-metric-definitions',
+        minRequiredRole: SiteRole.VIEWER,
+      }) as WebTool<any>;
+
+    it('retries a Pulse group after an indeterminate condition probe and registers it once the probe succeeds', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions
+        .mockResolvedValueOnce({
+          registrationConditionsMet: false,
+          failingCondition: 'RequiresPulse',
+          indeterminate: true,
+        })
+        .mockResolvedValueOnce({ registrationConditionsMet: true });
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([pulseTool()])
+        .mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([expect.stringContaining('could not be confirmed')]);
+      expect(first.notes).toBeUndefined();
+
+      const second = await server.loadWebTools('pulse');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['list-all-pulse-metric-definitions']);
+    });
+
+    it('reports a definitive unmet condition as a note and closes the group', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresPulse',
+      });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('loaded');
+      expect(first.warnings).toBeUndefined();
+      expect(first.notes).toEqual([expect.stringContaining('Pulse is not available')]);
+      expect((await server.loadWebTools('pulse')).status).toBe('already-loaded');
+    });
+
+    it('only reports problems for tools in the requested group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const result = await server.loadWebTools('datasource');
+
+      expect(result.status).toBe('loaded');
+      expect(result.warnings).toBeUndefined();
+      expect(result.notes).toBeUndefined();
+    });
+
+    it('describes every group and tool in the load-web-tools description', async () => {
+      const server = await setup();
+      const config = vi.mocked(server.mcpServer.registerTool).mock.calls[0][1] as {
+        description: string;
+      };
+      expect(config.description).toContain('"partial"');
+      for (const [group, tools] of Object.entries(webToolGroups)) {
+        expect(config.description).toContain(group);
+        for (const tool of tools) {
+          expect(config.description).toContain(tool);
+        }
+      }
+    });
+  });
 
   function createMockAdminTool(): WebTool<any> {
     return {
@@ -847,6 +1170,7 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
       (name: string) =>
         name === 'knowledge-tools' ||
+        name === 'knowledge-write-tools' ||
         enforceRoleRequirements(name) ||
         enforceRegistrationConditions(name),
     );
@@ -893,6 +1217,38 @@ describe('server', () => {
     await server.registerTools();
 
     expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
+  });
+
+  it('registers only Knowledge read tools when the write flag is off', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (name: string) =>
+        name === 'knowledge-tools' ||
+        enforceRoleRequirements(name) ||
+        enforceRegistrationConditions(name),
+    );
+    mocks.mockGetCurrentUserSiteRole.mockResolvedValue(SiteRole.CREATOR);
+    mocks.mockCheckRegistrationConditions.mockResolvedValue({ registrationConditionsMet: true });
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+      getQueryKnowledgeContextTool(server),
+      getInspectKnowledgeContextTool(server),
+      getManageKnowledgeContextTool(server),
+    ]);
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(2);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'query-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'inspect-knowledge-context',
+      expect.anything(),
+      expect.any(Function),
+    );
   });
 
   it('does not register a tool when the caller ranks below minRequiredRole', async () => {

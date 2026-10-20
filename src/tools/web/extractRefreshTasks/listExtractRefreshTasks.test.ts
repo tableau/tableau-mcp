@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -11,6 +12,7 @@ import { mockExtractRefreshTask } from './mockExtractRefreshTask.js';
 const mockTasks = [mockExtractRefreshTask];
 
 const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
   mockListExtractRefreshTasks: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
@@ -35,14 +37,21 @@ vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
+}));
+
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listExtractRefreshTasksTool', () => {
   beforeEach(() => {
@@ -61,6 +70,26 @@ describe('listExtractRefreshTasksTool', () => {
     expect(listExtractRefreshTasksTool.paramsSchema).toHaveProperty('pageSize');
     expect(listExtractRefreshTasksTool.paramsSchema).toHaveProperty('limit');
   });
+
+  it.each([
+    [true, true, false],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      const { getConfig } = await import('../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({ adminToolsEnabled } as ReturnType<
+        typeof getConfig
+      >);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const tool = getListExtractRefreshTasksTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(disabled);
+    },
+  );
 
   it('should successfully get extract refresh tasks', async () => {
     mocks.mockListExtractRefreshTasks.mockResolvedValue(mockTasks);

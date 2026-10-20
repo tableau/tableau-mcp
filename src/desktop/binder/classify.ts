@@ -1,5 +1,4 @@
-// Tier-1 fast-path binder — no-LLM classification + LLM-input construction
-// (design doc §3.3, §3.5).
+// Tier-1 fast-path binder — no-LLM classification + LLM-input construction.
 //
 // `classifyNoLlm` is the zero-latency path: it picks a single clearly-winning
 // `fast_path_eligible` template by keyword match, then does role-greedy field
@@ -113,7 +112,7 @@ export interface LlmProposeInput {
     label?: string;
   }>;
   /**
-   * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
+   * FIELD-NARROWING signal: present ONLY when
    * `fields` was capped — `count` is how many relevant-but-lower-ranked fields
    * were withheld, and `note` tells the caller to re-query with a field-name hint
    * if the field it needs is not in `fields`. Absent ⇒ every schema field is here.
@@ -121,12 +120,12 @@ export interface LlmProposeInput {
   more_available?: { count: number; note: string };
 }
 
-/** Default field cap for the propose prompt (stage 2B). See buildLlmInput opts. */
+/** Default field cap for the propose prompt. See buildLlmInput opts. */
 export const DEFAULT_MAX_FIELDS = 20;
 
 /**
  * Hard cap on the schema size the no-LLM classifier / propose-payload builder will
- * process (M10 Finding 3). `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
+ * process. `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
  * `narrowFields` (buildLlmInput) each run ONE regex PER schema field; a synthetic
  * ~50,000-field datasource costs ~2.9s of synchronous event-loop block per call — an
  * unbounded per-call CPU DoS. Over this cap the classifier FAILS CLOSED (returns null —
@@ -383,7 +382,7 @@ export function matchAvoidWhen(
 }
 
 /**
- * Hazard codes that DEMOTE the no-LLM shortcut unconditionally (W59). avoid_when
+ * Hazard codes that DEMOTE the no-LLM shortcut unconditionally. avoid_when
  * is ask-conditioned; these hazards are DATA-conditioned — the risk (e.g. calcs
  * that SPLIT a specific compound-string shape out of a bound field) is invisible
  * in any natural ask, so the zero-model path can never rule it out. Demote-only:
@@ -455,13 +454,13 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'bubble',
   'heatmap',
   'highlight-table',
-  // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
+  // Growth (per the table's own contract — grow as new distinct-shape
   // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
   // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
   // vocabulary ("line chart of X over Y" classified null — the exact sibling-scaling
   // regression this table exists to prevent). Each noun below deterministically names
   // a chart type and equals a real intent_keyword of its (stamped or imminently
-  // stamped, evidence-earned 2026-07-06) template: 'line' (trend-line-chart),
+  // stamped) template: 'line' (trend-line-chart),
   // 'gantt' (gantt-task-rollup-chart), 'histogram' (distribution-histogram),
   // 'bullet' (quota-attainment-bullet), 'funnel' (funnel-chart),
   // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
@@ -472,7 +471,7 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // without it every noun-less trend ask ("trend over time by month") demotes to
   // propose the moment the family gains a second member. Pattern PHRASES
   // ('over-time', 'time-series') stay out — nouns only; the ask-router lane
-  // (W36) is the successor mechanism for phrase-level routing.
+  // is the successor mechanism for phrase-level routing.
   'trend',
   'gantt',
   'histogram',
@@ -505,12 +504,11 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // eligible time-series template ever carries 'timeline', the TIE path's chart-noun
   // specificity ranking governs, so admitting it cannot create a cross-template flip.
   'timeline',
-  // Second growth event same night: the 13th-15th stamps made deviation
-  // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
-  // two-member families, collapsing nativity for the incumbent members'
+  // Deviation (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
+  // became two-member families, collapsing nativity for the incumbent members'
   // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
-  // classified null (live-caught by the drift guard). Each noun below is a
-  // deterministic type selector carried by exactly one template:
+  // classified null. Each noun below is a deterministic type selector carried by exactly
+  // one template:
   // 'arrow-chart' + 'over-under-arrow' (ww-ou-arrow),
   // 'bar-code' + 'strip-plot' + 'dot-strip' (distribution-bar-code-chart).
   'arrow-chart',
@@ -518,13 +516,12 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'bar-code',
   'strip-plot',
   'dot-strip',
-  // Third growth event (W59): the 2026-07-06 stamp wave's remaining fallout —
   // part-to-whole-waterfall and spatial-choropleth-map shipped stamped but their
-  // nouns were never admitted, so both lead exec-demo asks ("waterfall of Profit
-  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose
-  // (live-caught by the W59 proof-value spike). Each noun below is carried by
-  // exactly ONE stamped template (carrier-uniqueness checked across all bundled
-  // manifests; the generic 'map' stays OUT — dual-carrier with spatial-symbol-map):
+  // nouns were never admitted, so both lead demo asks ("waterfall of Profit
+  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose.
+  // Each noun below is carried by exactly ONE stamped template (carrier-uniqueness checked
+  // across all bundled manifests; the generic 'map' stays OUT — dual-carrier with
+  // spatial-symbol-map):
   // 'waterfall' (part-to-whole-waterfall),
   // 'choropleth' + 'filled-map' + 'region-map' (spatial-choropleth-map).
   'waterfall',
@@ -557,7 +554,7 @@ function chartNounSpecificity(ask: string, keywords: string[]): number {
 }
 
 /**
- * FAMILY-NATIVE vocabulary (stage 2b sole-wrong-matcher guard). Derived from the
+ * FAMILY-NATIVE vocabulary (sole-wrong-matcher guard). Derived from the
  * family's OWN fast-path-eligible manifests: a keyword is native to `family` when
  * it is carried by a STRICT MAJORITY of that family's eligible templates (for a
  * single-template family that is all of its keywords). This separates a family's
@@ -589,7 +586,7 @@ function familyNativeKeywords(
 }
 
 /**
- * FAMILY-LEVEL spatial intent guard vocabulary (W-23447710, Cluster A selection half).
+ * FAMILY-LEVEL spatial intent guard vocabulary (W-23447710).
  * The source of truth is the manifest set itself: any keyword carried by a
  * spatial-family manifest is spatial intent — INCLUDING non-eligible spatial supply,
  * so a lat/lon ask is protected even while spatial-symbol-map-latlon is unproven.
@@ -691,7 +688,7 @@ function askCarriesSpatialIntent(
 }
 
 /**
- * MEASURE-FREE LAT/LONG SYMBOL MAP — coordinate-affinity resolver (Blake wall #2).
+ * MEASURE-FREE LAT/LONG SYMBOL MAP — coordinate-affinity resolver.
  *
  * The `spatial-symbol-map-latlon` template plots real Longitude/Latitude coordinate
  * columns on Cols/Rows (one fixed-size, single-color Circle per detail member) with NO
@@ -712,7 +709,7 @@ const GANTT_TASK_TEMPLATE = 'gantt-task-rollup-chart';
 const HISTOGRAM_TEMPLATE = 'distribution-histogram';
 
 /**
- * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
+ * POINT-LOCATION CUES. Coordinate/point-location intent a user types when
  * they want a map of WHERE things are — plotted points, not a filled/geocoded region map.
  * Matched as WHOLE tokens against the MASKED ask (field names blanked) so a field literally
  * named "Location"/"Office" can't arm the resolver — intent is a phrasing decision, never a
@@ -1683,7 +1680,7 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       // "categories") as well as the trailing-`s` case.
       const plural = naivePlural(lower);
       const pluralToken = plural && !exactNames.has(plural) ? plural : null;
-      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
+      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING: phraseIndexInAsk
       // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
       // matches "waterfall chart"), so masking must blank that same span — a literal
       // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
@@ -1759,8 +1756,8 @@ function fieldContentTokens(f: SchemaField): Set<string> {
 }
 
 /**
- * Bindable+required slot kinds across the shortlisted candidates (stage 2B
- * rank-2). A field is "kind-compatible" for narrowing if it fits ANY of these.
+ * Bindable+required slot kinds across the shortlisted candidates
+ * (rank-2). A field is "kind-compatible" for narrowing if it fits ANY of these.
  */
 function requiredSlotKinds(candidates: TemplateManifest[]): Set<SlotKind> {
   const kinds = new Set<SlotKind>();
@@ -1773,7 +1770,7 @@ function requiredSlotKinds(candidates: TemplateManifest[]): Set<SlotKind> {
 }
 
 /**
- * Narrowing kind-fit (stage 2B): quantitative fields for quantitative slots,
+ * Narrowing kind-fit: quantitative fields for quantitative slots,
  * date/datetime for temporal, dimensions for categorical/geo. Intentionally
  * broader than validate.ts's gate-3 `kindCompatible` (which the deterministic
  * gate still enforces later) — narrowing must not prematurely drop a field a
@@ -1797,7 +1794,7 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
 }
 
 /**
- * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
+ * Field-narrowing for the propose prompt. A wide
  * schema (300–1000 fields) would blow the prompt, so rank and cap:
  *   rank 0 — fields the ask names exactly/normalizes to (never evicted by the cap);
  *   rank 1 — business-synonym candidates when that noun was not literally resolved;
@@ -2140,14 +2137,14 @@ function augmentGeoConceptMatches(
  * coarse phantom like "Region" (a sub-token of "Country/Region") tie the state slot
  * against "Country/Region" and fail closed, rather than being silently mis-bound.
  *
- * W60 GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
+ * GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
  * THAT slot's pool to the schema dimensions not already consumed by another slot and
  * binds the unique name-affine field there — BUT only when at least one OTHER geo slot
  * was satisfied from the ask-named pool (the ask demonstrated geographic intent by
  * naming ≥1 geo field).
  * The unique-max + distinctness rules still hold over the widened pool, so a schema with
  * two country-affine fields (a tie) or none still fails closed; an ask that names NO geo
- * field at all keeps the pre-W60 fail-closed behavior. A `tie` in the ASK-NAMED pool
+ * field at all keeps the fail-closed behavior. A `tie` in the ASK-NAMED pool
  * always fails closed (the ask named ambiguous candidates) and never widens. Slots
  * auto-completed from the widened pool are returned so the caller can surface which
  * field it chose for a slot the ask did not name.
@@ -2241,7 +2238,7 @@ function askHasExplicitTimeIntent(maskedAsk: string): boolean {
 }
 
 /**
- * UNIQUE-DATE TEMPORAL COMPLETION (mirrors the W60 geo-slot completion). When a
+ * UNIQUE-DATE TEMPORAL COMPLETION (mirrors the geo-slot completion). When a
  * chosen template's lone required temporal slot was NOT filled by an ask-named
  * field, complete it with the schema's SINGLE date/datetime field — but only under
  * strict, fail-closed preconditions so it can never introduce ambiguity:
@@ -2269,7 +2266,7 @@ function completeTemporalSlot(
 }
 
 /**
- * Role-greedy field assignment (design §3.5 step 2): fill each required, bindable
+ * Role-greedy field assignment: fill each required, bindable
  * slot with the first still-unused matched field of the compatible role/kind —
  * measures → quantitative, dimensions → categorical/temporal. GEO slots are the
  * exception: they do NOT take "the first unused dimension" (that silently swaps
@@ -2414,7 +2411,7 @@ function roleGreedyBind(
   const temporalSlots = m.slots.filter((s) => isActive(s) && s.kind === 'temporal');
   const temporalAutoCompleted = new Map<string, SchemaField>();
 
-  // CLS-003 GUARD: unique-date completion must not paper over an ask-NAMED
+  // NAMED-DIMENSION GUARD: unique-date completion must not paper over an ask-NAMED
   // non-temporal dimension no remaining slot can consume ("trend of Actual Amount
   // by Fiscal Period" on a temporal+measure template must escalate, never silently
   // drop Fiscal Period and chart a date axis the user did not ask for). Capacity =
@@ -2469,7 +2466,7 @@ function roleGreedyBind(
         // dimension ("2024-03" month) is ALSO acceptable — the DATEPARSE apply splice
         // (validate.ts + dateparseTemporalAxis) turns it into a continuous truncated axis.
         // Without this the string month never fills the temporal slot, the required-slot
-        // gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
+        // gate fails, and the agent thrashes into a bar-over-strings.
         chosen = take(
           slot,
           (f) =>
@@ -2477,7 +2474,7 @@ function roleGreedyBind(
             (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
           false,
         );
-        // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
+        // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors geo): a
         // lone required temporal slot the ask did not name is completed with the
         // schema's single date field, under the strict preconditions in
         // completeTemporalSlot. `temporalCompletion` is passed ONLY by classifyNoLlm's
@@ -2507,7 +2504,7 @@ function roleGreedyBind(
         // template). Name affinity replaces "first unused dimension", so a geo slot
         // binds only a name-matching field or fails closed — never a silent swap. A
         // required geo slot the ask does not name widens to unused schema dimensions
-        // when another geo slot IS named (W60).
+        // when another geo slot IS named.
         if (!geoResolved) {
           const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
           const availableSchemaDims = schemaDims.filter((f) => !used.has(f));
@@ -2535,7 +2532,7 @@ function roleGreedyBind(
     bindings.push(binding);
   }
 
-  // Surface any geo slot AUTO-COMPLETED from the full schema (W60) as provenance, so the
+  // Surface any geo slot AUTO-COMPLETED from the full schema as provenance, so the
   // caller can tell the agent which field it chose for a slot the ask did not name.
   const provenance: string[] = [];
   for (const [slotId, f] of geoAutoCompleted) {
@@ -2545,7 +2542,7 @@ function roleGreedyBind(
     );
   }
   // Surface a temporal slot AUTO-COMPLETED from the schema's lone date field (unique-
-  // date completion, W60 geo sibling) so the caller can tell the agent which field it
+  // date completion, geo sibling) so the caller can tell the agent which field it
   // chose for a required time axis the ask did not name.
   for (const [slotId, f] of temporalAutoCompleted) {
     provenance.push(
@@ -2557,7 +2554,7 @@ function roleGreedyBind(
 }
 
 /**
- * WITHIN-FAMILY template selection (stage 2b). Given the keyword-argmax `top`
+ * WITHIN-FAMILY template selection. Given the keyword-argmax `top`
  * (all sharing the max keyword score) plus the ask's recognizable fields, pick a
  * single template to auto-bind or return null to fall through to the propose leg.
  * Two regimes, driven by the measured scale breakpoints:
@@ -2675,11 +2672,11 @@ function selectWithinFamily(
 }
 
 /**
- * SMALL-MULTIPLES FACET CUES (W23-SM1). Explicit facet/trellis vocabulary a user
+ * SMALL-MULTIPLES FACET CUES. Explicit facet/trellis vocabulary a user
  * types when they want one chart PER member (side-by-side panes), NOT a color/detail
  * grouping. Deliberately tight: a bare "by <dim>" is ambiguous (could be a color
- * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", which the spec
- * names for per-category facets) arm a facet bind. Matched as WHOLE tokens against the
+ * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", used for
+ * per-category facets) arm a facet bind. Matched as WHOLE tokens against the
  * MASKED ask (field names blanked) so a field literally named "per…"/"facet…" can't
  * arm it, and so faceting is a phrasing decision, never a field-name accident.
  */
@@ -2716,7 +2713,7 @@ function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
 }
 
 /**
- * FAIL-CLOSED optional-facet augmentation (W23-SM1). Purely ADDITIVE: called only
+ * FAIL-CLOSED optional-facet augmentation. Purely ADDITIVE: called only
  * AFTER the required slots have bound, it appends ONE categorical facet binding when
  * (a) the ask names/implies a facet, (b) the template declares an optional facet slot
  * not already bound, and (c) a spare categorical the ask NAMED remains after the
@@ -2764,6 +2761,126 @@ function colorSeriesBinding(
   const spares = candidates.filter((field) => isCategorical(field) && !boundFields.has(field.name));
   if (spares.length !== 1) return null;
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
+}
+
+type BasicLineSlots = {
+  color: TemplateManifest['slots'][number];
+  measure: TemplateManifest['slots'][number];
+  temporal: TemplateManifest['slots'][number];
+};
+
+function optionalLineSeriesSlots(m: TemplateManifest): BasicLineSlots | null {
+  if (m.family !== 'time-series' || m.calcs.length > 0) return null;
+  const color = m.slots.filter(
+    (slot) =>
+      slot.bindable && !slot.required && slot.kind === 'categorical' && slot.role.includes('color'),
+  );
+  const temporal = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'temporal' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  const measure = m.slots.filter(
+    (slot) =>
+      slot.bindable &&
+      slot.required &&
+      slot.kind === 'quantitative' &&
+      (slot.role.includes('rows') || slot.role.includes('cols')),
+  );
+  if (color.length !== 1 || temporal.length !== 1 || measure.length !== 1) return null;
+  const axisRole = (slot: TemplateManifest['slots'][number]): 'rows' | 'cols' | null => {
+    const roles = (['rows', 'cols'] as const).filter((role) => slot.role.includes(role));
+    return roles.length === 1 ? roles[0] : null;
+  };
+  if (!axisRole(temporal[0]) || axisRole(temporal[0]) === axisRole(measure[0])) return null;
+  const supported = new Set([color[0], temporal[0], measure[0]]);
+  if (m.slots.some((slot) => slot.bindable && !supported.has(slot) && !isFacetSlot(slot))) {
+    return null;
+  }
+  return { color: color[0], measure: measure[0], temporal: temporal[0] };
+}
+
+type BasicLineFieldSpan = {
+  field: SchemaField;
+  start: number;
+  end: number;
+  token: string;
+  acronymGrain?: 'tdy' | 'tmn' | 'tqr' | 'tyr';
+};
+
+const BASIC_LINE_GRAINS: Readonly<Record<string, 'tdy' | 'tmn' | 'tqr' | 'tyr'>> = {
+  daily: 'tdy',
+  day: 'tdy',
+  monthly: 'tmn',
+  month: 'tmn',
+  quarterly: 'tqr',
+  quarter: 'tqr',
+  yearly: 'tyr',
+  year: 'tyr',
+};
+
+function basicLineFieldSpans(
+  ask: string,
+  summary: SchemaSummary,
+  filterFields: Set<SchemaField>,
+): BasicLineFieldSpan[] | null {
+  const exactNames = fieldExactNames(summary.fields);
+  const candidates: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  for (const field of summary.fields) {
+    const names = [bareName(field.columnName), field.caption, field.name].filter(
+      (name): name is string => !!name,
+    );
+    for (const name of names) {
+      let cursor = 0;
+      while (cursor < ask.length) {
+        const match = fieldNameMatchInAskSpan(ask.slice(cursor), name, exactNames);
+        if (!match) break;
+        candidates.push({ field, start: cursor + match.start, end: cursor + match.end });
+        cursor += match.end;
+      }
+    }
+    if (candidates.some((candidate) => candidate.field === field)) continue;
+    const expansion = names
+      .map((name) => ACRONYM_EXPANSIONS[name.toLowerCase()])
+      .find((value) => value !== undefined);
+    if (!expansion) continue;
+    const matches = expansion.map((word) => phraseMatchInAsk(ask, word));
+    if (matches.some((match) => match === null)) continue;
+    const start = Math.min(...matches.map((match) => match!.start));
+    const end = Math.max(...matches.map((match) => match!.end));
+    const spanTokens = normalizeFieldPhrase(ask.slice(start, end)).split(' ').sort();
+    if (spanTokens.join(' ') !== [...expansion].sort().join(' ')) continue;
+    const grainWord = expansion.find((word) => BASIC_LINE_GRAINS[word]);
+    candidates.push({
+      field,
+      start,
+      end,
+      ...(grainWord ? { acronymGrain: BASIC_LINE_GRAINS[grainWord] } : {}),
+    });
+  }
+
+  const selected: Array<Omit<BasicLineFieldSpan, 'token'>> = [];
+  const ordered = candidates.sort(
+    (left, right) => left.start - right.start || right.end - right.start - (left.end - left.start),
+  );
+  for (const candidate of ordered) {
+    if (selected.some((span) => candidate.start < span.end && candidate.end > span.start)) continue;
+    const equalOwners = new Set(
+      ordered
+        .filter((other) => other.start === candidate.start && other.end === candidate.end)
+        .map((other) => other.field),
+    );
+    if (equalOwners.size > 1) return null;
+    selected.push(candidate);
+  }
+  return selected
+    .sort((left, right) => left.start - right.start)
+    .map((span, index) => ({
+      ...span,
+      token: `__${filterFields.has(span.field) ? 'f' : isMeasure(span.field) ? 'q' : TEMPORAL_DATATYPES.has(span.field.datatype) ? 't' : 'c'}${index}__`,
+    }));
 }
 
 export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
@@ -3470,13 +3587,276 @@ interface NoLlmClassification {
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
   top_n?: number;
   filters?: Array<{ field: string; context?: boolean }>;
-  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema). Present only when non-empty. */
   notes?: string[];
   /**
    * Encodings the classifier analyzed, split by what the bind filled. Present whenever
    * optional-encoding analysis ran, including empty arrays when no encoding cue was found.
    */
   encodings?: EncodingReport;
+  completeRequestParse?: ParsedCompleteRequest;
+}
+
+function strictCoveredAskTokens(ask: string, spans: BasicLineFieldSpan[]): string | null {
+  let typed = ask;
+  for (const span of [...spans].sort((left, right) => right.start - left.start)) {
+    typed = `${typed.slice(0, span.start)} ${span.token} ${typed.slice(span.end)}`;
+  }
+  typed = typed.trim().replace(/\.$/u, '').trim();
+  if (/[^\p{L}\p{N}_\s]/u.test(typed)) return null;
+  return typed.toLowerCase().replace(/\s+/gu, ' ');
+}
+
+type CompleteChartShape = 'single' | 'pair' | 'scatter';
+
+type ParsedCompleteRequest = {
+  ask: string;
+  template: string;
+  shape: CompleteChartShape;
+  fields: SchemaField[];
+  links: string[];
+  grain?: Derivation;
+  aggregation?: Derivation;
+  horizontal: boolean;
+};
+
+function completeChartShape(manifest: TemplateManifest): CompleteChartShape | null {
+  if (!manifest.fast_path_eligible || manifest.fast_path_blockers.length > 0) return null;
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  const optional = manifest.slots.filter((slot) => slot.bindable && !slot.required);
+  const signature = required
+    .map(
+      (slot) => `${slot.kind}:${slot.role.join('+')}:${slot.communicative_role}:${slot.derivation}`,
+    )
+    .sort()
+    .join('|');
+  const noOtherSlots = optional.length === 0;
+  const markClasses = manifest.mark_classes ?? [];
+  const hasOnlyMarkClass = (allowed: readonly string[]): boolean =>
+    markClasses.length === 1 && allowed.includes(markClasses[0]);
+  if (
+    noOtherSlots &&
+    manifest.calcs.length === 1 &&
+    required.length === 2 &&
+    required[0].template_field === required[1].template_field &&
+    signature === 'quantitative:cols:measure-value:none|quantitative:rows:measure-value:cnt' &&
+    hasOnlyMarkClass(['Bar'])
+  )
+    return 'single';
+  if (manifest.calcs.length !== 0) return null;
+  if (
+    noOtherSlots &&
+    (signature === 'categorical:rows:axis-partition:none|quantitative:cols:measure-value:sum' ||
+      signature === 'categorical:cols:axis-partition:none|quantitative:rows:measure-value:sum') &&
+    // Tableau's Automatic mark resolves to bars for this exact discrete-category /
+    // continuous-measure axis structure. Other Automatic shapes remain unproved.
+    hasOnlyMarkClass(['Bar', 'Automatic'])
+  )
+    return 'pair';
+  if (
+    signature === 'quantitative:rows:measure-value:sum|temporal:cols:axis-partition:tmn' &&
+    optional.every(
+      (slot) =>
+        slot.kind === 'categorical' &&
+        slot.role.length === 1 &&
+        slot.role[0] === 'color' &&
+        slot.communicative_role === 'distribution-breakout',
+    ) &&
+    optional.length <= 1 &&
+    hasOnlyMarkClass(['Line'])
+  )
+    return 'pair';
+  if (
+    noOtherSlots &&
+    signature ===
+      'categorical:lod:distribution-breakout:none|quantitative:cols:measure-value:sum|quantitative:rows:measure-value:sum' &&
+    hasOnlyMarkClass(['Circle'])
+  )
+    return 'scatter';
+  return null;
+}
+
+/** Every non-field word must describe the selected chart and its required fields. */
+function parseCompleteSingleSheetRequest(
+  ask: string,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): ParsedCompleteRequest | null {
+  const shape = completeChartShape(manifest);
+  if (shape === null) return null;
+  const spans = basicLineFieldSpans(ask, summary, new Set());
+  if (!spans) return null;
+  const typed = strictCoveredAskTokens(ask, spans);
+  if (typed === null) return null;
+  let request = typed.replace(/^(?:(?:show me|create|make|display|plot) )?(?:(?:a|an|the) )?/u, '');
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  const groups = new Map<string, TemplateManifest['slots']>();
+  for (const slot of required)
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  const describedNoun = manifest.description
+    .split(' ')
+    .filter((word) => word && !['chart', 'plot', 'graph'].includes(word))
+    .at(-1);
+  const namedNouns = matchedKeywords(maskFieldNames(ask, summary), manifest.intent_keywords)
+    .filter((word) => CHART_NOUN_KEYWORDS.has(word.toLowerCase()))
+    .sort((left, right) => right.length - left.length);
+  if (describedNoun && manifest.intent_keywords.includes(describedNoun))
+    namedNouns.push(describedNoun);
+  let grain: Derivation | undefined;
+  let horizontal = false;
+  if (request.startsWith('horizontal ')) {
+    horizontal = true;
+    request = request.slice('horizontal '.length);
+  }
+  const leadingGrain = /^(daily|monthly|quarterly|yearly) /u.exec(request);
+  if (leadingGrain) {
+    grain = BASIC_LINE_GRAINS[leadingGrain[1]];
+    request = request.slice(leadingGrain[0].length);
+  }
+  const noun = namedNouns.find((candidate) =>
+    request.startsWith(`${candidate.toLowerCase().replace(/-/gu, ' ')} `),
+  );
+  let fieldsText: string;
+  if (noun) {
+    const nounStart = `${noun.toLowerCase().replace(/-/gu, ' ')} `;
+    fieldsText = request
+      .slice(nounStart.length)
+      .replace(/^(?:chart|plot|graph) /u, '')
+      .replace(/^of /u, '');
+  } else {
+    const trend = /^(__[qct]\d+__) trend over (__[qct]\d+__)$/u.exec(request);
+    if (!trend || !manifest.intent_keywords.includes('trend')) return null;
+    fieldsText = `${trend[1]} over ${trend[2]}`;
+  }
+  const innerGrain = /^(daily|monthly|quarterly|yearly) /u.exec(fieldsText);
+  if (innerGrain) {
+    if (grain !== undefined) return null;
+    grain = BASIC_LINE_GRAINS[innerGrain[1]];
+    fieldsText = fieldsText.slice(innerGrain[0].length);
+  }
+  let aggregation: Derivation | undefined;
+  const aggregate =
+    /^(distinct count|count distinct|average|avg|median|minimum|min|maximum|max|count|sum) /u.exec(
+      fieldsText,
+    );
+  if (aggregate) {
+    aggregation =
+      aggregate[1] === 'sum'
+        ? 'sum'
+        : AGGREGATION_WORDS.find((item) => item.phrase === aggregate[1])?.deriv;
+    fieldsText = fieldsText.slice(aggregate[0].length);
+  }
+  const pieces = fieldsText.split(/ (and|by|over) /u);
+  if (pieces.length === 0 || pieces.length % 2 === 0) return null;
+  const tokens = pieces.filter((_part, index) => index % 2 === 0);
+  const links = pieces.filter((_part, index) => index % 2 === 1);
+  if (tokens.some((token) => !/^__[qct]\d+__$/u.test(token))) return null;
+  const expectedLinks = shape === 'scatter' ? ['and', 'by'] : shape === 'pair' ? [links[0]] : [];
+  if (
+    tokens.length !== groups.size ||
+    links.length !== expectedLinks.length ||
+    links.some((link, index) => link !== expectedLinks[index]) ||
+    (shape === 'pair' && !['by', 'over'].includes(links[0])) ||
+    (shape === 'single' && (grain !== undefined || aggregation !== undefined || horizontal))
+  )
+    return null;
+  const ordered = tokens.map((token) => spans.find((span) => span.token === token)?.field);
+  if (ordered.some((field) => field === undefined)) return null;
+  const resolved = ordered as SchemaField[];
+  if (
+    (shape === 'single' && !isMeasure(resolved[0])) ||
+    (shape === 'pair' &&
+      (!isMeasure(resolved[0]) || (!isCategorical(resolved[1]) && !isTemporal(resolved[1])))) ||
+    (shape === 'scatter' &&
+      (!isMeasure(resolved[0]) || !isMeasure(resolved[1]) || !isCategorical(resolved[2])))
+  )
+    return null;
+  if (shape === 'pair' && links[0] === 'over' && !isTemporal(resolved[1])) return null;
+  const measureGrain = spans.find((span) => span.token === tokens[0])?.acronymGrain;
+  if (measureGrain && required.some((slot) => slot.kind === 'temporal')) {
+    if (grain && grain !== measureGrain) return null;
+    grain = measureGrain;
+  }
+  if (
+    horizontal &&
+    !required.some((slot) => slot.kind === 'categorical' && slot.role.includes('rows'))
+  )
+    return null;
+  if (grain && !required.some((slot) => slot.kind === 'temporal')) return null;
+  return {
+    ask,
+    template: manifest.template,
+    shape,
+    fields: resolved,
+    links,
+    ...(grain ? { grain } : {}),
+    ...(aggregation ? { aggregation } : {}),
+    horizontal,
+  };
+}
+
+/** Compare the one parsed full request with the actual validated slot bindings. */
+export function provesCompleteSingleSheetRequest(
+  ask: string,
+  classification: NoLlmClassification,
+  summary: SchemaSummary,
+  manifest: TemplateManifest,
+): boolean {
+  if (
+    manifest.template !== classification.template ||
+    (classification.notes?.length ?? 0) > 0 ||
+    classification.top_n !== undefined ||
+    (classification.filters?.length ?? 0) > 0 ||
+    classification.encodings === undefined ||
+    classification.encodings.filled.length > 0 ||
+    classification.encodings.unfilled.length > 0
+  )
+    return false;
+  const parsed = classification.completeRequestParse;
+  if (!parsed || parsed.ask !== ask || parsed.template !== manifest.template) return false;
+  const { shape, fields: resolved, grain, aggregation } = parsed;
+  const groups = new Map<string, TemplateManifest['slots']>();
+  const bindings = new Map(classification.bindings.map((binding) => [binding.slot_id, binding]));
+  const required = manifest.slots.filter((slot) => slot.bindable && slot.required);
+  if (bindings.size !== required.length || classification.bindings.length !== required.length)
+    return false;
+  for (const slot of required) {
+    if (!bindings.has(slot.slot_id)) return false;
+    groups.set(slot.template_field, [...(groups.get(slot.template_field) ?? []), slot]);
+  }
+  const seen = new Set<string>();
+  for (const [index, field] of resolved.entries()) {
+    const matching = [...groups].filter(([, slots]) =>
+      slots.every((slot) => bindings.get(slot.slot_id)?.field === field.name),
+    );
+    if (matching.length !== 1 || seen.has(matching[0][0])) return false;
+    const [templateField, slots] = matching[0];
+    seen.add(templateField);
+    if (
+      shape === 'scatter' &&
+      !slots.every((slot) =>
+        slot.role.includes(index === 0 ? 'rows' : index === 1 ? 'cols' : 'lod'),
+      )
+    )
+      return false;
+    if (
+      slots.some(
+        (slot) =>
+          (slot.kind === 'quantitative' && !isMeasure(field)) ||
+          (slot.kind === 'categorical' && !isCategorical(field)) ||
+          (slot.kind === 'temporal' && !isTemporal(field)) ||
+          (grain &&
+            slot.kind === 'temporal' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== grain) ||
+          (aggregation &&
+            slot.kind === 'quantitative' &&
+            slot.derivation !== 'none' &&
+            (bindings.get(slot.slot_id)?.derivation ?? slot.derivation) !== aggregation),
+      )
+    )
+      return false;
+  }
+  return seen.size === groups.size;
 }
 
 /**
@@ -3784,7 +4164,7 @@ function attachAskModifiers(
 }
 
 /**
- * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
+ * No-LLM classification with within-family disambiguation.
  * Keyword-scores the eligible fast-path templates, selects a single template via
  * `selectWithinFamily` (sole-wrong-matcher guard for a lone winner; intra-family
  * tiebreak for a same-family tie; fail-closed for a cross-family tie), then
@@ -3792,15 +4172,16 @@ function attachAskModifiers(
  * Returns null (fall through to the LLM propose path) whenever no template is
  * selected, avoid_when demotes, or a required slot is left unfilled.
  *
- * `summary` is required to assign by kind (the design's §3.2 signature omitted it,
- * but §3.5 step 2 needs the field roles to map measures→quantitative etc.).
+ * `summary` is required to assign by kind: the field roles map
+ * measures→quantitative etc.
  */
 export function classifyNoLlm(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
+  requireCompleteRequest = false,
 ): NoLlmClassification | null {
-  // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
+  // FAIL-CLOSED cost guard: over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
   // return null so the orchestrator escalates rather than risk a silent wrong bind on a
   // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
@@ -3833,10 +4214,10 @@ export function classifyNoLlm(
   const filterFields = new Set(filterCandidates);
   const matched = matchFieldsInAsk(ask, summary).filter((field) => !filterFields.has(field));
   // The full dimension pool a required geo slot widens into when the ask names no
-  // affine candidate for it (W60 geo-slot completion).
+  // affine candidate for it (geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
 
-  // MEASURE-FREE LAT/LONG SYMBOL MAP (Blake wall #2): a specialized coordinate-affinity
+  // MEASURE-FREE LAT/LONG SYMBOL MAP: a specialized coordinate-affinity
   // resolver runs BEFORE generic keyword scoring, because a pure "map of <locations>" ask
   // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
   // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
@@ -3890,7 +4271,20 @@ export function classifyNoLlm(
   if (histogram?.fast_path_eligible) {
     const bindings = resolveSingleMeasureHistogram(histogram, maskedAsk, matched);
     if (bindings) {
-      return attachAskModifiers(ask, { template: histogram.template, bindings }, filterCandidates);
+      const completeRequestParse = requireCompleteRequest
+        ? parseCompleteSingleSheetRequest(ask, summary, histogram)
+        : null;
+      if (requireCompleteRequest && completeRequestParse === null) return null;
+      return attachAskModifiers(
+        ask,
+        {
+          template: histogram.template,
+          bindings,
+          ...(requireCompleteRequest ? { encodings: { filled: [], unfilled: [] } } : {}),
+          ...(completeRequestParse ? { completeRequestParse } : {}),
+        },
+        filterCandidates,
+      );
     }
   }
 
@@ -4011,14 +4405,13 @@ export function classifyNoLlm(
   );
   if (unresolvedAvoidMatches.length > 0) return null;
 
-  // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
+  // DEMOTE on data-shape-parse hazards: avoid_when only fires when the ASK
   // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
   // ask mentions — "over-under arrow chart of Sales by Sub-Category" happily bound
-  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing (live-caught by
-  // the W59 proof-value spike + dual review). A template whose calcs parse a
-  // specific string shape out of a bound field can never prove data fit on the
-  // zero-model path, so it always falls through to propose, where the model sees
-  // the hazard notes + avoid_when and judges the actual schema.
+  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing.
+  // A template whose calcs parse a specific string shape out of a bound field can never
+  // prove data fit on the zero-model path, so it always falls through to propose, where
+  // the model sees the hazard notes + avoid_when and judges the actual schema.
   if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
   // FINAL bind pass — the ONLY place unique-date temporal completion is armed (pass
@@ -4073,19 +4466,58 @@ export function classifyNoLlm(
     matched,
   );
   bindings.push(...symbolMapEncodings.bindings);
-  // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
+  // OPTIONAL small-multiples facet: additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
   // the bound decision, the chosen template, or the required bindings — a no-cue /
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
+  const completeRequestParse = requireCompleteRequest
+    ? parseCompleteSingleSheetRequest(ask, summary, chosen)
+    : null;
+  if (requireCompleteRequest && completeRequestParse === null) return null;
   // A facet cue wins over series color. Otherwise inspect the full datasource, not
-  // only `matched` (which contains ask-named fields): e4 intentionally does not name
-  // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
-  const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
-  if (colorSeries) bindings.push(colorSeries);
-  // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
+  // only `matched` (which contains ask-named fields): the ask need not name the spare
+  // series dimension (e.g. a lone Product field). Exact-one cardinality keeps this fail-closed.
+  if (requireCompleteRequest) {
+    const lineSlots = optionalLineSeriesSlots(chosen);
+    if (lineSlots) {
+      if (completeRequestParse?.shape !== 'pair') return null;
+      const temporalBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.temporal.slot_id,
+      );
+      const temporalField = temporalBinding
+        ? summary.fields.find((field) => field.name === temporalBinding.field)
+        : undefined;
+      const measureBinding = bindings.find(
+        (binding) => binding.slot_id === lineSlots.measure.slot_id,
+      );
+      if (
+        !temporalBinding ||
+        !temporalField ||
+        temporalField !== completeRequestParse.fields[1] ||
+        measureBinding?.field !== completeRequestParse.fields[0]?.name
+      )
+        return null;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain &&
+        !['date', 'datetime'].includes(temporalField.datatype)
+      )
+        return null;
+      if (
+        completeRequestParse.grain &&
+        lineSlots.temporal.derivation !== completeRequestParse.grain
+      ) {
+        temporalBinding.derivation = completeRequestParse.grain;
+      }
+    }
+  } else {
+    const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+    if (colorSeries) bindings.push(colorSeries);
+  }
+  // Attach provenance (e.g. geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(
     ask,
@@ -4094,13 +4526,14 @@ export function classifyNoLlm(
       bindings,
       ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
       encodings: symbolMapEncodings.encodings,
+      ...(completeRequestParse ? { completeRequestParse } : {}),
     },
     filterCandidates,
   );
 }
 
 /**
- * Build the compact LLM input (design §3.3): keyword-ranked fast-path candidates
+ * Build the compact LLM input: keyword-ranked fast-path candidates
  * (Fuse fallback when no exact hit), each with its BINDABLE slots only, plus the
  * field schema. The model only picks a template + maps slot_id→field name.
  */
@@ -4113,9 +4546,9 @@ export function buildLlmInput(
   const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
   const routable = [...manifests.values()].filter((m) => m.fast_path_eligible);
 
-  // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
-  // CLS-001): the propose shortlist must not let a field literally named "Pie"
-  // surface the pie family — the same leak masking exists to stop on the fast path.
+  // Mask field names before scoring, in lockstep with classifyNoLlm: the propose
+  // shortlist must not let a field literally named "Pie" surface the pie family —
+  // the same leak masking exists to stop on the fast path.
   const maskedAsk = maskFieldNames(ask, summary);
 
   let candidates = routable
@@ -4159,12 +4592,12 @@ export function buildLlmInput(
   }
   top.sort((a, b) => b.score - a.score || a.m.template.localeCompare(b.m.template));
 
-  // FIELD-NARROWING (stage 2B): rank the schema against the shortlisted
+  // FIELD-NARROWING: rank the schema against the shortlisted
   // candidates' required slot kinds + the ask, and cap at maxFields so a wide
   // schema can't blow the propose prompt. classifyNoLlm is untouched — it still
   // resolves against the full schema.
   const kinds = requiredSlotKinds(top.map((c) => c.m));
-  // FAIL-CLOSED cost guard (M10 Finding 3): narrowFields runs one regex per field
+  // FAIL-CLOSED cost guard: narrowFields runs one regex per field
   // (askNamesField) — the same unbounded hot loop classifyNoLlm caps. Over the cap, rank
   // only a bounded prefix so a pathological wide schema can't block the event loop for
   // seconds; `withheld` below is computed against the TRUE total so more_available stays

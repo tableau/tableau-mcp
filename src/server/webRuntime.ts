@@ -1,3 +1,4 @@
+import { closeActivityLog, initializeActivityLog } from '../activityLog/init.js';
 import type { Config } from '../config.js';
 import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
@@ -9,15 +10,32 @@ import {
   initializeSessionStore,
 } from '../sessionStore/init.js';
 
+// Minimal shutdown hook: release the session store's backend resources and flush the Activity Log
+// on termination signals. Intentionally NOT a general graceful-drain (no in-flight request
+// draining, no Express close).
+const SHUTDOWN_TIMEOUT_MS = 5000;
+
 function registerSessionStoreShutdown(): void {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, async () => {
+      let timer: NodeJS.Timeout | undefined;
       try {
-        await disconnectSessionStore();
+        // A hung backend must not keep the process alive after SIGTERM.
+        await Promise.race([
+          Promise.all([disconnectSessionStore(), closeActivityLog()]),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS} ms`)),
+              SHUTDOWN_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        clearTimeout(timer);
         process.exit(0);
       } catch (error) {
+        clearTimeout(timer);
         log({
-          message: 'Error closing session store during shutdown',
+          message: 'Error closing session store or Activity Log during shutdown',
           level: 'error',
           logger: 'shutdown',
           data: error,
@@ -34,6 +52,7 @@ export async function initializeWebRuntime(
   RestApi.host = config.server;
 
   initializeFeatureGate();
+  await initializeActivityLog();
   initializeSessionStore();
   await connectSessionStore();
   registerSessionStoreShutdown();

@@ -1,4 +1,4 @@
-// STAGE 2B FIELD-NARROWING (adjudicated attack 1, SUSTAINED): buildLlmInput used
+// FIELD-NARROWING: buildLlmInput used
 // to send ALL summary.fields, so a wide schema (300–1000 fields) blew the propose
 // prompt. These tests pin the narrowing contract:
 //   - rank-1: fields whose name/caption tokens overlap the ask survive (even past N)
@@ -109,7 +109,7 @@ function wideSummary(total: number, named: SchemaField[]): SchemaSummary {
   return { datasource: 'DS', fields };
 }
 
-describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
+describe('binder/buildLlmInput — field narrowing', () => {
   const askedFields = [
     field('Sales', 'measure', 'quantitative', 'real'),
     field('Region', 'dimension', 'nominal', 'string'),
@@ -243,7 +243,7 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     expect(input.more_available).toBeUndefined();
   });
 
-  // Red-team GEO-03: the propose model can't respect geo tags it never sees.
+  // The propose model can't respect geo tags it never sees.
   it('includes semanticRole for geo-tagged fields in the propose payload', () => {
     const fields = [
       field('Sales', 'measure', 'quantitative', 'real'),

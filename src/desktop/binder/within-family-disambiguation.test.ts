@@ -1,4 +1,4 @@
-// STAGE 2b WITHIN-FAMILY DISAMBIGUATION (measured scale breakpoints). Two rules
+// WITHIN-FAMILY DISAMBIGUATION (measured scale breakpoints). Two rules
 // added to classifyNoLlm's template selection, each pinned here:
 //
 //   (1) INTRA-FAMILY TIEBREAK — a keyword-argmax tie whose tied candidates ALL
@@ -307,7 +307,7 @@ describe('classifyNoLlm — geo slot name affinity', () => {
   });
 });
 
-// ── (6) W60 GEO-SLOT COMPLETION (required geo slot with zero ask-named candidates) ─
+// ── (6) GEO-SLOT COMPLETION (required geo slot with zero ask-named candidates) ─
 // A required geo slot the ask does not name widens THAT slot's candidate pool to the
 // full schema's dimensions and binds the unique name-affine field — but ONLY when the
 // ask named at least one OTHER geo field (i.e. it demonstrated geographic intent). The
@@ -315,7 +315,7 @@ describe('classifyNoLlm — geo slot name affinity', () => {
 // schema with no geo field fails closed, and an ask that names NO geo field at all
 // (section 4's ZERO-candidates test) is unchanged. The auto-completed field is reported
 // in `notes` so the caller can say "using Country/Region".
-describe('classifyNoLlm — geo-slot completion (W60)', () => {
+describe('classifyNoLlm — geo-slot completion', () => {
   it('FAIL-CLOSED: geo completion cannot reuse a field consumed by a categorical slot', () => {
     const countryAndState: SchemaSummary = {
       datasource: 'DS',
@@ -508,14 +508,14 @@ describe('classifyNoLlm — spatial-intent family guard (W-23447710)', () => {
   });
 });
 
-// ── CLS-003: TEMPORAL-COMPLETION NAMED-DIMENSION GUARD ────────────────────────
+// ── TEMPORAL-COMPLETION NAMED-DIMENSION GUARD ────────────────────────
 // Unique-date completion must not paper over an ask-NAMED non-temporal dimension
 // that no remaining slot can consume: "trend of Actual Amount by Fiscal Period"
 // on a temporal+measure template must escalate (null), never silently drop
 // Fiscal Period and chart a date axis the user did not ask for. Capacity counts
 // the remaining ACTIVE categorical/geo slots plus ONE armed optional facet slot
 // (facetBinding appends at most one spare named categorical post-bind).
-describe('classifyNoLlm — temporal completion named-dimension guard (CLS-003)', () => {
+describe('classifyNoLlm — temporal completion named-dimension guard', () => {
   const tempVal = (): SlotSpec[] => [slot('t', 'temporal'), slot('v', 'quantitative')];
   const financeSummary: SchemaSummary = {
     datasource: 'DS',

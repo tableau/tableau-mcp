@@ -22,7 +22,12 @@ export const dataSourceSchema = z.object({
   // datasource is certified and older than any user clone.
   createdAt: z.string().optional(),
   isCertified: tableauBoolean.optional(),
-  project: projectSchema,
+  // Query Data Source (single, by LUID) can return either a published or an embedded (workbook) data
+  // source on WBDS-enabled servers. Embedded ones carry `parentType: "Workbook"` and NO `project`;
+  // published ones carry a `project`. The classifier keys off those two facts (see
+  // getDatasourceMetadata.resolveDatasourceType), so both fields are optional here.
+  project: projectSchema.optional(),
+  parentType: z.string().optional(),
   owner: z
     .object({
       id: z.string(),
@@ -32,3 +37,8 @@ export const dataSourceSchema = z.object({
 });
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
+
+// Some servers return a `project` on embedded data sources too, so `parentType` is checked first.
+export function isEmbeddedDatasource(datasource: DataSource): boolean {
+  return datasource.parentType === 'Workbook' || !datasource.project;
+}

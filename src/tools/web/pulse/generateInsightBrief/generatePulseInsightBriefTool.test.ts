@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { pulseInsightBriefRequestSchema } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
@@ -27,6 +28,10 @@ vi.mock('../../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getGeneratePulseInsightBriefTool', () => {
   const briefRequest: z.infer<typeof pulseInsightBriefRequestSchema> = {

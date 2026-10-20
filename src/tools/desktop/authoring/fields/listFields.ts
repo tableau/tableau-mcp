@@ -1,13 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
+import { readCacheFileArg } from '../../../../desktop/cachePath.js';
 import { listFields } from '../../../../desktop/metadata/index.js';
-import {
-  FileNotFoundError,
-  FileReadError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { FileNotFoundError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { artifactFileParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
@@ -35,16 +31,13 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
         extra,
         args: { worksheetFile },
         callback: async () => {
-          if (!existsSync(worksheetFile)) {
-            return new FileNotFoundError(worksheetFile).toErr();
-          }
-
-          let worksheetXml: string;
-          try {
-            worksheetXml = readFileSync(worksheetFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
-          }
+          const read = readCacheFileArg(
+            'worksheetFile',
+            worksheetFile,
+            (path) => new FileNotFoundError(path),
+          );
+          if (read.isErr()) return read.error.toErr();
+          const worksheetXml = read.value.text;
 
           let fields;
           try {

@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { delimiter, join } from 'path';
 
+import { getDesktopConfig } from '../config.desktop.js';
 import { getDirname } from '../utils/getDirname.js';
 import {
   _setSeaApiForTest as _setSharedSeaApiForTest,
@@ -38,8 +39,8 @@ function resolveRoot(candidates: string[]): string {
 
 export function getDataRoot(): string {
   return resolveRoot([
+    // Bundled: build/desktop/data next to the bundle. Never the repo's src tree.
     join(safeDirname(), 'desktop', 'data'),
-    join(safeDirname(), '..', 'src', 'desktop', 'data'),
     // Unbundled source/vitest: getDirname() is src/utils, so the data dir is a sibling.
     join(safeDirname(), '..', 'desktop', 'data'),
   ]);
@@ -47,15 +48,15 @@ export function getDataRoot(): string {
 
 export function getResourcesRoot(): string {
   return resolveRoot([
+    // Bundled: build/resources/desktop next to the bundle. Never the repo's resources tree.
     join(safeDirname(), 'resources', 'desktop'),
-    join(safeDirname(), '..', 'resources', 'desktop'),
     // Unbundled source/vitest: getDirname() is src/utils, so resources live two levels up.
     join(safeDirname(), '..', '..', 'resources', 'desktop'),
   ]);
 }
 
 // Eager snapshots retained for call sites that still build absolute paths and
-// for the CORPUS_PATH/TEMPLATES_DIR-style env overrides used in tests.
+// for the TEMPLATES_DIR-style env overrides used in tests.
 export const DATA_ROOT = getDataRoot();
 export const RESOURCES_ROOT = getResourcesRoot();
 
@@ -206,13 +207,11 @@ export function readResourceAsset(relPath: string): string | null {
   }
 }
 
-const KNOWLEDGE_DIR_ENV_NAME = 'TABLEAU_KNOWLEDGE_DIR';
-
 // Ordered by precedence: earlier roots win on a slug collision. tab-agent-south owns what
 // each root physically is (protected/user-content/overridable); this file never learns those
 // names, it just merges whatever ordered list it's handed.
 function externalKnowledgeRoots(): string[] {
-  const raw = process.env[KNOWLEDGE_DIR_ENV_NAME];
+  const raw = getDesktopConfig().knowledgeDir;
   if (!raw) {
     return [];
   }

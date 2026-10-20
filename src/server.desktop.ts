@@ -20,10 +20,15 @@ import {
   RESOURCES_ROOT,
 } from './desktop/assets.js';
 import { createCallDeadline } from './desktop/callDeadline.js';
-import { emitEpisodeEvent, type ToolSchemaProfile } from './desktop/episode-events.js';
+import {
+  emitEpisodeEvent,
+  TOOL_PROFILE_NAMES,
+  type ToolSchemaProfile,
+} from './desktop/episode-events.js';
 import { apiVersionAtLeast } from './desktop/externalApi/apiVersion.js';
 import { discoverInstances } from './desktop/externalApi/discovery.js';
 import { ExternalApiInstance } from './desktop/externalApi/types.js';
+import { DESKTOP_MCP_NAME } from './desktop/externalApi/userAgent.js';
 import { buildDesktopInstructions } from './desktop/instructions.js';
 import {
   getKnowledgeCorpusEntryCount,
@@ -33,26 +38,23 @@ import {
 import { SessionManager } from './desktop/session/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
+import { registerSkills } from './skills/index.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
-const serverName = 'tableau-desktop-mcp';
+const serverName = DESKTOP_MCP_NAME;
 const serverVersion = pkg.version;
 
 /**
- * Slim demo tool set (W60 spike lever 1 / preamble-hunt P1): registering ~10 tools instead
- * of the full 42 shrinks the serialized schema surface (~15-25k → ~4-5k tokens), which the
- * preamble-hunt measured as the single biggest per-turn latency win (−4.5 to −5.5s/chart)
- * and a per-turn token/cost reduction. Reconciled from BOTH source lists: the spike's
- * fast-path/coordination tools (bind-template, list-instances, list-available-fields,
- * list-worksheets, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
- * UNION the preamble-hunt's escalation-fallback chain it insists must stay
- * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances/
- * list-worksheets already overlap). Demo retains the legacy binder path because it does not
- * include the modern artifact builder.
+ * Small tool set for demos, selected by TOOL_PROFILE=demo. Registering fewer tools keeps the
+ * serialized schemas small, which cuts per-turn latency and token cost. It holds the fast-path
+ * and coordination tools plus the fallback chain (get-workbook-xml, inject-template,
+ * apply-worksheet) the model needs when the fast path cannot finish. It keeps the older
+ * template binder path because it does not include the modern artifact builder. Experimental:
+ * it may change or be removed in a minor release.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
@@ -70,19 +72,12 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
 ]);
 
 /**
- * EXPERIMENT (experiment/spec-loop-studio): the ruthless spec-loop-first surface,
- * selected by TOOL_PROFILE=spec-loop. Hypothesis under test: the native semantic
- * loop — generate-viz-from-notional-spec for charts, the whole-document GET/POST
- * for calcs, both dispatched through execute-tableau-command on the /v0 External
- * API — is sufficient with no XML authoring tools, templates, or bind-template.
- * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
- * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). get-worksheet-xml
- * is retained across every profile for existing-sheet inspection and edits, including
- * before any authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
- * charts + dashboard) authored live in seconds, zero agent-authored XML.
- * The known-command guard (from #542) makes the single execute-tableau-command tool
- * safe against hallucinated verbs.
+ * Minimal tool set that drives Tableau through execute-tableau-command alone, selected by
+ * TOOL_PROFILE=spec-loop. Charts, calcs and dashboards all go through that one tool, with no XML
+ * authoring tools, templates, or bind-template. The rest is discovery and readback tools so the
+ * model can observe state. get-worksheet-xml is in every profile so existing sheets can be
+ * inspected and edited before any authoring attempt. Experimental: it may change or be removed
+ * in a minor release.
  */
 export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'execute-tableau-command',
@@ -94,32 +89,16 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
 ]);
 
 /**
- * The full SINGABLE surface, selected by TOOL_PROFILE=dynamic-authoring: the spec-loop
- * five (charts/dashboards via generate-viz-from-notional-spec + discovery/readback
- * through execute-tableau-command) PLUS the five author-* verbs that keep the primary
- * semantic path agent-XML-free — author-calc (ratios/rank/
- * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
- * key signature, born at OPEN), author-action (parameter-change wiring), format-worksheets
- * (per-sheet mark labels and field number formats) — PLUS ask-user (ambiguity goes to the
- * human, never to a guess) and search-commands (how the singer discovers the
- * execute-tableau-command dialect) — PLUS
- * bind-template for recognizable single-view asks, plus the guarded list/build/apply template
- * artifact fallback and refine-worksheet, the primitives-only
- * top-N/sort editor that carries
- * edit-in-place now that the notional-spec loop is retired.
- * PLUS the two knowledge doors — search-knowledge + read-knowledge-resource —
- * without which the system prompt's "consult the expertise library BEFORE authoring"
- * instruction had no tool to route to: the singer could not read the curated corpus at
- * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
- * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
- * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Seventy-five tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise,
- * first-class workbook/data reads/navigation, scoped datasource/dashboard/story cached-XML
- * fallbacks, dialog inspection and action handling, and a narrow whole-workbook cached-XML
- * fallback. Standalone validation and unrelated info tools stay out. This is the
- * "make it shorter" answer — a lean, semantically-named surface for direct/default clients while
- * TAS discovers the wider surface through tool search. Mechanism map live-proven 2026-07-19 (CODA):
- * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
+ * The default tool set, used when TOOL_PROFILE is unset or `dynamic-authoring`. It is the lean
+ * native authoring surface: the spec-loop tools, the author-* tools (calcs, sets, parameters,
+ * actions), format-worksheets, ask-user, and search-commands for finding the
+ * execute-tableau-command dialect. It adds bind-template for single-view asks, the guarded
+ * template artifact fallback, and refine-worksheet for top-N and sort edits in place. It also
+ * includes the two knowledge tools (search-knowledge and read-knowledge-resource), because the
+ * instructions tell the model to consult the expertise library before authoring and these are
+ * the only way it can read that library. Workbook and data reads, navigation, dialog handling
+ * and scoped cached-XML fallbacks are included. Standalone validation and unrelated info tools
+ * are left out, and clients that need more can use TOOL_PROFILE=full.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
@@ -205,26 +184,25 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-action',
     'format-worksheets',
     'format-dashboard-zones',
+    'set-member-colors',
     'read-knowledge-resource',
     'search-knowledge',
   ]);
 
 /**
- * Select the tools to register for a given TOOL_PROFILE value (already normalized by
- * Config: trim + lowercase). '' (unset) → the lean {@link DYNAMIC_AUTHORING_TOOL_PROFILE}
- * native surface: the Desktop authoring server SINGS in native Tableau by default, no
- * env var required. 'full' → every registered tool, including unrelated info/validation tools.
- * 'demo' / 'spec-loop' → their named subsets;
- * 'combined-lean' → the full desktop surface (its lean half is the web side, handled by
- * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
- * apart from the warning log, so the selection can be unit-tested without the server or env.
+ * Select the tools to register for a TOOL_PROFILE value (already trimmed and lowercased by
+ * Config). Unset or `dynamic-authoring` gives the default lean set. `demo` and `spec-loop` give
+ * their named subsets. `full` and `combined-lean` give every Desktop tool (the lean half of
+ * `combined-lean` is the Web side, handled by WebMcpServer). Any other value logs a warning and
+ * gives the default set. Pure apart from that warning, so it can be unit-tested without the
+ * server or env.
  */
 export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   tools: T[],
   profile: string,
 ): T[] {
   if (profile === '' || profile === 'dynamic-authoring') {
-    return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
+    return selectDefaultTools(tools);
   }
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
@@ -232,16 +210,19 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   if (profile === 'spec-loop') {
     return tools.filter((tool) => SPEC_LOOP_TOOL_PROFILE.has(tool.name));
   }
-  // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
-  // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
-  if (profile !== 'full' && profile !== 'combined-lean') {
-    log({
-      message: `Unknown TOOL_PROFILE "${profile}" — registering the full tool set.`,
-      level: 'warning',
-      logger: 'DesktopMcpServer',
-    });
+  if (profile === 'full' || profile === 'combined-lean') {
+    return tools;
   }
-  return tools;
+  log({
+    message: `Unknown TOOL_PROFILE "${profile}"; expected one of ${TOOL_PROFILE_NAMES.join(', ')}. Using the default (dynamic-authoring).`,
+    level: 'warning',
+    logger: 'DesktopMcpServer',
+  });
+  return selectDefaultTools(tools);
+}
+
+function selectDefaultTools<T extends { name: DesktopToolName }>(tools: T[]): T[] {
+  return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
 }
 
 /**
@@ -291,10 +272,10 @@ export function filterToolsByApiVersion<T extends { minApiVersion?: string }>(
 
 export { DATA_ROOT, RESOURCES_ROOT };
 
-// Routing guidance every connecting client receives at initialize (W60 adoption P5 —
-// the demo build previously shipped NO instructions, so skill-less clients got zero
-// routing and the template fast path stayed dark in real sessions). Generated from the
-// typed route table so route edits are pinned by tests instead of drifting as prose.
+// Default (unpinned) routing guidance sent at initialize, so clients without a skill still
+// get routing for the template fast path. The server builds per-session text at connect time,
+// and demo and spec-loop get different text. Generated from the typed route table so route
+// edits are pinned by tests instead of drifting as prose.
 export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: false });
 
 export class DesktopMcpServer extends Server {
@@ -408,6 +389,7 @@ export class DesktopMcpServer extends Server {
     }
 
     await this.enableSkillsCapability();
+    await registerSkills(this);
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
@@ -488,16 +470,9 @@ export class DesktopMcpServer extends Server {
 }
 
 function normalizeToolSchemaProfile(profile: string): ToolSchemaProfile {
-  if (profile === '' || profile === 'dynamic-authoring') return 'dynamic-authoring';
-  if (
-    profile === 'demo' ||
-    profile === 'spec-loop' ||
-    profile === 'full' ||
-    profile === 'combined-lean'
-  ) {
-    return profile;
-  }
-  return 'unknown';
+  return (TOOL_PROFILE_NAMES as readonly string[]).includes(profile)
+    ? (profile as ToolSchemaProfile)
+    : 'dynamic-authoring';
 }
 
 export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {

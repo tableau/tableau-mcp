@@ -1,3 +1,8 @@
+import {
+  objectFromShape,
+  safeParse,
+  ZodRawShapeCompat,
+} from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -6,10 +11,13 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getManageKnowledgeContextTool } from './manageKnowledgeContext.js';
+import { advertisedInputSchema } from './knowledgeSchemaTestUtils.js';
+import { getManageKnowledgeContextTool, validateArgs } from './manageKnowledgeContext.js';
 
 const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
+  listSemanticStatements: vi.fn(),
+  getKnowledgeNode: vi.fn(),
   createSemanticStatements: vi.fn(),
   updateSemanticStatements: vi.fn(),
   deleteSemanticStatements: vi.fn(),
@@ -45,40 +53,93 @@ describe('manageKnowledgeContextTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isFeatureEnabled.mockResolvedValue(true);
+    mocks.listSemanticStatements.mockResolvedValue([]);
+    mocks.getKnowledgeNode.mockResolvedValue({ id: 'ctx-1', type: 'SEMANTIC_CONTEXT' });
     mocks.createSemanticStatements.mockResolvedValue(context());
     mocks.updateSemanticStatements.mockResolvedValue(context(['Updated definition']));
     mocks.deleteSemanticStatements.mockResolvedValue(undefined);
   });
 
-  it('is disabled when the knowledge-tools feature flag is off', async () => {
-    mocks.isFeatureEnabled.mockResolvedValue(false);
+  it.each([
+    [false, false, true],
+    [false, true, true],
+    [true, false, true],
+    [true, true, false],
+  ])('requires both Knowledge flags (read=%s, write=%s)', async (read, write, disabled) => {
+    mocks.isFeatureEnabled.mockImplementation(async (name: string) =>
+      name === 'knowledge-tools' ? read : name === 'knowledge-write-tools' && write,
+    );
 
-    expect(await Provider.from(getTool().disabled)).toBe(true);
-    expect(mocks.isFeatureEnabled).toHaveBeenCalledWith('knowledge-tools');
+    expect(await Provider.from(getTool().disabled)).toBe(disabled);
   });
 
-  it('exposes only mutation parameters', async () => {
-    const schema = await Provider.from(getTool().paramsSchema);
-    expect(schema).toHaveProperty('safeParse', expect.any(Function));
-    if (!('safeParse' in schema)) return;
+  it.each([
+    { action: 'create', statements: [{ statement: 'AOV = revenue / orders' }], isGlobal: true },
+    { action: 'update', contextId: 'ctx-1', statements: [{ statement: 'Updated definition' }] },
+    { action: 'delete', contextId: 'ctx-1' },
+  ])('blocks $action after the write flag is turned off', async (args) => {
+    const tool = getTool();
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    mocks.isFeatureEnabled.mockImplementation(async (name: string) => name === 'knowledge-tools');
 
-    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1' }).success).toBe(true);
-    expect(schema.safeParse({ action: 'delete' }).success).toBe(false);
-    expect(schema.safeParse({ action: 'delete', contextId: 'ctx-1', statements: [] }).success).toBe(
-      false,
-    );
+    const result = await (
+      await Provider.from(tool.callback)
+    )(args as never, getMockRequestHandlerExtra());
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Knowledge write tools are disabled.');
+    expect(useRestApi).not.toHaveBeenCalled();
+  });
+
+  it('advertises a non-empty inputSchema carrying the action enum', async () => {
+    // Reproduces the MCP SDK's own schema-advertisement conversion (see
+    // knowledgeSchemaTestUtils.ts). A z.discriminatedUnion (this tool's schema before the fix)
+    // converts to `{"type":"object","properties":{}}` because it has no top-level `.shape`; the
+    // flat raw shape this tool now uses does not have that problem.
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const jsonSchema = advertisedInputSchema(paramsSchema as ZodRawShapeCompat);
+    const properties = jsonSchema.properties as Record<string, { enum?: unknown }> | undefined;
+
+    expect(properties).toBeTruthy();
+    expect(Object.keys(properties ?? {}).length).toBeGreaterThan(0);
+    expect(properties?.action?.enum).toEqual(['create', 'update', 'delete']);
+  });
+
+  it('enforces the one-to-100 statement array bound at the schema level', async () => {
+    const paramsSchema = await Provider.from(getTool().paramsSchema);
+    const objectSchema = objectFromShape(paramsSchema as ZodRawShapeCompat);
+
     expect(
-      schema.safeParse({
+      safeParse(objectSchema, { action: 'create', statements: [], isGlobal: true }).success,
+    ).toBe(false);
+    expect(
+      safeParse(objectSchema, {
         action: 'create',
         statements: [{ statement: 'AOV = revenue / orders' }],
         isGlobal: true,
       }).success,
     ).toBe(true);
-    expect(schema.safeParse({ action: 'create', statements: [] }).success).toBe(false);
-    expect(schema.safeParse({ action: 'status' }).success).toBe(false);
   });
 
-  it('uses mutation annotations and requires only the Knowledge write scope', async () => {
+  it('rejects params irrelevant to, or missing for, the chosen mutation action', () => {
+    expect(validateArgs({ action: 'delete', contextId: 'ctx-1' })).toBeNull();
+    expect(validateArgs({ action: 'delete' })).toMatch(
+      /contextId is required when action is "delete"/,
+    );
+    expect(
+      validateArgs({ action: 'delete', contextId: 'ctx-1', statements: [{ statement: 'x' }] }),
+    ).toMatch(/statements is not used when action is "delete"/);
+    expect(
+      validateArgs({
+        action: 'create',
+        statements: [{ statement: 'AOV = revenue / orders' }],
+        isGlobal: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('uses mutation annotations and requires the Knowledge write and read scopes', async () => {
     const tool = getTool();
 
     expect(tool.name).toBe('manage-knowledge-context');
@@ -98,7 +159,7 @@ describe('manageKnowledgeContextTool', () => {
     });
     expect(vi.mocked(useRestApi)).toHaveBeenCalledWith(
       expect.objectContaining({
-        jwtScopes: ['tableau:knowledge:write'],
+        jwtScopes: ['tableau:knowledge:write', 'tableau:knowledge:read'],
       }),
     );
   });
@@ -136,10 +197,74 @@ describe('manageKnowledgeContextTool', () => {
   });
 
   it('rejects create without statements', async () => {
-    const result = await parseParams({ action: 'create', isGlobal: true });
+    const result = await getResult({ action: 'create', isGlobal: true });
 
-    expect(result.success).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('statements is required when action is "create"');
     expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
+  });
+
+  it('does not create a statement that already exists in the same scope', async () => {
+    mocks.listSemanticStatements.mockResolvedValue([context()]);
+
+    const out = payload(
+      await getResult({
+        action: 'create',
+        isGlobal: true,
+        statements: [{ statement: '  aov = revenue / orders ' }],
+      }),
+    );
+
+    expect(mocks.createSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ created: false, reason: 'DUPLICATE', existingContextId: 'ctx-1' });
+  });
+
+  it('creates the rule when only a read-only external context has the same statement', async () => {
+    mocks.listSemanticStatements.mockResolvedValue([
+      { ...context(), id: 'ext-1', type: 'SEMANTIC_CONTEXT_EXTERNAL' },
+    ]);
+
+    const out = payload(
+      await getResult({
+        action: 'create',
+        isGlobal: true,
+        statements: [{ statement: 'AOV = revenue / orders' }],
+      }),
+    );
+
+    expect(mocks.createSemanticStatements).toHaveBeenCalled();
+    expect(out.context.id).toBe('ctx-1');
+  });
+
+  it('reports NOT_FOUND instead of deleting an unknown contextId', async () => {
+    mocks.getKnowledgeNode.mockRejectedValue({ isAxiosError: true, response: { status: 404 } });
+    const out = payload(
+      await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'missing' }),
+    );
+
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ deleted: false, reason: 'NOT_FOUND', contextId: 'missing' });
+  });
+
+  it('reports NOT_FOUND instead of deleting an id that is not a semantic context', async () => {
+    mocks.getKnowledgeNode.mockResolvedValue({ id: 'field-1', type: 'FIELD' });
+
+    const out = payload(
+      await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'field-1' }),
+    );
+
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ deleted: false, reason: 'NOT_FOUND', contextId: 'field-1' });
+  });
+
+  it('does not report NOT_FOUND when the lookup fails for another reason', async () => {
+    mocks.getKnowledgeNode.mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+
+    const result = await getResult({ action: 'delete', graphId: 'graph-1', contextId: 'ctx-1' });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
   });
 
   it('deletes a context by exact contextId without overstating the result', async () => {
@@ -154,14 +279,16 @@ describe('manageKnowledgeContextTool', () => {
     expect(out).toEqual({
       action: 'delete',
       contextId: 'ctx-1',
-      requestCompleted: true,
+      deleted: true,
     });
   });
 
   it('rejects delete without contextId', async () => {
-    const result = await parseParams({ action: 'delete' });
+    const result = await getResult({ action: 'delete' });
 
-    expect(result.success).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('contextId is required when action is "delete"');
     expect(mocks.deleteSemanticStatements).not.toHaveBeenCalled();
   });
 });
@@ -173,12 +300,6 @@ function getTool(): ReturnType<typeof getManageKnowledgeContextTool> {
 async function getResult(args: Record<string, unknown>): Promise<CallToolResult> {
   const tool = getTool();
   return (await Provider.from(tool.callback))(args as never, getMockRequestHandlerExtra());
-}
-
-async function parseParams(args: Record<string, unknown>): Promise<{ success: boolean }> {
-  const schema = await Provider.from(getTool().paramsSchema);
-  invariant('safeParse' in schema);
-  return schema.safeParse(args);
 }
 
 function payload(result: CallToolResult): any {

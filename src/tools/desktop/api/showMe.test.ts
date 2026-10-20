@@ -9,6 +9,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -58,6 +59,10 @@ function resultBody(result: CallToolResult): Record<string, unknown> {
   invariant(result.content[0].type === 'text');
   return JSON.parse(result.content[0].text) as Record<string, unknown>;
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('show-me tool', () => {
   beforeEach(() => {

@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
+
 export const customZoneSchema = z.object({
   worksheetName: z.string(),
   x: z.number(),
@@ -23,6 +25,156 @@ type DirectLayoutSpec = z.infer<typeof layoutSpecSchema>;
 export type LayoutSpec = Omit<DirectLayoutSpec, 'layoutType'> & {
   layoutType: DirectLayoutSpec['layoutType'] | 'executive-summary';
 };
+
+const MAX_COORD = 100000;
+
+/** Refuse layouts that would write wrong or dropped zones; callers run this before any write. */
+export function validateLayoutSpec(
+  layoutSpec: Pick<
+    LayoutSpec,
+    'kpis' | 'charts' | 'layoutType' | 'gridColumns' | 'kpiStripHeight' | 'customZones'
+  >,
+  titleText?: string,
+): ArgsValidationError | undefined {
+  const { kpis, charts, layoutType, gridColumns, kpiStripHeight, customZones } = layoutSpec;
+  const names = [...kpis, ...charts];
+  const duplicated = [...new Set(names.filter((name, i) => names.indexOf(name) !== i))];
+  if (duplicated.length > 0) {
+    return new ArgsValidationError(
+      `Worksheet(s) listed more than once in kpis and charts: ${quoteList(duplicated)}. Each sheet gets one zone.`,
+    );
+  }
+  if (
+    layoutType === 'auto-grid' &&
+    gridColumns !== undefined &&
+    !(Number.isInteger(gridColumns) && gridColumns >= 1 && gridColumns <= 6)
+  ) {
+    return new ArgsValidationError(
+      `layout gridColumns must be an integer from 1 to 6; received ${gridColumns}.`,
+    );
+  }
+  if (
+    layoutType !== 'executive-summary' &&
+    kpiStripHeight !== undefined &&
+    !(kpiStripHeight >= 0 && kpiStripHeight <= 100)
+  ) {
+    return new ArgsValidationError(
+      `layout kpiStripHeight is a percent from 0 to 100; received ${kpiStripHeight}.`,
+    );
+  }
+  if (
+    layoutType !== 'executive-summary' &&
+    kpis.length > 0 &&
+    kpiStripHeight !== undefined &&
+    Math.floor(MAX_COORD * (kpiStripHeight / 100)) < 1
+  ) {
+    return new ArgsValidationError(
+      `layout kpiStripHeight must be above 0 when kpis are given; received ${kpiStripHeight}.`,
+    );
+  }
+  if (layoutType === 'custom' && charts.length > 0) {
+    if (!customZones) {
+      return new ArgsValidationError(
+        'layoutType "custom" requires customZones with one zone per chart; none were provided.',
+      );
+    }
+    for (const cz of customZones) {
+      const x = Math.round(cz.x);
+      const y = Math.round(cz.y);
+      const w = Math.round(cz.width);
+      const h = Math.round(cz.height);
+      if (
+        [x, y, w, h].some((v) => !Number.isFinite(v) || v < 0 || v > MAX_COORD) ||
+        x + w > MAX_COORD ||
+        y + h > MAX_COORD ||
+        w < 1 ||
+        h < 1
+      ) {
+        return new ArgsValidationError(
+          `Custom zone "${cz.worksheetName}" must keep x and y within 0..${MAX_COORD}, width and height at least 1 after rounding, and x+width and y+height at most ${MAX_COORD}; received x=${cz.x}, y=${cz.y}, width=${cz.width}, height=${cz.height}.`,
+        );
+      }
+    }
+    const zonedNames = customZones.map((cz) => cz.worksheetName);
+    const repeated = [...new Set(zonedNames.filter((n, i) => zonedNames.indexOf(n) !== i))];
+    if (repeated.length > 0) {
+      return new ArgsValidationError(
+        `customZones name worksheet(s) more than once: ${quoteList(repeated)}. Each chart gets one zone.`,
+      );
+    }
+    const kpiZoned = zonedNames.filter((name) => kpis.includes(name));
+    if (kpiZoned.length > 0) {
+      return new ArgsValidationError(
+        kpiZoned
+          .map(
+            (name) =>
+              `"${name}" is a KPI; KPIs always go in the KPI strip, so drop its customZone.`,
+          )
+          .join(' '),
+      );
+    }
+    const missing = charts.filter((chart) => !zonedNames.includes(chart));
+    if (missing.length > 0) {
+      return new ArgsValidationError(
+        `layoutType "custom" has no customZone for chart(s): ${quoteList(missing)}. Give every chart a zone.`,
+      );
+    }
+    const unknown = zonedNames.filter((name) => !charts.includes(name));
+    if (unknown.length > 0) {
+      return new ArgsValidationError(
+        `customZones name worksheet(s) that are not in charts: ${quoteList(unknown)}.`,
+      );
+    }
+  }
+  const doesNotFit = (zone: Zone): boolean =>
+    zone.w < 1 || zone.h < 1 || zone.x + zone.w > MAX_COORD || zone.y + zone.h > MAX_COORD;
+  const outOfCanvas = computeZones(titleText, layoutSpec as LayoutSpec).find(doesNotFit);
+  if (outOfCanvas) {
+    const label = outOfCanvas.kind === 'worksheet' ? `"${outOfCanvas.name}"` : 'the title';
+    const detail = `the zone for ${label} would be x=${outOfCanvas.x}, y=${outOfCanvas.y}, width=${outOfCanvas.w}, height=${outOfCanvas.h} on a ${MAX_COORD} canvas`;
+    const hasTitle = Boolean(titleText);
+    const hasKpis = kpis.length > 0;
+    const sentence = (options: string[]): string => {
+      const text = options.join(' or ');
+      return `${text[0].toUpperCase()}${text.slice(1)}.`;
+    };
+    if (charts.length === 0) {
+      const subject =
+        hasTitle && hasKpis ? 'The title and KPI strip' : hasKpis ? 'The KPI strip' : 'The title';
+      const options = [
+        ...(hasTitle ? ['drop the title'] : []),
+        ...(hasKpis ? ['use fewer KPIs'] : []),
+      ];
+      return new ArgsValidationError(
+        `${subject} do${hasTitle && hasKpis ? '' : 'es'} not fit on the canvas: ${detail}. ${sentence(options)}`,
+      );
+    }
+    const slimStripFits =
+      layoutType !== 'executive-summary' &&
+      hasKpis &&
+      !computeZones(titleText, { ...(layoutSpec as LayoutSpec), kpiStripHeight: 1 }).some(
+        doesNotFit,
+      );
+    const advice = slimStripFits
+      ? 'Lower kpiStripHeight.'
+      : sentence([...(hasTitle ? ['drop the title'] : []), 'use fewer sheets']);
+    if (!hasTitle && !hasKpis) {
+      return new ArgsValidationError(`The charts do not fit on the canvas: ${detail}. ${advice}`);
+    }
+    const subject =
+      hasTitle && hasKpis
+        ? 'The title and KPI strip leave'
+        : hasKpis
+          ? 'The KPI strip leaves'
+          : 'The title leaves';
+    return new ArgsValidationError(`${subject} no room for the charts: ${detail}. ${advice}`);
+  }
+  return undefined;
+}
+
+function quoteList(items: string[]): string {
+  return items.map((item) => `"${item}"`).join(', ');
+}
 
 const ZONE_STYLE = `<zone-style>
             <format attr="border-color" value="#000000"/>
@@ -203,12 +355,12 @@ export function computeZones(titleText: string | undefined, layoutSpec: LayoutSp
         if (charts.includes(cz.worksheetName)) {
           zones.push({
             kind: 'worksheet',
-            h: cz.height,
+            h: Math.round(cz.height),
             id: nextId++,
             name: cz.worksheetName,
-            w: cz.width,
-            x: cz.x,
-            y: cz.y,
+            w: Math.round(cz.width),
+            x: Math.round(cz.x),
+            y: Math.round(cz.y),
           });
         }
       }

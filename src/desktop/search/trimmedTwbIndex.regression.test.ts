@@ -10,12 +10,6 @@ import {
   TWB_RESULTS_LIMIT,
 } from '../../scripts/trimTwbExampleIndex.js';
 
-// Point the real searchWorkbookExamples loader at the committed trimmed file so
-// the production-scorer cross-check below reads the same bytes we assert on.
-// (loadTwbExampleIndex reads TWB_INDEX_PATH at call time; this file is module-
-// isolated under vitest, so setting it before the first call is enough.)
-process.env.TWB_INDEX_PATH = DEFAULT_OUT;
-
 // Reuse the generator's own entry shape so entries pass to topKForQuery without
 // a structural-compatibility cast.
 type Entry = ReturnType<typeof readSourceEntries>[number];
@@ -27,13 +21,13 @@ const source = readSourceEntries(DEFAULT_IN);
 const trimmed = JSON.parse(readFileSync(DEFAULT_OUT, 'utf8')) as Entry[];
 const suite = buildQuerySuite(source);
 
-const paths = (entries: Entry[]): string[] => entries.map((e) => e.relativePath).sort();
+const ids = (entries: Entry[]): string[] => entries.map((e) => e.id).sort();
 
 function overlap(query: string): { src: string[]; trim: string[]; hits: number } {
-  const src = paths(topKForQuery(source, query));
-  const trim = paths(topKForQuery(trimmed, query));
+  const src = ids(topKForQuery(source, query));
+  const trim = ids(topKForQuery(trimmed, query));
   const trimSet = new Set(trim);
-  return { src, trim, hits: src.filter((p) => trimSet.has(p)).length };
+  return { src, trim, hits: src.filter((id) => trimSet.has(id)).length };
 }
 
 // TR2's six regression cases. The source simply does not contain 15 scored hits
@@ -91,10 +85,8 @@ describe('trimmed twb-example-index.json retrieval regression (oracle-seeded)', 
     // identically to topKForQuery for the seeded smoke queries.
     const { searchWorkbookExamples } = await import('./searchLibrary.js');
     for (const query of SMOKE_QUERIES) {
-      const real = (searchWorkbookExamples(query).twbExamples as Entry[])
-        .map((e) => e.relativePath)
-        .sort();
-      const replicated = paths(topKForQuery(trimmed, query));
+      const real = (searchWorkbookExamples(query).twbExamples as Entry[]).map((e) => e.id).sort();
+      const replicated = ids(topKForQuery(trimmed, query));
       expect(real, `production vs replicated mismatch for "${query}"`).toEqual(replicated);
     }
   });

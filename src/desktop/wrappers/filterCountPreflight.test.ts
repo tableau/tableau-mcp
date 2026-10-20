@@ -1,3 +1,4 @@
+import * as loggerModule from '../../logging/logger.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
@@ -31,6 +32,10 @@ function expectFilterCountIssue(
     ]),
   );
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('non-positive filter count apply preflight', () => {
   it('blocks whole-workbook XML before dispatch', async () => {

@@ -162,7 +162,7 @@ export async function runSeaSmoke({
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: SmokeOptions): Promise<void> {
   const child = spawn(binaryPath, [], {
-    env: { ...process.env, TRANSPORT: 'stdio' },
+    env: { ...process.env, TRANSPORT: 'stdio', PRODUCT_TELEMETRY_ENABLED: 'false' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

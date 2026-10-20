@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -22,12 +23,16 @@ vi.mock('./stagedWorkbookUpload.js', async (importOriginal) => ({
   requestStagedWorkbookUpload: mocks.mockRequestStagedWorkbookUpload,
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('requestWorkbookUploadTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
-    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => flag !== 'authoring-with-slack');
     mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
       uploadUrl: 'https://s3.example.com/signed-put',
@@ -82,6 +87,17 @@ describe('requestWorkbookUploadTool', () => {
     );
 
     expect(await Provider.from(tool.disabled)).toBe(true);
+  });
+
+  it('is enabled for Slack when the authoring-tools and authoring-with-slack flags are ON', async () => {
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+
+    const tool = getRequestWorkbookUploadTool(
+      new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+    );
+
+    expect(await Provider.from(tool.disabled)).toBe(false);
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
   it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {

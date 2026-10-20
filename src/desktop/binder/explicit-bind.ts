@@ -387,11 +387,49 @@ function buildProposalFromFieldMapping(
     });
   }
 
+  warnings.push(...unmatchedMappingKeyWarnings(manifest, mapping));
+
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
   };
+}
+
+function unmatchedMappingKeyWarnings(
+  manifest: TemplateBindingContract,
+  mapping: Record<string, string>,
+): string[] {
+  const valid = new Set<string>();
+  const bareCounts = new Map<string, number>();
+  for (const slot of manifest.slots) {
+    if (!slot.bindable) continue;
+    valid.add(slot.slot_id);
+    valid.add(`${slot.template_field}@${slot.derivation}`);
+    bareCounts.set(slot.template_field, (bareCounts.get(slot.template_field) ?? 0) + 1);
+  }
+  const ambiguous = new Set<string>();
+  for (const [field, count] of bareCounts) {
+    if (count === 1) valid.add(field);
+    else ambiguous.add(field);
+  }
+  const validNames = [...valid];
+  return Object.keys(mapping)
+    .filter((key) => !valid.has(key))
+    .map((key) => {
+      const near = validNames.find((name) => name.toLowerCase() === key.toLowerCase());
+      if (ambiguous.has(key)) {
+        return (
+          `field_mapping key '${key}' is ambiguous: ${bareCounts.get(key)} slots use it, so it was ignored.` +
+          ` Use one of: ${validNames.filter((n) => n.startsWith(`${key}@`) || manifest.slots.some((s) => s.bindable && s.template_field === key && s.slot_id === n)).join(', ')}`
+        );
+      }
+      return (
+        `Unmatched field_mapping key '${key}' matches no slot and was ignored.` +
+        (near ? ` Did you mean '${near}'?` : '') +
+        ` Valid keys: ${validNames.join(', ')}`
+      );
+    });
 }
 
 function takeCompatibleSource(
@@ -659,6 +697,8 @@ function fixForBlocker(b: Blocker): string {
       return 'Provide a compatible field for this required manifest slot.';
     case 'kind-mismatch':
       return 'Bind a field whose role/type/datatype matches the manifest slot kind.';
+    case 'duplicate-slot-binding':
+      return 'Keep exactly one binding per slot_id; remove the repeated binding and retry.';
     case 'derivation-illegal':
       return 'Drop the illegal derivation override or bind a field whose datatype supports it.';
     case 'aggregation-level-mismatch':

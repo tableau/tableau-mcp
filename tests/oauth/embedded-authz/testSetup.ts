@@ -1,5 +1,9 @@
+import './networkGuard.js';
+import '../../../src/testTelemetryGuard.js';
+
 import { Ok } from 'ts-results-es';
 
+import { closeLoopbackServer, startLoopbackServer } from '../../../src/testLoopbackRequest.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { mockDatasources } from '../../../src/tools/web/datasources/mockDatasources.js';
 
@@ -41,3 +45,22 @@ vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => {
     RestApi: MockRestApi,
   };
 });
+
+// Admin tools need both ADMIN_TOOLS_ENABLED (set in testEnv.ts) and the admin-tools flag; force
+// only that flag on so every other flag keeps its real value.
+vi.mock('../../../src/features/init.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/features/init.js')>();
+  return {
+    ...original,
+    getFeatureGate: () => {
+      const featureGate = original.getFeatureGate();
+      return {
+        isFeatureEnabled: async (featureName: string) =>
+          featureName === 'admin-tools' || featureGate.isFeatureEnabled(featureName),
+      };
+    },
+  };
+});
+
+beforeEach(startLoopbackServer);
+afterEach(closeLoopbackServer);

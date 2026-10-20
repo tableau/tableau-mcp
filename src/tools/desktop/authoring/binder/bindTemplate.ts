@@ -26,11 +26,18 @@ import {
   parseExactFilterIntent,
 } from '../../../../desktop/binder/classify.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../../desktop/binder/route-spec.js';
+import { narrowSummaryToDatasource } from '../../../../desktop/binder/schema-summary.js';
 import { resolveDerivation } from '../../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../../desktop/episode-events.js';
-import { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  type ExecuteCommandWarning,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/externalApiToolExecutor.js';
-import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
+import {
+  parseCanonicalColumnRef,
+  resolveUniqueDatasourceName,
+} from '../../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../../desktop/metadata/fields.js';
 import { normalizeArray, parseXML } from '../../../../desktop/metadata/parser.js';
 import {
@@ -66,11 +73,13 @@ import { loadRuntimeTemplateCatalogSnapshots } from '../../../../desktop/templat
 import type { TemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import {
   classifyWorksheetPromiseOutcome,
+  formatDesktopWarnings,
   formatWorksheetPromiseCheck,
 } from '../../../../desktop/validation/promise-check.js';
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  isReadbackUnsettled,
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
@@ -88,13 +97,14 @@ import {
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
+import { desktopWarningNextAction } from '../../api/applyPreamble.js';
 import {
   fetchWorksheetSummaryData,
   type SummaryDataRead,
@@ -126,7 +136,7 @@ import {
 // confidence-required + title-max-80 tightening) lives in proposalSchema.ts.
 import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { proposalSchema } from './proposalSchema.js';
-import { proposalSignature } from './proposalSignature.js';
+import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Desktop PID; omit if pinned or sole.'),
@@ -134,6 +144,7 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply now'),
+  requireCompleteRequest: z.boolean().optional().describe('Prove full ask or decline, no writes'),
   skip_validation: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
@@ -196,22 +207,48 @@ type AppliedDefault = Pick<
   'measure' | 'top_n' | 'reason' | 'context_measures'
 >;
 
+type CompletionCaveat =
+  | 'unconverted_currency'
+  | 'field_validation_unverified'
+  | 'query_render_unverified'
+  | 'summary_preview_unavailable';
+
+type CompletionEvidence = {
+  version: 2;
+  kind: 'single_sheet_apply';
+  askSha256: string;
+  coverage: 'complete_request' | 'applied_operation';
+  application: { status: 'applied'; template: string; sheetName: string };
+  caveats: CompletionCaveat[];
+};
+
+type RequestCoverage = {
+  version: 1;
+  kind: 'complete_single_sheet_binding';
+  askSha256: string;
+  template: string;
+};
+
 /**
- * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
- * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
- * ~170-token apply_instruction, apply_hint, and used_llm — those exist to enable a manual
- * second call that never happens once the server-side apply succeeds. The FULL shape is
- * preserved on applied:false / propose / escalate / error, except for legacy apply instructions
- * that name tools outside the served profile. Graceful fallback still keeps the safe bound args.
+ * Trimmed shape returned ONLY on applied:true fast-path success. It keeps just what a
+ * rendered success needs and drops the args echo, the ~170-token apply_instruction,
+ * apply_hint, and used_llm — those exist to enable a manual second call that never happens
+ * once the server-side apply succeeds. The FULL shape is preserved on applied:false /
+ * propose / escalate / error, except for legacy apply instructions that name tools outside
+ * the served profile. Graceful fallback still keeps the safe bound args.
  */
 type AppliedFastPathResult = {
   status: 'bound';
   applied: true;
   authored_calcs?: string[];
   warnings?: string[];
+  /** Desktop's own apply warnings; present only when Desktop returned any. */
+  desktop_warnings?: ExecuteCommandWarning[];
   sheet_name: string;
   phase_ms: AuthoringPhaseMs;
   verification?: ReadbackVerificationResult;
+  completionEvidence?: CompletionEvidence;
+  requestCoverage?: RequestCoverage;
   guidance: string;
   applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
@@ -250,7 +287,12 @@ type BlockedBindTemplateResult = {
     | 'fallback_required'
     | 'ambiguous_filter_intent'
     | 'proposal_contract_mismatch'
-    | 'proposal_filter_resolution_failed';
+    | 'proposal_filter_resolution_failed'
+    | 'request_not_covered';
+  applied?: false;
+  may_have_applied?: false;
+  writeAttempts?: 0;
+  requestCoverage?: { version: 1; kind: 'declined'; askSha256: string };
   guidance: string;
   call_2_contract?: Call2Contract;
   mismatches?: ProposalContractMismatch[];
@@ -296,19 +338,20 @@ const NOT_APPLIED_GUIDANCE =
   'NOT APPLIED — the worksheet is unchanged. Resubmit this exact bind-template call with auto_apply:true to apply the bind.';
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 // A P&L/bridge running total is order-dependent and its intended
-// order is usually a non-displayed sequence field; the hint names it so the singer carries it
+// order is usually a non-displayed sequence field; the hint names it so the agent carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
   'Waterfall default sort is DESC by the bound measure (largest values first). After apply, verify and stop; override only with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
-// Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
-// (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
-// bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
+// Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled.
+// It stops the agent from calling more tools after a finished bind: the model reads guidance
+// verbatim, so this directly contradicts the bundled skill's "adapt fields/formatting" + the
+// ambient "search-commands available" pulls.
 // Paired with structuredContent.nextAction{kind:'done'} for host orchestration.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 const POST_APPLY_UNCERTAINTY_GUIDANCE =
   'Post-apply state is uncertain: inspect live worksheet state with get-worksheet-xml before any correction. Do NOT call bind-template again or replay apply.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
-// singer must NOT hand-author another one. These clauses are appended only for splices the
+// agent must NOT hand-author another one. These clauses are appended only for splices the
 // function observed succeeding; requested-but-skipped filters are warnings, not successes.
 const FILTER_APPLIED_GUIDANCE =
   'The requested filter is ALREADY applied. Do NOT add another filter — a second one can change the scoping. The interactive control may not render as a visible card; that is a display detail, not a missing filter.';
@@ -321,6 +364,8 @@ const SUMMARY_ROWS_MAX_ROWS = 20;
 const EMPTY_SUMMARY_ROWS_ERROR = 'empty readback — verify with get-summary-data';
 const EMPTY_SUMMARY_ROWS_GUIDANCE =
   'Summary readback returned zero rows; check the sheet and its filters before claiming the chart is complete.';
+const SETTLED_SUMMARY_PREVIEW_GUIDANCE =
+  'Summary preview unavailable; do not claim values or replay the apply.';
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
@@ -367,8 +412,8 @@ function refMatchesSchemaField(ref: CanonicalColumnRef, field: SchemaField): boo
 function currencyHeterogeneityCaveat(
   schemaSummary: SchemaSummary,
   worksheetXml: string | null,
-): string {
-  if (!worksheetXml) return '';
+): { guidance: string; completionCaveat: 'unconverted_currency' | null } | null {
+  if (!worksheetXml) return null;
 
   const displayedRefs = canonicalRefsIn(xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']));
   const summedMeasure = schemaSummary.fields.find(
@@ -378,7 +423,7 @@ function currencyHeterogeneityCaveat(
         (ref) => ref.derivation.toLowerCase() === 'sum' && refMatchesSchemaField(ref, field),
       ),
   );
-  if (!summedMeasure) return '';
+  if (!summedMeasure) return null;
 
   // Detail/LOD, shape, and text partition marks per member just like rows/cols do,
   // so a currency column on any of them means the sum is NOT cross-currency.
@@ -394,11 +439,14 @@ function currencyHeterogeneityCaveat(
       ) &&
       !visibleDimensionRefs.some((ref) => refMatchesSchemaField(ref, field)),
   );
-  if (!omittedUnitDimension) return '';
+  if (!omittedUnitDimension) return null;
 
   const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.columnName);
   const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.columnName);
-  return `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`;
+  return {
+    guidance: `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`,
+    completionCaveat: /^currency([ _-]?code)?$/i.test(unitName) ? 'unconverted_currency' : null,
+  };
 }
 
 type SummaryRowsEnrichment = Pick<
@@ -560,6 +608,26 @@ function blockedResult(
       ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
     },
     prefillNextAction(nextActionLabel),
+  );
+}
+
+function completeRequestDecline(ask: string): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'blocked',
+      reason: 'request_not_covered',
+      applied: false,
+      may_have_applied: false,
+      writeAttempts: 0,
+      requestCoverage: {
+        version: 1,
+        kind: 'declined',
+        askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+      },
+      guidance:
+        'The complete request was not proven safe for a direct bind. Continue with the ordinary authoring path without replaying this bind.',
+    },
+    prefillNextAction('Continue with ordinary authoring'),
   );
 }
 
@@ -1330,8 +1398,9 @@ function buildWaterfallDiscoveryGuidance(
   if (!hasSortOverride(res, proposal)) {
     const orderCandidates = waterfallOrderCandidates(schemaSummary);
     if (orderCandidates.length > 0) {
-      // Name the sequence column so the singer carries it in the bind instead of failing on
-      // refine (which cannot sort by an off-view field) — the m1 give-up/XML-surgery seam.
+      // Name the sequence column so the agent carries it in the bind instead of failing on
+      // refine (which cannot sort by an off-view field); without it the agent gives up or
+      // hand-edits the XML.
       sentences.push(
         `Waterfall step order: schema has ${orderCandidates.join(', ')}; the running total is ` +
           `order-dependent, so re-call bind-template with proposal.sort:{by:${JSON.stringify(
@@ -1460,6 +1529,7 @@ function buildCall2Contract({
   session,
   ask,
   targetWorksheet,
+  datasource,
   requiredFilterFields,
   requiredFilterValues,
 }: {
@@ -1467,6 +1537,7 @@ function buildCall2Contract({
   session: string;
   ask: string;
   targetWorksheet?: string;
+  datasource?: string;
   requiredFilterFields?: string[];
   requiredFilterValues?: ExactFilterValueConstraint[];
 }): Call2Contract {
@@ -1476,6 +1547,7 @@ function buildCall2Contract({
       session,
       ask,
       ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
+      ...(datasource !== undefined ? { datasource } : {}),
       auto_apply: true,
     },
     ...(llmInput.recommended ? { recommended: llmInput.recommended } : {}),
@@ -1554,13 +1626,11 @@ function appliedDefaultFrom(
 }
 
 /**
- * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an anchor
- * category candidate or an explicit order column) — the m1 genuine-unfilled case that MUST
- * keep steering a re-bind. It is the exact complement of "terminal": the applied:true receipt
- * is only marked done when this is false. Built from the SAME four helpers the steer uses so
- * the two sides cannot drift. The gray-zone waterfall whose only emission would be the bare
- * WATERFALL_SORT_HINT (no named order column) is deliberately NOT unfilled here — matching the
- * cartographer's boundary: steer ⟺ a named candidate field is actually fillable.
+ * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an order
+ * column exists and no sort is set) — the genuine-unfilled case that MUST keep steering a
+ * re-bind. While it is true, the receipt is never marked done. The gray-zone waterfall
+ * whose only emission would be the bare WATERFALL_SORT_HINT (no named order column) is
+ * deliberately NOT unfilled here: steer ⟺ a named candidate field is actually fillable.
  */
 function waterfallReBindSlotUnfilled(res: BinderResult, schemaSummary?: SchemaSummary): boolean {
   if (!isWaterfallResult(res)) {
@@ -1584,7 +1654,7 @@ function buildGuidance(
       guidance =
         'Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs ' +
         'to exact compatible field names, and make Call 2 with the same ask/target, proposal, and ' +
-        `auto_apply:true. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
+        `top-level auto_apply:true. top_n ranks; filters[].context scopes filters. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
         'Do not call other authoring tools between calls.';
       break;
     case 'escalate':
@@ -1706,7 +1776,6 @@ function collisionFreeWorksheetTitle(
 }
 
 const IDEMPOTENCY_ATTRIBUTE = '@_user:tableau-agent-idempotency-key';
-const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
 
 function worksheetTitleForIdempotencyKey(workbookXml: string, key: string): string | undefined {
   let workbook: ParsedWorkbook;
@@ -1810,8 +1879,8 @@ function stampWorksheetIdempotencyKey(
   const escapedKey = escapeXmlAttribute(idempotencyKey);
   const existing = new RegExp(`\\s${attributeName}=(['"])[^'"]*\\1`);
   const stampedWorksheet = existing.test(worksheetXml)
-    ? worksheetXml.replace(existing, ` ${attributeName}='${escapedKey}'`)
-    : worksheetXml.replace(/<worksheet\b/, `<worksheet ${attributeName}='${escapedKey}'`);
+    ? worksheetXml.replace(existing, () => ` ${attributeName}='${escapedKey}'`)
+    : worksheetXml.replace(/<worksheet\b/, () => `<worksheet ${attributeName}='${escapedKey}'`);
   return ensureUserNamespace(
     upsertSheetIntoWorkbook(workbookXml, worksheetTitle, stampedWorksheet),
   );
@@ -1910,7 +1979,7 @@ function ensureSortByColumnDependency(
 
 /**
  * Declare a FILTER field's column + column-instance in <datasource-dependencies> — the mirror
- * of {@link ensureSortByColumnDependency} for an m7 context filter. A <filter column='[DS].[CI]'>
+ * of {@link ensureSortByColumnDependency} for a context filter. A <filter column='[DS].[CI]'>
  * references a phantom CI unless both the base <column> and the <column-instance> exist in the
  * dependency block, so this ensures them (idempotent: skips whichever is already declared).
  * Returns the parsed CI parts the caller needs to emit the filter node (`instanceName`, `role`).
@@ -1986,7 +2055,7 @@ function ensureFilterColumnDependency(
 }
 
 /**
- * Emit an interactive dimension filter node (m7). A `context:true` filter carries
+ * Emit an interactive dimension filter node. A `context:true` filter carries
  * `context='true'` — Tableau order-of-operations step 3, which runs BEFORE the Top-N
  * dimension filter (step 4), so a top-N within this dimension ranks WITHIN the selection.
  * With no member `values`, emit the enumerate-all interactive control
@@ -2044,18 +2113,21 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
   let out = xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${filterXml}`);
   const sliceEntry = `<column>${sliceColumn}</column>`;
   if (/<slices\b[^>]*\/>/.test(out)) {
-    out = out.replace(/<slices\b[^>]*\/>/, `<slices>${sliceEntry}</slices>`);
+    out = out.replace(/<slices\b[^>]*\/>/, () => `<slices>${sliceEntry}</slices>`);
   } else if (/<slices>[\s\S]*?<\/slices>/.test(out)) {
     // Guard against duplicates by the exact slice ENTRY, not the bare CI ref: the CI ref also
     // appears in the filter node just inserted, so `includes(sliceColumn)` would wrongly skip
     // a legitimate second slice (e.g. planTopN already added the product CI to <slices>).
     if (!out.includes(sliceEntry)) {
-      out = out.replace(/<\/slices>/, `${sliceEntry}</slices>`);
+      out = out.replace(/<\/slices>/, () => `${sliceEntry}</slices>`);
     }
   } else if (/<aggregation\b/.test(out)) {
-    out = out.replace(/(\s*)(<aggregation\b)/, `$1<slices>${sliceEntry}</slices>$1$2`);
+    out = out.replace(
+      /(\s*)(<aggregation\b)/,
+      (_m, ws: string, agg: string) => `${ws}<slices>${sliceEntry}</slices>${ws}${agg}`,
+    );
   } else {
-    out = out.replace(filterXml, `${filterXml}\n      <slices>${sliceEntry}</slices>`);
+    out = out.replace(filterXml, () => `${filterXml}\n      <slices>${sliceEntry}</slices>`);
   }
   return out;
 }
@@ -2063,10 +2135,11 @@ function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: s
 /** Splice a filter card into ONE worksheet-window body, creating the cards scaffold if absent. */
 function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string): string {
   // Already carries a filter card for this CI — leave it.
-  if (
-    inner.includes(`param='${escapeXmlAttribute(columnRef)}'`) &&
-    /type=['"]filter['"]/.test(inner)
-  ) {
+  const paramAttr = `param='${escapeXmlAttribute(columnRef)}'`;
+  const hasFilterCard = (inner.match(/<card\b[^>]*>/g) ?? []).some(
+    (tag) => tag.includes(paramAttr) && /type=['"]filter['"]/.test(tag),
+  );
+  if (hasFilterCard) {
     return inner;
   }
   const leftStripRe =
@@ -2089,7 +2162,7 @@ function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string
   if (emptyCardsRe.test(inner)) {
     return inner.replace(
       emptyCardsRe,
-      `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
+      () => `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
     );
   }
   // No cards node — create the scaffold as the FIRST child (worksheet window content model:
@@ -2140,7 +2213,7 @@ function worksheetXmlByTitle(xml: string, literalTitle: string): string | null {
 function applyProposalSplices({
   xml,
   args,
-  schemaSummary,
+  schemaSummary: fullSchemaSummary,
   literalTitle,
 }: {
   xml: string;
@@ -2154,6 +2227,14 @@ function applyProposalSplices({
   if (!args.sort && args.top_n === undefined && (!args.filters || args.filters.length === 0)) {
     return { ok: true, xml, warnings: [], appliedFilterCount: 0 };
   }
+  const boundDatasource = args.template_parameters['DATASOURCE'];
+  const schemaSummary =
+    boundDatasource === undefined
+      ? fullSchemaSummary
+      : narrowSummaryToDatasource(
+          fullSchemaSummary,
+          (ds) => ds === decodeXmlEntities(boundDatasource),
+        );
   const originalWorksheetXml = worksheetXmlByTitle(xml, literalTitle);
   if (originalWorksheetXml === null) {
     return { ok: false, reason: `proposal splice target worksheet "${literalTitle}" not found` };
@@ -2203,7 +2284,7 @@ function applyProposalSplices({
     if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
     out = filtered.xml;
   }
-  // Declarative interactive filters (m7). CRITICAL ORDERING: this runs AFTER the top_n splice
+  // Declarative interactive filters. CRITICAL ORDERING: this runs AFTER the top_n splice
   // so planTopN sees the clean single-dimension sheet and never trips its >1-dimension refusal
   // (a filter-only CI would otherwise look like a second rankable dimension). A context:true
   // filter is Tableau OoO step 3 (before the top-N dimension filter at step 4), so a "top N
@@ -2233,7 +2314,7 @@ function applyProposalSplices({
       appliedFilterCount += 1;
     }
   }
-  let workbookXml = xml.replace(originalWorksheetXml, out);
+  let workbookXml = xml.replace(originalWorksheetXml, () => out);
   for (const columnRef of shownFilterColumns) {
     // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
     // context filter with no control is invisible. Best-effort (no-op if the window is absent).
@@ -2294,9 +2375,7 @@ async function verifyTrustedWorkbookReadback({
         return (
           calculationsPresent &&
           fragment !== null &&
-          !verifyWorksheetReadback(intendedWorksheetXml, fragment).some(
-            (finding) => finding.severity === 'error',
-          )
+          !isReadbackUnsettled(verifyWorksheetReadback(intendedWorksheetXml, fragment))
         );
       },
       signal,
@@ -2562,6 +2641,7 @@ async function performAutoApply({
     };
   }
   const applyMs = Date.now() - applyStart;
+  const documentWarnings = applyResult.value.documentWarnings;
 
   // ── Host verification receipt on the HOT path (W-23447506) ────────
   // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
@@ -2693,7 +2773,7 @@ async function performAutoApply({
     };
   }
 
-  // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
+  // Response-shape trim: on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const successfulCalcCaptions = [
@@ -2705,10 +2785,10 @@ async function performAutoApply({
     res.status,
   );
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
-  // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
-  // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
-  // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
-  // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
+  // Stop the agent calling more tools after a finished bind: the applied:true receipt gets
+  // the stop-clause and the machine-readable done marker only when `incomplete` (below) is
+  // false. `incomplete` is true for a waterfall with an unfilled order slot, an unfilled
+  // encoding, a splice warning or a failed promise check.
   // A tool that cannot verify what it wrote must not report success. The binder is the only
   // layer that knows the ask named an encoding it could not bind (a post-apply readback is
   // blind here — the XML it would read back never contained the node), so its own
@@ -2732,6 +2812,7 @@ async function performAutoApply({
   const summaryMs = Date.now() - summaryStart;
   const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   const summaryReadbackTimedOut = summaryRows.summary_rows_error === SUMMARY_ROWS_TIMEOUT_ERROR;
+  const summaryPreviewUnavailable = summaryRows.summary_rows === undefined;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -2750,12 +2831,9 @@ async function performAutoApply({
       usedFieldValidityUnknown.reason !== 'unsupported-api');
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const needsFollowUp =
-    incomplete ||
-    (injected.warnings?.length ?? 0) > 0 ||
-    emptySummaryReadback ||
-    summaryReadbackTimedOut ||
-    postApplyUncertain;
+  const coreNeedsFollowUp =
+    incomplete || (injected.warnings?.length ?? 0) > 0 || postApplyUncertain;
+  const needsFollowUp = coreNeedsFollowUp || emptySummaryReadback || summaryReadbackTimedOut;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -2770,7 +2848,8 @@ async function performAutoApply({
   const defaultGuidance = appliedDefault
     ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default, offer to change the measure or top_n${contextMeasureGuidance}.`
     : '';
-  const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const heterogeneityCaveat = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
+  const currencyGuidance = heterogeneityCaveat?.guidance ?? '';
   const guidance = `${
     promiseOutcome === 'failed' || postApplyUncertain
       ? `${receiptText} ${POST_APPLY_UNCERTAINTY_GUIDANCE}`
@@ -2784,13 +2863,87 @@ async function performAutoApply({
           )
         : needsFollowUp
           ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
-          : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+          : documentWarnings.length > 0
+            ? receiptText
+            : `${receiptText} ${terminalGuidance}`
+  }${documentWarnings.length > 0 ? ` ${DESKTOP_WARNINGS_GUIDANCE}${formatDesktopWarnings(documentWarnings)}` : ''}${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  const nativeFindings = verificationReport.findings ?? [];
+  const nativeFieldUnverified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'skipped' &&
+    nativeFindings.length === 1 &&
+    nativeFindings[0].severity === 'warning' &&
+    nativeFindings[0].source === 'used-field-validity' &&
+    nativeFindings[0].reason === 'unsupported-api';
+  const nativeFieldVerified =
+    verificationReport.ok === true &&
+    verificationReport.status === 'passed' &&
+    nativeFindings.length === 0;
+  const completionEligible =
+    res.requestCoverage !== undefined &&
+    !trustedDeterministicApply &&
+    args.sheet_type === 'worksheet' &&
+    !coreNeedsFollowUp &&
+    documentWarnings.length === 0 &&
+    !emptySummaryReadback &&
+    !summaryReadbackTimedOut &&
+    !appliedDefault &&
+    successfulCalcCaptions.length === 0 &&
+    args.top_n === undefined &&
+    args.sort === undefined &&
+    (args.filters?.length ?? 0) === 0 &&
+    spliced.appliedFilterCount === 0 &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified) &&
+    res.encodings !== undefined &&
+    res.encodings.unfilled.length === 0 &&
+    (heterogeneityCaveat === null || heterogeneityCaveat.completionCaveat !== null) &&
+    readbackEvidence === '';
+  const caveats: CompletionCaveat[] = [];
+  if (heterogeneityCaveat?.completionCaveat) caveats.push(heterogeneityCaveat.completionCaveat);
+  if (nativeFieldUnverified) caveats.push('field_validation_unverified');
+  caveats.push('query_render_unverified');
+  if (summaryPreviewUnavailable) caveats.push('summary_preview_unavailable');
+  const operationEligible =
+    !trustedDeterministicApply &&
+    res.requestCoverage === undefined &&
+    args.sheet_type === 'worksheet' &&
+    !coreNeedsFollowUp &&
+    documentWarnings.length === 0 &&
+    !emptySummaryReadback &&
+    !summaryReadbackTimedOut &&
+    readbackRan &&
+    encodingAnalysisComplete &&
+    (base.warnings?.length ?? 0) === 0 &&
+    (injected.warnings?.length ?? 0) === 0 &&
+    spliced.warnings.length === 0 &&
+    applyResult.value.validationWarnings.length === 0 &&
+    verification?.ok === true &&
+    verification.status === 'passed' &&
+    verification.findings.length === 0 &&
+    (nativeFieldVerified || nativeFieldUnverified);
+  const evidenceEligible = completionEligible || operationEligible;
+  const completionEvidenceWithheld = res.requestCoverage !== undefined && !completionEligible;
+  const settledGuidance =
+    documentWarnings.length > 0
+      ? guidance
+      : completionEvidenceWithheld
+        ? `${receiptText} Completion evidence was withheld because the post-apply result did not satisfy every complete request verification requirement.${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${summaryReadbackTimedOut ? ` ${SUMMARY_ROWS_TIMEOUT_GUIDANCE}` : ''}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+        : evidenceEligible && summaryPreviewUnavailable
+          ? `${receiptText} ${terminalGuidance} ${SETTLED_SUMMARY_PREVIEW_GUIDANCE}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`
+          : guidance;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(successfulCalcCaptions.length > 0 ? { authored_calcs: successfulCalcCaptions } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
-    guidance,
+    ...(documentWarnings.length > 0 ? { desktop_warnings: documentWarnings } : {}),
+    guidance: settledGuidance,
     ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
@@ -2806,8 +2959,36 @@ async function performAutoApply({
       : { bind: bindMs, inject: injectMs, apply: applyMs },
     verification: receiptInput.readback,
     ...summaryRows,
+    ...(res.requestCoverage ? { requestCoverage: res.requestCoverage } : {}),
+    ...(evidenceEligible
+      ? {
+          completionEvidence: {
+            version: 2,
+            kind: 'single_sheet_apply',
+            askSha256: createHash('sha256').update(ask, 'utf8').digest('hex'),
+            coverage: completionEligible ? 'complete_request' : 'applied_operation',
+            application: {
+              status: 'applied',
+              template: args.template_name,
+              sheetName: literalTitle,
+            },
+            caveats,
+          } as const,
+        }
+      : {}),
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
+  if (documentWarnings.length > 0) {
+    return {
+      ...(needsFollowUp || unfilledEncodings ? { incomplete: true as const } : {}),
+      result: withNextAction(
+        applied,
+        unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain
+          ? prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings))
+          : desktopWarningNextAction(),
+      ),
+    };
+  }
   if (unfilledEncodings && promiseOutcome !== 'failed' && !postApplyUncertain) {
     return {
       incomplete: true,
@@ -2817,7 +2998,7 @@ async function performAutoApply({
       ),
     };
   }
-  return needsFollowUp
+  return (needsFollowUp || completionEvidenceWithheld) && !evidenceEligible
     ? { incomplete: true, result: applied }
     : {
         result: withNextAction(
@@ -2853,6 +3034,9 @@ async function performAutoApply({
         ),
       };
 }
+
+const DESKTOP_WARNINGS_GUIDANCE =
+  'Desktop reported warnings while applying this sheet. Read them below and tell the user what Desktop dropped or changed before you continue.';
 
 function renderAuthoredCalcPrefix(
   captions: string[] | undefined,
@@ -3100,6 +3284,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         proposal,
         minConfidence,
         auto_apply,
+        requireCompleteRequest,
         target_worksheet,
         datasource,
         calcs,
@@ -3115,6 +3300,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           proposal,
           minConfidence,
           auto_apply,
+          requireCompleteRequest,
           target_worksheet,
           datasource,
           calcs,
@@ -3130,6 +3316,17 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          if (
+            requireCompleteRequest === true &&
+            (auto_apply !== true ||
+              proposal !== undefined ||
+              calcs !== undefined ||
+              skip_validation !== undefined ||
+              target_worksheet !== undefined ||
+              datasource !== undefined)
+          ) {
+            return new Ok(completeRequestDecline(ask));
+          }
           const trustedDeterministicApply =
             extra.config.allowSkipValidation === true &&
             skip_validation === true &&
@@ -3144,6 +3341,13 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const currentProposalSignature =
             proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
           const priorRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+          if (requireCompleteRequest === true && priorRecovery !== undefined) {
+            // An open recovery record would read this as a bare resubmit; decline and leave it alone.
+            return new Ok(completeRequestDecline(ask));
+          }
+          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
+          const retainedDatasource = retainedCall2Contract?.arguments.datasource;
+          const requestedDatasource = datasource ?? retainedDatasource;
           const isStructuredCorrectionCall =
             currentProposalSignature !== undefined &&
             priorRecovery?.attempts.some(
@@ -3193,20 +3397,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
             }
-            bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
-              resolvedSession,
-              askKey,
-              {
-                ...(currentProposalSignature !== undefined
-                  ? { proposalSignature: currentProposalSignature }
-                  : {}),
-              },
-            );
+            if (requestedDatasource === undefined) {
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            }
           } catch {
             /* fail-open */
           }
 
-          const retainedCall2Contract = priorRecovery?.proposalContext as Call2Contract | undefined;
           if (proposal !== undefined && retainedCall2Contract !== undefined) {
             const mismatches = proposalContractMismatches(
               proposal as BindingProposal,
@@ -3250,13 +3455,57 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           let workbookXml = xmlResult.value;
           const hostBaselineWorkbookXml = workbookXml;
+          const effectiveDatasource =
+            requestedDatasource === undefined
+              ? undefined
+              : resolveUniqueDatasourceName(workbookXml, requestedDatasource);
+          if (effectiveDatasource === null) {
+            return new ArgsValidationError(
+              `datasource "${requestedDatasource}" not found or ambiguous in the workbook; use an internal datasource name or unique caption`,
+            ).toErr();
+          }
+          if (retainedDatasource !== undefined && effectiveDatasource !== retainedDatasource) {
+            return new ArgsValidationError(
+              `datasource must match the retained bind-template datasource "${retainedDatasource}"`,
+            ).toErr();
+          }
+          if (requestedDatasource !== undefined) {
+            try {
+              // The workbook read can overlap another call; reject its reservation before mutation.
+              const currentRecovery = sessionRouteState.getBindRecovery(resolvedSession, askKey);
+              if (currentRecovery !== priorRecovery) {
+                const blocked = recoveryGateBlock(
+                  currentRecovery,
+                  currentProposalSignature,
+                  resolvedSession,
+                  askKey,
+                  target_worksheet,
+                );
+                if (blocked) {
+                  return new IncompleteOperationError(blocked).toErr();
+                }
+              }
+              bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+                resolvedSession,
+                askKey,
+                {
+                  ...(currentProposalSignature !== undefined
+                    ? { proposalSignature: currentProposalSignature }
+                    : {}),
+                },
+              );
+            } catch {
+              /* fail-open */
+            }
+          }
           let baselineSchemaSummary: SchemaSummary | undefined;
           let baselineFilterIntent: ExactFilterIntent | undefined;
           if (priorRecovery === undefined) {
-            baselineSchemaSummary = summarizeSchema(workbookXml);
+            baselineSchemaSummary = summarizeSchema(workbookXml, effectiveDatasource);
             baselineFilterIntent = parseExactFilterIntent(ask, baselineSchemaSummary);
             if (baselineFilterIntent.kind === 'ambiguous') {
               clearFilterPreflightRecoveryFailOpen(resolvedSession, askKey);
+              if (requireCompleteRequest === true) return new Ok(completeRequestDecline(ask));
               return new IncompleteOperationError(
                 ambiguousFilterIntentResult(baselineFilterIntent.candidateFieldRefs),
               ).toErr();
@@ -3288,7 +3537,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const prepared = prepareCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 resolveLooseReferences: true,
               });
               if (prepared.isErr()) {
@@ -3300,7 +3549,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               const authored = await authorCalculationsInWorkbook({
                 workbookXml,
                 calcs: authoredCalcInputs,
-                datasource,
+                datasource: effectiveDatasource,
                 executor,
                 signal: extra.signal,
                 resolveLooseReferences: true,
@@ -3316,6 +3565,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const runtimeCatalog = loadRuntimeTemplateCatalogSnapshots({
             ...(proposal === undefined ? {} : { additionalTemplates: [proposal.template] }),
             automaticOnly: true,
+            ...(requireCompleteRequest === true ? { completeRequestLineColorOptional: true } : {}),
           });
           const puppetCompatibility = createPuppetCompatibilityProjection(runtimeCatalog);
           const manifests =
@@ -3343,7 +3593,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
           }
-          // ── Target-worksheet gate (e1/s7 stray-sheet class) ──────────
+          // ── Target-worksheet gate (stray-sheet class) ──────────
           // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
           // chain): an explicit target must be provably replaceable — a missing name
           // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
@@ -3382,12 +3632,15 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ask,
               workbookXml,
               manifests,
+              datasource: effectiveDatasource,
+              ...(requireCompleteRequest === true ? { requireCompleteRequest: true } : {}),
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
             if (
               proposal === undefined &&
               auto_apply === true &&
+              requireCompleteRequest !== true &&
               res.status === 'propose' &&
               res.llm_input.recommended &&
               requiredFilterFields === undefined
@@ -3397,6 +3650,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ask,
                 workbookXml,
                 manifests,
+                datasource: effectiveDatasource,
                 proposal: proposalFromRecommendation(ask, recommended),
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
@@ -3419,6 +3673,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ask,
                   workbookXml,
                   manifests,
+                  datasource: effectiveDatasource,
                   ...(minConfidence !== undefined ? { minConfidence } : {}),
                 });
                 const recommended =
@@ -3450,8 +3705,31 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             res = { ...res, args: { ...res.args, title: canonicalTargetWorksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          schemaSummary ??= summarizeSchema(workbookXml);
+          schemaSummary ??= summarizeSchema(workbookXml, effectiveDatasource);
           res = puppetCompatibility.expandBinderResult(res, schemaSummary);
+          if (
+            requireCompleteRequest === true &&
+            (res.status !== 'bound' ||
+              res.requestCoverage === undefined ||
+              res.used_llm ||
+              (res.warnings?.length ?? 0) > 0 ||
+              res.encodings === undefined ||
+              res.encodings.unfilled.length > 0 ||
+              appliedDefault !== undefined)
+          ) {
+            // The decline wrote nothing and returned no proposal, so release this call's admission.
+            try {
+              sessionRouteState.releaseBindRecoveryReservation(
+                resolvedSession,
+                askKey,
+                bindRecoveryReservationId,
+              );
+              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+            } catch {
+              /* fail-open */
+            }
+            return new Ok(completeRequestDecline(ask));
+          }
 
           // ── One structured correction boundary ─────────────────────────
           // Only `propose` earns a structured Call 2. Every escalation closes the fast path.
@@ -3462,6 +3740,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   session: resolvedSession,
                   ask,
                   targetWorksheet: resolvedTarget?.id ?? target_worksheet,
+                  datasource: effectiveDatasource,
                   requiredFilterFields,
                   requiredFilterValues,
                 })

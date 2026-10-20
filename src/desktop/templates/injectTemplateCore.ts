@@ -1,6 +1,6 @@
 // Shared inject core — the template→workbook transformation extracted from the
 // inject-template tool (src/tools/desktop/template/injectTemplate.ts) so the
-// bind-template auto-apply path (W60) can run the SAME proven inject without
+// bind-template auto-apply path can run the SAME proven inject without
 // duplicating it. This is intentionally PURE over strings: no fs (the caller
 // reads the template + workbook), no MCP, no logging. It reproduces the tool's
 // exact substitution order and escaping so both callers behave identically.
@@ -19,7 +19,7 @@ import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { unsubstitutedTemplateTokenRule } from '../validation/rules/unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { parsedXmlNamesEqual } from '../xmlElement.js';
+import { escapeRegExp, parsedXmlNamesEqual } from '../xmlElement.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import {
@@ -71,7 +71,6 @@ export function stripDonorCurrencyOrLocaleFormats(
  * xmldom >=0.9 (this repo ships 0.9.10) throws NamespaceError serializing user:*
  * attributes with no xmlns:user in scope; templates are workbook fragments that
  * historically omitted the declaration. No-op when declared or unused.
- * Ported from a2td 3ee7bb6.
  */
 export function ensureUserNamespace(xml: string): string {
   if (!/\buser:[A-Za-z0-9_-]+/.test(xml)) return xml;
@@ -239,7 +238,7 @@ function spliceHistogramBinSize(templateXml: string, binSize: number | undefined
   }
   return templateXml.replace(binCalculation, (tag) =>
     /\bsize=(['"])[^'"]*\1/.test(tag)
-      ? tag.replace(/\bsize=(['"])[^'"]*\1/, `size='${binSize}'`)
+      ? tag.replace(/\bsize=(['"])[^'"]*\1/, () => `size='${binSize}'`)
       : tag.replace(/\s*\/>$|>$/, (end) => ` size='${binSize}'${end}`),
   );
 }
@@ -332,13 +331,13 @@ export function workbookHasSheetNamed(workbookXml: string, name: string): boolea
 
 /**
  * Remove every existing same-named worksheet (and worksheet-class window entry) so a
- * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
- * repeat demo asks piled up suffixed copies). STRUCTURAL (parse → filter → serialize
- * with the pipeline's own parser.ts pair), not string surgery: quote style, attribute
- * order, whitespace, and entity encoding cannot defeat the match (the regex layer this
- * replaces was defeated twice — adversary P0-3 quote flip, P2-7 attribute order).
- * ALL same-named nodes are removed, not just the first (P2-8): Desktop enforces unique
- * sheet names, so same-named siblings are always stale pile-up copies of one sheet —
+ * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (repeat
+ * demo asks piled up suffixed copies). STRUCTURAL (parse → filter → serialize with the
+ * pipeline's own parser.ts pair), not string surgery: quote style, attribute order,
+ * whitespace, and entity encoding cannot defeat the match (the regex layer this replaces
+ * was defeated by a quote flip and by attribute order). ALL same-named nodes are removed,
+ * not just the first: Desktop enforces unique sheet names, so same-named siblings are
+ * always stale pile-up copies of one sheet —
  * never distinct user work — and one apply now converges them.
  * Fail-safes (both return the input string byte-identical, deferring to Desktop dedup):
  * - the name is referenced by any dashboard zone — silently deleting a dashboard's
@@ -402,14 +401,14 @@ export function buildInjectedWorkbookXml({
   dateparseAxis,
   histogramBinSize,
 }: InjectTemplateCoreParams): InjectTemplateCoreResult {
-  // W60 demo-idempotence: a worksheet inject with a colliding title replaces the
-  // existing sheet rather than accumulating "Name (1)" copies.
+  // A worksheet inject with a colliding title replaces the existing sheet rather than
+  // accumulating "Name (1)" copies.
   const baseWorkbookXml =
     sheetType === 'worksheet' ? removeSameNamedWorksheet(workbookXml, title) : workbookXml;
 
   let processed = spliceHistogramBinSize(templateXml, histogramBinSize).replace(
     /\{\{TITLE\}\}/g,
-    AUTHORED_TITLE_SENTINEL,
+    () => AUTHORED_TITLE_SENTINEL,
   );
   const rewriteWarnings: string[] = [];
 
@@ -424,7 +423,7 @@ export function buildInjectedWorkbookXml({
 
   if (templateParameters?.['DATASOURCE']) {
     processed = pruneUnboundOptionalFields(processed, optionalFieldPrunes);
-    // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
+    // Splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
     // core rewrite (identity no-op when no facet is bound). The core then maps
     // [Facet] → the bound field.
     processed = ensureUserNamespace(processed);
@@ -458,7 +457,9 @@ export function buildInjectedWorkbookXml({
       // field_mapping. Generic parameter replacement would bypass derivation,
       // metadata, optional-prune, and survivor guards.
       if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
-      processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), () => escapeXml(value));
+      processed = processed.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, 'g'), () =>
+        escapeXml(value),
+      );
     }
   }
 
@@ -467,7 +468,7 @@ export function buildInjectedWorkbookXml({
     return { ok: false, issues: templateTokenIssues.map((issue) => issue.message) };
   }
 
-  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), escapeXml(title));
+  processed = processed.replace(new RegExp(AUTHORED_TITLE_SENTINEL, 'g'), () => escapeXml(title));
 
   const modifiedXml = injectTemplate(
     baseWorkbookXml,

@@ -4,16 +4,13 @@ import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { sessionParam } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
 import { applyAndVerify } from './applyAndVerify.js';
-import { DatasourceElement, selectTargetDatasource } from './authorCalcCore.js';
+import { DatasourceElement, quoteCalcString, selectTargetDatasource } from './authorCalcCore.js';
 
 const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 
@@ -183,6 +180,11 @@ function nextParameterName(xml: string): string {
   return `[Parameter ${n}]`;
 }
 
+function dateLiteral(raw: string): string {
+  const inner = raw.trim().replace(/^#(.*)#$/, '$1');
+  return `#${inner}#`;
+}
+
 function renderParameterColumn({
   caption,
   paramName,
@@ -196,12 +198,13 @@ function renderParameterColumn({
   value: string;
   members?: Array<string>;
 }): string {
-  const isString = datatype === 'string' || datatype === 'date';
+  const isString = datatype === 'string';
   const domain = members && members.length > 0 ? 'list' : 'any';
   const role = 'measure';
   const type = isString ? 'nominal' : 'quantitative';
-  // String/date parameter values are quoted in the value attr and the formula.
-  const wrap = (raw: string): string => (isString ? `"${raw}"` : raw);
+  // Strings are quoted calc literals; dates use Tableau's #...# literal (18 date parameters in src/desktop/data/twb-example-index.json: datatype='date' type='quantitative' value='#2000-03-11#', same formula).
+  const wrap = (raw: string): string =>
+    isString ? quoteCalcString(raw) : datatype === 'date' ? dateLiteral(raw) : raw;
   const valueAttr = escapeXml(wrap(value));
   const formula = escapeXml(wrap(value));
   const customized = datatype === 'integer' ? " datatype-customized='true'" : '';

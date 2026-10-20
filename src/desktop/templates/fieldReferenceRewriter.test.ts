@@ -7,7 +7,7 @@ import {
 import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 import type { TemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
 
-// Ports A's ref-class coverage (W10-E8) onto this repo's TBM-derived runtime snapshots.
+// Ref-class coverage against this repo's TBM-derived runtime snapshots.
 // The shared DOM-structural rewriter must rewrite every reference CLASS a template
 // carries — bare column declarations, base-column-attr rewrites, plain and
 // COMPOUND (table-calc) column-instance names, datasource-qualified refs in text
@@ -53,6 +53,43 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
     expect(out).toContain('name="[Sales]"');
     expect(out).not.toContain('name="[qk]"');
   });
+
+  it.each([
+    ['[DS].[none:Order: Date:nk]', 'none', 'Order: Date'],
+    ['[DS].[sum:Q1: Sales:qk]', 'sum', 'Q1: Sales'],
+    ['[DS].[pcto:cum:sum:A:B:C:qk:3]', 'pcto:cum:sum', 'A:B:C'],
+    ['[DS].[none:Sum: Total:nk]', 'none', 'Sum: Total'],
+    ['[DS].[sum:Sum: Total:qk]', 'sum', 'Sum: Total'],
+    ['[DS].[sum:min: Duration:qk]', 'sum', 'min: Duration'],
+  ])('keeps a colon inside a bound field name for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`:${field}:`);
+    expect(out).not.toContain(`name="[${field.split(':').pop()}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each([
+    ['[DS].[pcto:sum:Sales:qk]', 'pcto:sum', 'Sales'],
+    ['[DS].[cum:usr:Calc:qk]', 'cum:usr', 'Calc'],
+    ['[DS].[cum:Sum:Sales:qk]', 'cum:sum', 'Sales'],
+    ['[DS].[pcto:cum:sum:Sales:qk]', 'pcto:cum:sum', 'Sales'],
+  ])('consumes a table-calc wrapper chain for %s', (mapped, deriv, field) => {
+    const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+    expect(out).toContain(`name="[${field}]"`);
+    expect(out).toContain(`[${deriv}:${field}:`);
+  });
+
+  it.each(['[DS].[sum::qk]', '[DS].[pcto:sum::qk]'])(
+    'skips a malformed mapping with an empty field name: %s',
+    (mapped) => {
+      const out = rewriteFieldReferences(xml, { Field: mapped }, 'DS');
+
+      expect(out).not.toContain('name="[]"');
+    },
+  );
 
   it('rewrites an unqualified generated-instance source reference', () => {
     const forecastXml = xml.replace(
@@ -749,7 +786,7 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
   });
 });
 
-describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall (W10-E8 port)', () => {
+describe('rewriteFieldReferences — ref-class coverage: part-to-whole-waterfall', () => {
   let snapshot: TemplateRuntimeSnapshot;
   const DS = 'World Indicators';
   const mapping = {
@@ -834,10 +871,10 @@ describe('rewriteFieldReferences — calc caption rewrite (synthetic; no shipped
   });
 });
 
-describe('rewriteFieldReferences — calc caption derivation when formula inputs are remapped (Ben regression)', () => {
-  // Live defect (Ben, 2026-07-09 test1.twbx): correlation-scatter calc kept its
-  // human caption "Profit Ratio" after its formula was rebound to SUM([Profit])/
-  // SUM([Discount]), creating a second, wrong "Profit Ratio" beside the real one.
+describe('rewriteFieldReferences — calc caption derivation when formula inputs are remapped', () => {
+  // Live defect: a correlation-scatter calc kept its human caption "Profit Ratio" after its
+  // formula was rebound to SUM([Profit])/SUM([Discount]), creating a second, wrong
+  // "Profit Ratio" beside the real one.
   // Fix: derive an honest caption when the formula field refs change.
   const xml =
     '<workbook><worksheets><worksheet><table><view>' +
@@ -1237,6 +1274,23 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
     expect(out).not.toContain('name="[sum:Latitude (generated):qk]"');
   });
 
+  it('synthesizes a declaration for a colon-named field without splitting its name', () => {
+    const colonMap =
+      "<worksheet name='m'><table><view>" +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column datatype='real' name='[min: Duration]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies>' +
+      '<panes><pane><encodings>' +
+      "<size column='[{{DATASOURCE}}].[sum:min: Duration:qk]' />" +
+      '</encodings></pane></panes>' +
+      '</view></table></worksheet>';
+    const out = rewriteFieldReferences(colonMap, {}, 'DS');
+
+    expect(out).toContain(
+      '<column-instance column="[min: Duration]" derivation="Sum" name="[sum:min: Duration:qk]" pivot="key" type="quantitative"/>',
+    );
+  });
+
   it('carries the synthesized instance through a rename, matching the renamed base column', () => {
     // color references [sum:Quantity:qk]; Quantity is remapped to Profit → the
     // synthesized declaration must name the RENAMED base column, not the donor's.
@@ -1249,5 +1303,34 @@ describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instan
       '<column-instance column="[Profit]" derivation="Sum" name="[sum:Profit:qk]" pivot="key" type="quantitative"/>',
     );
     expect(out).not.toContain('name="[sum:Quantity:qk]"');
+  });
+});
+
+describe('rewriteFieldReferences — pruning an unmapped optional pill keeps shelf operators', () => {
+  const sheet = (rows: string): string =>
+    `<worksheet name='S'><table><view><datasources><datasource name='{{DATASOURCE}}'/></datasources><datasource-dependencies datasource='{{DATASOURCE}}'><column name='[A]' datatype='real' role='measure' type='quantitative'/><column name='[B]' datatype='real' role='measure' type='quantitative'/><column name='[Opt]' datatype='real' role='measure' type='quantitative'/><column-instance column='[A]' derivation='Sum' name='[sum:A:qk]' pivot='key' type='quantitative'/><column-instance column='[B]' derivation='Sum' name='[sum:B:qk]' pivot='key' type='quantitative'/><column-instance column='[Opt]' derivation='Sum' name='[sum:Opt:qk]' pivot='key' type='quantitative'/></datasource-dependencies></view><rows>${rows}</rows><cols></cols></table></worksheet>`;
+  const slots = [
+    { template_field: 'A', required: true },
+    { template_field: 'B', required: true },
+    { template_field: 'Opt', required: false },
+  ];
+  const d = '[{{DATASOURCE}}]';
+  it.each([
+    [`(${d}.[sum:A:qk] + ${d}.[sum:Opt:qk])`, '[DS].[sum:X:qk]'],
+    [`(${d}.[sum:Opt:qk] / ${d}.[sum:A:qk])`, '[DS].[sum:X:qk]'],
+    [
+      `(${d}.[sum:A:qk] / (${d}.[sum:B:qk] + ${d}.[sum:Opt:qk]))`,
+      '([DS].[sum:X:qk] / [DS].[sum:Y:qk])',
+    ],
+  ])('prunes %s', (rows, expected) => {
+    const result = rewriteFieldReferencesWithDiagnostics(
+      sheet(rows),
+      { A: '[sum:X:qk]', B: '[sum:Y:qk]' },
+      'DS',
+      undefined,
+      { templateSlots: slots },
+    );
+    const out = result.xml.match(/<rows>([^<]*)<\/rows>/)?.[1];
+    expect(out).toBe(expected);
   });
 });

@@ -9,9 +9,9 @@ import type { ReadbackVerificationResult } from '../../../desktop/validation/rea
 import { loadWorksheetXml } from '../../../desktop/wrappers/loadWorksheetXml.js';
 import {
   DesktopCommandExecutionError,
-  McpToolError,
   WorksheetXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 
 export interface ApplyWorksheetArtifactArgs {
   store: TemplateArtifactStore;

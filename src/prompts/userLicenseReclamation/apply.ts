@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { WebPromptFactory } from '../registry.js';
 
@@ -204,7 +205,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
     `Unlicensed via \`${UPDATE_USER_TOOL}\`. Admin-only. ` +
     'Ownership of content is retained after downgrade (no content is deleted).',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const inactiveDays = args.inactiveDays
@@ -380,11 +381,11 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '**Null handling — null is NOT activity.** A null, empty, or missing Desktop/Prep date is NOT ' +
         'evidence of activity; such a user remains a candidate. Only a recent *non-null* Desktop/Prep ' +
         'date rescues a user.',
-      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Users results were truncated at ` +
-        `the ${10000}-row limit. Some candidates may be missing their Desktop/Prep last-access date and ` +
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, warn the admin: "⚠️ TS Users results were truncated at ` +
+        'the row limit. Some candidates may be missing their Desktop/Prep last-access date and ' +
         'could be falsely flagged as inactive — narrow the scope with `userIds` or a smaller candidate ' +
         'set." (With the `User Email` scoping above this should not occur unless the candidate set itself ' +
-        'exceeds 10000.)',
+        'exceeds the row limit.)',
       'If the query returns 0 rows, the `User Email` scoping was likely NOT applied — either the ' +
         '`<REPLACE ...>` placeholder was left unsubstituted, or no candidate email matched. TS Users is ' +
         'one row per user, so a real candidate set should return at least one row. Do NOT treat 0 rows as ' +
@@ -404,10 +405,10 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       'A user with a recent non-null Desktop or Prep last-access date is **active** and must be excluded even if ' +
         'they have no TS Events Access event and a stale `lastLogin`.',
       '',
-      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Events results were truncated at the ` +
-        `${10000}-row limit. Some active users may not appear in the result — candidates are not exhaustive. ` +
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, warn the admin: "⚠️ TS Events results were truncated at the ` +
+        'row limit. Some active users may not appear in the result — candidates are not exhaustive. ' +
         'Consider narrowing the scope with `userIds` or reducing `inactiveDays`." (With the `Actor User Name` ' +
-        'scoping in 2a this should not occur unless the candidate set itself has more than 10000 Access events in the window.)',
+        'scoping in 2a this should not occur unless the candidate set itself has more Access events in the window than the row limit.)',
       'Unlike the TS Users query (2b), 0 rows in the TS Events result (2a) is a VALID outcome — it means none ' +
         'of the scoped candidates had an Access event in the lookback window, so they are correctly retained as ' +
         'candidates. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder ' +
@@ -437,8 +438,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         'This is informational — ownership is NOT affected by downgrade. ' +
         'Present the owned-content count per user so the admin can decide whether to reassign ownership ' +
         'separately before or after reclamation.',
-      `If the query returns exactly ${10000} rows, note in the report: "⚠️ Site Content results were ` +
-        `truncated at the ${10000}-row limit — owned-content counts may be understated for some users."`,
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, note in the report: "⚠️ Site Content results were ` +
+        'truncated at the row limit — owned-content counts may be understated for some users."',
       '',
       '**IMPORTANT — Ownership note:** Downgrading a user to Unlicensed does NOT delete, reassign, ' +
         'or affect any content they own. Their workbooks, data sources, and other content remain ' +

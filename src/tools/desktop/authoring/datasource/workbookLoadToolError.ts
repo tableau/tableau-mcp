@@ -3,10 +3,8 @@ import {
   describeLoadWorkbookXmlError,
   type LoadWorkbookXmlError,
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import {
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { XmlModificationError } from '../../../../errors/mcpToolError.js';
 
 type WorkbookLoadFailure =
   | { type: 'execute-command-error'; error: ExecuteCommandError }

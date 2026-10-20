@@ -1,16 +1,11 @@
 import { statSync } from 'fs';
 import { join } from 'path';
 
-// Smoke test for the TRIMMED, committed twb-example-index.json (see
-// src/scripts/trimTwbExampleIndex.ts). Under vitest, DATA_ROOT does not resolve
-// to the source data dir (same reason testSetup.ts pins CORPUS_PATH), so point
-// the loader at the committed trimmed file explicitly. loadTwbExampleIndex()
-// reads TWB_INDEX_PATH at call time, so setting it before any test call is
-// enough; this file never mocks searchLibrary, so it exercises the real file.
-const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
-process.env.TWB_INDEX_PATH = TRIMMED_INDEX_PATH;
-
 import { searchWorkbookExamples } from './searchLibrary.js';
+
+// Smoke test for the TRIMMED, committed twb-example-index.json (see
+// src/scripts/trimTwbExampleIndex.ts); this file never mocks searchLibrary, so it exercises the real file.
+const TRIMMED_INDEX_PATH = join(process.cwd(), 'src', 'desktop', 'data', 'twb-example-index.json');
 
 interface TwbSnippet {
   xml?: string;
@@ -18,7 +13,7 @@ interface TwbSnippet {
 }
 interface TwbEntry {
   name: string;
-  relativePath: string;
+  id: string;
   features: string[];
   snippets: Record<string, TwbSnippet>;
 }
@@ -49,8 +44,8 @@ function assertUsableEntries(entries: TwbEntry[]): void {
     const snippets = Object.values(e.snippets);
     expect(snippets.length).toBeGreaterThan(0);
     for (const s of snippets) {
-      // The trim keeps the authoritative XML fragment and drops the redundant
-      // parsed `json` tree, so every returned snippet must still carry xml.
+      // Snippets carry only the XML fragment (no parsed `json` tree), so every
+      // returned snippet must still carry xml.
       expect(typeof s.xml).toBe('string');
       expect((s.xml as string).length).toBeGreaterThan(0);
       expect(s.json).toBeUndefined();

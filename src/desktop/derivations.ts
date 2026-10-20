@@ -243,6 +243,26 @@ export function canonicalShortDerivation(
 }
 
 /**
+ * How many leading segments of a column instance (`parts`, ending before `roleIndex`) are
+ * derivation prefixes. Only a table-calc wrapper may be followed by another prefix; a plain
+ * derivation (`sum`, `none`, `yr`, `usr`) ends the list, so `[sum:min: Duration:qk]` keeps
+ * the base `min: Duration`. The base always keeps at least one segment.
+ */
+export function columnInstancePrefixLength(parts: readonly string[], roleIndex: number): number {
+  let count = 0;
+  while (count < roleIndex - 1) {
+    const segment = parts[count];
+    if (COLUMN_INSTANCE_WRAPPER_PREFIXES.has(segment.toLowerCase())) {
+      count++;
+      continue;
+    }
+    if (canonicalShortDerivation(segment) !== undefined) count++;
+    break;
+  }
+  return count;
+}
+
+/**
  * Resolve a column-instance short prefix to its canonical `derivation` attribute
  * value, or throw. Write paths use this: echoing an unrecognized prefix into the
  * attribute produces XML that our own preflight rejects and that Tableau would

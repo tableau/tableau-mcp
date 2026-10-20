@@ -205,6 +205,25 @@ describe('planTopN — happy path', () => {
     expect(filterIdx).toBeGreaterThan(r.xml.indexOf('</datasource-dependencies>'));
   });
 
+  it('escapes names containing & and $ exactly once', () => {
+    const xml = BASE.replaceAll('Superstore', () => 'R&amp;D')
+      .replaceAll('Region', () => 'Region &amp; $1')
+      .replaceAll('Sales]', () => 'Sales &amp; $&]')
+      .replaceAll('Sales:', () => 'Sales &amp; $&:');
+    const r = planTopN(xml, { n: 5 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.filterColumn).toBe('[R&D].[none:Region & $1:nk]');
+    expect(r.xml).toContain(
+      "<filter class='categorical' column='[R&amp;D].[none:Region &amp; $1:nk]'>",
+    );
+    expect(r.xml).toContain("expression='SUM([Sales &amp; $&amp;])'");
+    expect(r.xml).not.toContain('&amp;amp;');
+    expect(r.xml).toContain(
+      '<slices><column>[R&amp;D].[none:Region &amp; $1:nk]</column></slices>',
+    );
+  });
+
   it('keeps the ordered-list head with direction=ASC for a bottom-N ask', () => {
     const r = planTopN(BASE, { n: 3, end: 'bottom' });
     expect(r.ok).toBe(true);
@@ -793,7 +812,7 @@ describe('appliedSortByFieldDirection — distinguishes wrong-direction from nev
   });
 });
 
-describe('planSortByField — nested sortDirection.direction is honored (defect 1 unit)', () => {
+describe('planSortByField — nested sortDirection.direction is honored', () => {
   const WATERFALL = BASE.replace(
     /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
     `<datasource-dependencies datasource='Superstore'>${LINE_ITEM_COL}${DISPLAY_ORDER_COL}${LINE_ITEM_CI}${DISPLAY_ORDER_CI}</datasource-dependencies>`,

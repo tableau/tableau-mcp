@@ -4,7 +4,10 @@
  */
 
 import { resolveDerivation } from '../derivations.js';
-import { formulaRequiresUserDerivation } from '../formulaAggregation.js';
+import {
+  createCalculationAggregationResolver,
+  getCalculationDependencyReferences,
+} from '../formulaAggregation.js';
 import {
   forEachRelationColumn,
   inferFieldTypeFromType,
@@ -13,6 +16,14 @@ import {
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
+import {
+  insertShelfLeaf,
+  parseShelfValue,
+  removeShelfLeaf,
+  serializeShelfTree,
+  shelfLeaves,
+  shelfTreeFromValue,
+} from './shelfTree.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
 
 /**
@@ -166,7 +177,9 @@ export function addFieldToEncoding(
 
     // Check if mark-labels-show rule already exists
     const hasLabelRule = styleRules.some(
-      (rule: any) => rule['@_element'] === 'mark' && rule.format?.['@_attr'] === 'mark-labels-show',
+      (rule: any) =>
+        rule['@_element'] === 'mark' &&
+        normalizeArray(rule.format).some((f: any) => f?.['@_attr'] === 'mark-labels-show'),
     );
 
     // Add the rule if it doesn't exist
@@ -193,7 +206,7 @@ export function addFieldToEncoding(
   // This must be done to ensure the changes are reflected in the parsed structure
   worksheet.table.panes.pane = panes.length === 1 ? panes[0] : panes;
 
-  // Debug: Verify the encoding was added before serializing
+  // Verify the encoding was added before serializing
   const verifyPanes = normalizeArray(worksheet.table.panes.pane);
   const verifyPane = verifyPanes[0];
   const verifyEncodings = normalizeArray(verifyPane?.encodings?.[encodingType]);
@@ -203,15 +216,6 @@ export function addFieldToEncoding(
   const encodingAdded = verifyEncodings.some((enc: any) => enc['@_column'] === correctedColumnRef);
 
   if (!encodingAdded) {
-    // Log detailed debug info
-    console.error('Encoding verification failed:', {
-      panesCount: verifyPanes.length,
-      hasEncodings: !!verifyPane?.encodings,
-      encodingType,
-      verifyEncodingsCount: verifyEncodings.length,
-      verifyEncodings: verifyEncodings,
-      expectedColumnRef: correctedColumnRef,
-    });
     throw new Error(
       `Failed to add encoding: encoding not found in structure after modification. Expected: ${correctedColumnRef}, Found: ${JSON.stringify(verifyEncodings)}`,
     );
@@ -275,59 +279,6 @@ export function removeFieldFromEncoding(
 }
 
 /**
- * Move a field to a new position within an encoding type
- * @param worksheetXml - The worksheet XML as a string
- * @param encodingType - Type of encoding
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInEncoding(
-  worksheetXml: string,
-  encodingType: EncodingType,
-  columnRef: string,
-  newIndex: number,
-): string {
-  encodingType = canonicalEncodingType(encodingType);
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table?.panes) {
-    throw new Error('No panes found in worksheet');
-  }
-
-  const panes = normalizeArray(worksheet.table.panes.pane);
-  if (panes.length === 0) {
-    throw new Error('No panes found');
-  }
-
-  const firstPane = panes[0];
-  if (!firstPane.encodings?.[encodingType]) {
-    throw new Error(`No ${encodingType} encodings found`);
-  }
-
-  const encodings = normalizeArray(firstPane.encodings[encodingType]);
-  const currentIndex = encodings.findIndex((enc) => enc['@_column'] === columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Encoding ${encodingType} with column ${columnRef} not found`);
-  }
-
-  if (newIndex < 0 || newIndex >= encodings.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${encodings.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = encodings.splice(currentIndex, 1);
-  encodings.splice(newIndex, 0, moved);
-
-  // Update encodings
-  firstPane.encodings[encodingType] = encodings.length === 1 ? encodings[0] : encodings;
-
-  return serializeXML(parsed);
-}
-
-/**
  * Add a field to the rows shelf
  * @param worksheetXml - The worksheet XML as a string
  * @param columnRef - Column reference to add
@@ -379,94 +330,6 @@ export function removeFieldFromRows(worksheetXml: string, columnRef: string): st
  */
 export function removeFieldFromCols(worksheetXml: string, columnRef: string): string {
   return removeFieldFromShelf(worksheetXml, 'cols', columnRef);
-}
-
-/**
- * Move a field to a new position in rows
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInRows(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'rows', columnRef, newIndex);
-}
-
-/**
- * Move a field to a new position in cols
- * @param worksheetXml - The worksheet XML as a string
- * @param columnRef - Column reference to move
- * @param newIndex - New position (0-based)
- * @returns Modified worksheet XML
- */
-export function moveFieldInCols(worksheetXml: string, columnRef: string, newIndex: number): string {
-  return moveFieldInShelf(worksheetXml, 'cols', columnRef, newIndex);
-}
-
-/**
- * Parse a shelf value into pill refs. Shelf text uses "/" between pills, while field
- * names can also contain "/" inside bracketed column-instance refs.
- */
-export function parseShelfValue(value: string | string[] | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-  if (typeof value === 'string') {
-    return splitShelfString(value);
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((v) => splitShelfString(typeof v === 'string' ? v : String(v)));
-  }
-  return [];
-}
-
-function splitShelfString(value: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let inBracketedName = false;
-
-  const pushCurrent = (): void => {
-    const trimmed = current.trim();
-    if (trimmed) {
-      parts.push(trimmed);
-    }
-    current = '';
-  };
-
-  for (let i = 0; i < value.length; i++) {
-    const char = value[i];
-    if (char === '[' && !inBracketedName) {
-      inBracketedName = true;
-      current += char;
-      continue;
-    }
-    if (char === ']' && inBracketedName) {
-      if (value[i + 1] === ']') {
-        current += ']]';
-        i++;
-        continue;
-      }
-      inBracketedName = false;
-      current += char;
-      continue;
-    }
-    if (char === '/' && !inBracketedName) {
-      pushCurrent();
-      continue;
-    }
-    current += char;
-  }
-
-  pushCurrent();
-  return parts;
-}
-
-/**
- * Internal helper to serialize shelf array to string
- */
-function serializeShelfValue(fields: string[]): string {
-  // Join with '/' separator (custom language format)
-  return fields.join(' / ');
 }
 
 /**
@@ -702,6 +565,69 @@ function getColumnFromWorkbook(
   }
 }
 
+function createDatasourceCalculationAggregationResolver(
+  workbookXml: string | undefined,
+  datasourceName: string,
+  datasourceDependency: any,
+): (columnName: string) => boolean {
+  const formulas = new Map<string, string>();
+
+  if (workbookXml) {
+    try {
+      const workbook = parseXML(workbookXml).workbook;
+      const datasource = normalizeArray(workbook?.datasources?.datasource).find(
+        (candidate: any) => candidate['@_name'] === datasourceName,
+      );
+      for (const column of normalizeArray(datasource?.column)) {
+        const name = column['@_name'];
+        const formula = column.calculation?.['@_formula'];
+        if (typeof name === 'string' && typeof formula === 'string') {
+          formulas.set(name, formula);
+        }
+      }
+    } catch {
+      // Workbook parse failures retain the existing worksheet-only behavior.
+    }
+  }
+
+  for (const column of normalizeArray(datasourceDependency.column)) {
+    const name = column['@_name'];
+    if (typeof name !== 'string') continue;
+    const formula = column.calculation?.['@_formula'];
+    if (typeof formula === 'string') formulas.set(name, formula);
+    else formulas.delete(name);
+  }
+
+  return createCalculationAggregationResolver(formulas);
+}
+
+function copyWorkbookColumnWithDependencies(
+  columns: any[],
+  workbookXml: string | undefined,
+  datasourceName: string,
+  workbookColumn: any,
+): void {
+  const columnName = workbookColumn?.['@_name'];
+  if (
+    typeof columnName !== 'string' ||
+    columns.some((column: any) => column['@_name'] === columnName)
+  ) {
+    return;
+  }
+
+  columns.push({ ...workbookColumn });
+  const formula = workbookColumn.calculation?.['@_formula'];
+  if (typeof formula !== 'string') return;
+
+  for (const dependencyName of getCalculationDependencyReferences(formula)) {
+    if (columns.some((column: any) => column['@_name'] === dependencyName)) continue;
+    const dependency = getColumnFromWorkbook(workbookXml, datasourceName, dependencyName);
+    if (dependency) {
+      copyWorkbookColumnWithDependencies(columns, workbookXml, datasourceName, dependency);
+    }
+  }
+}
+
 /**
  * Ensure column-instance exists in datasource-dependencies
  * If it doesn't exist, adds both column and column-instance entries
@@ -778,14 +704,16 @@ function ensureColumnInstanceInDependencies(
   // Check if base column exists to determine if it's a calculated field
   const columnsArray = normalizeArray(datasourceDep.column);
   const existingBaseColumn = columnsArray.find((col: any) => col['@_name'] === parsed.column);
+  const calculationRequiresUserDerivation = createDatasourceCalculationAggregationResolver(
+    workbookXml,
+    datasource,
+    datasourceDep,
+  );
   let correctedInstanceName = columnInstanceName;
 
   // If it's a calculated field with aggregation, we need to use usr prefix
   if (existingBaseColumn?.calculation?.['@_formula']) {
-    const formula = existingBaseColumn.calculation['@_formula'];
-    const hasAggregation = formulaRequiresUserDerivation(formula);
-
-    if (hasAggregation && parsed.derivation !== 'User') {
+    if (calculationRequiresUserDerivation(parsed.column) && parsed.derivation !== 'User') {
       correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
       emitFieldRewrite({
         requested: columnInstanceName,
@@ -825,34 +753,7 @@ function ensureColumnInstanceInDependencies(
       const workbookColumn = getColumnFromWorkbook(workbookXml, datasource, parsedCorrected.column);
 
       if (workbookColumn) {
-        // Copy the full column definition from workbook, including any calculation elements
-        // Make a shallow copy to avoid reference issues
-        const newColumn = { ...workbookColumn };
-        columns.push(newColumn);
-
-        // If this is a calculated field, also ensure dependent columns exist
-        if (workbookColumn.calculation) {
-          // Parse the formula to extract dependent column names (simplified approach)
-          const formula =
-            workbookColumn.calculation['@_formula'] || workbookColumn.calculation['@_class'];
-          if (formula && typeof formula === 'string') {
-            // Extract column names in brackets from formula (e.g., [Profit], [Sales])
-            const dependentColumns = formula.match(/\[([^\]]+)\]/g);
-            if (dependentColumns) {
-              for (const depCol of dependentColumns) {
-                // Check if this dependent column already exists
-                const depExists = columns.some((col: any) => col['@_name'] === depCol);
-                if (!depExists) {
-                  // Try to get it from workbook
-                  const depWorkbookColumn = getColumnFromWorkbook(workbookXml, datasource, depCol);
-                  if (depWorkbookColumn) {
-                    columns.push({ ...depWorkbookColumn });
-                  }
-                }
-              }
-            }
-          }
-        }
+        copyWorkbookColumnWithDependencies(columns, workbookXml, datasource, workbookColumn);
       } else if (!workbookXml) {
         throw new Error(
           `Cannot resolve column ${parsedCorrected.column} without workbook context. ` +
@@ -907,10 +808,10 @@ function ensureColumnInstanceInDependencies(
     let actualDerivation = parsedCorrected.derivation;
     let actualColumnInstanceName = correctedInstanceName;
     if (baseColumn?.calculation?.['@_formula']) {
-      const formula = baseColumn.calculation['@_formula'];
-      const hasAggregation = formulaRequiresUserDerivation(formula);
-
-      if (hasAggregation && parsedCorrected.derivation !== 'User') {
+      if (
+        calculationRequiresUserDerivation(parsedCorrected.column) &&
+        parsedCorrected.derivation !== 'User'
+      ) {
         // This calculated field already has aggregation - use User derivation to prevent double aggregation
         actualDerivation = 'User';
         // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix.
@@ -999,19 +900,10 @@ function addFieldToShelf(
   const correctedColumnRef = `[${parsedRef.datasource}].${correctedColumnInstanceName}`;
 
   // Get current shelf value and parse to array
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
 
   // Note: Tableau allows duplicate fields on the same shelf, so we don't check for existing entries
-
-  // Add at specified index or end (using corrected column ref)
-  if (index !== undefined && index >= 0 && index <= currentArray.length) {
-    currentArray.splice(index, 0, correctedColumnRef);
-  } else {
-    currentArray.push(correctedColumnRef);
-  }
-
-  // Serialize back to string
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(insertShelfLeaf(tree, index, correctedColumnRef));
 
   return serializeXML(parsed);
 }
@@ -1081,50 +973,12 @@ function removeFieldFromShelf(
     throw fieldRemovalError(worksheet, `No ${shelf} shelf found in worksheet`);
   }
 
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const filtered = currentArray.filter((col) => col !== columnRef);
-
-  if (filtered.length === currentArray.length) {
+  const tree = shelfTreeFromValue(worksheet.table[shelf]);
+  if (!shelfLeaves(tree).includes(columnRef)) {
     throw fieldRemovalError(worksheet, `Column ${columnRef} not found in ${shelf}`);
   }
 
-  worksheet.table[shelf] = filtered.length > 0 ? serializeShelfValue(filtered) : '';
-
-  return serializeXML(parsed);
-}
-
-/**
- * Internal helper to move field in rows or cols shelf
- */
-function moveFieldInShelf(
-  worksheetXml: string,
-  shelf: 'rows' | 'cols',
-  columnRef: string,
-  newIndex: number,
-): string {
-  const parsed = parseXML(worksheetXml);
-  const worksheet = getWorksheet(parsed);
-
-  if (!worksheet?.table) {
-    throw new Error(`No ${shelf} shelf found in worksheet`);
-  }
-
-  const currentArray = parseShelfValue(worksheet.table[shelf]);
-  const currentIndex = currentArray.indexOf(columnRef);
-
-  if (currentIndex === -1) {
-    throw new Error(`Column ${columnRef} not found in ${shelf}`);
-  }
-
-  if (newIndex < 0 || newIndex >= currentArray.length) {
-    throw new Error(`Invalid index ${newIndex}. Must be between 0 and ${currentArray.length - 1}`);
-  }
-
-  // Move the element
-  const [moved] = currentArray.splice(currentIndex, 1);
-  currentArray.splice(newIndex, 0, moved);
-
-  worksheet.table[shelf] = serializeShelfValue(currentArray);
+  worksheet.table[shelf] = serializeShelfTree(tree && removeShelfLeaf(tree, columnRef));
 
   return serializeXML(parsed);
 }

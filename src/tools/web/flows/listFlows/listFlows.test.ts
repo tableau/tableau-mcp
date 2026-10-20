@@ -1,13 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo } from '../../_lib/truncation.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { looksLikeLoginNotFullName } from './flowsFilterUtils.js';
-import { buildTruncationInfo, constrainFlows, getListFlowsTool } from './listFlows.js';
+import { constrainFlows, getListFlowsTool } from './listFlows.js';
 import { mockFlows } from './mockFlows.js';
 
 const mocks = vi.hoisted(() => ({
@@ -33,11 +35,14 @@ vi.mock('../../../../restApiInstance.js', () => ({
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listFlowsTool', () => {
   beforeEach(() => {
@@ -48,7 +53,8 @@ describe('listFlowsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const listFlowsTool = getListFlowsTool(new WebMcpServer());
     expect(listFlowsTool.name).toBe('list-flows');
-    expect(listFlowsTool.description).toContain('Retrieves a list of Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Retrieves a list of published Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Flow drafts are excluded');
     expect(listFlowsTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
   });
 

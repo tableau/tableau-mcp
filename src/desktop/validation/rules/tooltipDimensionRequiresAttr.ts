@@ -9,10 +9,10 @@
  * applies "successfully", then the sheet blanks with "cannot be converted to a
  * measure using ATTR()".
  *
- * Confirmed P0 (GUS W-23447711, Lee Graber dogfood 2026-07-14): none: dimension on
- * <tooltip> in an aggregated view → ATTR conversion pill errors + blank sheet, with
- * the agent retrying the same broken shape because nothing rejected it. This rule is
- * the preflight backstop that makes the failure visible BEFORE Desktop renders.
+ * Confirmed P0 (GUS W-23447711): none: dimension on <tooltip> in an aggregated view →
+ * ATTR conversion pill errors + blank sheet, with the agent retrying the same broken shape
+ * because nothing rejected it. This rule is the preflight backstop that makes the failure
+ * visible BEFORE Desktop renders.
  *
  * Severity: error — same class as the other applies-clean-renders-blank rules
  * (aggregate-calc-derivation, undeclared-calc-reference).
@@ -26,7 +26,7 @@ import * as xpath from 'xpath';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 import { parseXml } from './parseXml.js';
 
-const FIELD_REF = /\[[^\]]+\]\.\[[^\]]+\]/g;
+const FIELD_REF = /\[(?:[^\]]|\]\])+\]\.\[(?:[^\]]|\]\])+\]/g;
 
 /** Column-instance prefixes that mark a ref as aggregate (the view is aggregated). */
 const AGGREGATE_PREFIXES = new Set([
@@ -57,10 +57,10 @@ interface ParsedRef {
 function parseFieldRef(ref: string): ParsedRef | null {
   const outer = String(ref ?? '')
     .trim()
-    .match(/^\[([^\]]+)\]\.(\[[^\]]+\])$/);
+    .match(/^\[((?:[^\]]|\]\])+)\]\.(\[(?:[^\]]|\]\])+\])$/);
   if (!outer) return null;
   const instance = outer[2];
-  const ci = instance.match(/^\[([^:\]]+):([^:\]]+):([^:\]]+)\]$/);
+  const ci = instance.match(/^\[([^:\]]+):((?:[^:\]]|\]\])+):([^:\]]+)\]$/);
   if (!ci) return null;
   return { datasource: outer[1], instance, derivation: ci[1], field: ci[2], pivot: ci[3] };
 }

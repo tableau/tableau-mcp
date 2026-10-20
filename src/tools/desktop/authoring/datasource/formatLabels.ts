@@ -7,11 +7,8 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorkbookXml } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import {
   artifactNameParam,
@@ -20,13 +17,14 @@ import {
   sessionParam,
 } from '../../params.js';
 import { DesktopTool } from '../../tool.js';
+import { unescapeXml } from './authorCalcCore.js';
 import { workbookLoadToolError } from './workbookLoadToolError.js';
 
 // Primitives in, mark-label format XML server-side, readback out. Turns mark labels
 // ON for a worksheet (labels hug the bars) — the finishing polish over the melody.
-// PROVEN live 2026-07-19 (CODA): <style><style-rule element='mark'><format
-// attr='mark-labels-show' value='true'/></style-rule></style> spliced into a pane
-// MERGES via the document round-trip and survives readback.
+// A <style><style-rule element='mark'><format attr='mark-labels-show' value='true'/>
+// </style-rule></style> block spliced into a pane MERGES via the document round-trip and
+// survives readback.
 const paramsSchema = {
   session: sessionParam(),
   worksheetName: artifactNameParam('worksheet').optional(),
@@ -162,7 +160,10 @@ function setMarkLabels(
 
   const existing = /<format\b[^>]*attr=(['"])mark-labels-show\1[^>]*\/>/.exec(wsXml);
   if (existing) {
-    newWsXml = wsXml.replace(existing[0], `<format attr='mark-labels-show' value='${value}' />`);
+    newWsXml = wsXml.replace(
+      existing[0],
+      () => `<format attr='mark-labels-show' value='${value}' />`,
+    );
   } else {
     const styleBlock =
       "<style><style-rule element='mark'>" +
@@ -176,8 +177,9 @@ function setMarkLabels(
 }
 
 function worksheetBounds(xml: string, name: string): { start: number; end: number } | undefined {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const open = new RegExp(`<worksheet\\b[^>]*\\bname=(['"])${escaped}\\1[^>]*>`).exec(xml);
+  const open = [...xml.matchAll(/<worksheet\b[^>]*\bname=(['"])(.*?)\1[^>]*>/g)].find(
+    (match) => unescapeXml(match[2]) === name,
+  );
   if (!open || open.index === undefined) {
     return undefined;
   }

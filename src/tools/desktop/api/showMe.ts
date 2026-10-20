@@ -10,6 +10,7 @@ import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -47,6 +48,7 @@ export const getShowMeTool = (server: DesktopMcpServer): DesktopTool<typeof para
       return await showMeTool.logAndExecute({
         extra,
         args: { session, worksheet, showMeType, dataSource, fieldsSelectedInSchemaViewer },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           return await withApplyLock(async () => {
             return await runExternalApiTool({
@@ -104,16 +106,28 @@ export const getShowMeTool = (server: DesktopMcpServer): DesktopTool<typeof para
                 }
 
                 const { id, name } = resolved.value;
-                return new Ok({
-                  showMeRequested: true,
-                  operationStatus: result.value.status,
-                  worksheet: { id, name },
-                  showMeType,
-                  message:
-                    result.value.status === 'completed'
-                      ? `Desktop accepted Show Me type "${showMeType}" for worksheet "${name}". The resulting visualization was not independently verified.`
-                      : `Requested Show Me type "${showMeType}" for worksheet "${name}"; Desktop is still applying it.`,
-                });
+                const subject =
+                  result.value.status === 'completed'
+                    ? `Desktop accepted Show Me type "${showMeType}" for worksheet "${name}"`
+                    : `Requested Show Me type "${showMeType}" for worksheet "${name}"; Desktop is still applying it`;
+                const note =
+                  result.value.status === 'completed'
+                    ? ' The resulting visualization was not independently verified.'
+                    : '';
+                return new Ok(
+                  commandOk(
+                    {
+                      showMeRequested: true,
+                      operationStatus: result.value.status,
+                      worksheet: { id, name },
+                      showMeType,
+                      message: `${subject}.${note}`,
+                    },
+                    result.value,
+                    subject,
+                    note,
+                  ),
+                );
               },
             });
           });

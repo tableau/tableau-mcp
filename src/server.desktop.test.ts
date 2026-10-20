@@ -44,6 +44,10 @@ vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('DesktopMcpServer', () => {
   beforeEach(() => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
@@ -177,7 +181,7 @@ describe('DesktopMcpServer', () => {
       expect(emitSpy).toHaveBeenCalledWith(expect.anything(), {
         type: 'tool_schemas_registered',
         surface: 'desktop',
-        profile: 'unknown',
+        profile: 'dynamic-authoring',
         tool_count: listedTools.length,
         schemas_json_chars: JSON.stringify(listedTools).length,
         instructions_chars: instructions.length,
@@ -221,6 +225,23 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 // Aggregate tools/list size is no longer a product contract: TAS discovers tools through search.
 // Keep the selected profile and its instruction text pinned, plus per-tool caps below.
 describe('desktop tools/list serialized surface', () => {
+  it('registers highlight authoring on the existing author-action tool', async () => {
+    const tools = desktopToolFactories.map((factory) => factory(new DesktopMcpServer()));
+    const tool = tools.find((candidate) => candidate.name === 'author-action');
+    expect(tool).toBeDefined();
+    const surface = JSON.parse(await serializeDesktopToolSurface(tool!));
+    expect(surface.inputSchema.properties.mode.enum).toContain('highlight');
+    expect(surface.inputSchema.properties.highlightFields.type).toBe('array');
+    expect(surface.inputSchema.properties.highlightBy.enum).toEqual([
+      'all-fields',
+      'dates-and-times',
+    ]);
+    expect(surface.inputSchema.properties.operation.enum).toEqual(['create', 'edit', 'delete']);
+    expect(surface.inputSchema.properties.actionName.type).toBe('string');
+    expect(surface.inputSchema.required ?? []).not.toContain('caption');
+    expect(surface.inputSchema.required ?? []).not.toContain('sourceWorksheet');
+    expect(surface.annotations.destructiveHint).toBe(true);
+  });
   it('serves the selected dynamic authoring profile with pinned instructions', () => {
     const server = new DesktopMcpServer();
     const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
@@ -232,7 +253,7 @@ describe('desktop tools/list serialized surface', () => {
     // Tool search owns discovery; pin explicit authoring scope, merged filter recovery,
     // dense-scatter repair, executive-dashboard guidance, rounded-bar build/refine proof
     // route, and dashboard corner routing without restoring an aggregate tools/list ceiling.
-    expect(DESKTOP_INSTRUCTIONS).toHaveLength(9_328);
+    expect(DESKTOP_INSTRUCTIONS).toHaveLength(9_438);
   });
 });
 
@@ -301,9 +322,9 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
     ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
-    ['plan-dashboard-creation', 1374], // Manual-registration description trim; do not grow.
-    ['build-and-apply-dashboard', 1421], // ratcheted down after removing viewpoint injection; do not grow
-    ['author-action', 2582], // raised 2026-09-30 (+166, signed off): parameter-mode onClear enum distinguishes an empty-string reset from keep-current; do not grow
+    ['plan-dashboard-creation', 1373], // Manual-registration description trim; do not grow.
+    ['build-and-apply-dashboard', 1418], // ratcheted down after removing viewpoint injection; do not grow
+    ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.
     ['format-worksheets', 1097],
@@ -377,7 +398,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   });
 });
 
-describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)', () => {
+describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   const allTools = (): Array<DesktopTool<any>> =>
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
@@ -428,7 +449,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(new Set(selected.map((t) => t.name))).toEqual(DEMO_TOOL_PROFILE);
     expect(selected.map((tool) => tool.name)).toContain('run-dashboard-batch');
     expect(selected.map((tool) => tool.name)).not.toContain('dashboard-auto-apply');
-    // The escalation-fallback chain the preamble-hunt requires must survive the slim.
+    // The fallback chain used when the fast path cannot finish must survive in the demo set.
     for (const fallback of [
       'bind-template',
       'get-workbook-xml',
@@ -466,11 +487,11 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 76-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 77-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(76);
+      expect(selected).toHaveLength(77);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -687,7 +708,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ).toHaveLength(1);
   });
 
-  it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
+  it('unset ("") profile returns the default dynamic-authoring set', () => {
     const selected = selectToolsForProfile(allTools(), '');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
   });
@@ -714,13 +735,31 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selectToolsForProfile(tools, 'combined-lean')).toBe(tools);
   });
 
-  it('an unknown profile value falls back to the full set and logs a warning', () => {
-    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
-    const tools = allTools();
-    const selected = selectToolsForProfile(tools, 'bogus');
-    expect(selected).toBe(tools);
-    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
-  });
+  it.each(['bogus', 'lean-tools'])(
+    'an unknown profile value "%s" falls back to the default set and logs a warning',
+    (raw) => {
+      const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+      const tools = allTools();
+      const selected = selectToolsForProfile(tools, raw);
+      expect(selected).not.toBe(tools);
+      expect(selected.map((tool) => tool.name).sort()).toEqual(
+        tools
+          .filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name))
+          .map((tool) => tool.name)
+          .sort(),
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining(`"${raw}"`),
+        }),
+      );
+      const message = String(logSpy.mock.calls.at(-1)?.[0].message);
+      for (const valid of ['dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean']) {
+        expect(message).toContain(valid);
+      }
+    },
+  );
 });
 
 describe('API-version tool gate (interim minApiVersion floor)', () => {

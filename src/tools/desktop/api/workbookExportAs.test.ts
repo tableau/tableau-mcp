@@ -8,6 +8,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -26,6 +27,10 @@ function messageOf(result: CallToolResult): string {
 function exportPosts(server: MockExternalApiServer): Array<{ body: string }> {
   return server.requests.filter((r) => r.method === 'POST' && r.path === EXPORT_AS_PATH);
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('workbook-export-as tool', () => {
   beforeEach(() => {

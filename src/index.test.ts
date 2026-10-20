@@ -1,5 +1,7 @@
 const startupState = vi.hoisted(() => ({
   transport: 'http' as 'http' | 'stdio',
+  auth: 'pat' as string,
+  oauthEnabled: true,
   connectPromise: Promise.resolve(),
   serverInfoPromise: Promise.resolve({}),
   expressPromise: Promise.resolve({ url: 'http://localhost:3927/tableau-mcp' }),
@@ -22,8 +24,8 @@ vi.mock('./config.js', () => ({
   getConfig: vi.fn(() => ({
     transport: startupState.transport,
     server: 'https://tableau.example.com',
-    auth: 'pat',
-    oauth: { enabled: true },
+    auth: startupState.auth,
+    oauth: { enabled: startupState.oauthEnabled },
     defaultNotificationLevel: 'info',
     loggers: new Set<string>(),
     fileLoggerDirectory: '/tmp',
@@ -31,6 +33,13 @@ vi.mock('./config.js', () => ({
     disableLogMasking: false,
     breakGlassDisableGlobally: false,
   })),
+}));
+
+vi.mock('./activityLog/init.js', () => ({
+  initializeActivityLog: vi.fn(async () => {
+    startupState.events.push('activity log init');
+  }),
+  closeActivityLog: vi.fn(async () => undefined),
 }));
 
 vi.mock('./features/init.js', () => ({
@@ -128,6 +137,8 @@ describe('default entrypoint startup', () => {
     vi.resetModules();
     vi.clearAllMocks();
     startupState.transport = 'http';
+    startupState.auth = 'pat';
+    startupState.oauthEnabled = true;
     startupState.connectPromise = Promise.resolve();
     startupState.serverInfoPromise = Promise.resolve({});
     startupState.expressPromise = Promise.resolve({
@@ -154,6 +165,7 @@ describe('default entrypoint startup', () => {
 
     expect(startupState.events).toEqual([
       'feature gate',
+      'activity log init',
       'session store init',
       'session store connected',
       'server info',
@@ -169,6 +181,26 @@ describe('default entrypoint startup', () => {
         expect.objectContaining({ message: expect.stringContaining('server available at') }),
       ),
     );
+  });
+
+  it.each([
+    ['pat', true],
+    ['passthrough', false],
+  ])('AUTH=%s without OAuth: warns about unprotected HTTP = %s', async (auth, expectWarning) => {
+    startupState.auth = auth;
+    startupState.oauthEnabled = false;
+
+    await import('./index.js');
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('server available at') }),
+      ),
+    );
+
+    const warned = vi
+      .mocked(log)
+      .mock.calls.some(([entry]) => entry.message.includes('OAuth is disabled'));
+    expect(warned).toBe(expectWarning);
   });
 
   it('handles server-info failure while HTTP startup is still pending', async () => {

@@ -20,7 +20,7 @@ export const workbookSchema = z.object({
   project: projectSchema.optional(),
   // The destination the server actually recorded: `type` is 'Project' or 'PersonalSpace'. Used to
   // confirm a personal-space publish truly landed there — a personal-space landing has no `project`
-  // in the response at all, so the tool reads `location` to see where an auto-default landed.
+  // in the response at all, so the tool reads `location` to see where a Personal Space publish landed.
   location: z
     .object({
       id: z.string().optional(),

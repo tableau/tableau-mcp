@@ -1,0 +1,19 @@
+<!-- Trimmed from live eval-run datasource ds-before.xml (Desktop's auto-written default Category map). Cut: <connection>, <aliases>, <metadata-records>, all <column> elements, <layout>, <semantic-values>, <object-graph>. Kept verbatim: the root element, the datasource-level <column-instance> elements and the datasource <style>. -->
+<datasource inline='true' name='start' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+  <style>
+    <style-rule element='mark'>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#4e79a7'>
+          <bucket>&quot;Technology&quot;</bucket>
+        </map>
+        <map to='#e15759'>
+          <bucket>&quot;Office Supplies&quot;</bucket>
+        </map>
+        <map to='#f28e2b'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+      </encoding>
+    </style-rule>
+  </style>
+</datasource>

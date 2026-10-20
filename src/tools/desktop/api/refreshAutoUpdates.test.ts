@@ -10,6 +10,7 @@ import {
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -23,6 +24,10 @@ const WORKSHEET_NAME = 'Sales by Region';
 const DASHBOARD_NAME = 'Executive Dashboard';
 const STORYBOARD_NAME = 'QBR Story';
 const REFRESH_ROUTE = `/v0/workbook/worksheets/${WORKSHEET_ID}:refreshNow`;
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('refresh-auto-updates', () => {
   beforeEach(() => {

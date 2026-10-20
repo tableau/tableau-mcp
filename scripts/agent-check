@@ -70,7 +70,7 @@ else
 fi
 
 # ---- Desktop build (authoring variant; esbuild plus providers type build) -----
-run "desktop build" npm run build:desktop
+run "desktop build" npm run build:desktop:dirty
 
 # ---- Verdict -----------------------------------------------------------------
 echo

@@ -2,19 +2,24 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExecuteCommandError } from '../../../desktop/externalApi/executorTypes.js';
+import {
+  ExecuteCommandError,
+  ExecuteCommandWarning,
+} from '../../../desktop/externalApi/executorTypes.js';
 import { endpointNotInThisBuild } from '../../../desktop/externalApi/toolUtils.js';
 import { StoryboardRefreshOutcome } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/session/sessionResolution.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   IncompleteOperationError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
-import { attachNextAction, prefillNextAction } from '../structuredContent.js';
+import { attachNextAction, prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult } from './desktopCommandResult.js';
+import { nonCleanRefreshSubject } from './refreshOutcomeSubject.js';
 import { resolveSheetRef } from './resolveSheetRef.js';
 
 const paramsSchema = {
@@ -30,6 +35,7 @@ type RefreshStoryboardToolResult = {
   refreshed?: boolean | StoryboardRefreshOutcome['refreshed'];
   outcome?: StoryboardRefreshOutcome['outcome'];
   failed?: StoryboardRefreshOutcome['failed'];
+  warnings?: ExecuteCommandWarning[];
 };
 
 export const getRefreshStoryboardAutoUpdatesTool = (
@@ -52,6 +58,7 @@ export const getRefreshStoryboardAutoUpdatesTool = (
       return await refreshStoryboardAutoUpdatesTool.logAndExecute<RefreshStoryboardToolResult>({
         extra,
         args: { session, storyboard },
+        getSuccessResult: commandSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -92,18 +99,44 @@ export const getRefreshStoryboardAutoUpdatesTool = (
           }
 
           if (result.value.status !== 'completed') {
-            return new Ok({
-              refreshed: false,
-              storyboard: { id: ref.id, name: previousName },
-              message: `Requested refreshing auto-updates for storyboard "${previousName}"; Desktop is still applying it.`,
-            });
+            const pending = `Requested refreshing auto-updates for storyboard "${previousName}"; Desktop is still applying it`;
+            return new Ok(
+              commandOk(
+                {
+                  refreshed: false,
+                  storyboard: { id: ref.id, name: previousName },
+                  message: `${pending}.`,
+                },
+                result.value,
+                pending,
+              ),
+            );
           }
 
-          return new Ok({
+          const nonClean = nonCleanRefreshSubject(
+            `the current point of storyboard "${previousName}"`,
+            result.value.parsedResult,
+          );
+          const subject =
+            nonClean ??
+            `Refreshed auto-updates for the current point of storyboard "${previousName}"`;
+          const body = {
             storyboard: { id: ref.id, name: previousName },
             ...result.value.parsedResult,
-            message: `Refreshed auto-updates for the current point of storyboard "${previousName}".`,
-          });
+            message: `${subject}.`,
+          };
+          return new Ok(
+            commandOk(
+              nonClean === undefined
+                ? body
+                : withNextAction(
+                    body,
+                    prefillNextAction('Review failed worksheet updates in the current story point'),
+                  ),
+              result.value,
+              subject,
+            ),
+          );
         },
       });
     },

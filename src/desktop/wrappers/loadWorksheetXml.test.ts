@@ -8,7 +8,11 @@ import { normalizeArray, parseXML } from '../metadata/parser.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
-import { loadWorksheetXml, verifyPostApplyWorksheetReadback } from './loadWorksheetXml.js';
+import {
+  loadWorksheetXml,
+  resolveCanonicalWorksheetName,
+  verifyPostApplyWorksheetReadback,
+} from './loadWorksheetXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -1845,5 +1849,71 @@ describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
 
     expect(verification.status).toBe('failed');
     expect(verification.findings.some((f) => f.severity === 'error')).toBe(true);
+  });
+
+  describe('shelf reorder warnings (W-24366132)', () => {
+    const PROFIT = '[DS].[sum:Profit:qk]';
+    const SALES = '[DS].[sum:Sales:qk]';
+    const reorderable = (rows: string): { xml: string } => ({
+      xml: `<workbook><worksheets><worksheet name="Blank Map"><table><rows>${rows}</rows></table></worksheet></worksheets></workbook>`,
+    });
+    const intendedRows = `${SALES} + ${PROFIT}`;
+    const intended = `<worksheet name="Blank Map"><table><rows>${intendedRows}</rows></table></worksheet>`;
+
+    it('keeps polling past a same-field reorder and passes once the apply settles', async () => {
+      const getWorksheetDocument = vi
+        .fn()
+        .mockResolvedValueOnce(Ok(reorderable(`${PROFIT} + ${SALES}`)))
+        .mockResolvedValue(Ok(reorderable(intendedRows)));
+      const executor = makeExecutorMock({
+        listWorksheets: vi.fn().mockResolvedValue(listOk()),
+        getWorksheetDocument,
+      });
+
+      const verification = await verifyPostApplyWorksheetReadback(
+        'Blank Map',
+        intended,
+        executor,
+        signal,
+      );
+
+      expect(verification.status).toBe('passed');
+      expect(getWorksheetDocument.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('reports a durable same-field reorder as a warning after exhausting the poll budget', async () => {
+      vi.useFakeTimers();
+      try {
+        const getWorksheetDocument = vi
+          .fn()
+          .mockResolvedValue(Ok(reorderable(`${PROFIT} + ${SALES}`)));
+        const executor = makeExecutorMock({
+          listWorksheets: vi.fn().mockResolvedValue(listOk()),
+          getWorksheetDocument,
+        });
+
+        const pending = verifyPostApplyWorksheetReadback('Blank Map', intended, executor, signal);
+        await vi.runAllTimersAsync();
+        const verification = await pending;
+
+        expect(verification.status).toBe('warning');
+        expect(verification.ok).toBe(true);
+        expect(getWorksheetDocument.mock.calls.length).toBeGreaterThan(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+});
+
+describe('resolveCanonicalWorksheetName entity-like names', () => {
+  it('does not equate the literal `A &amp; B` with `A & B`', () => {
+    const literal = "<worksheet name='A &amp;amp; B'/>";
+
+    expect(resolveCanonicalWorksheetName('A & B', literal).isErr()).toBe(true);
+    expect(resolveCanonicalWorksheetName('A &amp; B', literal).unwrap()).toBe('A &amp; B');
+    expect(resolveCanonicalWorksheetName('A & B', "<worksheet name='A &amp; B'/>").unwrap()).toBe(
+      'A & B',
+    );
   });
 });

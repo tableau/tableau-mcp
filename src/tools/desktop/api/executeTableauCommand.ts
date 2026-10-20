@@ -16,11 +16,8 @@ import {
   type UsedFieldValidityOutcome,
 } from '../../../desktop/validation/usedFieldValidity.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  McpToolError,
-} from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 

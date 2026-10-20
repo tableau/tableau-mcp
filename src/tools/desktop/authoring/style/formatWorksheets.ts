@@ -5,16 +5,17 @@ import { z } from 'zod';
 import { resolveItemByNameOrId } from '../../../../desktop/externalApi/toolUtils.js';
 import { parseCanonicalColumnRef } from '../../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
-import { verifyWorksheetReadback } from '../../../../desktop/validation/readback-verify.js';
+import {
+  formatReadbackVerificationWarnings,
+  isReadbackUnsettled,
+  verifyWorksheetReadback,
+} from '../../../../desktop/validation/readback-verify.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { sourceSha256 } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  XmlModificationError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, XmlModificationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { resolveShelfField } from '../../api/resolveShelfField.js';
 import { sessionParam } from '../../params.js';
@@ -79,7 +80,7 @@ export type FormatWorksheetDocumentResult =
   | { ok: true; xml: string }
   | { ok: false; message: string };
 
-type FormattedWorksheet = { worksheet: string; verified: true };
+type FormattedWorksheet = { worksheet: string; verified: true; readbackWarning?: string };
 
 const title = 'Format';
 
@@ -191,9 +192,7 @@ export const getFormatWorksheetsTool = (
               read: async () => await executor.getWorksheetDocument(worksheetId, extra.signal),
               settled: (value) =>
                 hasRequestedFormatting(value.xml, xml) &&
-                !verifyWorksheetReadback(xml, value.xml).some(
-                  (finding) => finding.severity === 'error',
-                ),
+                !isReadbackUnsettled(verifyWorksheetReadback(xml, value.xml)),
               signal: extra.signal,
             });
             if (!readback.ok) {
@@ -202,13 +201,23 @@ export const getFormatWorksheetsTool = (
                 earlierUpdatesWarning(updatedWorksheetCount),
               ).toErr();
             }
-            if (!readback.settled) {
+            // W-24366132: shelf and sort warnings are non-blocking once the poll budget is spent.
+            const lastFindings = verifyWorksheetReadback(xml, readback.value.xml);
+            const onlyWarnings =
+              hasRequestedFormatting(readback.value.xml, xml) &&
+              !lastFindings.some((finding) => finding.severity === 'error');
+            if (!readback.settled && !onlyWarnings) {
               return new XmlModificationError(
                 `Desktop accepted formatting for "${worksheetName}", but the requested formatting did not survive readback or Tableau dropped worksheet semantics. ${earlierUpdatesWarning(updatedWorksheetCount)}`,
               ).toErr();
             }
             updatedWorksheetCount += 1;
-            formatted.push({ worksheet: worksheetName, verified: true });
+            const readbackWarning = formatReadbackVerificationWarnings(lastFindings).trim();
+            formatted.push({
+              worksheet: worksheetName,
+              verified: true,
+              ...(readbackWarning ? { readbackWarning } : {}),
+            });
           }
 
           return new Ok({ formatted });

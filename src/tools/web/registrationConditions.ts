@@ -49,6 +49,8 @@ export type RegistrationContext = {
   isKnowledgeAvailable?: boolean;
   isPulseEnabled?: boolean;
   hasPulsePremium?: boolean;
+  // Conditions whose probe failed transiently; a retry could change the answer.
+  indeterminateConditions?: Set<RegistrationCondition>;
 };
 
 type ConditionsCheckResult =
@@ -58,11 +60,14 @@ type ConditionsCheckResult =
   | {
       registrationConditionsMet: false;
       failingCondition: RegistrationCondition;
+      // True when the probe failed transiently rather than answering "not available".
+      indeterminate?: boolean;
     };
 
 /**
  * True only when every condition in `conditions` is satisfied for the current caller.
- * Fail-closed: an unrecognized condition, or a capability that cannot be confirmed, returns falsy result
+ * Fail-closed: an unrecognized condition, or a capability that cannot be confirmed, returns an unmet
+ * result; a transient probe failure is also flagged `indeterminate` so callers can retry.
  *
  * `context` is mutated in place to memoize each capability, so it is looked up at most once per
  * registration pass even when many tools declare the same condition. If the context for a condition
@@ -79,28 +84,40 @@ export async function checkRegistrationConditions(
     switch (condition) {
       case 'RequiresKnowledge': {
         if (context.isKnowledgeAvailable === undefined) {
-          context.isKnowledgeAvailable = await checkKnowledgeAvailable(restApiArgs);
+          context.isKnowledgeAvailable = recordProbe(
+            context,
+            'RequiresKnowledge',
+            await checkKnowledgeAvailable(restApiArgs),
+          );
         }
         if (!context.isKnowledgeAvailable) {
-          return { registrationConditionsMet: false, failingCondition: 'RequiresKnowledge' };
+          return unmet(context, 'RequiresKnowledge');
         }
         continue;
       }
       case 'RequiresPulse': {
         if (context.isPulseEnabled === undefined) {
-          context.isPulseEnabled = await checkPulseEnabled(restApiArgs);
+          context.isPulseEnabled = recordProbe(
+            context,
+            'RequiresPulse',
+            await checkPulseEnabled(restApiArgs),
+          );
         }
         if (!context.isPulseEnabled) {
-          return { registrationConditionsMet: false, failingCondition: 'RequiresPulse' };
+          return unmet(context, 'RequiresPulse');
         }
         continue;
       }
       case 'RequiresPulsePremium': {
         if (context.hasPulsePremium === undefined) {
-          context.hasPulsePremium = await checkPulsePremium(restApiArgs, context);
+          context.hasPulsePremium = recordProbe(
+            context,
+            'RequiresPulsePremium',
+            await checkPulsePremium(restApiArgs, context),
+          );
         }
         if (!context.hasPulsePremium) {
-          return { registrationConditionsMet: false, failingCondition: 'RequiresPulsePremium' };
+          return unmet(context, 'RequiresPulsePremium');
         }
         continue;
       }
@@ -122,6 +139,30 @@ export async function checkRegistrationConditions(
   return { registrationConditionsMet: true };
 }
 
+// A probe returns undefined when it could not be confirmed (transient failure).
+function recordProbe(
+  context: RegistrationContext,
+  condition: RegistrationCondition,
+  result: boolean | undefined,
+): boolean {
+  if (result === undefined) {
+    (context.indeterminateConditions ??= new Set()).add(condition);
+    return false;
+  }
+  return result;
+}
+
+function unmet(
+  context: RegistrationContext,
+  condition: RegistrationCondition,
+): ConditionsCheckResult {
+  return {
+    registrationConditionsMet: false,
+    failingCondition: condition,
+    ...(context.indeterminateConditions?.has(condition) && { indeterminate: true }),
+  };
+}
+
 /**
  * Client-facing explanation for each condition, appended to the initialize instructions when that
  * condition hid at least one tool. Registration runs before the transport connects, so the
@@ -136,8 +177,8 @@ export async function checkRegistrationConditions(
  */
 const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
   RequiresKnowledge:
-    'NOTE: Tableau Knowledge tools were omitted because availability could not be confirmed for ' +
-    'this session. If the user asks for Knowledge context, explain that the feature requires ' +
+    'NOTE: Tableau Knowledge tools were omitted because they could not be confirmed as ' +
+    'available. If the user asks for Knowledge context, explain that the feature requires ' +
     'Tableau+ and suggest they contact their Tableau administrator.',
   // Kept generic: Pulse can be unavailable for several reasons (Tableau Server, site setting
   // off, or a user-level preference), and the probe cannot distinguish them cleanly enough to
@@ -159,6 +200,24 @@ const UNMET_CONDITION_INSTRUCTIONS: Record<RegistrationCondition, string> = {
     'condition check is not implemented.',
 };
 
+const CONDITION_TOOL_LABELS: Record<RegistrationCondition, string> = {
+  RequiresKnowledge: 'Knowledge',
+  RequiresPulse: 'Pulse',
+  RequiresPulsePremium: 'AI-powered Pulse insight',
+  MissingConditionCheck: 'some',
+};
+
+/** The warning to surface when a transient probe failure hid tools for `condition`. */
+export function getIndeterminateConditionWarning(
+  condition: RegistrationCondition,
+  retryAdvice: string,
+): string {
+  return (
+    `WARNING: Tableau ${CONDITION_TOOL_LABELS[condition]} tools were omitted from this session ` +
+    `because their availability could not be confirmed. This is likely a transient error. ${retryAdvice}`
+  );
+}
+
 /** The client-facing explanation to surface when `condition` hid one or more tools. */
 export function getUnmetConditionInstructions(condition: RegistrationCondition): string {
   return UNMET_CONDITION_INSTRUCTIONS[condition];
@@ -168,7 +227,7 @@ export function getUnmetConditionInstructions(condition: RegistrationCondition):
 export const MAX_API_RETRY_ATTEMPTS = 2;
 
 /** `listGraphs` is available to every Knowledge read role and succeeds for an entitled empty site. */
-async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean> {
+async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolean | undefined> {
   try {
     return await retry(
       () =>
@@ -185,8 +244,8 @@ async function checkKnowledgeAvailable(restApiArgs: RestApiArgs): Promise<boolea
         retryIf: isRetryableProbeError,
       },
     );
-  } catch {
-    return false;
+  } catch (error) {
+    return isRetryableProbeError(error) ? undefined : false;
   }
 }
 
@@ -222,9 +281,10 @@ function isRetryableProbeError(error: unknown): boolean {
  * site with zero definitions is still Pulse-enabled.
  *
  * Fail-closed: an indeterminate outcome (transient API error, exhausted retries, failed sign-in)
- * returns `false`, so a tool declaring `RequiresPulse` is hidden rather than exposed.
+ * returns `undefined`, so a tool declaring `RequiresPulse` is hidden rather than exposed, and the
+ * caller can tell it apart from a definitive `false`.
  */
-async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean> {
+async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean | undefined> {
   try {
     return await retry(
       () =>
@@ -262,9 +322,9 @@ async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean> {
         retryIf: isRetryableProbeError,
       },
     );
-  } catch {
-    // Retries exhausted or a non-retryable error was thrown — fail closed.
-    return false;
+  } catch (error) {
+    // Retries exhausted on a retryable error is inconclusive; a 4xx is a definitive no.
+    return isRetryableProbeError(error) ? undefined : false;
   }
 }
 
@@ -286,13 +346,18 @@ async function checkPulseEnabled(restApiArgs: RestApiArgs): Promise<boolean> {
 async function checkPulsePremium(
   restApiArgs: RestApiArgs,
   context: RegistrationContext,
-): Promise<boolean> {
+): Promise<boolean | undefined> {
   if (context.isPulseEnabled === undefined) {
-    context.isPulseEnabled = await checkPulseEnabled(restApiArgs);
+    context.isPulseEnabled = recordProbe(
+      context,
+      'RequiresPulse',
+      await checkPulseEnabled(restApiArgs),
+    );
   }
 
   if (!context.isPulseEnabled) {
-    return false;
+    // Premium is unknown, not absent, when the base Pulse probe was inconclusive.
+    return context.indeterminateConditions?.has('RequiresPulse') ? undefined : false;
   }
 
   try {
@@ -327,8 +392,8 @@ async function checkPulsePremium(
         retryIf: isRetryableProbeError,
       },
     );
-  } catch {
-    // Retries exhausted or a non-retryable error was thrown — fail closed.
-    return false;
+  } catch (error) {
+    // Retries exhausted on a retryable error is inconclusive; a 4xx is a definitive no.
+    return isRetryableProbeError(error) ? undefined : false;
   }
 }

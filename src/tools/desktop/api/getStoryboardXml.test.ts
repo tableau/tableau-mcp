@@ -11,6 +11,10 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getStoryboardXmlTool } from './getStoryboardXml.js';
 
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 // A storyboard serializes as a `<dashboard type="storyboard">`, and its /document route returns
 // that bare fragment directly — no surrounding <workbook>, no sibling dashboards.

@@ -5,14 +5,13 @@ import { Ok } from 'ts-results-es';
 import { makeExecutorMock } from '../../src/desktop/externalApi/executor.mock.js';
 import type { ExecuteCommandResult } from '../../src/desktop/externalApi/executorTypes.js';
 import { formatArtifactSummary } from '../../src/desktop/limits/artifactSummary.js';
-import { formatDashboardPromiseCheck } from '../../src/desktop/validation/promise-check.js';
 import { sourceSha256 } from '../../src/desktop/wrappers/cacheFingerprint.js';
 import { loadDashboardXml } from '../../src/desktop/wrappers/loadDashboardXml.js';
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
-} from '../../src/errors/mcpToolError.js';
-import { acceptedNoReadbackApplyResult } from '../../src/tools/desktop/api/applyPreamble.js';
+} from '../../src/errors/mcpToolError.desktop.js';
+import { acceptedDashboardLoadResult } from '../../src/tools/desktop/api/applyPreamble.js';
 import { jsonToolResult } from '../../src/tools/desktop/structuredContent.js';
 import invariant from '../../src/utils/invariant.js';
 import { getAgent } from './base.js';
@@ -387,13 +386,11 @@ export class DashboardApplyScenario {
             : new DesktopCommandExecutionError(error.error).message;
         }
         this.successes++;
-        const warnings = result.value.validationWarnings;
         const response = jsonToolResult(
-          acceptedNoReadbackApplyResult({
+          acceptedDashboardLoadResult({
             kind: 'dashboard',
-            appliedName: result.value.appliedName,
-            resultWarnings: warnings,
-            hostVerification: formatDashboardPromiseCheck(warnings),
+            loaded: result.value,
+            fallbackName: dashboardName,
           }),
         );
         invariant(response.content[0].type === 'text');

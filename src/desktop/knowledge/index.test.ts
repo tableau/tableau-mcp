@@ -11,13 +11,13 @@ import {
   readKnowledgeResource,
   readKnowledgeSections,
   searchKnowledgeWithFallback,
+  stripExtendedSearchOperators,
   ZERO_HIT_NEAREST_MATCHES_NOTE,
 } from './index.js';
 
 // Knowledge is served only from external roots (TABLEAU_KNOWLEDGE_DIR). The fs mock below
 // stands in for one such root; each test declares the files it contains by absolute path.
 const KNOWLEDGE_ROOT = join('/', 'mock', 'knowledge');
-const ORIGINAL_KNOWLEDGE_DIR = process.env.TABLEAU_KNOWLEDGE_DIR;
 
 function makeDirent(name: string, isDir: boolean): Dirent {
   return {
@@ -57,15 +57,7 @@ describe('knowledge/index', () => {
     vi.clearAllMocks();
     clearKnowledgeCache();
     _resetKnowledgeSearchCache();
-    process.env.TABLEAU_KNOWLEDGE_DIR = KNOWLEDGE_ROOT;
-  });
-
-  afterEach(() => {
-    if (ORIGINAL_KNOWLEDGE_DIR === undefined) {
-      delete process.env.TABLEAU_KNOWLEDGE_DIR;
-    } else {
-      process.env.TABLEAU_KNOWLEDGE_DIR = ORIGINAL_KNOWLEDGE_DIR;
-    }
+    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', KNOWLEDGE_ROOT);
   });
 
   describe('listKnowledgeResources', () => {
@@ -87,7 +79,7 @@ describe('knowledge/index', () => {
 
     it('returns [] when no knowledge root is configured', () => {
       // No external root -> empty corpus, not an error.
-      delete process.env.TABLEAU_KNOWLEDGE_DIR;
+      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', undefined);
       setupFsMock({});
 
       expect(listKnowledgeResources()).toEqual([]);
@@ -340,7 +332,87 @@ describe('knowledge/index', () => {
     });
   });
 
+  describe('query operator characters', () => {
+    it.each(["'zq", '!zq', '^zq', 'zq$', '=zq', 'zq|', '"zq"'])(
+      'treats %s as plain text, not Fuse extended-search syntax',
+      (query) => {
+        setupFsMock({
+          [join(KNOWLEDGE_ROOT, 'zq-chart.md')]: [
+            '# Zq Chart',
+            '- Relevant user prompts/search terms: zq',
+            '',
+            '## When to Use',
+            'Use zq.',
+          ].join('\n'),
+        });
+
+        expect(searchKnowledgeWithFallback(query, 3).hits.map((hit) => hit.slug)).toEqual([
+          'zq-chart',
+        ]);
+      },
+    );
+  });
+
+  describe('operator stripping keeps ordinary punctuation', () => {
+    it.each([
+      ["don't", "don't"],
+      ["'zq", 'zq'],
+      ['!zq', 'zq'],
+      ['zq|zq', 'zq zq'],
+      ['$ zq', 'zq'],
+      ['zq$', 'zq'],
+      ['P&L zq', 'P&L zq'],
+      ['Year-over-Year zq', 'Year-over-Year zq'],
+      ['!!!', ''],
+    ])('strips %j to %j', (query, expected) => {
+      expect(stripExtendedSearchOperators(query)).toBe(expected);
+    });
+
+    it('returns no hits for a query of only operators', () => {
+      setupFsMock({ [join(KNOWLEDGE_ROOT, 'zq-chart.md')]: '# Zq Chart\nzq' });
+      expect(searchKnowledgeWithFallback('!!!', 3).hits).toEqual([]);
+    });
+  });
+
   describe('readKnowledgeSections', () => {
+    it('does not open a fence on a line that starts with inline code', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_ROOT, 'guide.md')]: ['# Guide', '```x``` inline', '## Real'].join('\n'),
+      });
+      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+    });
+
+    it('keeps a block open past a ```js line inside it', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_ROOT, 'guide.md')]: [
+          '# Guide',
+          '```',
+          '```js',
+          '## hidden',
+          '```',
+          '## Real',
+        ].join('\n'),
+      });
+      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+    });
+
+    it('ignores # lines inside code fences', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_ROOT, 'guide.md')]: [
+          '# Guide',
+          '```bash',
+          '# not a heading',
+          '```',
+          '## Real',
+          '~~~',
+          '## also not',
+          '~~~',
+        ].join('\n'),
+      });
+
+      expect(readKnowledgeSections('guide')).toEqual(['guide', 'real']);
+    });
+
     it('lists H1/H2 slugs and omits deeper headings', () => {
       setupFsMock({
         [join(KNOWLEDGE_ROOT, 'guide.md')]: ['# Guide', '## First', '### Nested', '## Second'].join(

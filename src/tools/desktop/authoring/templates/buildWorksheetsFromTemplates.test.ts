@@ -92,7 +92,6 @@ const EXACT_ARGS = {
 };
 
 describe('build-worksheets-from-templates', () => {
-  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
   let templatesDir: string;
 
   beforeEach(() => {
@@ -106,13 +105,11 @@ describe('build-worksheets-from-templates', () => {
         ),
       );
     }
-    process.env['TEMPLATES_DIR'] = templatesDir;
+    vi.stubEnv('TEMPLATES_DIR', templatesDir);
     sessionRouteState.clear();
   });
 
   afterEach(() => {
-    if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-    else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
     rmSync(templatesDir, { recursive: true, force: true });
     sessionRouteState.clear();
   });

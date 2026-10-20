@@ -36,12 +36,9 @@ const PASS1_BLOCKED_BOOKMARK = BOOKMARK.replace(
 );
 
 describe('list-templates', () => {
-  const originalTemplatesDir = process.env['TEMPLATES_DIR'];
   const temporaryRoots: string[] = [];
 
   afterEach(() => {
-    if (originalTemplatesDir === undefined) delete process.env['TEMPLATES_DIR'];
-    else process.env['TEMPLATES_DIR'] = originalTemplatesDir;
     for (const root of temporaryRoots.splice(0)) {
       rmSync(root, { recursive: true, force: true });
     }
@@ -51,7 +48,7 @@ describe('list-templates', () => {
     const root = mkdtempSync(join(process.cwd(), 'tmp-list-templates-'));
     temporaryRoots.push(root);
     for (const name of names) writeFileSync(join(root, `${name}.tbm`), BOOKMARK);
-    process.env['TEMPLATES_DIR'] = root;
+    vi.stubEnv('TEMPLATES_DIR', root);
   }
 
   it('is a read-only, caller-neutral catalog tool', async () => {
@@ -256,7 +253,7 @@ describe('list-templates', () => {
   });
 
   it('reports truthful visible channels and the three direct scatter slots', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const body = await getBody({
       query: 'correlation-scatter-plot-chart',
@@ -294,7 +291,7 @@ describe('list-templates', () => {
   });
 
   it('filters templates by every explicitly required visible channel', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const size = await getBody({
       query: 'scatter',
@@ -325,7 +322,7 @@ describe('list-templates', () => {
   });
 
   it('treats Tableau detail and lod as the same discovery channel', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const body = await getBody({
       query: 'box plot',
@@ -344,7 +341,7 @@ describe('list-templates', () => {
   });
 
   it('ranks the smaller bindable Gantt carrier before a shorter legacy match', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const body = await getBody({ query: 'gantt', includeSlots: true, limit: 1 });
 
@@ -356,7 +353,7 @@ describe('list-templates', () => {
   });
 
   it('paginates over the channel-filtered candidates', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const first = await getBody({ query: 'bar', requiredChannels: ['rows'], limit: 1 });
     expect(first.candidateCount).toBeGreaterThan(1);
@@ -417,7 +414,7 @@ describe('list-templates', () => {
   });
 
   it('returns semantic roles for neutral geo slots from a real choropleth TBM', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const body = await getBody({
       query: 'spatial-choropleth-map',
@@ -443,7 +440,7 @@ describe('list-templates', () => {
   });
 
   it('includes required slot IDs and semantic roles in a compact real-template result', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const body = await getBody({ query: 'spatial-choropleth-map', limit: 1 });
 
@@ -468,7 +465,7 @@ describe('list-templates', () => {
   });
 
   it('includes exact optional slot facts in a bounded compact real-template result', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const result = await getToolResult({ query: 'bullet-variance-chart', limit: 1 });
     expect(result.isError).toBe(false);
@@ -495,7 +492,7 @@ describe('list-templates', () => {
     temporaryRoots.push(root);
     writeFileSync(join(root, 'eligible.tbm'), BOOKMARK);
     writeFileSync(join(root, 'blocked.tbm'), PASS1_BLOCKED_BOOKMARK);
-    process.env['TEMPLATES_DIR'] = root;
+    vi.stubEnv('TEMPLATES_DIR', root);
 
     const all = await getBody({ limit: 10 });
     expect(all.templates.map((template: { template: string }) => template.template)).toEqual([
@@ -516,7 +513,7 @@ describe('list-templates', () => {
   });
 
   it('reports shipped donut and Gantt support gates as eligibility truth', async () => {
-    delete process.env['TEMPLATES_DIR'];
+    vi.stubEnv('TEMPLATES_DIR', undefined);
 
     const donut = await getBody({
       query: 'part-to-whole__donut__show-parts-with-center-space-for-total',
@@ -575,7 +572,7 @@ describe('list-templates', () => {
     temporaryRoots.push(root);
     writeFileSync(join(root, 'blocked.tbm'), PASS1_BLOCKED_BOOKMARK);
     writeFileSync(join(root, 'eligible.tbm'), BOOKMARK);
-    process.env['TEMPLATES_DIR'] = root;
+    vi.stubEnv('TEMPLATES_DIR', root);
 
     const first = await getBody({ limit: 1, pass1EligibleOnly: true });
     expect(first).toMatchObject({ candidateCount: 2, scanned: 1, count: 0 });
@@ -640,23 +637,17 @@ describe('list-templates', () => {
       BOOKMARK,
     );
     writeFileSync(join(root, 'Tableau Agent', 'templates', 'shared.tbm'), '<broken/>');
-    delete process.env['TEMPLATES_DIR'];
-    const originalRepositoryDir = process.env['TABLEAU_REPOSITORY_DIR'];
-    process.env['TABLEAU_REPOSITORY_DIR'] = root;
-    try {
-      const body = await getBody({ query: 'shared' });
-      expect(body.templates).toEqual([]);
-      expect(body.diagnostics.templates).toEqual([
-        {
-          template: 'shared',
-          provenance: 'custom',
-          issue: 'invalid-or-unreadable',
-        },
-      ]);
-    } finally {
-      if (originalRepositoryDir === undefined) delete process.env['TABLEAU_REPOSITORY_DIR'];
-      else process.env['TABLEAU_REPOSITORY_DIR'] = originalRepositoryDir;
-    }
+    vi.stubEnv('TEMPLATES_DIR', undefined);
+    vi.stubEnv('TABLEAU_REPOSITORY_DIR', root);
+    const body = await getBody({ query: 'shared' });
+    expect(body.templates).toEqual([]);
+    expect(body.diagnostics.templates).toEqual([
+      {
+        template: 'shared',
+        provenance: 'custom',
+        issue: 'invalid-or-unreadable',
+      },
+    ]);
   });
 
   it('bounds malformed-name diagnostics without hiding valid templates', async () => {
@@ -667,7 +658,7 @@ describe('list-templates', () => {
       writeFileSync(join(root, `bad\\name-${String(index).padStart(2, '0')}.tbm`), BOOKMARK);
     }
     writeFileSync(join(root, 'valid.tbm'), BOOKMARK);
-    process.env['TEMPLATES_DIR'] = root;
+    vi.stubEnv('TEMPLATES_DIR', root);
 
     const body = await getBody({ limit: 1 });
     expect(body.templates.map((template: { template: string }) => template.template)).toEqual([

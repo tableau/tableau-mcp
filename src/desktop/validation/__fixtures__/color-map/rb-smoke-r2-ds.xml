@@ -1,0 +1,24 @@
+<!-- Live Desktop 0000.26.1012.0832 datasource readback after apply-datasource of the f1 shape (R2), trimmed: cut <connection>, <cols>, <metadata-records>, <column> elements and everything after <style>. Kept verbatim: the root element, the Category <column-instance> and the datasource <style>. -->
+<datasource caption='Sample - Superstore' inline='true' name='federated.zfru97lfbdy7xggra2seh2uwxf6o' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+  <style>
+    <style-rule element='mark'>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#00aa00'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+        <map to='#e15759'>
+          <bucket>&quot;Technology&quot;</bucket>
+        </map>
+        <map to='#f28e2b'>
+          <bucket>&quot;Office Supplies&quot;</bucket>
+        </map>
+      </encoding>
+      <encoding attr='color' field='[none:Category:nk]' type='palette'>
+        <map to='#00aa00'>
+          <bucket>&quot;Furniture&quot;</bucket>
+        </map>
+      </encoding>
+    </style-rule>
+  </style>
+</datasource>

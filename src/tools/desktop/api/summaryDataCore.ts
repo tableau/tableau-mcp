@@ -49,12 +49,15 @@ export async function fetchWorksheetSummaryData({
   maxRows,
   columns,
   materializeEmpty = false,
+  ignoreAliases,
 }: {
   read: SummaryDataRead;
   worksheet: string | undefined;
   maxRows: number;
   columns?: string[];
   materializeEmpty?: boolean;
+  /** Return underlying values instead of display aliases; omitted keeps the API default. */
+  ignoreAliases?: boolean;
 }): Promise<Result<WorksheetSummaryData, WorksheetSummaryDataError>> {
   const worksheetsResult = await read(
     'worksheet list',
@@ -88,7 +91,11 @@ export async function fetchWorksheetSummaryData({
       async (activeExecutor, activeSignal) =>
         await activeExecutor.getWorksheetSummaryData(
           resolvedWorksheet.id,
-          { maxRows, ignoreSelection: SUMMARY_DATA_READ_SCOPE.ignoreSelection },
+          {
+            maxRows,
+            ignoreSelection: SUMMARY_DATA_READ_SCOPE.ignoreSelection,
+            ...(ignoreAliases === undefined ? {} : { ignoreAliases }),
+          },
           activeSignal,
         ),
     );
@@ -194,7 +201,7 @@ function columnName(column: unknown): string {
 
 function normalizeColumnName(name: string): string {
   const trimmed = name.trim().replace(/^\[|\]$/g, '');
-  const wrapped = trimmed.match(/^[A-Z][A-Z0-9_ ]*\((.*)\)$/i);
+  const wrapped = trimmed.match(/^[A-Z][A-Z0-9_]*\((.*)\)$/i);
   return (wrapped?.[1] ?? trimmed)
     .trim()
     .replace(/^\[|\]$/g, '')

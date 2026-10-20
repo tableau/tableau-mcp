@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { _resetExternalApiCommandRegistryForTest } from '../externalApi/paramWireRegistry.js';
@@ -35,7 +36,7 @@ function writeExternalApiRegistry({
   typeOfParam?: Record<string, unknown>;
   enumVals?: Record<string, string[]>;
 }): string {
-  const dir = mkdtempSync(join(process.cwd(), 'external-api-guard-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'external-api-guard-test-'));
   TEST_REGISTRY_DIRS.push(dir);
   writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
   writeFileSync(

@@ -22,6 +22,7 @@ import {
 import type { ParsedWorksheet } from '../metadata/types.js';
 import {
   isPromisedSortLossWarning,
+  isReadbackUnsettled,
   type ReadbackFinding,
   type ReadbackVerificationResult,
   type VerificationFinding,
@@ -37,7 +38,7 @@ import {
   checkUsedFieldValidity,
   mergeUsedFieldValidityVerification,
 } from '../validation/usedFieldValidity.js';
-import { xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -107,7 +108,10 @@ export function publicReadbackVerificationResult(
   const findings: VerificationFinding[] = result.findings.map((finding) => ({
     severity: finding.severity,
     source: 'readback' as const,
-    message: `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`,
+    message:
+      finding.readback === 'missing' || finding.readback === 'changed'
+        ? `Tableau ${finding.readback} ${finding.node}${finding.column ? ` (${finding.column})` : ''}.`
+        : `Tableau changed ${finding.node}: intended "${finding.intended}", read back "${finding.readback}".`,
   }));
   if (result.status === 'skipped') {
     findings.push({
@@ -206,7 +210,7 @@ export async function verifyPostApplyWorksheetReadback(
     const polled = await pollReadback({
       read: () => getWorksheetXml({ worksheetName, executor, signal }),
       settled: (fragment) =>
-        !verifyWorksheetReadback(intendedXml, fragment.xml).some((f) => f.severity === 'error'),
+        !isReadbackUnsettled(verifyWorksheetReadback(intendedXml, fragment.xml)),
       signal,
     });
 
@@ -257,10 +261,7 @@ async function verifyPostApplyArtifactReadback(
       settled: (workbookXml) => {
         const fragment = extractSheetXml(workbookXml, worksheetName);
         return (
-          fragment !== null &&
-          !verifyWorksheetReadback(intendedXml, fragment).some(
-            (finding) => finding.severity === 'error',
-          )
+          fragment !== null && !isReadbackUnsettled(verifyWorksheetReadback(intendedXml, fragment))
         );
       },
       signal,
@@ -448,12 +449,12 @@ export function resolveCanonicalWorksheetName(
     return Ok(xmlName);
   }
 
-  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
+  if (!parsedXmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:
-        `worksheet_name "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheet_name set to the XML's name ` +
+        `worksheetName "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
+        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheetName set to the XML's name ` +
         `"${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <worksheet name> attribute in the ` +
         `XML to "${worksheetName}" if the caller name is intended.`,
     });

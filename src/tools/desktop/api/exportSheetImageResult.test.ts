@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -77,6 +77,28 @@ describe('buildCachedImageToolResult', () => {
     expect(doubles.log).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(doubles.log.mock.calls)).not.toContain(bytes.toString('base64'));
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses a symlink planted at the image path and leaves its target untouched',
+    () => {
+      const victim = join(directory, 'victim.txt');
+      writeFileSync(victim, 'precious');
+      symlinkSync(victim, join(directory, 'worksheet-image-generated.png'));
+
+      expect(() =>
+        buildCachedImageToolResult({
+          tool: 'export-worksheet-image',
+          label: 'Worksheet',
+          cachePrefix: 'worksheet-image',
+          bytes: Buffer.from([1, 2, 3, 4]),
+          inlineBytes: 4,
+          capBytes: 3,
+          mimeType: 'image/png',
+        }),
+      ).toThrow('Could not write the image to the local cache.');
+      expect(readFileSync(victim, 'utf-8')).toBe('precious');
+    },
+  );
 
   it('does no cache I/O or cap-hit logging when inline bytes equal the cap', () => {
     const result = buildCachedImageToolResult({

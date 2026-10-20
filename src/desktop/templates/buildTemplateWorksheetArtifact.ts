@@ -2,7 +2,6 @@ import { Ok, type Result } from 'ts-results-es';
 
 import {
   ArgsValidationError,
-  FileReadError,
   McpToolError,
   XmlValidationError,
 } from '../../errors/mcpToolError.js';
@@ -213,6 +212,6 @@ export function buildTemplateWorksheetArtifact({
         ),
     });
   } catch (error) {
-    return new FileReadError(error).toErr();
+    return new ArgsValidationError(error instanceof Error ? error.message : String(error)).toErr();
   }
 }

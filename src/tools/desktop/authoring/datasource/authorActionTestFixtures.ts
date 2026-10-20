@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
@@ -71,7 +72,7 @@ function renderDashboard({ name, zones }: WorkbookDashboard): string {
 
 export const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
-  "<workbook version='18.1'>",
+  "<workbook version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>",
   '<datasources>',
   "<datasource hasconnection='false' inline='true' name='Parameters'>",
   "<column caption='p.Period' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column>",
@@ -94,14 +95,18 @@ export function withActions(baseXml: string, actionXml: string): string {
 
 export type AuthorActionArgs = {
   session?: string;
-  mode?: 'parameter' | 'set' | 'url' | 'filter';
-  caption: string;
-  sourceWorksheet: string;
+  operation?: 'create' | 'edit' | 'delete';
+  actionName?: string;
+  mode?: 'parameter' | 'set' | 'url' | 'filter' | 'highlight';
+  caption?: string;
+  sourceWorksheet?: string;
   sourceField?: string;
   targetParameter?: string;
   targetSet?: string;
   targetSheet?: string;
   filterFields?: string[];
+  highlightFields?: string[];
+  highlightBy?: 'all-fields' | 'dates-and-times';
   datasource?: string;
   setMembership?: 'assign' | 'add' | 'remove';
   clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
@@ -158,31 +163,40 @@ export async function getToolResult({
   const tool = getAuthorActionTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
+  const shape = await Provider.from(tool.paramsSchema);
+  invariant(shape !== undefined);
+  const parsedArgs = z.object(shape).parse({ session: '12345', ...args });
   const result = await callback(
     {
       session: '12345',
-      ...args,
-      mode: args.mode ?? 'parameter',
-      sourceField: args.sourceField,
-      targetParameter: args.targetParameter,
-      targetSet: args.targetSet,
-      targetSheet: args.targetSheet,
-      filterFields: args.filterFields,
-      datasource: args.datasource,
-      singleSelect: args.singleSelect,
-      activation: args.activation ?? 'on-select',
-      setMembership: args.setMembership ?? 'assign',
-      clearSelection: args.clearSelection ?? 'do-nothing',
-      sourceFieldAggregation: args.sourceFieldAggregation,
-      clearValue: args.clearValue,
-      onClear: args.onClear,
-      url: args.url,
-      sourceDashboard: args.sourceDashboard,
-      excludeSourceSheets: args.excludeSourceSheets,
-      excludeTargetSheets: args.excludeTargetSheets,
-      urlTarget: args.urlTarget,
-      zoneId: args.zoneId,
-      urlEncode: args.urlEncode,
+      ...parsedArgs,
+      operation: parsedArgs.operation,
+      actionName: parsedArgs.actionName,
+      caption: parsedArgs.caption,
+      sourceWorksheet: parsedArgs.sourceWorksheet,
+      mode: parsedArgs.mode,
+      sourceField: parsedArgs.sourceField,
+      targetParameter: parsedArgs.targetParameter,
+      targetSet: parsedArgs.targetSet,
+      targetSheet: parsedArgs.targetSheet,
+      filterFields: parsedArgs.filterFields,
+      highlightFields: parsedArgs.highlightFields,
+      highlightBy: parsedArgs.highlightBy,
+      datasource: parsedArgs.datasource,
+      singleSelect: parsedArgs.singleSelect,
+      activation: parsedArgs.activation,
+      setMembership: parsedArgs.setMembership,
+      clearSelection: parsedArgs.clearSelection,
+      sourceFieldAggregation: parsedArgs.sourceFieldAggregation,
+      clearValue: parsedArgs.clearValue,
+      onClear: parsedArgs.onClear,
+      url: parsedArgs.url,
+      sourceDashboard: parsedArgs.sourceDashboard,
+      excludeSourceSheets: parsedArgs.excludeSourceSheets,
+      excludeTargetSheets: parsedArgs.excludeTargetSheets,
+      urlTarget: parsedArgs.urlTarget,
+      zoneId: parsedArgs.zoneId,
+      urlEncode: parsedArgs.urlEncode,
     },
     extra,
   );

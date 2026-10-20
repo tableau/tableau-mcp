@@ -1,4 +1,4 @@
-import { proposalSignature } from './proposalSignature.js';
+import { IDEMPOTENCY_TEMPLATE_PARAMETER, proposalSignature } from './proposalSignature.js';
 
 const baseProposal = {
   template: 'ranking-ordered-bar',
@@ -76,7 +76,7 @@ describe('proposalSignature', () => {
     );
   });
 
-  it('changes when a declarative filter is added (m7 — so an add-filter re-bind is not blocked as unchanged)', () => {
+  it('changes when a declarative filter is added (so an add-filter re-bind is not blocked as unchanged)', () => {
     // The recovery gate blocks a retry whose signature is unchanged. Adding an interactive
     // context filter is a real semantic change and MUST produce a distinct signature, else the
     // "add the Region context filter" re-bind would be refused as a duplicate.
@@ -86,6 +86,19 @@ describe('proposalSignature', () => {
         filters: [{ field: 'Region', context: true }],
       }),
     ).not.toBe(proposalSignature(baseProposal));
+  });
+
+  it('changes when only a template parameter value changes, and ignores parameter key order', () => {
+    const a = { ...baseProposal, template_parameters: { DATE_MIN: '2020', DATE_MAX: '2021' } };
+    expect(
+      proposalSignature({ ...a, template_parameters: { DATE_MIN: '2019', DATE_MAX: '2021' } }),
+    ).not.toBe(proposalSignature(a));
+    expect(
+      proposalSignature({ ...a, template_parameters: { DATE_MAX: '2021', DATE_MIN: '2020' } }),
+    ).toBe(proposalSignature(a));
+    expect(proposalSignature({ ...baseProposal, template_parameters: {} })).toBe(
+      proposalSignature(baseProposal),
+    );
   });
 
   it('treats filter order as non-semantic but values/context as semantic', () => {
@@ -107,5 +120,15 @@ describe('proposalSignature', () => {
       ],
     };
     expect(proposalSignature(contextFlipped)).not.toBe(proposalSignature(a));
+  });
+
+  it('ignores the idempotency key but still counts other template parameters', () => {
+    const withKey = (key: string): Parameters<typeof proposalSignature>[0] => ({
+      ...baseProposal,
+      template_parameters: { DATE_MIN: '2020', [IDEMPOTENCY_TEMPLATE_PARAMETER]: key },
+    });
+
+    expect(proposalSignature(withKey('run-1'))).toBe(proposalSignature(withKey('run-2')));
+    expect(proposalSignature(withKey('run-1'))).not.toBe(proposalSignature(baseProposal));
   });
 });

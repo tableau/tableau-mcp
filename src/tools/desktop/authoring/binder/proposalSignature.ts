@@ -1,3 +1,5 @@
+export const IDEMPOTENCY_TEMPLATE_PARAMETER = '__TABLEAU_AGENT_IDEMPOTENCY_KEY__';
+
 export interface ProposalSignatureBinding {
   slot_id: string;
   field: string;
@@ -20,6 +22,7 @@ export interface ProposalSignatureInput {
   top_n?: number;
   bin_size?: number;
   filters?: ProposalSignatureFilter[];
+  template_parameters?: Record<string, string>;
 }
 
 function compareText(a: string | undefined, b: string | undefined): number {
@@ -49,6 +52,10 @@ export function proposalSignature(proposal: ProposalSignatureInput): string {
     }))
     .sort((a, b) => compareText(a.field, b.field));
 
+  const templateParameters = Object.entries(proposal.template_parameters ?? {})
+    .filter(([key]) => key !== IDEMPOTENCY_TEMPLATE_PARAMETER)
+    .sort(([a], [b]) => compareText(a, b));
+
   return JSON.stringify({
     template: proposal.template,
     bindings,
@@ -58,5 +65,6 @@ export function proposalSignature(proposal: ProposalSignatureInput): string {
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
     ...(proposal.bin_size !== undefined ? { bin_size: proposal.bin_size } : {}),
     ...(filters !== undefined && filters.length > 0 ? { filters } : {}),
+    ...(templateParameters.length > 0 ? { template_parameters: templateParameters } : {}),
   });
 }

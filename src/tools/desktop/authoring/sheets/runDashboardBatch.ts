@@ -28,6 +28,7 @@ import {
 import {
   formatReadbackVerificationError,
   formatReadbackVerificationWarnings,
+  isReadbackUnsettled,
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../../../desktop/validation/readback-verify.js';
@@ -38,6 +39,7 @@ import {
 } from '../../../../desktop/validation/registry.js';
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
+import { hideStartPage } from '../../../../desktop/wrappers/applyFocus.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   describeLoadWorkbookXmlError,
@@ -50,14 +52,14 @@ import { xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
-  type McpToolError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { type McpToolError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifact.js';
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
-import { DesktopTool } from '../../tool.js';
+import { DesktopTool, resolveEpisodeKey } from '../../tool.js';
 import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
@@ -163,6 +165,8 @@ type WorksheetVerification = {
 
 type BatchReadbackVerification = {
   ok: boolean;
+  /** True while a finding may still be a pre-apply read: any error, or a shelf warning. */
+  pending: boolean;
   worksheets: WorksheetVerification[];
   dashboardIssues: string[];
 };
@@ -202,7 +206,11 @@ export const getRunDashboardBatchTool = (
       extra,
     ): Promise<CallToolResult> => {
       const startedAt = performance.now();
-      const sessionId = episodeSessionIdFromArgs(extra.config, { session });
+      const sessionId = resolveEpisodeKey(
+        extra.config,
+        { session },
+        episodeSessionIdFromArgs(extra.config, { session }),
+      );
       let executionStarted = false;
       const result = await tool.logAndExecute<RunDashboardBatchResult>({
         extra,
@@ -577,9 +585,16 @@ export const getRunDashboardBatchTool = (
 
             const polled = await pollReadback({
               read: () => getWorkbookXml({ executor, signal: extra.signal }),
-              settled: (xml) =>
-                verifyBatchReadback(xml, candidateXml, reservations, dashboardName, worksheetNames)
-                  .ok,
+              settled: (xml) => {
+                const attempt = verifyBatchReadback(
+                  xml,
+                  candidateXml,
+                  reservations,
+                  dashboardName,
+                  worksheetNames,
+                );
+                return attempt.ok && !attempt.pending;
+              },
               signal: extra.signal,
             });
             if (!polled.ok) {
@@ -599,7 +614,7 @@ export const getRunDashboardBatchTool = (
               dashboardName,
               worksheetNames,
             );
-            if (!polled.settled || !verification.ok) {
+            if (!verification.ok) {
               return unknownBatch({
                 artifactIds: orderedArtifactIds,
                 reservations,
@@ -620,6 +635,7 @@ export const getRunDashboardBatchTool = (
 
             const emptyWorksheetNames = findBlankWorksheetNames(polled.value, worksheetNames);
 
+            await hideStartPage({ executor, signal: extra.signal });
             await activateSheetWithValidatedGoto({
               sheetName: dashboardName,
               executor,
@@ -699,6 +715,7 @@ function verifyBatchReadback(
   dashboardName: string,
   worksheetNames: string[],
 ): BatchReadbackVerification {
+  let pending = false;
   const worksheets = reservations.map((reservation): WorksheetVerification => {
     const { id: artifactId, title: worksheetTitle, worksheetXml } = reservation.artifact;
     const fragment = extractSheetXml(workbookXml, worksheetTitle);
@@ -714,6 +731,7 @@ function verifyBatchReadback(
       };
     }
     const findings = verifyWorksheetReadback(worksheetXml, fragment);
+    pending ||= isReadbackUnsettled(findings);
     if (findings.some((finding) => finding.severity === 'error')) {
       return {
         artifactId,
@@ -748,6 +766,7 @@ function verifyBatchReadback(
   ];
   return {
     ok: worksheets.every(({ verification }) => verification.ok) && dashboardIssues.length === 0,
+    pending,
     worksheets,
     dashboardIssues,
   };

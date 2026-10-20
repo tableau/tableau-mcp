@@ -2,10 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { formatDesktopWarnings } from '../../../desktop/validation/promise-check.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
+import { IncompleteOperationError } from '../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
+import { prefillNextAction, withNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { commandOk, commandSuccessResult, toWireWarnings } from './desktopCommandResult.js';
 
 const paramsSchema = {
   session: sessionParam(),
@@ -31,7 +35,7 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
       'Save As dialog and blocks until a person responds — pass filePath to save it headlessly.',
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     },
@@ -40,6 +44,7 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
       return await saveWorkbookTool.logAndExecute({
         extra,
         args: { session, filePath },
+        getSuccessResult: commandSuccessResult,
         callback: async () =>
           await runExternalApiReadTool({
             session,
@@ -54,34 +59,45 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
               }
 
               if (result.value.status !== 'completed') {
-                return new Ok({
-                  message: 'Requested saving the workbook; Desktop is still applying it.',
-                });
+                const pending = 'Requested saving the workbook; Desktop is still applying it';
+                return new Ok(commandOk({ message: `${pending}.` }, result.value, pending));
               }
 
-              // A completed save can still be a no-op: a dismissed Save As dialog reports
-              // SUCCEEDED, so confirm the write via unsavedChanges rather than trusting status.
-              const inventory = await read(
-                'workbook inventory',
-                async (executor, signal) => await executor.getWorkbook(signal),
-              );
-              if (inventory.isErr()) {
-                return inventory;
-              }
-              if (inventory.value.unsavedChanges) {
-                return new Ok({
-                  message:
-                    'Tableau reported the save as complete, but the workbook still has unsaved ' +
-                    'changes, so it was not saved (the Save As dialog was likely dismissed).',
-                });
+              // Only an in-place save can open a Save dialog, and a dismissed one still reports
+              // SUCCEEDED, so confirm that write via unsavedChanges. A save to filePath is
+              // authoritative on status, as in workbook-export-as.
+              if (filePath === undefined) {
+                const inventory = await read(
+                  'workbook inventory',
+                  async (executor, signal) => await executor.getWorkbook(signal),
+                );
+                if (inventory.isErr()) {
+                  return inventory;
+                }
+                if (inventory.value.unsavedChanges) {
+                  const warnings = toWireWarnings(result.value.warnings);
+                  return new IncompleteOperationError(
+                    withNextAction(
+                      {
+                        message:
+                          'The save did not complete: Desktop reported it finished, but the workbook ' +
+                          'still has unsaved changes. A Save dialog may have been dismissed. Do not ' +
+                          'retry without filePath unless the user is at the machine, because a retry ' +
+                          'reopens a dialog that blocks until a person answers.' +
+                          formatDesktopWarnings(warnings, ''),
+                        ...(warnings.length > 0 ? { warnings } : {}),
+                      },
+                      prefillNextAction('Ask the user whether to retry the save'),
+                    ),
+                  ).toErr();
+                }
               }
 
-              return new Ok({
-                message:
-                  filePath !== undefined
-                    ? `Saved a copy to "${filePath}".`
-                    : 'Saved the open workbook.',
-              });
+              const subject =
+                filePath !== undefined
+                  ? `Saved a copy to "${filePath}"`
+                  : 'Saved the open workbook';
+              return new Ok(commandOk({ message: `${subject}.` }, result.value, subject));
             },
           }),
       });

@@ -4,6 +4,11 @@
 
 When a pull request to `main` opens or updates, `.github/workflows/auto-version-bump.yml` computes the selected version from the latest `main`, commits it to the pull request branch, and updates both package files. After the pull request merges, the workflow tags the merged version as `v<version>`. Publishing a GitHub Release from that tag triggers `.github/workflows/publish.yml` and `.github/workflows/docker-publish.yml`.
 
+The npm package is Web-only: it publishes `build/index.js` as the single command and excludes the
+Desktop entry point and Desktop data. Desktop uses a separate distribution path. On a published
+GitHub Release, `.github/workflows/upload-binaries.yml` builds the Web and Desktop standalone
+executables and puts both in each platform archive before attaching the archives to the release.
+
 > **The Release publish is the trigger.** Both `publish.yml` and `docker-publish.yml` fire on `release: published` — pushing a tag alone publishes **nothing**. And both preflight that the release tag equals `v<package.json version>` at the tagged commit; a mismatch fails the run before anything publishes (npm keys prerelease-vs-stable off `package.json`, Docker off the tag name — the preflight keeps them agreeing).
 
 ## Hotfix release

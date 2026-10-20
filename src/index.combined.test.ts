@@ -57,6 +57,11 @@ vi.mock('./desktop/instructions.js', () => ({
   buildDesktopInstructions: vi.fn(() => 'desktop instructions'),
 }));
 
+vi.mock('./activityLog/init.js', () => ({
+  initializeActivityLog: vi.fn(async () => undefined),
+  closeActivityLog: vi.fn(async () => undefined),
+}));
+
 vi.mock('./features/init.js', () => ({
   initializeFeatureGate: vi.fn(() => {
     startupState.activeFeatureGateProvider = 'custom';
@@ -124,6 +129,7 @@ vi.mock('./server.desktop.js', () => ({
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+import { closeActivityLog, initializeActivityLog } from './activityLog/init.js';
 import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { connectSessionStore } from './sessionStore/init.js';
@@ -175,6 +181,7 @@ describe('combined entrypoint startup', () => {
     await vi.waitFor(() => expect(getTableauServerInfo).toHaveBeenCalledOnce());
 
     expect(initializeFeatureGate).toHaveBeenCalledOnce();
+    expect(initializeActivityLog).toHaveBeenCalledOnce();
     expect(connectSessionStore).toHaveBeenCalledOnce();
     expect(McpServer).not.toHaveBeenCalled();
 
@@ -194,6 +201,7 @@ describe('combined entrypoint startup', () => {
     await startupState.shutdownHandlers.get('SIGTERM')!();
 
     expect(startupState.sessionStoreDisconnected).toBe(true);
+    expect(closeActivityLog).toHaveBeenCalledOnce();
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 });

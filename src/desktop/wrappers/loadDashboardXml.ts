@@ -2,22 +2,24 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
+import { supportsDashboardVisualRegistration } from '../externalApi/apiVersion.js';
 import {
   ExecuteCommandError,
+  type ExecuteCommandWarning,
   WithExecutorAndAbortSignal,
   WorkbookDocument,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
-import { classifyWorkbookWorksheets } from '../metadata/worksheetRenderState.js';
 import {
   alwaysBlockingValidationIssues,
   blockingValidationIssues,
   runValidation,
 } from '../validation/registry.js';
 import { ValidationIssue } from '../validation/types.js';
-import { parsedXmlNamesEqual, xmlNamesEqual } from '../xmlElement.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import {
@@ -51,14 +53,16 @@ export type LoadDashboardXmlError =
   | { type: 'registration-required'; message: string; worksheetNames: string[] }
   // All dashboard callers require an existing sheet; no whole-workbook fallback is safe here.
   | { type: 'sheet-absent'; message: string }
-  // A dashboard zone references a worksheet that exists by name but has no applied
-  // mark/encoding (no visual doc). Desktop's HasVisualDoc would reject this with
-  // IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC; we catch it before dispatch. retry-safe: nothing sent.
-  | { type: 'sheet-not-rendered'; message: string; worksheetNames: string[] };
+  // The Desktop build lacks the per-sheet document endpoint; nothing was sent.
+  | { type: 'route-missing'; message: string };
 
 export interface LoadDashboardXmlOk {
   appliedName?: string;
   validationWarnings: ValidationIssue[];
+  /** Nodes Desktop dropped from the applied document; empty on a clean apply. */
+  documentWarnings: ExecuteCommandWarning[];
+  diagnostics?: WorkbookDiagnostics;
+  diagnosticsInvalid?: boolean;
   /** Worksheet registrations observed in the successful post-apply readback. */
   verifiedWorksheetNames?: string[];
 }
@@ -116,7 +120,7 @@ function resolveCanonicalDashboardName(
     });
   }
 
-  if (!xmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
+  if (!parsedXmlNamesEqual(xmlName, callerRef) && !(xmlId && xmlId === callerRef)) {
     return Err({
       type: 'name-mismatch',
       message:
@@ -130,91 +134,7 @@ function resolveCanonicalDashboardName(
   return Ok(xmlName);
 }
 
-/**
- * Preflight render guard (pure). A dashboard zone can name a worksheet that exists in the live
- * workbook but has never been rendered (no mark/encoding -- a blank sheet skeleton). Desktop's
- * own HasVisualDoc check rejects that combination only AFTER dispatch
- * (IDP_ERR_DASHBOARD_MISSING_VISUAL_DOC); catching it here keeps the apply retry-safe, since
- * nothing is sent to Tableau.
- *
- * This is a pure function over an ALREADY-FETCHED live workbook snapshot: the caller reads the
- * workbook inside `withApplyLock` and hands the same snapshot both here and to the apply, so the
- * MCP writes share one snapshot. Desktop user edits are not serialized by this mutex. A read
- * failure is the caller's to surface as a retriable error (fail CLOSED) rather than being
- * swallowed here. Only worksheets PRESENT-but-blank are flagged -- absent worksheets are the
- * `sheet-absent` / create path's concern, and this guard must not duplicate that (so it returns
- * `[]` for a zone naming a worksheet missing from the snapshot: nothing to flag here).
- */
-function findBlankReferencedWorksheets(dashboardXml: string, liveWorkbookXml: string): string[] {
-  const worksheetZoneNames = dashboardWorksheetNames(dashboardXml);
-  if (worksheetZoneNames.length === 0) {
-    return [];
-  }
-  const { worksheets } = classifyWorkbookWorksheets(liveWorkbookXml);
-  return worksheetZoneNames.filter((name) =>
-    worksheets.some(
-      (worksheet) => parsedXmlNamesEqual(worksheet.name, name) && worksheet.state === 'blank',
-    ),
-  );
-}
-
-function sheetNotRenderedError(
-  canonicalName: string,
-  blankNames: string[],
-): Extract<LoadDashboardXmlError, { type: 'sheet-not-rendered' }> {
-  return {
-    type: 'sheet-not-rendered',
-    worksheetNames: blankNames,
-    message:
-      `Dashboard "${canonicalName}" references worksheet(s) ${blankNames.join(', ')} that exist ` +
-      'by name but have no applied mark/encoding, so Tableau cannot wire them into a dashboard ' +
-      '("no visual representation"). FIX: render each worksheet first (place a field on it with ' +
-      'add-field, or apply-worksheet with a filled <table>) so it has a mark, then re-apply the ' +
-      'dashboard. No changes were sent to Tableau.',
-  };
-}
-
-// The render guard needs a live-workbook snapshot to inspect worksheet <table> state. Read it
-// under the same apply lock the write uses, evaluate the (pure) guard against that one snapshot,
-// and fail CLOSED on a read failure: a transient read error surfaces as a retriable
-// execute-command-error rather than silently disabling the protection. Both apply routes call
-// this from INSIDE their `withApplyLock` body so the read/check/apply run as one critical section.
-//
-// Returns the fetched live-workbook snapshot so registration checks and readback can reuse it.
-// Higher-level helpers also read back the surgical apply result.
-// Returns `null` WITHOUT reading when the dashboard
-// names no worksheet zones -- there is nothing for the guard to check, so a zone-less apply
-// pays no guard fetch. Helpers requesting verified readback fetch their snapshot separately.
-async function runRenderGuardInLock(
-  canonicalName: string,
-  dashboardXml: string,
-  { executor, signal }: WithExecutorAndAbortSignal,
-): Promise<Result<WorkbookDocument | null, RenderGuardOrApplyError>> {
-  if (dashboardWorksheetNames(dashboardXml).length === 0) {
-    return Ok(null);
-  }
-  const workbookResult = await executor.getWorkbookDocument(signal);
-  if (workbookResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: workbookResult.error });
-  }
-  const liveWorkbookXml = workbookResult.value.xml;
-  const blankNames = findBlankReferencedWorksheets(dashboardXml, liveWorkbookXml);
-  if (blankNames.length > 0) {
-    log({
-      level: 'error',
-      message: 'Dashboard references a blank (unrendered) worksheet -- not sent to Tableau',
-      logger: 'dashboardCommands',
-      data: { dashboardName: canonicalName, worksheetNames: blankNames },
-    });
-    return Err({
-      type: 'load-dashboard-xml-error',
-      error: sheetNotRenderedError(canonicalName, blankNames),
-    });
-  }
-  return Ok(workbookResult.value);
-}
-
-type RenderGuardOrApplyError =
+type SnapshotOrApplyError =
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError };
 
@@ -240,7 +160,7 @@ export async function loadDashboardXml({
   // existing sheet and use only its surgical document endpoint; neither permits creation.
   requireExistingSheet?: boolean;
   expectedSourceHash?: string;
-  // Additional registrations requested by higher-level helpers must exist BEFORE the write.
+  // Registrations outside the submitted zones must exist before the write.
   worksheetNames?: string[];
   verifyReadback?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
@@ -301,22 +221,18 @@ export async function loadDashboardXml({
   const canonicalFocus: ApplyFocus =
     focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
-  // The render guard (a zone naming an existing-but-blank worksheet would be rejected by Desktop's
-  // own HasVisualDoc check) reads the live workbook. Run it INSIDE each route's apply lock so the
-  // MCP read/check/apply are one critical section; this does not block Desktop user edits. A
-  // read failure fails CLOSED. There is no workbook replacement or creation fallback.
+  // The lock serializes MCP snapshot/check/apply, not Desktop user edits.
+  // A snapshot read failure fails closed; no workbook replacement or creation fallback is safe.
   let verifiedWorksheetNames: string[] | undefined;
   const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
   const perSheetResult = await withApplyLock(
-    async (): Promise<Result<PerSheetApplyOutcome, RenderGuardOrApplyError>> => {
-      const guard = await runRenderGuardInLock(canonicalName, xml, { executor, signal });
-      if (guard.isErr()) {
-        return Err(guard.error);
-      }
-      let snapshot = guard.value;
-      if (snapshot === null && (verifyReadback || worksheetNames.length > 0)) {
+    async (): Promise<Result<PerSheetApplyOutcome, SnapshotOrApplyError>> => {
+      let snapshot: WorkbookDocument | null = null;
+      if (dashboardWorksheetNames(xml).length > 0 || verifyReadback || worksheetNames.length > 0) {
         const workbook = await executor.getWorkbookDocument(signal);
-        if (workbook.isErr()) return Err({ type: 'execute-command-error', error: workbook.error });
+        if (workbook.isErr()) {
+          return Err({ type: 'execute-command-error', error: workbook.error });
+        }
         snapshot = workbook.value;
       }
       const expectedInstanceId = snapshot?.instanceId ?? executor.desktopInstanceId;
@@ -336,9 +252,10 @@ export async function loadDashboardXml({
         return Ok(prepared.value);
       }
       const checked = prepared.value;
-      const names = [
-        ...new Set([...dashboardWorksheetNames(checked.fragmentXml), ...worksheetNames]),
-      ];
+      const referencedNames = dashboardWorksheetNames(checked.fragmentXml);
+      const names = [...new Set([...referencedNames, ...worksheetNames])];
+      const supportsRegistration = supportsDashboardVisualRegistration(executor.desktopApiVersion);
+      let requiresRegistrationReadback = false;
       if (kind === 'dashboard' && snapshot !== null) {
         let missing: string[];
         try {
@@ -349,7 +266,15 @@ export async function loadDashboardXml({
             error: { type: 'invalid-response', error },
           });
         }
-        if (missing.length > 0) {
+        requiresRegistrationReadback = supportsRegistration && missing.length > 0;
+        if (
+          missing.length > 0 &&
+          (!supportsRegistration ||
+            missing.some(
+              (name) =>
+                !referencedNames.some((referenced) => parsedXmlNamesEqual(name, referenced)),
+            ))
+        ) {
           return Err({
             type: 'load-dashboard-xml-error',
             error: {
@@ -357,7 +282,10 @@ export async function loadDashboardXml({
               worksheetNames: missing,
               message:
                 `Dashboard "${checked.name}" needs worksheet view registrations for ${missing.join(', ')}. ` +
-                'This Desktop API cannot add them through the dashboard-only endpoint, and a whole-workbook replacement could overwrite concurrent edits. ' +
+                (supportsRegistration
+                  ? 'Native registration only covers worksheets referenced by the submitted dashboard zones. '
+                  : 'This Desktop API cannot add them through the dashboard-only endpoint. ') +
+                'A whole-workbook replacement could overwrite concurrent edits. ' +
                 'Add the worksheets to this dashboard in Desktop, then re-read the dashboard before retrying the layout edit. ' +
                 'Do not change worksheet zone types or retry with a whole-workbook replacement. No changes were sent to Tableau.',
             },
@@ -365,13 +293,14 @@ export async function loadDashboardXml({
         }
       }
       let matchesReadback: ((workbookXml: string) => boolean) | undefined;
-      if (verifyReadback && snapshot !== null) {
+      if ((verifyReadback || requiresRegistrationReadback) && snapshot !== null) {
         try {
           // Compose only an in-memory expectation for readback, never a workbook POST.
           const expected = composeDashboardWorkbook(
             snapshot.xml,
             checked.name,
             checked.fragmentXml,
+            { useNativeViewpointDefaults: supportsRegistration },
           );
           if (expected.isErr())
             return Err({
@@ -420,17 +349,28 @@ export async function loadDashboardXml({
     },
   );
   if (perSheetResult.isErr()) {
-    // RenderGuardOrApplyError already matches this function's error union (sheet-not-rendered
-    // rejection, its retriable read failure, or a per-sheet execute-command error).
     return Err(perSheetResult.error);
   }
   const outcome = perSheetResult.value;
   if (typeof outcome === 'object' && 'status' in outcome) {
+    // Invariant: a requested readback that did not run is a failure, never an unverified Ok.
+    if (verifyReadback && !verifiedWorksheetNames) {
+      return Err({
+        type: 'load-dashboard-xml-error',
+        error: {
+          type: 'verification-failed',
+          message: `Tableau accepted the ${kind} apply, but no readback ran for "${outcome.name}". Changes may have been applied. Re-read the live ${kind} before retrying; do not blindly repeat the apply.`,
+        },
+      });
+    }
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt without re-running validation.
     return Ok({
       appliedName: outcome.name,
       validationWarnings: validation.issues.filter((issue) => issue.severity !== 'error'),
+      documentWarnings: outcome.documentWarnings,
+      ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
+      ...(outcome.diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
       ...(verifiedWorksheetNames ? { verifiedWorksheetNames } : {}),
     });
   }
@@ -448,6 +388,17 @@ export async function loadDashboardXml({
         message:
           `The ${kind} changed since this cache was read. Re-read it with get-${kind}-xml, ` +
           `reapply your edit to the new cache file, then retry apply-${kind}. No changes were sent to Tableau.`,
+      },
+    });
+  }
+  if (outcome === 'route-missing') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'route-missing',
+        message:
+          `This Tableau Desktop build has no per-sheet ${kind} document endpoint, so "${canonicalName}" ` +
+          'cannot be updated in place. Update Tableau Desktop. No changes were sent to Tableau.',
       },
     });
   }

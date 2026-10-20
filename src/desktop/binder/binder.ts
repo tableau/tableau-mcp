@@ -1,20 +1,21 @@
-// Tier-1 fast-path binder — the orchestrator (design doc §3, with the two-call
-// protocol correction).
+// Tier-1 fast-path binder — the orchestrator.
 //
 // TWO-CALL PROTOCOL (the MCP server stays model-free):
 //   • Call 1 — `bindTemplate({ ask, ... })`: run classifyNoLlm + role-greedy
 //     binding. If it fully binds AND passes the gate → `{status:"bound"}` with
 //     `used_llm:false`. On a miss → `{status:"propose"}` carrying the compact
-//     `LlmProposeInput` (§3.3) and the strict JSON `output_schema`, so the
+//     `LlmProposeInput` and the strict JSON `output_schema`, so the
 //     CALLING agent produces the BindingProposal itself.
 //   • Call 2 — `bindTemplate({ ask, proposal, ... })`: validate the agent's
-//     proposal through `validateBinding` (§2.4 gates 1–7) → `{status:"bound"}`
+//     proposal through `validateBinding` (gates 1–7) → `{status:"bound"}`
 //     or `{status:"escalate", reason, blockers}`.
 //
 // EVAL-ONLY seam: the pure core still accepts an optional `llmPropose` injection.
 // When supplied (and Call 1 missed), the binder calls it and validates the result
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
+
+import { createHash } from 'crypto';
 
 import { CANONICAL_DERIVATION_SHORT_FORMS } from '../derivations.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
@@ -27,12 +28,18 @@ import {
   type LlmProposeInput as CoreLlmProposeInput,
   type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  provesCompleteSingleSheetRequest,
   resolveEncodingFieldInAsk,
   resolveLooseFieldReference,
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
-import { type SchemaField, type SchemaSummary, summarizeSchema } from './schema-summary.js';
+import {
+  narrowSummaryToDatasource,
+  type SchemaField,
+  type SchemaSummary,
+  summarizeSchema,
+} from './schema-summary.js';
 import {
   type BindingProposal,
   type Blocker,
@@ -67,7 +74,7 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // A waterfall's running total is order-dependent, and its intended P&L order almost always
 // lives in a non-displayed sequence column (display_order / sort_order / …). Left to the
 // template default (DESC by the bound measure) the bridge is wrong; and asking the model to
-// ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
+// ADD the sort in a later step is fragile (live receipts: it lands the sort only ~1/3 of
 // runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
 // fragile follow-up. The shared constants live in waterfall.ts so classification and apply
@@ -131,7 +138,7 @@ export interface InjectTemplateArgs {
   top_n?: number;
   /** Histogram-only positive bin width; undefined preserves the authored default. */
   bin_size?: number;
-  /** Declarative interactive dimension filters (m7). A context:true filter is emitted at
+  /** Declarative interactive dimension filters. A context:true filter is emitted at
    * Tableau OoO step 3 so a Top-N within that dimension ranks within the selection. */
   filters?: FilterSpec[];
   /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
@@ -180,6 +187,12 @@ export type BinderResult =
        * completion while `unfilled` is non-empty.
        */
       encodings?: EncodingReport;
+      requestCoverage?: {
+        version: 1;
+        kind: 'complete_single_sheet_binding';
+        template: string;
+        askSha256: string;
+      };
     }
   | {
       status: 'propose';
@@ -202,7 +215,7 @@ export const DERIVATION_OVERRIDE_INSTRUCTION =
   'set derivation ONLY when the ask explicitly requests an aggregation/date grain different from the template default';
 
 /**
- * The strict JSON output schema the small-LLM is constrained to (design §3.3).
+ * The strict JSON output schema the small-LLM is constrained to.
  * The model picks a template, maps slot_id→field name, titles the sheet, and MAY
  * set an optional per-slot `derivation` override — the ONLY derivation surface it
  * controls. Datasource, instance syntax, and (in the absence of an override) the
@@ -251,10 +264,10 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       type: 'number',
       exclusiveMinimum: 0,
     },
-    // Declarative interactive dimension filters (m7 order-of-operations). Set context:true to
+    // Declarative interactive dimension filters. Set context:true to
     // make a filter a CONTEXT filter (Tableau OoO step 3) so a Top-N within that dimension
     // ranks WITHIN the selected member, not globally-then-filtered. Omit `values` for an
-    // interactive enumerate-all control (the m7 case: "let me filter down to one region").
+    // interactive enumerate-all control (for example: "let me filter down to one region").
     filters: {
       type: 'array',
       items: {
@@ -298,8 +311,8 @@ function sanitizeTemplateParameters(
  * (U+0000–U+001F) and DEL (U+007F). A title carrying one — NUL especially, which cannot
  * appear in XML at all — would make the substituted worksheet fragment unparseable
  * downstream. The tool boundary (proposalSchema) REJECTS these and the Call-1 generator
- * (makeTitle) STRIPS them; one shared definition so the two surfaces cannot drift
- * (M10 Finding 2). NON-global so `.test()` is stateless (no lastIndex hazard).
+ * (makeTitle) STRIPS them; one shared definition so the two surfaces cannot drift.
+ * NON-global so `.test()` is stateless (no lastIndex hazard).
  *
  * The character class is assembled at runtime (String.fromCharCode) rather than written
  * as a regex literal so the intentional control chars do not trip eslint no-control-regex
@@ -329,6 +342,21 @@ export function makeTitle(ask: string): string {
   const lastSpace = head.lastIndexOf(' ');
   const kept = lastSpace >= 40 ? head.slice(0, lastSpace) : head;
   return `${kept.replace(/[\s,;:.—–-]+$/, '')}…`;
+}
+
+/** Names the other datasource when a field resolves only outside the bound one. */
+function foundOnlyInOtherDatasource(
+  summary: SchemaSummary,
+  boundSummary: SchemaSummary,
+  name: string,
+  kind: 'filters' | 'sort',
+): string | undefined {
+  if (boundSummary === summary) return undefined;
+  const elsewhere = resolveInSummary(summary, name);
+  const other = elsewhere.field?.datasource;
+  const bound = boundSummary.fields[0]?.datasource;
+  if (other === undefined || bound === undefined || other === bound) return undefined;
+  return `"${name}" exists only in datasource '${other}'; bind-template ${kind} must come from the bound datasource '${bound}'.`;
 }
 
 /**
@@ -396,17 +424,22 @@ function validateAndBuild(
   }
 
   const warnings = [...(v.warnings ?? [])];
+  // Sort, filters and the waterfall order field resolve inside the datasource the slots bound to.
+  const boundSummary = narrowSummaryToDatasource(summary, (ds) => escapeXml(ds) === v.datasource);
   let sort = proposal.sort;
   if (proposal.sort) {
-    const sortField = resolveInSummary(summary, proposal.sort.by);
+    const sortField = resolveInSummary(boundSummary, proposal.sort.by);
     if (sortField.kind === 'ambiguous') {
       warnings.push(
         `"${proposal.sort.by}" matches ${sortField.candidates?.length ?? 0} sort fields; ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
     } else if (sortField.kind === 'not_found' || !sortField.field) {
+      const elsewhere = foundOnlyInOtherDatasource(summary, boundSummary, proposal.sort.by, 'sort');
       warnings.push(
-        `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
+        elsewhere !== undefined
+          ? `${elsewhere} Ignoring optional sort and keeping the template's default sort`
+          : `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
     }
@@ -414,10 +447,11 @@ function validateAndBuild(
 
   // Waterfall step-order default: if no usable sort was proposed and the schema carries a
   // sequence/order column, sort the bridge by it ascending in THIS bind — see the note on
-  // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
-  // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
+  // WATERFALL_ORDER_FIELD_RE. No order field: keep the template default. One: sort by it if it
+  // resolves. Several: escalate and ask for an explicit proposal.sort.
+  // Deterministic, unlike asking the model to add the sort later (it lands ~1/3 of runs).
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
-    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderFields = boundSummary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
     if (orderFields.length > 1) {
       return {
         status: 'escalate',
@@ -435,7 +469,7 @@ function validateAndBuild(
     }
     const orderField = orderFields[0];
     if (orderField) {
-      const resolved = resolveInSummary(summary, orderField.name);
+      const resolved = resolveInSummary(boundSummary, orderField.name);
       if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
         sort = { by: orderField.name, direction: 'asc' };
         warnings.push(
@@ -454,13 +488,13 @@ function validateAndBuild(
     };
   }
 
-  // Declarative interactive filters (m7). Every requested filter must resolve to one real
+  // Declarative interactive filters. Every requested filter must resolve to one real
   // dimension. Applying the chart after dropping one would silently change the user's ask.
   // The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the accepted field
   // to its CI, declares the dependency, and emits the context filter + shown card.
   if (proposal.filters && proposal.filters.length > 0) {
     for (const filter of proposal.filters) {
-      const r = resolveInSummary(summary, filter.field);
+      const r = resolveInSummary(boundSummary, filter.field);
       if (r.kind === 'ambiguous') {
         return {
           status: 'escalate',
@@ -482,7 +516,9 @@ function validateAndBuild(
           blockers: [
             {
               code: 'field-not-found',
-              detail: `no filter field named "${filter.field}" in datasource(s)`,
+              detail:
+                foundOnlyInOtherDatasource(summary, boundSummary, filter.field, 'filters') ??
+                `no filter field named "${filter.field}" in datasource(s)`,
               candidates: (r.candidates ?? []).slice(0, 5).map((candidate) => candidate.column_ref),
             },
           ],
@@ -522,7 +558,7 @@ function validateAndBuild(
 
   const args: InjectTemplateArgs = {
     template_name: m.template,
-    // SECURITY (M10 Finding 1): the title is proposal/caller-controlled and substituted
+    // SECURITY: the title is proposal/caller-controlled and substituted
     // verbatim into an XML attribute — escape it here, at the single point it enters the
     // returned payload. datasource + field_mapping arrive PRE-escaped from validateBinding
     // (escaped exactly once at their production), so they are NOT re-escaped here.
@@ -550,6 +586,19 @@ function validateAndBuild(
   };
 }
 
+function requestNotCovered(): Extract<BinderResult, { status: 'escalate' }> {
+  return {
+    status: 'escalate',
+    reason: 'request-not-covered',
+    blockers: [
+      {
+        code: 'request-not-covered',
+        detail: 'The deterministic bind did not account for the complete original request',
+      },
+    ],
+  };
+}
+
 /**
  * Bind a template for `ask`, implementing the two-call protocol.
  * `llmPropose` is the EVAL-ONLY seam; omit it for the model-free (Call 1 →
@@ -562,16 +611,21 @@ export async function bindTemplate(args: {
   proposal?: BindingProposal;
   llmPropose?: LlmProposeFn;
   minConfidence?: number;
+  datasource?: string;
+  requireCompleteRequest?: boolean;
 }): Promise<BinderResult> {
-  const summary = summarizeSchema(args.workbookXml);
+  const summary = summarizeSchema(args.workbookXml, args.datasource);
   const minConfidence = args.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
   // ── Call 2: validate the agent-produced proposal ─────────────────
   if (args.proposal) {
+    if (args.requireCompleteRequest) {
+      return requestNotCovered();
+    }
     return validateAndBuild(args.proposal, args.manifests, summary, minConfidence, true, args.ask);
   }
 
-  // ── FAIL-CLOSED cost guard (M10 Finding 3) ───────────────────────
+  // ── FAIL-CLOSED cost guard ───────────────────────
   // classifyNoLlm + buildLlmInput run one regex PER schema field (maskFieldNames /
   // matchFieldsInAsk / narrowFields), uncapped — a pathological wide schema (~50k fields
   // ≈ 2.9s of synchronous event-loop block) is a per-call DoS. Over the cap we do NOT
@@ -593,7 +647,7 @@ export async function bindTemplate(args: {
   }
 
   // ── Call 1: no-LLM fast path ─────────────────────────────────────
-  const cls = classifyNoLlm(args.ask, args.manifests, summary);
+  const cls = classifyNoLlm(args.ask, args.manifests, summary, args.requireCompleteRequest);
   let declineReason: DeclineReason = {
     code: 'no_llm_classifier_declined',
     detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
@@ -609,7 +663,7 @@ export async function bindTemplate(args: {
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
     if (res.status === 'bound') {
       // Surface the classifier's advisory provenance (e.g. a required geo slot
-      // auto-completed from the schema, W60) alongside any avoid_when warnings, using
+      // auto-completed from the schema) alongside any avoid_when warnings, using
       // the bound result's existing `warnings` channel — never a blocker.
       if (cls.notes && cls.notes.length > 0) {
         res.warnings = [...(res.warnings ?? []), ...cls.notes];
@@ -620,6 +674,22 @@ export async function bindTemplate(args: {
       // node in the first place.
       if (cls.encodings) {
         res.encodings = cls.encodings;
+      }
+      if (args.requireCompleteRequest) {
+        const manifest = args.manifests.get(cls.template);
+        if (
+          manifest === undefined ||
+          res.warnings !== undefined ||
+          !provesCompleteSingleSheetRequest(args.ask, cls, summary, manifest)
+        ) {
+          return requestNotCovered();
+        }
+        res.requestCoverage = {
+          version: 1,
+          kind: 'complete_single_sheet_binding',
+          template: cls.template,
+          askSha256: createHash('sha256').update(args.ask, 'utf8').digest('hex'),
+        };
       }
       return res;
     }
@@ -632,6 +702,8 @@ export async function bindTemplate(args: {
     };
     // else fall through — the no-LLM guess didn't validate.
   }
+
+  if (args.requireCompleteRequest) return requestNotCovered();
 
   // ── Miss. Eval-only injected LLM closes the loop in-process ───────
   if (args.llmPropose) {

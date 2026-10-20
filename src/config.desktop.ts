@@ -1,8 +1,10 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+  MAX_TIMER_DELAY_MS,
   MIN_DESKTOP_CALL_TIMEOUT_MS,
 } from './desktop/callDeadline.js';
+import { parseUserAgentPrefix } from './desktop/externalApi/userAgent.js';
 import {
   DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
   DEFAULT_INLINE_IMAGE_MAX_BYTES,
@@ -39,6 +41,16 @@ export class Config extends BaseConfig {
 
   /** Optional override for the External Client API discovery directory. */
   externalApiDiscoveryDir: string | undefined;
+
+  /**
+   * Product token (`name/version`) of the app that launched this server, via
+   * `TABLEAU_USER_AGENT_PREFIX`. Leads the `User-Agent` sent to the External Client API so Desktop
+   * attributes the calls to the launcher. Ignored unless it is a single RFC 9110 product token.
+   */
+  userAgentPrefix: string | undefined;
+
+  /** Optional directory holding the Desktop command-param and codegen registry JSON files. */
+  commandsRegistryDir: string | undefined;
 
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
@@ -91,6 +103,14 @@ export class Config extends BaseConfig {
    */
   allowSkipValidation: boolean;
 
+  /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
+  knowledgeDir: string | undefined;
+
+  // Dev/test overrides for search assets; not user settings.
+  workbookXsdPath: string | undefined;
+  examplesDir: string | undefined;
+  twbIndexPath: string | undefined;
+
   constructor() {
     super();
 
@@ -100,6 +120,8 @@ export class Config extends BaseConfig {
       INLINE_IMAGE_MAX_BYTES: inlineImageMaxBytes,
       IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
+      TABLEAU_COMMANDS_REGISTRY_DIR: commandsRegistryDir,
+      TABLEAU_USER_AGENT_PREFIX: userAgentPrefix,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
       TABLEAU_DESKTOP_SESSION_LUID: desktopSessionLuid,
       TABLEAU_SITE_LUID: siteLuid,
@@ -114,6 +136,8 @@ export class Config extends BaseConfig {
     }
 
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
+    this.commandsRegistryDir = commandsRegistryDir?.trim() || undefined;
+    this.userAgentPrefix = parseUserAgentPrefix(userAgentPrefix);
     this.desktopSessionId =
       desktopSessionId && parseSessionPid(desktopSessionId) !== undefined
         ? desktopSessionId
@@ -135,17 +159,36 @@ export class Config extends BaseConfig {
       minValue: 1,
     });
 
-    this.imageExportTimeoutMs = parseNumber(imageExportTimeoutMs, {
-      defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
-      minValue: 1,
-    });
+    // Node turns a setTimeout delay above 2^31-1 into 1 ms, so "effectively never" must clamp, not fall back.
+    this.imageExportTimeoutMs = Math.min(
+      parseNumber(imageExportTimeoutMs, {
+        defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
+        minValue: 1,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
-    this.desktopCallTimeoutMs = parseNumber(desktopCallTimeoutMs, {
-      defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
-      minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
-    });
+    this.desktopCallTimeoutMs = Math.min(
+      parseNumber(desktopCallTimeoutMs, {
+        defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+        minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
+      }),
+      MAX_TIMER_DELAY_MS,
+    );
 
     this.allowSkipValidation = allowSkipValidation === 'true';
+
+    const {
+      TABLEAU_KNOWLEDGE_DIR: knowledgeDir,
+      WORKBOOK_XSD_PATH: workbookXsdPath,
+      EXAMPLES_DIR: examplesDir,
+      TWB_INDEX_PATH: twbIndexPath,
+    } = cleansedVars;
+    this.knowledgeDir = knowledgeDir || undefined;
+    this.workbookXsdPath = workbookXsdPath || undefined;
+    // An empty EXAMPLES_DIR still selects the directory route (an empty list), as before.
+    this.examplesDir = examplesDir;
+    this.twbIndexPath = twbIndexPath || undefined;
   }
 }
 

@@ -1,4 +1,4 @@
-// Tier-1 fast-path binder — the deterministic validation gate (design doc §2.4).
+// Tier-1 fast-path binder — the deterministic validation gate.
 //
 // `validateBinding(manifest, proposal, schema)` is PURE (no I/O): it takes a
 // proposed slot→field mapping and either returns the exact `field_mapping` the
@@ -66,11 +66,11 @@ import { inferStringTemporal } from './stringTemporal.js';
  * default, and emitted in the field_mapping value on success (gate 7).
  */
 /**
- * A declarative interactive dimension filter (m7 order-of-operations). `field` is a
+ * A declarative interactive dimension filter. `field` is a
  * NAME from SchemaSummary.fields. `context: true` marks it a CONTEXT filter — Tableau
  * order-of-operations step 3, which runs BEFORE a Top-N dimension filter (step 4), so a
  * "top N of A within an interactively-selected B" bind ranks WITHIN the selected B rather
- * than globally-then-filtering. `values` is OPTIONAL: when the ask names no member (m7:
+ * than globally-then-filtering. `values` is OPTIONAL: when the ask names no member (for example:
  * "let me filter down to one region"), the apply path emits an enumerate-all interactive
  * control (function="level-members" + user:ui-enumeration="all"), not a member list.
  */
@@ -95,7 +95,7 @@ export interface BindingProposal {
   confidence?: number;
 }
 
-/** The gate-specific escalation reasons (design §3.2). */
+/** The gate-specific escalation reasons. */
 export type EscalateReason =
   | 'template-not-found'
   | 'not-fast-path'
@@ -103,13 +103,15 @@ export type EscalateReason =
   | 'ambiguous-field'
   | 'field-not-found'
   | 'kind-mismatch'
+  | 'duplicate-slot-binding'
   | 'derivation-illegal'
   | 'aggregation-level-mismatch'
   | 'base-column-conflict'
   | 'cross-datasource-binding'
   | 'calc-dependency-unmet'
   | 'low-confidence'
-  // M10 Finding 3: the ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
+  | 'request-not-covered'
+  // The ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
   // classifier fails closed (never classifies a truncated subset) and escalates to
   // the general authoring flow rather than risk a silent wrong bind.
   | 'schema-too-large';
@@ -181,7 +183,7 @@ const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 // MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
-// Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
+// Geo semantic-role concept check. MIRRORS the private
 // tables in hash-gated src/desktop/binder/classify.ts (geoConceptFromSlotId /
 // GEO_SEMANTIC_ROLE_CONCEPT) — they are intentionally not exported because this
 // port must keep lockstep-core bytes unchanged.
@@ -390,7 +392,7 @@ export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   return { kind: 'not_found', candidates: fuzzy };
 }
 
-/** Does the resolved field satisfy the slot's kind? (design §2.4 gate 3.) */
+/** Does the resolved field satisfy the slot's kind? */
 function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   switch (kind) {
     case 'quantitative':
@@ -488,7 +490,7 @@ export function validateBinding(
     }
   }
 
-  // Index the proposed bindings by slot_id (last wins if duplicated).
+  // Index the proposed bindings by slot_id (a duplicate is blocked in gate 1).
   const boundBySlot = new Map<string, string>();
   const overrideBySlot = new Map<string, Derivation>(); // optional per-slot derivation override
   for (const b of p.bindings) {
@@ -525,7 +527,16 @@ export function validateBinding(
       });
     }
   }
+  const seenBindingSlots = new Set<string>();
   for (const b of p.bindings) {
+    if (seenBindingSlots.has(b.slot_id)) {
+      blockers.push({
+        code: 'duplicate-slot-binding',
+        slot_id: b.slot_id,
+        detail: `slot '${b.slot_id}' is bound more than once; give each slot exactly one binding`,
+      });
+    }
+    seenBindingSlots.add(b.slot_id);
     const slot = slotById.get(b.slot_id);
     if (!slot) {
       // Binding to a calc slot or a wholly unknown slot_id.
@@ -678,7 +689,7 @@ export function validateBinding(
       continue;
     }
 
-    // Gate 3b: geo semantic-role concept (red-team GEO-02) — the deterministic
+    // Gate 3b: geo semantic-role concept — the deterministic
     // path already enforces this in pickGeoField; the validate leg must too or
     // a City-tagged field can bind a state slot via Call-2.
     const geoMismatch = geoConceptMismatch(slot, f);
@@ -1197,7 +1208,7 @@ export function validateBinding(
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    // SECURITY (M10 Finding 1): the VALUE is substituted verbatim into a template XML
+    // SECURITY: the VALUE is substituted verbatim into a template XML
     // attribute, and both datasource + column name are workbook-controlled — escape the
     // five XML metachars EXACTLY ONCE, here at production. The KEY is the manifest's
     // template_field (trusted, shape-validated) and is NOT escaped. Tableau field-ref

@@ -1,5 +1,6 @@
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { buildInjectedWorkbookXml } from '../templates/injectTemplateCore.js';
@@ -9,6 +10,10 @@ import { loadWorkbookXml } from './loadWorkbookXml.js';
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('loadWorkbookXml validation preflight', () => {
   it.each(
     [false, true].flatMap((cachedLiveRelative) =>
@@ -90,7 +95,7 @@ describe('loadWorkbookXml validation preflight', () => {
     },
   );
 
-  it('Miller World Cup repro: default-named parameters apply with telemetry warnings', async () => {
+  it('World Cup workbook repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
 <workbook>
   <datasources>
@@ -138,7 +143,7 @@ describe('loadWorkbookXml validation preflight', () => {
     }
   });
 
-  it('Miller-shaped bound ranking template passes whole-workbook preflight', async () => {
+  it('World Cup-shaped bound ranking template passes whole-workbook preflight', async () => {
     const datasource = 'federated.0mkveh20xfko2115afimd1odnzrh';
     const workbookXml = `<?xml version='1.0'?>
 <workbook>
@@ -310,6 +315,49 @@ describe('loadWorkbookXml validation preflight', () => {
       '</zone></zones></dashboard></dashboards>';
     const baselineXml = `<?xml version='1.0'?><workbook>${brokenDashboard}</workbook>`;
     const candidateXml = `<?xml version='1.0'?><workbook>${brokenDashboard}<windows /></workbook>`;
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({ applyWorkbookDocument });
+
+    const result = await loadWorkbookXml({
+      xml: candidateXml,
+      baselineXml,
+      executor,
+      signal: new AbortController().signal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('allows adding an aggregate calc to one datasource without blocking another datasource field', async () => {
+    const workbook = (datasourceACalculation: string): string => `<?xml version='1.0'?>
+<workbook>
+  <datasources>
+    <datasource name='A'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      ${datasourceACalculation}
+    </datasource>
+    <datasource name='B'>
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Shared]' role='measure' type='quantitative' datatype='real'>
+        <calculation formula='[Sales] * 2' />
+      </column>
+    </datasource>
+  </datasources>
+  <worksheets><worksheet name='Sheet 1'><table><view>
+    <datasource-dependencies datasource='B'>
+      <column-instance name='[none:Shared:qk]' column='[Shared]' derivation='None' pivot='key' type='quantitative' />
+    </datasource-dependencies>
+  </view></table></worksheet></worksheets>
+  <windows><window class='worksheet' name='Sheet 1' /></windows>
+</workbook>`;
+    const baselineXml = workbook('');
+    const candidateXml = workbook(
+      "<column name='[Shared]' role='measure' type='quantitative' datatype='real'><calculation formula='SUM([Sales])' /></column>",
+    );
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));

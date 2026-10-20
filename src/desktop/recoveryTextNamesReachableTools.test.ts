@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { dirname, relative, resolve } from 'path';
+import ts from 'typescript';
 
 import {
   DesktopMcpServer,
@@ -85,33 +86,48 @@ function reachableModules(entry: string, cache: Map<string, Set<string>>): Set<s
   return seen;
 }
 
-/** Drop comments — a tool name in a code comment never reaches the agent. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
-
 /**
  * One compiled matcher per tool name, built once. Compiling these per string literal
  * per module per reaching tool is what put this test within 3x of the CI timeout.
+ * A `tableau-`/`tableau_` prefixed spelling is never a registered name, so it is reported
+ * as its own (always off-profile) token.
  */
-const TOOL_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = desktopToolNames.map((tool) => {
-  const spellings = [tool, tool.replaceAll('-', '_')];
-  return [tool, new RegExp(`(?<![\\w-])(?:tableau[-_])?(?:${spellings.join('|')})(?![\\w-])`)];
-});
+const TOOL_PATTERNS: ReadonlyArray<readonly [string, RegExp, RegExp]> = desktopToolNames.map(
+  (tool) => {
+    const spellings = [tool, tool.replaceAll('-', '_')].join('|');
+    return [
+      tool,
+      new RegExp(`(?<![\\w-])(?:${spellings})(?![\\w-])`),
+      new RegExp(`(?<![\\w-])tableau[-_](?:${spellings})(?![\\w-])`),
+    ];
+  },
+);
 
-/** Tool names quoted inside string literals in a module's source. */
-function toolNamesNamedIn(rawSource: string): Set<string> {
-  const source = stripComments(rawSource);
+/** String literal text in a module, via the TypeScript AST (a regex scanner loses track at apostrophes). */
+function stringLiterals(source: string): string[] {
+  const sourceFile = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true);
+  const literals: string[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      literals.push(node.text);
+    } else if (ts.isTemplateExpression(node)) {
+      literals.push(node.head.text, ...node.templateSpans.map((span) => span.literal.text));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return literals;
+}
+
+/** Tool names quoted inside string literals in a module's source; prefixed spellings come back as `tableau-<tool>`. */
+function toolNamesNamedIn(source: string): Set<string> {
   const named = new Set<string>();
-  // Only look inside quoted strings — an import path or an identifier is not
-  // agent-facing text.
-  for (const match of source.matchAll(/'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)) {
-    const literal = match[1] ?? match[2] ?? '';
+  for (const literal of stringLiterals(source)) {
     if (literal.startsWith('.') || literal.startsWith('@')) continue;
-    for (const [tool, pattern] of TOOL_PATTERNS) {
-      if (pattern.test(literal)) {
-        named.add(tool);
-      }
+    for (const [tool, pattern, prefixed] of TOOL_PATTERNS) {
+      if (pattern.test(literal)) named.add(tool);
+      if (prefixed.test(literal)) named.add(`tableau-${tool}`);
     }
   }
   return named;
@@ -150,6 +166,8 @@ function toolNameToModule(): Map<string, string> {
   return map;
 }
 
+// Scope: the default dynamic-authoring profile only. demo, spec-loop and full serve sets that
+// cannot satisfy a strict check (their text legitimately names tools across profiles).
 describe('recovery text names only tools the caller actually has', () => {
   // The class: an error string that names a tool absent from the profile it ships in
   // is a guaranteed dead end — the model is told to call something it cannot see, so
@@ -192,5 +210,17 @@ describe('recovery text names only tools the caller actually has', () => {
 
   it('recognizes underscore spellings as registered tool names', () => {
     expect(toolNamesNamedIn("'execute_tableau_command'")).toContain('execute-tableau-command');
+  });
+
+  it('keeps scanning after an apostrophe inside a string', () => {
+    expect(toolNamesNamedIn("const a = \"it's\"; const b = 'lookup-workbook-schema';")).toContain(
+      'lookup-workbook-schema',
+    );
+  });
+
+  it('reports tableau-prefixed spellings as offenders', () => {
+    const named = toolNamesNamedIn("'call tableau-list-available-fields'");
+    expect(named).toContain('tableau-list-available-fields');
+    expect(named).not.toContain('list-available-fields');
   });
 });

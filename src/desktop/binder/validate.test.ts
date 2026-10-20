@@ -116,6 +116,30 @@ describe('binder/validate — gate 1: slot coverage', () => {
       ).toBe(true);
   });
 
+  it('fire: the same slot_id bound twice → duplicate-slot-binding naming the slot', () => {
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'field_base_1', field: 'Region' },
+        { slot_id: 'field_base_2', field: 'Sales', derivation: 'avg' },
+        { slot_id: 'field_base_2', field: 'Profit' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(
+        r.blockers.some(
+          (b) =>
+            b.code === 'duplicate-slot-binding' &&
+            b.slot_id === 'field_base_2' &&
+            b.detail.includes('more than once'),
+        ),
+      ).toBe(true);
+  });
+
   it('fire: binding to a template-owned calc slot → kind-mismatch', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {
@@ -423,7 +447,7 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
     expect(validateBinding(m, p, SUMMARY).ok).toBe(true);
   });
 
-  // Gate 3b (red-team GEO-02): geo slots must respect the field's Tableau
+  // Gate 3b: geo slots must respect the field's Tableau
   // semantic-role concept, mirroring pickGeoField on the deterministic path.
   const geoSummary = (regionSemanticRole?: string): SchemaSummary => ({
     datasource: 'Superstore',
@@ -898,7 +922,7 @@ describe('binder/validate — cardinality advice', () => {
   });
 });
 
-describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
+describe('binder/validate — gate 4: min/max on a temporal field is legal (gantt-task-rollup)', () => {
   const GANTT_SCHEMA: SchemaSummary = {
     datasource: 'Projects',
     fields: [
@@ -1823,7 +1847,7 @@ describe('binder/validate — gate 7: full scatter emission', () => {
   });
 });
 
-describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1)', () => {
+describe('binder/validate — XML escaping in the emitted payload', () => {
   const HOSTILE_DS = "Evil'/><datasource name='pwn";
   const ESCAPED_DS = 'Evil&apos;/&gt;&lt;datasource name=&apos;pwn';
 
@@ -1946,7 +1970,7 @@ describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1
   });
 });
 
-describe('binder/validate — geo mirror parity with lockstep classify.ts (GEO-02 port)', () => {
+describe('binder/validate — geo mirror parity with classify.ts', () => {
   // The geo tables here MIRROR private tables in hash-gated classify.ts (not
   // exported so lockstep-core bytes stay unchanged) — pin them token-identical
   // at the source level so classifier table edits can't silently drift the gate.

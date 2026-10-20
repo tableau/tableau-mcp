@@ -136,4 +136,37 @@ describe('undeclared-set-reference rule', () => {
       ),
     ).toBe(false);
   });
+
+  it('does not flag a physical field whose name ends in "Set" declared only in metadata', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column caption="Uniq" datatype="integer" name="[Calculation_1]" role="measure" type="quantitative">
+        <calculation class="tableau" formula="COUNTD([Data Set])"/>
+      </column>
+      <metadata-records><metadata-record class="column"><local-name>[Data Set]</local-name><remote-name>Data Set</remote-name></metadata-record></metadata-records>
+    </datasource></datasources></workbook>`;
+    expect(undeclaredSetReferenceRule.validate(xml)).toEqual([]);
+  });
+
+  it('still flags an undeclared set that only appears as a column-instance or parent-name', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column caption="L" datatype="string" name="[Calculation_1]" role="dimension" type="nominal">
+        <calculation class="tableau" formula="IF [Top Set] THEN &quot;Top&quot; END"/>
+      </column>
+      <metadata-record class="table"><parent-name>[Top Set]</parent-name></metadata-record>
+    </datasource></datasources>
+    <worksheets><worksheet name="S"><table><view><datasource-dependencies datasource="DS">
+      <column-instance column="[Top Set]" derivation="None" name="[none:Top Set:nk]" pivot="key" type="nominal"/>
+    </datasource-dependencies></view></table></worksheet></worksheets></workbook>`;
+    expect(undeclaredSetReferenceRule.validate(xml)).toHaveLength(1);
+  });
+
+  it('still flags a set when only a renamed join column carries the name as a remote-name', () => {
+    const xml = `<workbook><datasources><datasource name="DS">
+      <column caption="L" datatype="string" name="[Calculation_1]" role="dimension" type="nominal">
+        <calculation class="tableau" formula="IF [Top Set] THEN &quot;Top&quot; END"/>
+      </column>
+      <metadata-records><metadata-record class="column"><remote-name>Top Set</remote-name><local-name>[Top Set (Orders)]</local-name></metadata-record></metadata-records>
+    </datasource></datasources></workbook>`;
+    expect(undeclaredSetReferenceRule.validate(xml)).toHaveLength(1);
+  });
 });

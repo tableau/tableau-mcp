@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkCacheFileArg, readCacheFileArg } from '../../../../desktop/cachePath.js';
 import {
   endpointNotInThisBuild,
   isRouteMissing,
@@ -10,13 +10,10 @@ import {
 import { listAvailableFields } from '../../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  FileReadError,
-  McpToolError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError, McpToolError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
+import invariant from '../../../../utils/invariant.js';
 import { DesktopTool } from '../../tool.js';
 import {
   filterListAvailableFieldsSlimByLuid,
@@ -177,27 +174,39 @@ export const getListAvailableFieldsTool = (
             ).toErr();
           }
 
-          if (cacheWorkbookFile && !existsSync(cacheWorkbookFile)) {
-            return new WorkbookFileNotFoundError(cacheWorkbookFile).toErr();
+          // A refresh rewrites the cache from the live workbook, so it only needs the path;
+          // a cache-only read needs the contents.
+          let cachedWorkbook: { path: string; text?: string } | undefined;
+          if (cacheWorkbookFile) {
+            const notFound = (path: string): McpToolError => new WorkbookFileNotFoundError(path);
+            if (session) {
+              const checked = checkCacheFileArg('workbookFile', cacheWorkbookFile, notFound);
+              if (checked.isErr()) return checked.error.toErr();
+              cachedWorkbook = { path: checked.value };
+            } else {
+              const read = readCacheFileArg('workbookFile', cacheWorkbookFile, notFound);
+              if (read.isErr()) return read.error.toErr();
+              cachedWorkbook = read.value;
+            }
           }
 
           let workbookXml: string;
           let resolvedSession: string | undefined;
           let executor: Awaited<ReturnType<typeof extra.getExecutor>> | undefined;
-          if (session || cacheWorkbookFile === undefined) {
+          if (session || !cachedWorkbook) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
               return sessionResult.error.toErr();
             }
             resolvedSession = sessionResult.value;
 
-            if (cacheWorkbookFile) {
+            if (cachedWorkbook) {
               // Shared refresh seam (W-23447478): resolve-field reuses the identical
               // re-snapshot + cache/sidecar-rewrite path. list-available-fields fails
               // hard on a refresh failure (never silently lists stale fields).
               const refresh = await refreshWorkbookCache({
                 extra,
-                workbookFile: cacheWorkbookFile,
+                workbookFile: cachedWorkbook.path,
                 resolvedSession,
                 action: 'listing fields',
               });
@@ -214,11 +223,8 @@ export const getListAvailableFieldsTool = (
               workbookXml = liveWorkbook.value;
             }
           } else {
-            try {
-              workbookXml = readFileSync(cacheWorkbookFile, 'utf-8');
-            } catch (error) {
-              return new FileReadError(error).toErr();
-            }
+            invariant(cachedWorkbook.text !== undefined, 'the cached workbook was read');
+            workbookXml = cachedWorkbook.text;
           }
 
           const fields = listAvailableFields(workbookXml);

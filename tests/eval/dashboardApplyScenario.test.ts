@@ -1,7 +1,6 @@
 import { MCPServerStdio, RunContext, setTracingDisabled, withTrace } from '@openai/agents';
 
-import { formatDashboardPromiseCheck } from '../../src/desktop/validation/promise-check.js';
-import { acceptedNoReadbackApplyResult } from '../../src/tools/desktop/api/applyPreamble.js';
+import { acceptedDashboardLoadResult } from '../../src/tools/desktop/api/applyPreamble.js';
 import { jsonToolResult } from '../../src/tools/desktop/structuredContent.js';
 import invariant from '../../src/utils/invariant.js';
 import {
@@ -108,11 +107,10 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
     const scenario = new DashboardApplyScenario(dashboardApplyCases[0]);
     const actual = await scenario.invoke('apply_dashboard', applyArgs);
     const expected = jsonToolResult(
-      acceptedNoReadbackApplyResult({
+      acceptedDashboardLoadResult({
         kind: 'dashboard',
-        appliedName: dashboardName,
-        resultWarnings: [],
-        hostVerification: formatDashboardPromiseCheck([]),
+        loaded: { appliedName: dashboardName, validationWarnings: [], documentWarnings: [] },
+        fallbackName: dashboardName,
       }),
     );
     expect(actual).toEqual(expected.content[0]);

@@ -1,4 +1,4 @@
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 const PROMPT_NAME = 'user-license-reclamation-apply';
@@ -15,7 +15,7 @@ describe('user-license-reclamation-apply prompt', () => {
 
     beforeAll(async () => {
       client = new McpClient({
-        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+        env: getAdminToolsEnv(),
       });
       await client.connect();
       const prompts = await client.listPrompts();
@@ -23,7 +23,7 @@ describe('user-license-reclamation-apply prompt', () => {
       if (!promptAvailable) {
         console.warn(
           `Skipping ${PROMPT_NAME} e2e tests — prompt not registered. ` +
-            'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env.',
+            'Check that getAdminToolsEnv() enables admin tools.',
         );
       }
     });
@@ -103,7 +103,7 @@ describe('user-license-reclamation-apply prompt', () => {
       );
       expect(text).toContain('**Scope this query to the Step-1 candidates.**');
       expect(text).toContain('Do NOT fetch site-wide events.');
-      expect(text).toContain('TS Events results were truncated at the 10000-row limit');
+      expect(text).toContain('TS Events results were truncated at the row limit');
       // 0 rows is valid for ts-events but an unsubstituted placeholder must be flagged.
       expect(text).toContain('0 rows in the TS Events result (2a) is a VALID outcome');
     });
@@ -121,7 +121,7 @@ describe('user-license-reclamation-apply prompt', () => {
       expect(text).toContain('**Scope this query to the Step-1 candidates.**');
       expect(text).toContain('Do NOT fetch all site users.');
       // Defense-in-depth truncation warning mirrors the ts-events / site-content warnings.
-      expect(text).toContain('TS Users results were truncated at the 10000-row limit');
+      expect(text).toContain('TS Users results were truncated at the row limit');
     });
 
     it('renders a concrete ISO cutoff for the Desktop/Prep recency check (parity with inform)', async () => {

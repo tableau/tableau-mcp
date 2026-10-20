@@ -77,7 +77,7 @@ const runtimeManifests = createPuppetCompatibilityProjection(
   loadRuntimeTemplateCatalogSnapshots(),
 ).descriptors;
 
-/** The live-shaped World Cup schema Matt hit the flat-blue symbol map against. */
+/** A live-shaped World Cup schema that reproduced the flat-blue symbol map failure. */
 const worldCupXml = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
   <connection><relation name='players' /></connection>
   <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />

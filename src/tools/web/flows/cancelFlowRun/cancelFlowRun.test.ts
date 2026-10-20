@@ -33,7 +33,6 @@ vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowToolsEnabled: true,
     flowWriteToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -85,7 +84,6 @@ describe('cancelFlowRunTool', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       flowToolsEnabled: true,
       flowWriteToolsEnabled: false,
-      productTelemetryEnabled: false,
       productTelemetryEndpoint: 'https://test.com',
       server: 'https://test.tableau.com',
     } as unknown as ReturnType<typeof getConfig>);

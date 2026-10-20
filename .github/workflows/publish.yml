@@ -24,13 +24,9 @@ jobs:
           npm install -g npm@latest
           npm ci
           npm run build
-          # Build the desktop variant into the same build/ dir. --dirty preserves the
-          # default build/index.js emitted above (a non-dirty desktop build would wipe it).
-          npx tsx src/scripts/build.ts --variant desktop --dirty
-          # Fail the publish if either entry point or the staged desktop data is missing.
-          test -f build/index.js
-          test -f build/index.desktop.js
-          test -d build/desktop/data
+          npm pack --json > npm-pack.json
+          npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
+          PACKAGE_TARBALL="$(node -p "require('./npm-pack.json')[0].filename")"
           # Prerelease-aware publish. A SemVer prerelease version (one containing a
           # `-`, e.g. 2.18.0-hotfix.1; build metadata `+...` is NOT a prerelease)
           # must NOT reassign the `latest` npm dist-tag — otherwise a hotfix off an
@@ -60,10 +56,10 @@ jobs:
           fi
           if [[ "$VERSION" == *-* ]]; then
             echo "Prerelease $VERSION -> npm publish --tag hotfix-v$VERSION (NOT moving 'latest')"
-            npm publish --tag "hotfix-v$VERSION"
+            npm publish "$PACKAGE_TARBALL" --tag "hotfix-v$VERSION"
           else
             echo "Stable $VERSION -> npm publish (moves 'latest')"
-            npm publish
+            npm publish "$PACKAGE_TARBALL"
           fi
   upload-mcpb:
     runs-on: ubuntu-latest
@@ -75,16 +71,19 @@ jobs:
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
-      - run: |
+      - env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
           git fetch --tags
-          git checkout -b mcpb ${{ github.event.release.tag_name }}
+          git checkout -b mcpb "$RELEASE_TAG"
           npm ci
           npm run build
           npm run build:manifest
           npm ci --omit=dev
-          npx -y @anthropic-ai/mcpb pack . tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+          npx -y @anthropic-ai/mcpb pack . "tableau-mcp-${RELEASE_TAG}.mcpb"
       - name: Upload mcpb to release
         run: |
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+          gh release upload "$RELEASE_TAG" "tableau-mcp-${RELEASE_TAG}.mcpb"
         env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
           GITHUB_TOKEN: ${{ github.token }}

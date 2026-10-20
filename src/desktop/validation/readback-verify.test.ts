@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { verifyWorksheetReadback } from './readback-verify.js';
+import {
+  isReadbackUnsettled,
+  type ReadbackFinding,
+  verifyWorksheetReadback,
+} from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
@@ -186,6 +190,37 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it('treats (A / (B / C)) and (A / B / C) as the same operator structure', () => {
+    const [a, b, c] = ['a', 'b', 'c'].map((n) => `[DS].[none:${n}:nk]`);
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>(${a} / ${b} / ${c})</rows>`,
+    );
+    const readback = intended.replace(
+      `<rows>(${a} / ${b} / ${c})</rows>`,
+      `<rows>(${a} / (${b} / ${c}))</rows>`,
+    );
+    expect(verifyWorksheetReadback(intended, readback).filter((f) => f.kind === 'shelf')).toEqual(
+      [],
+    );
+  });
+
+  it('flags a / to + operator change on the same pills', () => {
+    const [a, b] = ['a', 'b'].map((n) => `[DS].[none:${n}:nk]`);
+    const intended = encodedWorksheet().replace(
+      `<rows>${GEO_FIELD}</rows>`,
+      `<rows>(${a} / ${b})</rows>`,
+    );
+    const readback = intended.replace(`(${a} / ${b})`, `(${a} + ${b})`);
+    const findings = verifyWorksheetReadback(intended, readback).filter((f) => f.kind === 'shelf');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      node: 'rows',
+      intended: `(${a} / ${b})`,
+      readback: `(${a} + ${b})`,
+    });
+  });
+
   it('still flags a nested shelf pill that Tableau actually dropped', () => {
     const group = '[DS].[none:group:nk]';
     const country = '[DS].[none:country:nk]';
@@ -208,7 +243,7 @@ describe('verifyWorksheetReadback', () => {
     });
   });
 
-  it('flags a grouped readback whose nested pills were reordered', () => {
+  it('keeps a grouped readback whose nested categorical pills were reordered as an error', () => {
     const group = '[DS].[none:group:nk]';
     const country = '[DS].[none:country:nk]';
     const intended = encodedWorksheet().replace(
@@ -438,16 +473,29 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
   });
 
   it.each([
-    ['function', MEMBER_UNION.replace('function="union"', 'function="except"')],
     ['level', MEMBER_UNION.replace(`level="${CATEGORICAL_LEVEL}"`, 'level="[none:State:nk]"')],
+  ])('fails when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
+    const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
+  });
+
+  it.each([
+    ['function', MEMBER_UNION.replace('function="union"', 'function="except"')],
     [
       'enumeration',
       MEMBER_UNION.replace('user:ui-enumeration="inclusive"', 'user:ui-enumeration="all"'),
     ],
-  ])('fails when Tableau changes the nested groupfilter %s', (_, readbackGroupfilter) => {
+  ])('fails when Tableau inverts the top-level groupfilter %s', (_, readbackGroupfilter) => {
     const readback = categoricalWorksheet(filterAttributes, readbackGroupfilter);
 
-    expect(verifyWorksheetReadback(intended, readback)).toContainEqual(CATEGORICAL_FILTER_FINDING);
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
+  });
+
+  it('fails when the surviving categorical filter has no groupfilter at all', () => {
+    const readback = categoricalWorksheet(filterAttributes, '');
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([CATEGORICAL_FILTER_FINDING]);
   });
 
   it('tolerates attribute order, quote, whitespace, and non-semantic user attribute noise', () => {
@@ -477,7 +525,7 @@ describe('verifyWorksheetReadback — ordinary categorical filter semantics', ()
   });
 });
 
-describe('verifyWorksheetReadback — column-instance co-dependency (RT finding RB-03)', () => {
+describe('verifyWorksheetReadback — column-instance co-dependency', () => {
   const withDeps = (deps: string): string =>
     `<worksheet name="Map"><table>
       <view><datasource-dependencies datasource="DS">${deps}</datasource-dependencies></view>
@@ -560,5 +608,152 @@ describe('verifyWorksheetReadback — filter column-instance co-dependency', () 
 
   it('does not require a filter column-instance that the intended XML never declared', () => {
     expect(verifyWorksheetReadback(filterWithDeps(''), filterWithDeps(''))).toEqual([]);
+  });
+});
+
+describe('verifyWorksheetReadback - shelf severity (W-24366132)', () => {
+  const CITY = '[DS].[none:City:nk]';
+  const PROFIT = '[DS].[sum:Profit:qk]';
+  const QTY = '[DS].[sum:Quantity:qk]';
+  const severities = (
+    intendedRows: string,
+    readbackRows: string,
+    shelf = 'rows',
+  ): ReadbackFinding['severity'][] =>
+    verifyWorksheetReadback(
+      worksheet(`<${shelf}>${intendedRows}</${shelf}>`),
+      worksheet(readbackRows ? `<${shelf}>${readbackRows}</${shelf}>` : ''),
+    )
+      .filter((f) => f.kind === 'shelf')
+      .map((f) => f.severity);
+
+  it('warns when two quantitative fields on a shared axis are reordered', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} + ${SALES_FIELD}`)).toEqual([
+      'warning',
+      'warning',
+    ]);
+  });
+
+  it('warns on a reordered shared axis on the cols shelf as well', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} + ${SALES_FIELD}`, 'cols')).toEqual([
+      'warning',
+      'warning',
+    ]);
+  });
+
+  it('keeps a datasource name containing a dot in the pill match', () => {
+    expect(
+      severities(
+        '[My.DS].[sum:A:qk] + [My.DS].[sum:B:qk]',
+        '[My.DS].[sum:B:qk] + [My.DS].[sum:A:qk]',
+      ),
+    ).toEqual(['warning', 'warning']);
+  });
+
+  it('errors when categorical fields are reordered, since the order sets the nesting', () => {
+    expect(severities(`${GEO_FIELD} / ${CITY}`, `${CITY} / ${GEO_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when quantitative fields on separate panes are reordered', () => {
+    expect(severities(`${SALES_FIELD} / ${PROFIT}`, `${PROFIT} / ${SALES_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when a shared-axis reorder comes with an operator change', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `${PROFIT} * ${SALES_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+
+  it('errors when a nested sum moves a pill between panes', () => {
+    expect(
+      severities(`(${SALES_FIELD} / ${PROFIT}) + ${QTY}`, `(${QTY} / ${PROFIT}) + ${SALES_FIELD}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('errors when a nested sum with a product moves a pill between groups', () => {
+    expect(
+      severities(`(${SALES_FIELD} * ${PROFIT}) + ${QTY}`, `(${QTY} * ${PROFIT}) + ${SALES_FIELD}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('errors when the pills inside a nested group are reordered', () => {
+    expect(
+      severities(`(${SALES_FIELD} / ${PROFIT}) + ${QTY}`, `(${PROFIT} / ${SALES_FIELD}) + ${QTY}`),
+    ).toEqual(['error', 'error']);
+  });
+
+  it('warns when a parenthesized sum is reordered but still flattens to one sum', () => {
+    expect(
+      severities(`(${SALES_FIELD} + ${PROFIT}) + ${QTY}`, `${QTY} + (${SALES_FIELD} + ${PROFIT})`),
+    ).toEqual(['warning', 'warning', 'warning']);
+  });
+
+  it('errors when a shelf has two items, even if each is a flat sum', () => {
+    const sum = `${SALES_FIELD} + ${PROFIT}`;
+    const reordered = `${PROFIT} + ${SALES_FIELD}`;
+    expect(
+      severities(`${sum}</rows><rows>${sum}`, `${reordered}</rows><rows>${reordered}`),
+    ).toEqual(['error', 'error', 'error', 'error']);
+  });
+
+  it('errors when a derivation changes, even on a shared axis', () => {
+    expect(severities(`${SALES_FIELD} + ${PROFIT}`, `[DS].[avg:Sales:qk] + ${PROFIT}`)).toEqual([
+      'error',
+    ]);
+  });
+
+  it('errors when a derivation changes on a single pill', () => {
+    expect(severities(SALES_FIELD, '[DS].[avg:Sales:qk]')).toEqual(['error']);
+  });
+
+  it('errors when a field is dropped from the shelf', () => {
+    expect(severities(`${GEO_FIELD} / ${CITY}`, GEO_FIELD)).toEqual(['error']);
+  });
+
+  it('errors when the whole shelf is missing from the readback', () => {
+    const findings = verifyWorksheetReadback(
+      worksheet(`<rows>${GEO_FIELD}</rows>`),
+      worksheet(''),
+    ).filter((f) => f.kind === 'shelf');
+
+    expect(findings).toEqual([expect.objectContaining({ readback: 'missing', severity: 'error' })]);
+  });
+
+  it('errors when a different field replaces the intended one', () => {
+    expect(severities(GEO_FIELD, CITY)).toEqual(['error']);
+  });
+
+  it('errors when a quantitative pill moves before a categorical pill', () => {
+    expect(severities(`${GEO_FIELD} / ${SALES_FIELD}`, `${SALES_FIELD} / ${GEO_FIELD}`)).toEqual([
+      'error',
+      'error',
+    ]);
+  });
+});
+
+describe('isReadbackUnsettled', () => {
+  const base = { column: 'c', intended: 'i', readback: 'changed' } as const;
+
+  it.each([
+    ['an error', { ...base, kind: 'mark', node: 'mark', severity: 'error' }, true],
+    ['a shelf warning', { ...base, kind: 'shelf', node: 'rows', severity: 'warning' }, true],
+    [
+      'a sort warning',
+      { ...base, kind: 'sort', node: 'computed-sort', severity: 'warning' },
+      false,
+    ],
+  ] as const)('treats %s correctly', (_, finding, expected) => {
+    expect(isReadbackUnsettled([finding])).toBe(expected);
+  });
+
+  it('treats no findings as settled', () => {
+    expect(isReadbackUnsettled([])).toBe(false);
   });
 });

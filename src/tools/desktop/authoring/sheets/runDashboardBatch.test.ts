@@ -13,6 +13,7 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -29,6 +30,10 @@ const BATCH = {
 };
 
 const WORKBOOK_XML = renderedWorkbook(['Existing', 'Existing A', 'Existing B']);
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('runDashboardBatchTool', () => {
   beforeEach(() => {
@@ -593,6 +598,63 @@ describe('runDashboardBatchTool', () => {
       ],
     });
     expect(JSON.stringify(bodyOf(result))).toContain('filter');
+  });
+
+  describe('same-field shelf reorder readback (W-24366132)', () => {
+    const ROWS = '<rows>[Sample - Superstore].[sum:A:qk] + [Sample - Superstore].[sum:B:qk]</rows>';
+    const SWAPPED =
+      '<rows>[Sample - Superstore].[sum:B:qk] + [Sample - Superstore].[sum:A:qk]</rows>';
+    const worksheetXmls = { a1: `<worksheet name="New A"><table>${ROWS}</table></worksheet>` };
+
+    it('keeps polling past a transient reordered read and reports a passed worksheet', async () => {
+      vi.useFakeTimers();
+      let reads = 0;
+      const harness = statefulExecutor({
+        readbackTransform: (xml) => (reads++ < 2 ? xml.replace(ROWS, SWAPPED) : xml),
+      });
+
+      const resultPromise = callBatch(['a1'], {
+        store: artifactStore(['a1'], { worksheetXmls }),
+        existingWorksheetNames: [],
+        executor: harness.executor,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(bodyOf(result)).toMatchObject({
+        applied: true,
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'worksheet',
+            verification: { ok: true, status: 'passed' },
+          }),
+        ]),
+      });
+      expect(reads).toBeGreaterThan(2);
+    });
+
+    it('accepts a persistent reorder as a warning after the poll budget', async () => {
+      vi.useFakeTimers();
+      const harness = statefulExecutor({ readbackTransform: (xml) => xml.replace(ROWS, SWAPPED) });
+
+      const resultPromise = callBatch(['a1'], {
+        store: artifactStore(['a1'], { worksheetXmls }),
+        existingWorksheetNames: [],
+        executor: harness.executor,
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(bodyOf(result)).toMatchObject({
+        applied: true,
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'worksheet',
+            verification: expect.objectContaining({ status: 'warning' }),
+          }),
+        ]),
+      });
+    });
   });
 
   it('keeps seven-artifact warning and failure receipts below the SDK truncation limit', async () => {

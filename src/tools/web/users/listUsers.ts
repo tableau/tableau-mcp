@@ -3,12 +3,14 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { MIN_ADMIN_SITE_ROLE, User } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { MAX_PAGE_SIZE, paginateWithMetadata } from '../../../utils/paginate.js';
+import { Provider } from '../../../utils/provider.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { assertAdmin } from '../adminGate.js';
-import { ListFlowsTruncationReason } from '../flows/listFlows/listFlows.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { buildUserFilterPredicate } from './usersFilterUtils.js';
 
@@ -51,7 +53,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
     server,
     name: 'list-users',
     minRequiredRole: MIN_ADMIN_SITE_ROLE,
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
     description: `
   Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.
 
@@ -274,7 +276,7 @@ function projectLeanUser(user: User): LeanUser {
  *    ceiling (see {@link MAX_USERS_PER_CALL}) and was clamped to it. `limit`
  *    cannot raise it; narrow the matching set with a `filter` and page instead.
  */
-export type ListUsersTruncationReason = ListFlowsTruncationReason | 'default-limit' | 'max-limit';
+export type ListUsersTruncationReason = TruncationReason | 'default-limit' | 'max-limit';
 
 export type ListUsersResultInfo = {
   returnedCount: number;

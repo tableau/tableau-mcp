@@ -16,12 +16,13 @@ import {
   writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, win32 as winPath } from 'path';
 
 import {
   type ContainedCacheReadOperations,
   type ContainedCacheWriteOperations,
   getCacheDir,
+  isWithinCacheDir,
   readContainedCacheTextFile,
   writeContainedCacheTextFile,
 } from './cachePath.js';
@@ -106,7 +107,8 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(file, defaultOperations({ open })).ok).toBe(true);
     const flags = open.mock.calls[0]?.[1] ?? 0;
     const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
-    expect(flags).toBe(constants.O_RDONLY | noFollow);
+    const nonBlock = typeof constants.O_NONBLOCK === 'number' ? constants.O_NONBLOCK : 0;
+    expect(flags).toBe(constants.O_RDONLY | noFollow | nonBlock);
   });
 
   it('rejects a final-component symlink that escapes the cache', () => {
@@ -322,7 +324,9 @@ describe('writeContainedCacheTextFile', () => {
     );
     expect(open).toHaveBeenCalledTimes(1);
     expect(open.mock.calls[0]?.[1]).toBe(
-      constants.O_RDWR | (typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0),
+      constants.O_RDWR |
+        (typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0) |
+        (typeof constants.O_NONBLOCK === 'number' ? constants.O_NONBLOCK : 0),
     );
     expect((open.mock.calls[0]?.[1] ?? 0) & constants.O_TRUNC).toBe(0);
   });
@@ -340,14 +344,15 @@ describe('writeContainedCacheTextFile', () => {
     temporaryPaths.push(file);
     const open = vi.fn((path: string, flags: number, mode?: number) => openSync(path, flags, mode));
     const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+    const nonBlock = typeof constants.O_NONBLOCK === 'number' ? constants.O_NONBLOCK : 0;
 
     expect(writeContainedCacheTextFile(file, '<worksheet/>', defaultOperations({ open })).ok).toBe(
       true,
     );
     expect(open).toHaveBeenCalledTimes(2);
-    expect(open.mock.calls[0]?.[1]).toBe(constants.O_RDWR | noFollow);
+    expect(open.mock.calls[0]?.[1]).toBe(constants.O_RDWR | noFollow | nonBlock);
     expect(open.mock.calls[1]?.[1]).toBe(
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow | nonBlock,
     );
     expect(open.mock.calls[1]?.[2]).toBe(0o600);
     expect((open.mock.calls[1]?.[1] ?? 0) & constants.O_TRUNC).toBe(0);
@@ -468,3 +473,19 @@ function withInode(stats: Stats, ino: number): Stats {
 function directoryLinkType(): 'dir' | 'junction' {
   return process.platform === 'win32' ? 'junction' : 'dir';
 }
+
+describe('isWithinCacheDir with Windows paths', () => {
+  const cacheDir = 'C:\\Users\\Me\\AppData\\Local\\Cache';
+
+  it.each([
+    ['C:\\Users\\Me\\AppData\\Local\\Cache\\a.xml', true],
+    ['c:\\users\\me\\appdata\\local\\cache\\A.XML', true],
+    ['C:\\Users\\Me\\AppData\\Local\\Cache', true],
+    ['C:\\Users\\Me\\AppData\\Local\\Cache\\..\\Other\\a.xml', false],
+    ['C:\\Users\\Me\\AppData\\Local\\CacheEvil\\a.xml', false],
+    ['D:\\Users\\Me\\AppData\\Local\\Cache\\a.xml', false],
+    ['\\\\server\\share\\Cache\\a.xml', false],
+  ])('%s -> %s', (candidate, expected) => {
+    expect(isWithinCacheDir(winPath.resolve(candidate), cacheDir, winPath)).toBe(expected);
+  });
+});

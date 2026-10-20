@@ -217,38 +217,51 @@ describe('authorActionTool (filter mode)', () => {
     expect(loaded).toContain(expectedAction);
   });
 
-  it('emits a tsl: <link> plus datasource-dependencies for a specific-field filter, never field-captions', async () => {
-    const expectedAction =
-      "<action caption='Filter Selected' name='[Action1]'>" +
-      "<activation type='on-select' />" +
-      "<source type='sheet' worksheet='Profit' />" +
-      filterLink(
-        'Filter Selected',
-        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
-      ) +
-      "<command command='tsc:tsl-filter'>" +
-      "<param name='target' value='Details' /></command>" +
-      '</action>';
-    const expectedBlocks = filterDependencyBlocks(['Category', 'Sub-Category']);
-    const { result, applyWorkbookDocument } = await getToolResult({
-      args: {
-        mode: 'filter',
-        caption: 'Filter Selected',
-        sourceWorksheet: 'Profit',
-        targetSheet: 'Details',
-        filterFields: ['Category', 'Sub-Category'],
-      },
-      initialXml: WORKSHEETS_WITH_FILTER_FIELDS,
-      readbackXml: withActions(WORKSHEETS_WITH_FILTER_FIELDS, expectedAction + expectedBlocks),
-    });
+  it.each(['', " enable-brushing='false'"])(
+    'emits a specific-field filter with dependencies and preserves action-container settings (%s)',
+    async (settings) => {
+      const expectedAction =
+        "<action caption='Filter Selected' name='[Action1]'>" +
+        "<activation type='on-select' />" +
+        "<source type='sheet' worksheet='Profit' />" +
+        filterLink(
+          'Filter Selected',
+          'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+        ) +
+        "<command command='tsc:tsl-filter'>" +
+        "<param name='target' value='Details' /></command>" +
+        '</action>';
+      const expectedBlocks = filterDependencyBlocks(['Category', 'Sub-Category']);
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'filter',
+          caption: 'Filter Selected',
+          sourceWorksheet: 'Profit',
+          targetSheet: 'Details',
+          filterFields: ['Category', 'Sub-Category'],
+        },
+        initialXml:
+          settings === ''
+            ? WORKSHEETS_WITH_FILTER_FIELDS
+            : withActions(WORKSHEETS_WITH_FILTER_FIELDS, '').replace(
+                '<actions>',
+                `<actions${settings}>`,
+              ),
+        readbackXml: withActions(
+          WORKSHEETS_WITH_FILTER_FIELDS,
+          expectedAction + expectedBlocks,
+        ).replace('<actions>', `<actions${settings}>`),
+      });
 
-    expect(result.isError).toBe(false);
-    const loaded = appliedDocumentXml(applyWorkbookDocument);
-    expect(loaded).toContain(expectedAction);
-    expect(loaded).toContain(expectedBlocks);
-    expect(loaded).not.toContain('field-captions');
-    expect(loaded).not.toContain('special-fields');
-  });
+      expect(result.isError).toBe(false);
+      const loaded = appliedDocumentXml(applyWorkbookDocument);
+      expect(loaded).toContain(expectedAction);
+      expect(loaded).toContain(expectedBlocks);
+      expect(loaded).not.toContain('field-captions');
+      expect(loaded).not.toContain('special-fields');
+      if (settings !== '') expect(loaded).toContain(`<actions${settings}>`);
+    },
+  );
 
   it('fails readback when the specific-field datasource-dependencies are dropped', async () => {
     const survivingAction =

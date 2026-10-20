@@ -1,4 +1,3 @@
-import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
 import { DesktopCache } from '../../../desktop/cache.js';
@@ -9,6 +8,7 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/limits/inlineXmlCap.js';
+import { writeRedactedXmlCacheFile } from '../../../desktop/limits/redactedXmlCache.js';
 import { sourceSha256, writeSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
 import { log } from '../../../logging/logger.js';
 
@@ -79,9 +79,9 @@ export function finishXmlRead<K extends string>({
   const cacheFile = new DesktopCache().getCacheFilePath({
     prefix: cacheName === undefined ? kind : `${kind}-${cacheName.replace(/[^a-zA-Z0-9]/g, '_')}`,
   });
-  writeFileSync(cacheFile, xml, 'utf-8');
+  writeRedactedXmlCacheFile(cacheFile, xml);
   // Stamp the producing session so the apply tool can refuse a cache from a
-  // different (or restarted) Desktop instance — cross-instance bleed guard (W9).
+  // different (or restarted) Desktop instance — cross-instance bleed guard.
   writeSidecar(cacheFile, resolvedSession, sourceSha256(xml));
 
   if (capFired) {

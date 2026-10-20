@@ -10,10 +10,10 @@ import * as applyRoundedStackedBarModule from '../../../../desktop/wrappers/appl
 import * as getWorksheetXmlModule from '../../../../desktop/wrappers/getWorksheetXml.js';
 import * as loadWorksheetXmlModule from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import {
-  ArgsValidationError,
   GetWorksheetXmlFailedError,
   WorksheetXmlLoadFailedError,
-} from '../../../../errors/mcpToolError.js';
+} from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -85,10 +85,9 @@ const ROUND_STACKED_SOURCE = `<worksheet name='Profit by Category' xmlns:user='h
 
 // A source that PLANS fine (one dim, one measure, an anchor) but fails preflight: the extra
 // column-instance carries a non-canonical derivation ("Attr"), which the real
-// invalid-derivation-string rule rejects as an error. tmcp has no a2td-style
-// computed-sort-crash rule, so this exercises the tool's preflight seam against a rule that
-// actually exists here. The planner still refuses the nested computed-sort crash form
-// directly (covered in the planner test).
+// invalid-derivation-string rule rejects as an error. That exercises the tool's
+// preflight seam. The planner still refuses the nested computed-sort crash form directly
+// (covered in the planner test).
 const PREFLIGHT_FAIL_SOURCE = SOURCE.replace(
   '</datasource-dependencies>',
   "<column-instance column='[Sales]' derivation='Attr' name='[attr:Sales:xk]' pivot='key' type='ordinal' /></datasource-dependencies>",
@@ -971,7 +970,7 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
   });
 
   it('honors nested sortDirection.direction=DESC on sort_by_field (not a silent ASC default)', async () => {
-    // e5 defect 1: the model's natural shape passes sortDirection:{direction:"DESC"} with no
+    // The model's natural shape passes sortDirection:{direction:"DESC"} with no
     // flat `direction`. Before the fix, that nested direction was dropped, the sort defaulted
     // to ASC, and the tool FALSELY confirmed success on the wrong direction. It must now apply
     // DESC and confirm DESC.
@@ -1015,7 +1014,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
   afterEach(() => vi.useRealTimers());
 
   it('reports refined:false with a precise reason when the sort lands but the direction is wrong', async () => {
-    // e5 defect 2: the sort node lands (right column + using) but with ASC, not the requested
+    // The sort node lands (right column + using) but with ASC, not the requested
     // DESC — Desktop did not honor the direction. This must NOT confirm success; it must
     // refuse with a reason that names both the applied and the requested direction.
     vi.useFakeTimers();
@@ -1034,7 +1033,7 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.refined).toBe(false);
@@ -1071,19 +1070,20 @@ describe('refineWorksheetTool — sort_by_field wrong-direction (no false succes
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
       refined: false,
       applied: true,
       retrySafe: false,
+      stage: 'readback',
       verification: { ok: false, status: 'failed' },
     });
     expect(JSON.stringify(payload.verification)).toContain(warningMessage);
     expect(payload.reason).toMatch(/direction is ASC/);
     expect(payload.reason).toMatch(/requested DESC/);
-    expect(payload.reason).toMatch(/do not.*retry/i);
+    expect(payload.reason).toMatch(/write landed but the readback differs.*do not.*retry/i);
     expect(payload.reason).not.toMatch(/fallback|standard path/i);
     expect(loadMock()).toHaveBeenCalledTimes(1);
   });
@@ -1149,7 +1149,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.refined).toBe(false);
@@ -1171,7 +1171,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1213,7 +1213,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1253,7 +1253,7 @@ describe('refineWorksheetTool — readback race (async apply settle)', () => {
     await vi.advanceTimersByTimeAsync(8 * 250);
     const result = await resultPromise;
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1336,7 +1336,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
       markType: 'area',
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1388,7 +1388,7 @@ describe('refineWorksheetTool — refusals and errors', () => {
       markType: 'area',
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
@@ -1529,11 +1529,13 @@ describe('refineWorksheetTool — refusals and errors', () => {
     const result = await resultPromise;
     vi.useRealTimers();
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.reason).toMatch(/readback did not contain/);
     expect(parsed.reason).toMatch(/after 8 polls/);
+    expect(parsed.reason).toMatch(/The write may have landed; do not automatically retry/);
+    expect(parsed.reason).not.toMatch(/readback differs/);
     expect(loadMock()).toHaveBeenCalledTimes(1);
     // 1 fetch + 8 readback polls, all exhausted — never retries the apply.
     expect(getMock()).toHaveBeenCalledTimes(9);

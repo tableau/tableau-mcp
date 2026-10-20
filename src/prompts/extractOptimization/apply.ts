@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPerformance.js';
 import { WebPromptFactory } from '../registry.js';
@@ -23,7 +24,7 @@ const argsSchema = {
     // Constrain to a safe character class. `taskIds` is interpolated into the workflow prompt
     // text (each id wrapped in backticks), so restricting it to alphanumerics/comma/space/dash
     // closes a prompt-injection vector (e.g. a value with quotes/backticks trying to coerce the
-    // model into auto-confirming). Mirrors the `tag` defense in stale-content-cleanup-apply.
+    // model into auto-confirming). Same defense as the other admin apply prompts.
     .regex(
       /^[A-Za-z0-9, -]+$/,
       'taskIds must contain only letters, numbers, commas, spaces, and dashes',
@@ -89,7 +90,7 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
     `\`${INVENTORY_TOOL}\`, \`${PERFORMANCE_TOOL}\`, \`${UPDATE_TOOL}\`, and \`${DELETE_TOOL}\`. ` +
     'Defaults to a dry run; requires explicit human confirmation before any PUT or DELETE.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const lookbackDays = args.lookbackDays ? parseInt(args.lookbackDays, 10) : undefined;

@@ -1,4 +1,5 @@
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import { decodeXmlEntities } from '../xmlElement.js';
 
 const GROUP_CALC_CLASSES = new Set(['categorical-bin']);
 
@@ -29,6 +30,33 @@ function mappedFieldName(columnInstance: string): string | null {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
+}
+
+function mappedDatasourceName(columnInstance: string): string | null {
+  const end = columnInstance.indexOf('].[');
+  return columnInstance.startsWith('[') && end > 0
+    ? decodeXmlEntities(columnInstance.slice(1, end))
+    : null;
+}
+
+function definitionKey(datasource: string, name: string): string {
+  return `${datasource}\u0000${name}`;
+}
+
+// Prefer the bound datasource's definition; without a match fall back only to an unambiguous bare name.
+function lookupDefinition<T>(
+  definitions: Map<string, T>,
+  columnInstance: string,
+  bare: string,
+): T | undefined {
+  const datasource = mappedDatasourceName(columnInstance);
+  if (datasource !== null) {
+    const exact = definitions.get(definitionKey(datasource, bare));
+    if (exact) return exact;
+  }
+  const suffix = `\u0000${bare}`;
+  const matches = [...definitions].filter(([key]) => key.endsWith(suffix));
+  return matches.length === 1 ? matches[0][1] : undefined;
 }
 
 function serializeElement(tag: string, node: unknown): string {
@@ -68,7 +96,7 @@ function collectGroupDefinitions(workbookXml: string): Map<string, GroupDefiniti
       const baseName = typeof baseNameRaw === 'string' ? baseNameRaw : undefined;
       const baseNode = baseName ? byName.get(baseName) : undefined;
 
-      groups.set(bareName(name), {
+      groups.set(definitionKey(String(dsName), bareName(name)), {
         groupName: name,
         columnXml: serializeElement('column', record),
         baseName,
@@ -114,7 +142,7 @@ export function spliceBoundGroupDefinitions(
   for (const value of Object.values(fieldMapping)) {
     const bare = mappedFieldName(value);
     if (!bare || done.has(bare)) continue;
-    const def = groups.get(bare);
+    const def = lookupDefinition(groups, value, bare);
     if (!def) continue;
     done.add(bare);
     out = materializeGroup(out, def);
@@ -173,7 +201,7 @@ function collectCalcDefinitions(workbookXml: string): Map<string, CalcDefinition
         }
       }
 
-      calcs.set(bareName(name), {
+      calcs.set(definitionKey(String(dsName), bareName(name)), {
         calcName: name,
         columnXml: serializeElement('column', record),
         dependencies,
@@ -214,7 +242,7 @@ export function spliceBoundCalcDefinitions(
   for (const value of Object.values(fieldMapping)) {
     const bare = mappedFieldName(value);
     if (!bare || done.has(bare)) continue;
-    const def = calcs.get(bare);
+    const def = lookupDefinition(calcs, value, bare);
     if (!def) continue;
     done.add(bare);
     out = materializeCalc(out, def);

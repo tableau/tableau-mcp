@@ -488,6 +488,49 @@ export function getDatasourceDownstreamByLuid(
   );
 }
 
+const datasourceNamesAndTagsResponseSchema = z.object({
+  data: z.object({
+    publishedDatasourcesConnection: z.object({
+      nodes: z.array(
+        z.object({
+          luid: z.string(),
+          name: z.string(),
+          tags: z.array(z.object({ name: z.string() })).nullish(),
+        }),
+      ),
+    }),
+  }),
+});
+
+export function getDatasourceNamesAndTagsQuery(datasourceLuids: Array<string>): string {
+  return `
+    query datasourceNamesAndTags {
+      publishedDatasourcesConnection(filter: { luidWithin: ${toGraphqlStringArray(datasourceLuids)} }) {
+        nodes {
+          luid
+          name
+          tags {
+            name
+          }
+        }
+      }
+    }
+  `;
+}
+
+/** Maps each published data source LUID in the response to its name and tag names. */
+export function getDatasourceNamesAndTagsByLuid(
+  response: unknown,
+): Map<string, { name: string; tags: Array<string> }> {
+  const parsed = datasourceNamesAndTagsResponseSchema.parse(response);
+  return new Map(
+    parsed.data.publishedDatasourcesConnection.nodes.map((node) => [
+      node.luid,
+      { name: node.name, tags: (node.tags ?? []).map((tag) => tag.name) },
+    ]),
+  );
+}
+
 function normalizeDownstreamContents(
   contents: Array<z.infer<typeof downstreamNodeSchema>> | null | undefined,
 ): Array<DownstreamContent> {
@@ -585,15 +628,27 @@ export function filterLineageContentsByAllowedIds(
     return contents;
   }
 
-  // Also strip a publishedParent pointer whose luid is out of bounds: the same excluded datasource
-  // would be dropped as a standalone entry, so it must not leak via a parent pointer either.
-  return contents
-    .filter((content) => allowedIds.has(content.luid))
-    .map((content) =>
-      content.publishedParent && !allowedIds.has(content.publishedParent.luid)
-        ? { ...content, publishedParent: undefined }
-        : content,
-    );
+  return stripOutOfBoundsPublishedParents(
+    contents.filter((content) => allowedIds.has(content.luid)),
+    allowedIds,
+  );
+}
+
+// Strips a publishedParent pointer whose luid is out of bounds: the same excluded datasource would be
+// dropped as a standalone entry, so it must not leak via a parent pointer either.
+function stripOutOfBoundsPublishedParents(
+  contents: Array<LineageContent>,
+  allowedIds?: Set<string> | null,
+): Array<LineageContent> {
+  if (!allowedIds) {
+    return contents;
+  }
+
+  return contents.map((content) =>
+    content.publishedParent && !allowedIds.has(content.publishedParent.luid)
+      ? { ...content, publishedParent: undefined }
+      : content,
+  );
 }
 
 // Merges published (Metadata) and embedded (REST /connections) lists, dropping a standalone published

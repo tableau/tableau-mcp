@@ -33,8 +33,7 @@ describe('DesktopMcpServer knowledge startup check', () => {
   });
 
   it('real knowledge resource listing returns [] when no external root is configured', async () => {
-    const originalKnowledgeDir = process.env.TABLEAU_KNOWLEDGE_DIR;
-    delete process.env.TABLEAU_KNOWLEDGE_DIR;
+    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', undefined);
 
     try {
       vi.resetModules();
@@ -48,11 +47,6 @@ describe('DesktopMcpServer knowledge startup check', () => {
       // empty rather than an error, so the desktop server degrades gracefully.
       expect(realKnowledge.listKnowledgeResources()).toEqual([]);
     } finally {
-      if (originalKnowledgeDir === undefined) {
-        delete process.env.TABLEAU_KNOWLEDGE_DIR;
-      } else {
-        process.env.TABLEAU_KNOWLEDGE_DIR = originalKnowledgeDir;
-      }
       vi.resetModules();
     }
   });

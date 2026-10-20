@@ -20,6 +20,7 @@ import {
   tableauBearerTokenSchema,
 } from './schemas';
 import { parseScopes } from './scopes.js';
+import { checkEmbeddedTokenBinding } from './siteBinding.js';
 import { AUDIENCE } from './token.js';
 
 type AccessTokenValidatorResult = Result<AuthInfo, string>;
@@ -107,6 +108,20 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
 
         const siteName = sessionResult.value.site.contentUrl || '';
 
+        const bindingError = checkEmbeddedTokenBinding(
+          this.config,
+          { tableauServer, tableauSiteContentUrl: siteName },
+          { name: sessionResult.value.site.name, contentUrl: siteName },
+        );
+        if (bindingError) {
+          log({
+            message: `Embedded access token rejected: ${bindingError}`,
+            level: 'error',
+            logger: 'oauth',
+          });
+          return new Err('Invalid or expired access token');
+        }
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
@@ -118,7 +133,22 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           siteName,
         };
       } else {
-        const { tableauUserId, tableauSiteId, tableauServer, sub } = mcpAccessToken.data;
+        const { tableauUserId, tableauSiteId, tableauSiteContentUrl, tableauServer, sub } =
+          mcpAccessToken.data;
+
+        const bindingError = checkEmbeddedTokenBinding(this.config, {
+          tableauServer,
+          tableauSiteContentUrl,
+        });
+        if (bindingError) {
+          log({
+            message: `Embedded access token rejected: ${bindingError}`,
+            level: 'error',
+            logger: 'oauth',
+          });
+          return new Err('Invalid or expired access token');
+        }
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,

@@ -3,6 +3,7 @@ import {
   constants,
   fstatSync,
   ftruncateSync,
+  lstatSync,
   openSync,
   readFileSync,
   realpathSync,
@@ -10,8 +11,11 @@ import {
   statSync,
   writeFileSync,
 } from 'fs';
-import { dirname, resolve, sep } from 'path';
+import path, { dirname, resolve } from 'path';
+import { Err, Ok, Result } from 'ts-results-es';
 
+import { CacheFileOutsideCacheError, CacheFileWriteError } from '../errors/mcpToolError.desktop.js';
+import { FileReadError, McpToolError } from '../errors/mcpToolError.js';
 import { DesktopCache } from './cache.js';
 
 export interface ContainedCacheReadOperations {
@@ -84,15 +88,30 @@ const DEFAULT_CONTAINED_CACHE_WRITE_OPERATIONS: ContainedCacheWriteOperations = 
   close: closeSync,
 };
 
+// A FIFO or device planted in the cache must fail the regular-file check, not hang the open.
+const NON_BLOCKING = typeof constants.O_NONBLOCK === 'number' ? constants.O_NONBLOCK : 0;
+
 export function getCacheDir(): string {
   return resolve(dirname(new DesktopCache().getCacheFilePath({ prefix: '_', id: '_' })));
 }
 
 // True only when absolutePath is the cache dir itself or a descendant of it.
 // A raw startsWith(cacheDir) check is unsafe: a sibling like `<dir>-evil` or
-// `<dir>XYZ.xml` shares the prefix and would escape containment.
-export function isWithinCacheDir(absolutePath: string, cacheDir: string): boolean {
-  return absolutePath === cacheDir || absolutePath.startsWith(cacheDir + sep);
+// `<dir>XYZ.xml` shares the prefix and would escape containment. path.relative
+// also compares case-insensitively on win32 and rejects other drives.
+export function isWithinCacheDir(
+  absolutePath: string,
+  cacheDir: string,
+  pathApi: Pick<typeof path, 'relative' | 'isAbsolute' | 'sep'> = path,
+): boolean {
+  const rel = pathApi.relative(cacheDir, absolutePath);
+  return (
+    rel === '' || (rel !== '..' && !rel.startsWith(`..${pathApi.sep}`) && !pathApi.isAbsolute(rel))
+  );
+}
+
+function isSamePath(a: string, b: string, pathApi: Pick<typeof path, 'relative'> = path): boolean {
+  return pathApi.relative(a, b) === '';
 }
 
 function hasStableFileIdentity(stats: Stats): boolean {
@@ -153,7 +172,7 @@ export function readContainedCacheTextFile(
   try {
     const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
     try {
-      fd = operations.open(absolutePath, constants.O_RDONLY | noFollow);
+      fd = operations.open(absolutePath, constants.O_RDONLY | noFollow | NON_BLOCKING);
     } catch (error) {
       return openFailure(error);
     }
@@ -164,7 +183,7 @@ export function readContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'read-error', error };
     }
-    if (!opened.isFile()) {
+    if (!opened.isFile() || opened.nlink > 1) {
       return { ok: false, issue: 'unsafe-file' };
     }
 
@@ -235,7 +254,7 @@ export function writeContainedCacheTextFile(
   let fd: number | null = null;
   try {
     try {
-      fd = operations.open(absolutePath, constants.O_RDWR | operations.noFollowFlag);
+      fd = operations.open(absolutePath, constants.O_RDWR | operations.noFollowFlag | NON_BLOCKING);
     } catch (error) {
       if (errnoCode(error) !== 'ENOENT') {
         return writeOpenFailure(error);
@@ -243,7 +262,7 @@ export function writeContainedCacheTextFile(
 
       // DesktopCache emits direct children. Limiting creation to that shape avoids
       // claiming nested parent traversal is race-safe without an openat-style API.
-      if (dirname(absolutePath) !== cacheDir) {
+      if (!isSamePath(dirname(absolutePath), cacheDir)) {
         return { ok: false, issue: 'unsupported-new-path' };
       }
       let realParent: string;
@@ -252,13 +271,17 @@ export function writeContainedCacheTextFile(
       } catch (parentError) {
         return { ok: false, issue: 'write-error', error: parentError };
       }
-      if (realParent !== realCacheDir) {
+      if (!isSamePath(realParent, realCacheDir)) {
         return { ok: false, issue: 'unsafe-file' };
       }
       try {
         fd = operations.open(
           absolutePath,
-          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | operations.noFollowFlag,
+          constants.O_WRONLY |
+            constants.O_CREAT |
+            constants.O_EXCL |
+            operations.noFollowFlag |
+            NON_BLOCKING,
           0o600,
         );
       } catch (createError) {
@@ -272,7 +295,7 @@ export function writeContainedCacheTextFile(
     } catch (error) {
       return { ok: false, issue: 'write-error', error };
     }
-    if (!opened.isFile()) {
+    if (!opened.isFile() || opened.nlink > 1) {
       return { ok: false, issue: 'unsafe-file' };
     }
 
@@ -337,4 +360,143 @@ function writeVerificationFailure(error: unknown): ContainedCacheWriteResult {
     return { ok: false, issue: 'unsafe-file', error };
   }
   return { ok: false, issue: 'write-error', error };
+}
+
+/**
+ * The one owner of "does this tool argument name a cache file?". Call it at the parameter
+ * boundary, before any existence check, so outside paths never learn whether a file exists.
+ */
+export function resolveCacheFileArg(argName: string, raw: string): Result<string, McpToolError> {
+  const absolutePath = resolve(raw.trim());
+  return isWithinCacheDir(absolutePath, getCacheDir())
+    ? new Ok(absolutePath)
+    : new Err(new CacheFileOutsideCacheError(argName));
+}
+
+/**
+ * Existence check with the contained reader's rule (no symlink, real path inside the cache) and
+ * no read, for callers that only need the path before a Desktop round trip.
+ */
+export function checkCacheFileArg(
+  argName: string,
+  raw: string,
+  notFound?: (path: string) => McpToolError,
+): Result<string, McpToolError> {
+  const resolved = resolveCacheFileArg(argName, raw);
+  if (resolved.isErr()) return resolved;
+  try {
+    const link = lstatSync(resolved.value);
+    const real = realpathSync(resolved.value);
+    if (
+      link.isSymbolicLink() ||
+      !link.isFile() ||
+      link.nlink > 1 ||
+      !isWithinCacheDir(real, realpathSync(getCacheDir()))
+    ) {
+      return new Err(new CacheFileOutsideCacheError(argName));
+    }
+    return new Ok(resolved.value);
+  } catch (error) {
+    if (errnoCode(error) === 'ENOENT') {
+      return new Err(missingCacheFileError(argName, resolved.value, raw, notFound));
+    }
+    return new Err(new CacheFileOutsideCacheError(argName));
+  }
+}
+
+/** Says "inside" only when the nearest resolvable ancestor provably lives in the cache; anything else counts as outside. */
+function resolvesOutsideCache(absolutePath: string): boolean {
+  let ancestor = dirname(absolutePath);
+  for (;;) {
+    try {
+      return !isWithinCacheDir(realpathSync(ancestor), realpathSync(getCacheDir()));
+    } catch (error) {
+      if (errnoCode(error) === 'ENOENT') {
+        try {
+          if (lstatSync(ancestor).isSymbolicLink()) return true;
+        } catch {
+          // Not even lstat-able: keep climbing.
+        }
+      }
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return true;
+      ancestor = parent;
+    }
+  }
+}
+
+/** A missing path under a planted directory symlink must look the same as an outside path. */
+function missingCacheFileError(
+  argName: string,
+  absolutePath: string,
+  raw: string,
+  notFound?: (path: string) => McpToolError,
+): McpToolError {
+  if (resolvesOutsideCache(absolutePath)) return new CacheFileOutsideCacheError(argName);
+  return notFound?.(raw) ?? new FileReadError(new Error(`${argName} does not exist`));
+}
+
+/** Contained read of a cache-file argument; `notFound` lets a tool keep its own missing-file error. */
+export function readCacheFileArg(
+  argName: string,
+  raw: string,
+  notFound?: (path: string) => McpToolError,
+): Result<{ path: string; text: string }, McpToolError> {
+  const resolved = resolveCacheFileArg(argName, raw);
+  if (resolved.isErr()) return resolved;
+  const read = readContainedCacheTextFile(resolved.value);
+  if (read.ok) return new Ok({ path: read.path, text: read.text });
+  switch (read.issue) {
+    case CONTAINED_CACHE_READ_ISSUE.outsideCache:
+    case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
+      return new Err(new CacheFileOutsideCacheError(argName));
+    case CONTAINED_CACHE_READ_ISSUE.missing:
+      return new Err(missingCacheFileError(argName, resolved.value, raw, notFound));
+    default:
+      if (resolvesOutsideCache(resolved.value)) {
+        return new Err(new CacheFileOutsideCacheError(argName));
+      }
+      return new Err(new FileReadError(read.error ?? new Error(`Unable to read ${argName}.`)));
+  }
+}
+
+/** Contained write for paths the server minted itself; throws so existing cache-write handlers keep working. */
+export function writeCacheTextFile(path: string, text: string): void {
+  const written = writeContainedCacheTextFile(path, text);
+  if (written.ok) return;
+  if (written.issue === CONTAINED_CACHE_WRITE_ISSUE.writeError) throw written.error;
+  if (written.issue === CONTAINED_CACHE_WRITE_ISSUE.unsupportedNewPath) {
+    throw new Error(
+      `refused to write ${path}: new cache files must be created directly in the Desktop cache directory`,
+    );
+  }
+  throw new Error(
+    `refused to write ${path}: it must be a regular file inside the Desktop cache directory`,
+  );
+}
+
+/** Contained write of a cache-file argument; a write failure is never reported as a read failure. */
+export function writeCacheFileArg(
+  argName: string,
+  raw: string,
+  text: string,
+): Result<string, McpToolError> {
+  const resolved = resolveCacheFileArg(argName, raw);
+  if (resolved.isErr()) return resolved;
+  const written = writeContainedCacheTextFile(resolved.value, text);
+  if (written.ok) return new Ok(written.path);
+  switch (written.issue) {
+    case CONTAINED_CACHE_WRITE_ISSUE.outsideCache:
+    case CONTAINED_CACHE_WRITE_ISSUE.unsafeFile:
+      return new Err(new CacheFileOutsideCacheError(argName));
+    case CONTAINED_CACHE_WRITE_ISSUE.unsupportedNewPath:
+      return new Err(
+        new CacheFileWriteError(
+          argName,
+          new Error('new cache files must be direct children of the cache directory'),
+        ),
+      );
+    default:
+      return new Err(new CacheFileWriteError(argName, written.error));
+  }
 }

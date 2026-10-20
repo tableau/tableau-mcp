@@ -36,7 +36,7 @@ export function xmlModeParam(): z.ZodDefault<z.ZodOptional<z.ZodEnum<['file', 'i
 
 export function artifactNameParam(
   kind: ArtifactParamKind,
-  options: { min?: number; max?: number } = {},
+  options: { min?: number; max?: number; plainName?: boolean } = {},
 ): z.ZodString {
   let base = z.string();
   if (options.min !== undefined) {
@@ -45,7 +45,8 @@ export function artifactNameParam(
   if (options.max !== undefined) {
     base = base.max(options.max);
   }
-  return base.describe(`${capitalize(kind)} name/id.`);
+  const plainNote = options.plainName ? ' Plain name (A & B), not escaped (A &amp; B).' : '';
+  return base.describe(`${capitalize(kind)} name/id.${plainNote}`);
 }
 
 export function artifactFileParam(

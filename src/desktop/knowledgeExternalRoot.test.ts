@@ -14,11 +14,10 @@ describe('external knowledge root (TABLEAU_KNOWLEDGE_DIR)', () => {
 
   beforeEach(() => {
     root = mkdtempSync(join(process.cwd(), '.tmp-knowledge-root-'));
-    process.env['TABLEAU_KNOWLEDGE_DIR'] = root;
+    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', root);
   });
 
   afterEach(() => {
-    delete process.env['TABLEAU_KNOWLEDGE_DIR'];
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -73,13 +72,10 @@ describe('external knowledge roots, multi-root precedence', () => {
     protectedRoot = mkdtempSync(join(process.cwd(), '.tmp-knowledge-protected-'));
     userRoot = mkdtempSync(join(process.cwd(), '.tmp-knowledge-user-'));
     overridableRoot = mkdtempSync(join(process.cwd(), '.tmp-knowledge-overridable-'));
-    process.env['TABLEAU_KNOWLEDGE_DIR'] = [protectedRoot, userRoot, overridableRoot].join(
-      delimiter,
-    );
+    vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', [protectedRoot, userRoot, overridableRoot].join(delimiter));
   });
 
   afterEach(() => {
-    delete process.env['TABLEAU_KNOWLEDGE_DIR'];
     for (const root of [protectedRoot, userRoot, overridableRoot]) {
       rmSync(root, { recursive: true, force: true });
     }

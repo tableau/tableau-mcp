@@ -46,6 +46,9 @@ export type ExecuteCommandError =
       error: ExecuteCommandResponseError;
       /** Typed command output retained by the API when a mapped aggregate failure is terminal. */
       result?: Record<string, unknown>;
+      /** Desktop's own warnings and diagnostics for a failed operation. */
+      warnings?: ExecuteCommandWarning[];
+      diagnostics?: WorkbookDiagnostics;
     }
   | { type: 'command-timed-out'; error: string }
   | { type: 'invalid-response'; error: unknown }

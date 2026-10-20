@@ -21,11 +21,6 @@ export class BaseConfig {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
-  /**
-   * Which tool registration profile to use. Normalized (trim + lowercase). '' (unset) and
-   * 'full' keep the eager/default tool surface; variant-specific profiles ('demo' on
-   * desktop, 'combined-lean' on the combined build) narrow or lazy-load parts of it.
-   */
   toolProfile: string;
 
   constructor() {

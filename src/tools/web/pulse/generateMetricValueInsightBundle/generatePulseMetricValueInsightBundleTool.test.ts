@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import z from 'zod';
 
 import {
   PulseDisabledError,
@@ -7,6 +8,7 @@ import {
   PulseNotAvailableError,
 } from '../../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
@@ -169,6 +171,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   afterEach(() => {
+    if (vi.isMockFunction(loggerModule.log)) vi.mocked(loggerModule.log).mockRestore();
     vi.unstubAllEnvs();
   });
 
@@ -229,35 +232,51 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     );
     expect(paramsSchema).toMatchObject({
       bundleRequest: expect.any(Object),
-      slim: expect.any(Object),
       verbosity: expect.any(Object),
     });
-    expect(paramsSchema.slim.description).toContain('Deprecated: use verbosity=slim.');
+    expect(paramsSchema).not.toHaveProperty('slim');
     expect(paramsSchema.verbosity.description).toContain(
       'strips the large viz (Vega chart-spec) blobs',
     );
     expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
+    expect(tool.registrationConditions).toEqual(['RequiresPulse']);
   });
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        data: expect.objectContaining({ message: errorMessage }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('should return an error for missing bundleRequest', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(
       new Error('bundleRequest is required'),
     );
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('bundleRequest');
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution failed',
+        data: expect.objectContaining({ message: 'bundleRequest is required' }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('should return Tableau Server error for bare 404 without error code', async () => {
@@ -338,11 +357,11 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).not.toHaveBeenCalled();
   });
 
-  it('strips viz from every insight and summary result when slim is true', async () => {
+  it('strips viz from every insight and summary result when verbosity is slim', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockPopulatedResponse),
     );
-    const result = await getToolResult('ban', true);
+    const result = await getToolResult('ban', 'slim');
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
@@ -362,33 +381,23 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsed).not.toHaveProperty('metric_context');
   });
 
-  it('returns byte-identical output for verbosity slim and deprecated slim alias', async () => {
+  it('silently strips a legacy slim: true argument and returns the full payload', async () => {
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+    const parsed = z.object(paramsSchema).safeParse({ bundleRequest, slim: true });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).not.toHaveProperty('slim');
+    expect(parsed.data?.verbosity).toBeUndefined();
+
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockPopulatedResponse),
     );
-
-    const verbositySlimResult = await getToolResult('ban', undefined, 'slim');
-    const deprecatedSlimResult = await getToolResult('ban', true);
-
-    invariant(verbositySlimResult.content[0].type === 'text');
-    invariant(deprecatedSlimResult.content[0].type === 'text');
-    expect(verbositySlimResult.content[0].text).toBe(deprecatedSlimResult.content[0].text);
-  });
-
-  it('uses verbosity when both verbosity and deprecated slim alias are supplied', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
-      new Ok(mockPopulatedResponse),
-    );
-
-    const result = await getToolResult('ban', true, 'full');
-
-    expect(result.isError).toBe(false);
+    const result = await getToolResult('ban', parsed.data?.verbosity);
     invariant(result.content[0].type === 'text');
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed).toEqual(mockPopulatedResponse);
+    expect(JSON.parse(result.content[0].text)).toEqual(mockPopulatedResponse);
   });
 
-  it('returns viz verbatim when slim is omitted or false', async () => {
+  it('returns viz verbatim when verbosity is omitted or full', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockPopulatedResponse),
     );
@@ -399,11 +408,11 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsedDefault).toEqual(mockPopulatedResponse);
     expect(parsedDefault).not.toHaveProperty('metric_context');
 
-    const explicitFalse = await getToolResult('ban', false);
-    invariant(explicitFalse.content[0].type === 'text');
-    const parsedExplicitFalse = JSON.parse(explicitFalse.content[0].text);
-    expect(parsedExplicitFalse).toEqual(mockPopulatedResponse);
-    expect(parsedExplicitFalse).not.toHaveProperty('metric_context');
+    const explicitFull = await getToolResult('ban', 'full');
+    invariant(explicitFull.content[0].type === 'text');
+    const parsedExplicitFull = JSON.parse(explicitFull.content[0].text);
+    expect(parsedExplicitFull).toEqual(mockPopulatedResponse);
+    expect(parsedExplicitFull).not.toHaveProperty('metric_context');
   });
 
   it('forwards options.now verbatim to the API', async () => {
@@ -419,7 +428,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     await callback(
-      { bundleRequest: withNow, bundleType: undefined, slim: undefined, verbosity: undefined },
+      { bundleRequest: withNow, bundleType: undefined, verbosity: undefined },
       getMockRequestHandlerExtra(),
     );
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(withNow, 'ban');
@@ -458,7 +467,6 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       {
         bundleRequest: withSpecificPeriod,
         bundleType: undefined,
-        slim: undefined,
         verbosity: undefined,
       },
       getMockRequestHandlerExtra(),
@@ -513,7 +521,6 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       {
         bundleRequest: withLastXPeriod,
         bundleType: undefined,
-        slim: undefined,
         verbosity: undefined,
       },
       getMockRequestHandlerExtra(),
@@ -531,14 +538,10 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   async function getToolResult(
     bundleType?: PulseInsightBundleType,
-    slim?: boolean,
     verbosity?: 'slim' | 'full',
   ): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    return await callback(
-      { bundleRequest, bundleType, slim, verbosity },
-      getMockRequestHandlerExtra(),
-    );
+    return await callback({ bundleRequest, bundleType, verbosity }, getMockRequestHandlerExtra());
   }
 });

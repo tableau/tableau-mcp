@@ -1,4 +1,5 @@
 import { Config } from './config.js';
+import * as logger from './logging/logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { milliseconds } from './utils/milliseconds.js';
 
@@ -171,6 +172,33 @@ describe('Config', () => {
     expect(config.transport).toBe('http');
   });
 
+  it('accepts AUTH case and whitespace variants', () => {
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('AUTH', ' Passthrough ');
+    vi.stubEnv('PAT_NAME', undefined);
+    vi.stubEnv('PAT_VALUE', undefined);
+
+    const config = new Config();
+    expect(config.auth).toBe('passthrough');
+    expect(config.enablePassthroughAuth).toBe(true);
+  });
+
+  it('warns and falls back to the default for an unknown AUTH value', () => {
+    const logSpy = vi.spyOn(logger, 'log');
+    vi.stubEnv('AUTH', 'passthru');
+
+    const config = new Config();
+
+    expect(config.auth).toBe('pat');
+    expect(config.enablePassthroughAuth).toBe(false);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('Unknown AUTH "passthru"'),
+      }),
+    );
+  });
+
   it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);
@@ -205,6 +233,31 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
+  });
+
+  describe('PENDING_DELETION_MAX_AGE_DAYS', () => {
+    it('defaults to 30 days', () => {
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+    });
+
+    it('accepts a value within 1-90', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '14');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(14);
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '90');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(90);
+    });
+
+    it('falls back to the default when out of range or not a number', () => {
+      for (const raw of ['0', '91', '-5', 'abc']) {
+        vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', raw);
+        expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+      }
+    });
+
+    it('truncates a fractional value to whole days', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '7.9');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(7);
+    });
   });
 
   it('should set enableMcpSiteSettings to true by default', () => {
@@ -964,7 +1017,8 @@ describe('Config', () => {
     beforeEach(() => {
       vi.stubEnv('AUTH', 'passthrough');
       vi.stubEnv('TRANSPORT', 'http');
-      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
+      vi.stubEnv('OAUTH_ISSUER', undefined);
       vi.stubEnv('PAT_NAME', undefined);
       vi.stubEnv('PAT_VALUE', undefined);
     });
@@ -973,6 +1027,16 @@ describe('Config', () => {
       const config = new Config();
       expect(config.auth).toBe('passthrough');
       expect(config.server).toBe('https://my-tableau-server.com');
+      expect(config.oauth.enabled).toBe(false);
+    });
+
+    it('should keep OAuth disabled when AUTH=passthrough and OAUTH_ISSUER is stale', () => {
+      vi.stubEnv('OAUTH_ISSUER', 'https://stale-issuer.example.com');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('passthrough');
+      expect(config.oauth.enabled).toBe(false);
     });
 
     it('should imply enablePassthroughAuth=true when AUTH=passthrough', () => {
@@ -1001,6 +1065,56 @@ describe('Config', () => {
       vi.stubEnv('SERVER', undefined);
 
       expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+    });
+
+    it('should preserve optional passthrough fallback when AUTH=pat', () => {
+      vi.stubEnv('AUTH', 'pat');
+      vi.stubEnv('TRANSPORT', 'stdio');
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+      vi.stubEnv('PAT_NAME', 'sponge');
+      vi.stubEnv('PAT_VALUE', 'bob');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('pat');
+      expect(config.enablePassthroughAuth).toBe(true);
+      expect(config.oauth.enabled).toBe(false);
+    });
+  });
+
+  describe('Activity Log provider configuration', () => {
+    it('should default to "noop" when ACTIVITY_LOG_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
+    });
+
+    it('should use "custom" when ACTIVITY_LOG_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+      vi.stubEnv(
+        'ACTIVITY_LOG_PROVIDER_CONFIG',
+        '{"module":"./my-activity-log.js","directory":"/home/nodejs/logs"}',
+      );
+
+      const config = new Config();
+      expect(config.activityLog).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './my-activity-log.js', directory: '/home/nodejs/logs' },
+      });
+    });
+
+    it('should throw error when ACTIVITY_LOG_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+      );
+    });
+
+    it('should fall back to "noop" when ACTIVITY_LOG_PROVIDER is invalid', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'invalid');
+
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
     });
   });
 });

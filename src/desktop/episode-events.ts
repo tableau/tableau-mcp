@@ -32,13 +32,14 @@ type SessionEventBase = EventBase & {
 };
 
 export type DesktopRpcOperation = 'read' | 'command' | 'document_apply';
-export type ToolSchemaProfile =
-  | 'dynamic-authoring'
-  | 'demo'
-  | 'spec-loop'
-  | 'full'
-  | 'combined-lean'
-  | 'unknown';
+export const TOOL_PROFILE_NAMES = [
+  'dynamic-authoring',
+  'demo',
+  'spec-loop',
+  'full',
+  'combined-lean',
+] as const;
+export type ToolSchemaProfile = (typeof TOOL_PROFILE_NAMES)[number];
 export type BatchApplyOutcome =
   | 'succeeded'
   | 'partial'
@@ -307,7 +308,7 @@ function getWriter(config: EpisodeConfig): FileLogger {
 }
 
 function getEpisodeFileName(): string {
-  episodeFileIso ??= new Date().toISOString();
+  episodeFileIso ??= new Date().toISOString().replace(/[:.]/g, '-');
   return `episodes-${episodeFileIso}.jsonl`;
 }
 

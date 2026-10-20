@@ -1,6 +1,6 @@
 // Search result quality — the agent must never be offered a command it cannot invoke.
 //
-// Live incident (v11 bundle): after a chart came out wrong the user said "warmer should be
+// Live incident: after a chart came out wrong the user said "warmer should be
 // with color". The agent called search-commands ~10 times and was handed
 // publish-workbook-to-workgroup, export-as-version, save-as, cell-size,
 // launch-worksheet-title-rich-text-editor, copy-worksheet-formatting and three COLOR dialogs
@@ -143,14 +143,14 @@ const FIXTURE_REGISTRY: Record<string, unknown> = {
   },
 };
 
-function enableExternalApiRegistry(commands: Record<string, unknown>): void {
+let registryDir: string;
+
+function writeExternalApiRegistry(commands: Record<string, unknown>): void {
   const dir = mkdtempSync(join(process.cwd(), 'search-commands-quality-test-'));
   TEST_DIRS.push(dir);
   writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
   writeFileSync(join(dir, 'codegen_registry.json'), JSON.stringify({}), 'utf-8');
-  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', dir);
-  _resetExternalApiCommandRegistryForTest();
-  _resetCommandsReferenceForTest();
+  registryDir = dir;
 }
 
 function names(result: {
@@ -163,11 +163,16 @@ beforeAll(() => {
   // One fixture registry for the whole file: searchLibrary.ts memoises its search index
   // at module scope the first time any test calls searchCommandsByKeywords, so every test
   // below runs against this same fixture regardless of which describe block it lives in.
-  enableExternalApiRegistry(FIXTURE_REGISTRY);
+  writeExternalApiRegistry(FIXTURE_REGISTRY);
+  _resetExternalApiCommandRegistryForTest();
+  _resetCommandsReferenceForTest();
+});
+
+beforeEach(() => {
+  vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', registryDir);
 });
 
 afterAll(() => {
-  vi.unstubAllEnvs();
   _resetExternalApiCommandRegistryForTest();
   _resetCommandsReferenceForTest();
   for (const dir of TEST_DIRS.splice(0)) {

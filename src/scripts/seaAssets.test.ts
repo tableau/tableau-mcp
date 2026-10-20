@@ -34,6 +34,9 @@ describe('buildAssetsMap', () => {
         'web/apps/dist/hitl-confirm.html': expect.stringMatching(
           /[\\/]build[\\/]web[\\/]apps[\\/]dist[\\/]hitl-confirm\.html$/,
         ),
+        'templates/data-app-template.zip': expect.stringMatching(
+          /[\\/]build[\\/]templates[\\/]data-app-template\.zip$/,
+        ),
         [MANIFEST_KEY]: manifestPath,
       }),
     );

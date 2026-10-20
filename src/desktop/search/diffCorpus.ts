@@ -1,3 +1,14 @@
+import type { DesktopToolName } from '../../tools/desktop/toolName.js';
+
+const WORKBOOK_TOOLS =
+  'get-workbook-xml/apply-workbook' satisfies `${DesktopToolName}/${DesktopToolName}`;
+
+function scopeTools(scope: string | undefined): string {
+  return scope === 'dashboard'
+    ? ('get-dashboard-xml/apply-dashboard' satisfies `${DesktopToolName}/${DesktopToolName}`)
+    : ('get-worksheet-xml/apply-worksheet' satisfies `${DesktopToolName}/${DesktopToolName}`);
+}
+
 export interface CorpusExample {
   id: string;
   title: string;
@@ -101,7 +112,7 @@ ${diffToShow}
 \`\`\`
 ${
   ex.scope !== 'workbook' && (ex.worksheet_diff || ex.dashboard_diff)
-    ? `\n💡 **Tip:** This is a ${ex.scope}-level diff showing only the changed ${ex.scope}. Use tableau-get-${ex.scope}/tableau-apply-${ex.scope} (file-based) for focused edits, or tableau-get-workbook/tableau-apply-workbook for full workbook changes.`
+    ? `\n**Tip:** This is a ${ex.scope}-level diff showing only the changed ${ex.scope}. Use ${scopeTools(ex.scope)} (file-based) for focused edits, or ${WORKBOOK_TOOLS} for full workbook changes.`
     : ''
 }`;
     })

@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../../desktop/validation/rules/wellFormedXml.js';
-import { restampSidecarAfterEdit } from '../../../../desktop/wrappers/cacheFingerprint.js';
 import { parseOuterElement, replaceElement } from '../../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
@@ -33,9 +32,9 @@ const paramsSchema = {
   session: sessionParam(),
   filePath: z.string(),
   xmlContent: z.string(),
-  worksheetName: artifactNameParam('worksheet').optional(),
+  worksheetName: artifactNameParam('worksheet', { plainName: true }).optional(),
   worksheet: deprecatedArtifactAliasParam('worksheet'),
-  dashboardName: artifactNameParam('dashboard').optional(),
+  dashboardName: artifactNameParam('dashboard', { plainName: true }).optional(),
   dashboard: deprecatedArtifactAliasParam('dashboard'),
 };
 
@@ -84,7 +83,6 @@ export const getWriteCachedXmlTool = (
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
-          const resolvedSession = sessionResult.value;
 
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
@@ -169,7 +167,8 @@ export const getWriteCachedXmlTool = (
             const spliced = replaceElement(existing, selectorTag, selectorName, xmlContent);
             if (spliced === null) {
               return new ArgsValidationError(
-                `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written.`,
+                `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written. ` +
+                  `The selector is the plain ${selectorTag} name (A & B), not the XML-escaped form from the raw file (A &amp; B); use list-${selectorTag}s to get exact names.`,
               ).toErr();
             }
             contentToWrite = spliced;
@@ -196,7 +195,6 @@ export const getWriteCachedXmlTool = (
           if (!writeResult.ok) {
             return new FileReadError(writeResult.error).toErr();
           }
-          restampSidecarAfterEdit(absolutePath, resolvedSession);
           return new Ok({
             filePath,
             bytes: contentToWrite.length,

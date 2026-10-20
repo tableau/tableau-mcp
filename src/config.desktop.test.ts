@@ -73,6 +73,38 @@ describe('DesktopConfig', () => {
     expect(config.imageExportTimeoutMs).toBe(30_000);
   });
 
+  it.each([
+    ['IMAGE_EXPORT_TIMEOUT_MS', 'imageExportTimeoutMs'],
+    ['TABLEAU_DESKTOP_CALL_TIMEOUT_MS', 'desktopCallTimeoutMs'],
+  ] as const)('clamps %s above the Node timer limit instead of falling back', (name, field) => {
+    vi.stubEnv(name, '99999999999');
+
+    expect(new Config()[field]).toBe(2_147_483_647);
+  });
+
+  describe('knowledge and search overrides', () => {
+    it('leaves them undefined by default', () => {
+      const config = new Config();
+      expect(config.knowledgeDir).toBeUndefined();
+      expect(config.workbookXsdPath).toBeUndefined();
+      expect(config.examplesDir).toBeUndefined();
+      expect(config.twbIndexPath).toBeUndefined();
+    });
+
+    it('reads them from the environment', () => {
+      vi.stubEnv('TABLEAU_KNOWLEDGE_DIR', '/a:/b');
+      vi.stubEnv('WORKBOOK_XSD_PATH', '/x.xsd');
+      vi.stubEnv('EXAMPLES_DIR', '/ex');
+      vi.stubEnv('TWB_INDEX_PATH', '/i.json');
+
+      const config = new Config();
+      expect(config.knowledgeDir).toBe('/a:/b');
+      expect(config.workbookXsdPath).toBe('/x.xsd');
+      expect(config.examplesDir).toBe('/ex');
+      expect(config.twbIndexPath).toBe('/i.json');
+    });
+  });
+
   describe('External Client API discovery', () => {
     it('should expose an optional discovery-dir override', () => {
       vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', '/custom/discovery');
@@ -80,8 +112,21 @@ describe('DesktopConfig', () => {
     });
 
     it('should leave the discovery-dir override undefined by default', () => {
-      delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+      vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', undefined);
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
+    });
+  });
+
+  describe('commands registry dir', () => {
+    it('should expose a trimmed TABLEAU_COMMANDS_REGISTRY_DIR', () => {
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '  /registry  ');
+      expect(new Config().commandsRegistryDir).toBe('/registry');
+    });
+
+    it('should be undefined when unset or an unresolved bundle placeholder', () => {
+      expect(new Config().commandsRegistryDir).toBeUndefined();
+      vi.stubEnv('TABLEAU_COMMANDS_REGISTRY_DIR', '${user_config.registry}');
+      expect(new Config().commandsRegistryDir).toBeUndefined();
     });
   });
 
@@ -148,6 +193,28 @@ describe('DesktopConfig', () => {
       expect(config.siteLuid).toBe('11111111-1111-1111-1111-111111111111');
       expect(config.userLuid).toBe('22222222-2222-2222-2222-222222222222');
     });
+  });
+
+  describe('user agent prefix', () => {
+    it('should default to undefined', () => {
+      const config = new Config();
+      expect(config.userAgentPrefix).toBeUndefined();
+    });
+
+    it('should read the launcher product token from TABLEAU_USER_AGENT_PREFIX', () => {
+      vi.stubEnv('TABLEAU_USER_AGENT_PREFIX', 'tableau-agent/0.27.1234');
+      const config = new Config();
+      expect(config.userAgentPrefix).toBe('tableau-agent/0.27.1234');
+    });
+
+    it.each(['', '  ', 'tableau-agent/1.0 extra/2.0', 'tableau-agent/1.0\r\nX-Injected: 1'])(
+      'should ignore %j because it is not a single product token',
+      (value) => {
+        vi.stubEnv('TABLEAU_USER_AGENT_PREFIX', value);
+        const config = new Config();
+        expect(config.userAgentPrefix).toBeUndefined();
+      },
+    );
   });
 
   describe('agent chat id', () => {

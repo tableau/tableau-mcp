@@ -1,9 +1,33 @@
 name: Generate NodeJS Single Executable Application
 
 on:
-  pull_request:
   release:
     types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/upload-binaries.yml
+      - package.json
+      - package-lock.json
+      - src/scripts/build*.ts
+      - src/scripts/sea*.ts
+      - src/utils/sea.ts
+      - src/utils/loadProviderModule.ts
+      - src/server.web.ts
+      - src/features/serverFeatureGate.ts
+      - src/desktop/assets.ts
+      - src/tools/web/scaffoldDataApp/dataAppWorkspaceStore.ts
+      - src/templates/**
+      - src/index*.ts
+      - src/scripts/variants.ts
+      - src/scripts/globalIdentifiers.ts
+      - features.json
+      - resources/desktop/**
+      - src/desktop/data/**
+      - src/web/apps/**
+      - tsconfig*.json
+      - src/desktop/cachePath*.ts
+      - src/tools/desktop/local/cache/**
 
 permissions:
   contents: read
@@ -18,7 +42,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         run: |
@@ -37,7 +61,7 @@ jobs:
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
@@ -65,7 +89,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         shell: pwsh
@@ -90,7 +114,7 @@ jobs:
             throw "tableau-mcp-desktop.exe smoke failed"
           }
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         shell: pwsh
         run: |
           npx tsx src/scripts/seaSmoke.ts .\tableau-mcp.exe
@@ -133,7 +157,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '>=22.7.5'
+          node-version: 24.x
           cache: 'npm'
       - name: Generate SEA
         run: |
@@ -153,7 +177,7 @@ jobs:
       - name: Smoke Desktop SEA
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
-        if: github.event_name == 'release'
+        if: github.event_name != 'pull_request'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}

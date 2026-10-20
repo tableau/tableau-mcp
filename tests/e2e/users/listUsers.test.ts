@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { userSchema } from '../../../src/sdks/tableau/types/user.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 /**
@@ -47,7 +47,7 @@ describe('list-users', () => {
 
   beforeAll(async () => {
     client = new McpClient({
-      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+      env: getAdminToolsEnv(),
     });
     await client.connect();
     const tools = await client.listTools();
@@ -55,7 +55,7 @@ describe('list-users', () => {
     if (!toolsAvailable) {
       console.warn(
         'Skipping list-users e2e tests — admin tools not registered. ' +
-          'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env and the caller is a site admin.',
+          'Ensure the caller is a site admin.',
       );
     }
   });

@@ -1,4 +1,3 @@
-import { Zodios } from '@zodios/core';
 import { Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
@@ -11,6 +10,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { formatPulseInsightsApiError } from '../../../errors/pulseInsightsApiError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { PulsePagination } from '../types/pagination.js';
@@ -37,7 +37,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, pulseApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, pulseApis, { axiosConfig }), creds);
   }
 
   /**

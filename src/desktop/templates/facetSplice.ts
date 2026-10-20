@@ -1,9 +1,8 @@
 /**
- * Apply-path facet splice (W28-C, ported from a2td server/tools/facet-splice.ts) —
- * make a BOUND optional facet slot RENDER.
+ * Apply-path facet splice: make a BOUND optional facet slot RENDER.
  *
- * W27-B armed the optional small-multiples facet slot on trend-line-chart and
- * ranking-ordered-bar: the binder emits `field_mapping["Facet"]`, and the byte-locked
+ * The optional small-multiples facet slot on trend-line-chart and ranking-ordered-bar is
+ * armed: the binder emits `field_mapping["Facet"]`, and the byte-locked
  * field-reference rewriter (src/desktop/templates/fieldReferenceRewriter.ts) renames the
  * OFF-SHELF `[Facet]` base column to the bound dimension. But nothing lands on the
  * rows/cols shelf, so a bound facet is visually a NO-OP.
@@ -35,6 +34,8 @@
  * which both funnel template XML + field_mapping into rewriteFieldReferences)
  * picks it up uniformly.
  */
+
+import { columnInstancePrefixLength } from '../derivations.js';
 
 /** Minimal runtime slot shape needed to locate an optional facet generically. */
 export interface FacetSlotReference {
@@ -209,7 +210,9 @@ function fieldFromInstanceName(inner: string): string | null {
   if (parts.length < 3) return null;
   for (let i = parts.length - 1; i >= 1; i--) {
     if (parts[i] === 'nk' || parts[i] === 'ok' || parts[i] === 'qk') {
-      return parts[i - 1] || null;
+      if (i < 2) return null;
+      const prefixEnd = Math.max(columnInstancePrefixLength(parts, i), 1);
+      return parts.slice(prefixEnd, i).join(':') || null;
     }
   }
   return null;

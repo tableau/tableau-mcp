@@ -2,32 +2,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { BLOCKING_DIALOG_GUIDANCE } from '../desktop/callDeadline.js';
-import { ExecuteCommandError } from '../desktop/externalApi/executorTypes.js';
-import {
-  BARE_COMMAND_FAILURE_GUIDANCE,
-  isBareCommandFailure,
-} from '../desktop/wrappers/applyFailureClassifier.js';
-import type { GetDashboardXmlError } from '../desktop/wrappers/getDashboardXml.js';
-import type { GetWorksheetXmlError } from '../desktop/wrappers/getWorksheetXml.js';
-import type { LoadDashboardXmlError } from '../desktop/wrappers/loadDashboardXml.js';
-import type { LoadWorkbookXmlError } from '../desktop/wrappers/loadWorkbookXml.js';
-import type { LoadWorksheetXmlError } from '../desktop/wrappers/loadWorksheetXml.js';
-import {
-  type StructuredResult,
-  type WireStructuredContent,
-  wireStructuredContent,
-} from '../tools/desktop/structuredContent.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-
-// Load XML errors preserve Desktop's message when present; otherwise serialize structural errors.
-function xmlLoadErrorMessage(
-  error: LoadWorkbookXmlError | LoadWorksheetXmlError | LoadDashboardXmlError,
-): string {
-  return 'message' in error && typeof error.message === 'string'
-    ? error.message
-    : JSON.stringify(error);
-}
 
 export class McpToolError extends Error {
   readonly type: string;
@@ -69,36 +44,6 @@ export class McpToolError extends Error {
   }
 }
 
-/**
- * Signals that a multi-step operation did not fully complete while preserving
- * the complete machine-readable recovery payload in the MCP error body.
- */
-export class IncompleteOperationError<T extends object> extends McpToolError {
-  readonly structuredContent?: WireStructuredContent;
-  private readonly recoveryPayload: StructuredResult<T>;
-
-  constructor(recoveryPayload: StructuredResult<T>) {
-    super({
-      type: 'incomplete-operation',
-      message: 'The requested operation did not complete.',
-      statusCode: 409,
-    });
-    this.recoveryPayload = recoveryPayload;
-    const { structuredContent, ...body } = recoveryPayload;
-    // A client that prefers structuredContent never reads getErrorText() below, so the
-    // recovery payload has to ride in the block too — otherwise the agent is told only
-    // "do this next" with no record of which asks failed or how far the operation got.
-    this.structuredContent = structuredContent
-      ? wireStructuredContent(body, structuredContent)
-      : undefined;
-  }
-
-  override getErrorText(): string {
-    const { structuredContent: _, ...body } = this.recoveryPayload;
-    return JSON.stringify(body);
-  }
-}
-
 export class ArgsValidationError extends McpToolError {
   constructor(message: string) {
     super({ type: 'args-validation', message, statusCode: 400 });
@@ -135,6 +80,34 @@ export class PreviewNotRunError extends McpToolError {
   }
 }
 
+// Thrown by delete-content (preview AND confirm) when Admin Insights shows the workbook/datasource no
+// longer meets the stale-content criteria — it was used within the threshold, or accessed on/after
+// the cleanup batch's date (W-24311035). statusCode 409: the resource's state blocks the mutation.
+export class ContentNotStaleError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'content-not-stale', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content when the staleness precondition cannot be evaluated (Admin Insights
+// unavailable, or the item is absent from the Site Content extract). The destructive gate fails
+// CLOSED: missing data never authorizes a deletion.
+export class StalenessUnverifiedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'staleness-unverified', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content / confirm-delete-content when a confirm names a cleanup batch older than
+// PENDING_DELETION_MAX_AGE_DAYS. A marker left by a crashed or abandoned preview expires instead of
+// authorizing a delete indefinitely; the marker itself is left in place for explicit cleanup.
+// statusCode 409: the batch's state blocks the mutation.
+export class CleanupBatchExpiredError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'cleanup-batch-expired', message, statusCode: 409 });
+  }
+}
+
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
     super({ type: 'feature-disabled', message, statusCode: 404 });
@@ -165,11 +138,22 @@ export class FlowNotAllowedError extends McpToolError {
   }
 }
 
+/** The flow-document endpoint requires Tableau Server 2026.3 or later. */
+export class FlowDocumentVersionUnsupportedError extends McpToolError {
+  constructor(serverVersion: string) {
+    super({
+      type: 'flow-document-version-unsupported',
+      message: `describe-flow requires Tableau Server 2026.3 or later. The connected server is version ${serverVersion}. Upgrade Tableau Server to read flow designs; use get-flow for flow metadata in the meantime.`,
+      statusCode: 501,
+    });
+  }
+}
+
 /**
  * The experimental flow-document REST API is not enabled on this server.
  *
- * The endpoint returns 403 with Tableau error code `403200` when its
- * `GetFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * The endpoint returns 403 with Tableau error code `403201` when its
+ * `getFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
  * specific code into this clearer, actionable error — any other 403 (insufficient
  * download permission, insufficient token scope, generic forbidden) is surfaced
  * as a {@link FlowDocumentForbiddenError} so a permission problem is never
@@ -188,7 +172,7 @@ export class FlowDocumentApiDisabledError extends McpToolError {
  * failures — the caller lacks permission to download the flow (the same
  * permission as downloading its `.tfl`/`.tflx` file in Tableau) or the token
  * lacks the `tableau:flows:download` scope. These are distinct from the
- * feature-flag-off case (Tableau error code `403200`), which maps to
+ * feature-flag-off case (Tableau error code `403201`), which maps to
  * {@link FlowDocumentApiDisabledError}.
  */
 export class FlowDocumentForbiddenError extends McpToolError {
@@ -370,129 +354,6 @@ export class AdminInsightsUnavailableError extends McpToolError {
   }
 }
 
-/**
- * The image-render call exceeded its deadline. Distinct from client cancellation: the render
- * hangs indefinitely when Tableau Desktop is showing a modal dialog that blocks rendering. Use
- * the same exact, bounded dialog recovery as other ordinary Desktop timeouts rather than retrying
- * the export or requiring an immediate human-only dismissal.
- */
-export class ImageExportTimeoutError extends McpToolError {
-  constructor(label: string, timeoutMs: number) {
-    const seconds = Math.round(timeoutMs / 1000);
-    super({
-      type: 'image-export-timeout',
-      message: [
-        `${label} image export exceeded ${seconds}s and was aborted.`,
-        BLOCKING_DIALOG_GUIDANCE,
-      ].join('\n'),
-      statusCode: 504,
-    });
-  }
-}
-
-export class DesktopCommandExecutionError extends McpToolError {
-  // A timeout counts as dialog-blocked too: the dedicated dialog tools may recover an ordinary
-  // hung call, while the error guidance still forbids blindly retrying the originating operation.
-  readonly blockedByDesktopDialog: boolean;
-
-  constructor(error: ExecuteCommandError, fix?: string) {
-    const message = formatDesktopCommandExecutionError(error);
-    super({
-      type: 'desktop-command-execution-error',
-      message: fix ? `${message}\n${fix}` : message,
-      statusCode: 500,
-    });
-    this.blockedByDesktopDialog =
-      error.type === 'command-timed-out' ||
-      (error.type === 'command-failed' && error.error?.code === 'awaiting-user');
-  }
-}
-
-function formatDesktopCommandExecutionError(error: ExecuteCommandError): string {
-  if (error.type !== 'command-failed') {
-    return JSON.stringify(error);
-  }
-
-  const commandError = error.error;
-  const message = commandError?.message;
-  if (!message) {
-    return JSON.stringify(error);
-  }
-
-  const tableauErrorCode = commandError['tableau-error-code'];
-  const formattedMessage =
-    typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
-      ? `${message}\ntableau-error-code: ${tableauErrorCode}`
-      : message;
-  return isBareCommandFailure(message)
-    ? `${formattedMessage}\n${BARE_COMMAND_FAILURE_GUIDANCE}`
-    : formattedMessage;
-}
-
-export class WorkbookXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadWorkbookXmlError) {
-    super({
-      type: 'load-workbook-xml-error',
-      message: xmlLoadErrorMessage(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class WorksheetXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadWorksheetXmlError, fix?: string) {
-    const message = xmlLoadErrorMessage(error);
-    super({
-      type: 'load-worksheet-xml-error',
-      message: fix ? `${message}\n${fix}` : message,
-      statusCode: 500,
-    });
-  }
-}
-
-export class GetWorksheetXmlFailedError extends McpToolError {
-  constructor(error: GetWorksheetXmlError) {
-    super({
-      type: 'get-worksheet-xml-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class GetDashboardXmlFailedError extends McpToolError {
-  constructor(error: GetDashboardXmlError) {
-    super({
-      type: 'get-dashboard-xml-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class DashboardXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadDashboardXmlError) {
-    super({
-      type: 'load-dashboard-xml-error',
-      message: xmlLoadErrorMessage(error),
-      statusCode: 500,
-    });
-  }
-}
-
-// A storyboard serializes as a `<dashboard type='storyboard'>`, so it shares the dashboard load
-// path and its error shape; only the error `type` differs so the agent sees a storyboard-scoped
-// failure rather than a misleading dashboard one.
-export class StoryboardXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadDashboardXmlError) {
-    super({
-      type: 'load-storyboard-xml-error',
-      message: xmlLoadErrorMessage(error),
-      statusCode: 500,
-    });
-  }
-}
-
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({
@@ -521,7 +382,7 @@ export class XmlModificationError extends McpToolError {
 
 /**
  * Refuse to apply a cache file whose instance fingerprint does not match the current
- * Desktop session (cross-instance cache bleed, W9). `message` carries the recovery recipe.
+ * Desktop session (cross-instance cache bleed). `message` carries the recovery recipe.
  */
 export class CacheSessionMismatchError extends McpToolError {
   constructor(message: string) {

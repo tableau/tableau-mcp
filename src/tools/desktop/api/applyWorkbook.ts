@@ -2,13 +2,22 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
+import {
+  formatColorMapCheck,
+  formatStaleWorksheetStyleLead,
+} from '../../../desktop/validation/colorMapReadback.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
+import { getWorkbookXml } from '../../../desktop/wrappers/getWorkbookXml.js';
 import { loadWorkbookXml } from '../../../desktop/wrappers/loadWorkbookXml.js';
 import {
+  readColorBaseline,
+  readColorMapsBack,
+} from '../../../desktop/wrappers/readColorMapsBack.js';
+import {
   DesktopCommandExecutionError,
-  UnknownError,
   WorkbookXmlLoadFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactFileParam, sessionParam } from '../params.js';
 import { jsonToolResult, prefillNextAction, withNextAction } from '../structuredContent.js';
@@ -58,6 +67,11 @@ export const getApplyWorkbookTool = (
           const { xml: workbookXml, resolvedSession, sourceHash } = preamble.value;
 
           const executor = await extra.getExecutor(resolvedSession);
+          // Read before the apply, outside the apply lock.
+          const baselineXml = await readColorBaseline({
+            appliedXml: workbookXml,
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+          });
           // A whole-workbook apply names no single artifact, so give the user their sheet back.
           const result = await loadWorkbookXml({
             xml: workbookXml,
@@ -91,8 +105,17 @@ export const getApplyWorkbookTool = (
           const documentWarnings = result.isOk() ? (result.value.documentWarnings ?? []) : [];
           const diagnostics = result.isOk() ? result.value.diagnostics : undefined;
           const diagnosticsInvalid = result.isOk() && result.value.diagnosticsInvalid === true;
+          const verification = await readColorMapsBack({
+            appliedXml: workbookXml,
+            baselineXml,
+            workbookApply: true,
+            executor,
+            signal: extra.signal,
+          });
           const hostVerification = result.isOk()
-            ? formatWorkbookPromiseCheck(validationWarnings)
+            ? `${formatWorkbookPromiseCheck(validationWarnings, documentWarnings)}${
+                verification === undefined ? '' : formatColorMapCheck(verification)
+              }`
             : '';
           if (result.isOk()) {
             await emitEpisodeEvent(extra.config, {
@@ -101,7 +124,7 @@ export const getApplyWorkbookTool = (
               episode_id: currentEpisodeId(resolvedSession),
               tool: 'apply-workbook',
               operation: 'load-workbook',
-              promise_outcome: 'unverified',
+              promise_outcome: verification?.status === 'failed' ? 'failed' : 'unverified',
             });
           }
 
@@ -121,8 +144,10 @@ export const getApplyWorkbookTool = (
           );
           const accepted = acceptedNoReadbackApplyResult({
             kind: 'workbook',
-            resultWarnings: validationWarnings,
+            preflightWarnings: validationWarnings,
+            resultWarnings: documentWarnings,
             hostVerification,
+            verification,
             ...(diagnosticsCoverage === 'incomplete'
               ? {
                   messageSuffix:
@@ -137,19 +162,28 @@ export const getApplyWorkbookTool = (
                   }
                 : {}),
           });
-          const acceptedWithGuidance = hasInvalidFields
-            ? withNextAction(
-                {
-                  ...accepted,
-                  message:
-                    `${accepted.message} The edit was accepted; address the reported invalid fields ` +
-                    'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
-                },
-                prefillNextAction('Address invalid fields reported in diagnostics'),
-              )
-            : accepted;
+          const guided = {
+            ...accepted,
+            message:
+              `${accepted.message} The edit was accepted; address the reported invalid fields ` +
+              'without replaying the apply. Static diagnostics do not establish query execution or rendering success.',
+          };
+          // A color failure's next action (already on `accepted`) wins over the invalid-fields one.
+          const acceptedWithGuidance = !hasInvalidFields
+            ? accepted
+            : verification?.status === 'failed'
+              ? guided
+              : withNextAction(
+                  guided,
+                  prefillNextAction(
+                    documentWarnings.length > 0
+                      ? 'Fix invalid fields; tell the user what Desktop warned about'
+                      : 'Address invalid fields reported in diagnostics',
+                  ),
+                );
           return new Ok({
             ...acceptedWithGuidance,
+            message: `${formatStaleWorksheetStyleLead(verification)}${acceptedWithGuidance.message}`,
             ...(diagnostics ? { diagnostics } : {}),
             ...(diagnosticsInvalid ? { diagnosticsInvalid: true } : {}),
             ...(documentWarnings.length > 0 ? { warnings: documentWarnings } : {}),

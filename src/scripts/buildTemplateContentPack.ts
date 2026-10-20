@@ -183,6 +183,7 @@ export function validateTemplateNames(names: string[]): void {
   }
 }
 
+// Hand-written ZIP (fixed DOS timestamp, sorted entries) so the same inputs always yield the same bytes.
 function createZipRecord(file: PackFile, localOffset: number): ZipRecord {
   const name = Buffer.from(file.name, 'utf8');
   const checksum = crc32(file.bytes);

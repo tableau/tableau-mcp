@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
+import os from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
@@ -9,6 +10,7 @@ import * as episodeEvents from '../../desktop/episode-events.js';
 import { beginEpisode, resetEpisodeEventsForTests } from '../../desktop/episode-events.js';
 import { sessionRouteState } from '../../desktop/route/route-state.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
+import * as loggerModule from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
 import { DesktopTool } from './tool.js';
@@ -23,7 +25,6 @@ const mockGetProductTelemetry = vi.hoisted(() =>
 );
 vi.mock('../../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   getProductTelemetry: mockGetProductTelemetry,
-  DEFAULT_PRODUCT_TELEMETRY_ENDPOINT: 'https://prod.telemetry.tableausoftware.com',
 }));
 
 const tmpDirs: string[] = [];
@@ -46,12 +47,17 @@ function readEvents(dir: string): Array<Record<string, unknown>> {
 }
 
 afterEach(() => {
+  if (vi.isMockFunction(loggerModule.log)) vi.mocked(loggerModule.log).mockRestore();
   resetEpisodeEventsForTests();
   sessionRouteState.clear();
   mockTelemetrySend.mockClear();
   mockGetProductTelemetry.mockClear();
   vi.useRealTimers();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
 describe('DesktopTool episode telemetry', () => {
@@ -98,6 +104,53 @@ describe('DesktopTool episode telemetry', () => {
     expect(events[2].duration_ms).toEqual(expect.any(Number));
   });
 
+  it.each([
+    ['without session, ok', {}, false],
+    ['with session, ok', { session: '4242' }, false],
+    ['without session, failing callback', {}, true],
+    ['with session, failing callback', { session: '4242' }, true],
+  ])(
+    'keys tool events by the resolved pid after begin-episode (%s)',
+    async (_label, args, fails) => {
+      const dir = tmpDir();
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        config: {
+          ...getMockRequestHandlerExtra().config,
+          episodeEventsEnabled: true,
+          episodeEventsDirectory: dir,
+        },
+      };
+      // Stubbed after the config is built: only resolveSession sees the pin, so the raw key stays 'unknown'.
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      try {
+        const begin = await beginEpisode(extra.config, { sessionId: '4242' });
+
+        await makeTool().logAndExecute({
+          extra,
+          args,
+          callback: async () => {
+            if (fails) throw new Error('boom');
+            return new Ok({ ok: true });
+          },
+        });
+
+        await vi.waitFor(() => {
+          expect(readEvents(dir)).toMatchObject([
+            { type: 'episode_begin' },
+            { type: 'tool_start', session_id: '4242', episode_id: begin.episode_id },
+            ...(fails
+              ? [{ type: 'tool_error', session_id: '4242', episode_id: begin.episode_id }]
+              : []),
+            { type: 'tool_end', session_id: '4242', episode_id: begin.episode_id },
+          ]);
+        });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('returns without waiting for the telemetry sink', async () => {
     const emitSpy = vi
       .spyOn(episodeEvents, 'emitEpisodeEvent')
@@ -132,6 +185,7 @@ describe('DesktopTool episode telemetry', () => {
         episodeEventsDirectory: dir,
       },
     };
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
 
     const result = await tool.logAndExecute({
       extra,
@@ -139,6 +193,13 @@ describe('DesktopTool episode telemetry', () => {
       callback: async () => {
         throw new Error('boom');
       },
+    });
+
+    expect(logSpy).toHaveBeenCalledWith({
+      message: 'Tool execution failed',
+      level: 'error',
+      logger: 'tool',
+      data: expect.objectContaining({ message: 'boom' }),
     });
 
     await vi.waitFor(() => {
@@ -339,20 +400,24 @@ describe('DesktopTool product telemetry', () => {
     });
 
     expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
-    expect(mockTelemetrySend).toHaveBeenCalledWith('tool_call', {
-      tool_name: 'ask-user',
-      request_id: '2',
-      session_id: guid,
-      site_luid: '',
-      user_luid: '',
-      chat_id: '',
-      success: true,
-      error_code: '',
-      error_message: '',
-      oauth_client_id: '',
-      oauth_client_display_name: '',
-      auth_type: 'desktop',
-    });
+    expect(mockTelemetrySend).toHaveBeenCalledWith(
+      'tool_call',
+      {
+        tool_name: 'ask-user',
+        request_id: '2',
+        session_id: guid,
+        site_luid: '',
+        user_luid: '',
+        chat_id: '',
+        success: true,
+        error_code: '',
+        error_message: '',
+        oauth_client_id: '',
+        oauth_client_display_name: '',
+        auth_type: 'desktop',
+      },
+      { includeHostName: false },
+    );
   });
 
   it('forwards the signed-in site and user LUID from config', async () => {
@@ -371,6 +436,7 @@ describe('DesktopTool product telemetry', () => {
         site_luid: '11111111-1111-1111-1111-111111111111',
         user_luid: '22222222-2222-2222-2222-222222222222',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -384,6 +450,7 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ chat_id: 'chat-abc-123' }),
+      { includeHostName: false },
     );
   });
 
@@ -412,6 +479,42 @@ describe('DesktopTool product telemetry', () => {
     expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ ok: true }) }]);
   });
 
+  it('sends no host_name on Desktop tool calls', async () => {
+    const { exportedForTesting } = await vi.importActual<
+      typeof import('../../telemetry/productTelemetry/telemetryForwarder.js')
+    >('../../telemetry/productTelemetry/telemetryForwarder.js');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const hostnameSpy = vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
+    mockGetProductTelemetry.mockReturnValueOnce(
+      new exportedForTesting.DirectTelemetryForwarder({
+        endpoint: 'https://telemetry.example.com',
+        enabled: true,
+        pod: '',
+        isHyperforce: false,
+      }),
+    );
+
+    try {
+      await makeTool().logAndExecute({
+        extra: extraWithConfig({}),
+        args: { session: 'S1' },
+        callback: async () => new Ok({ ok: true }),
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = await (fetchMock.mock.calls[0][0] as Request).clone().text();
+      expect(body).not.toContain('sentinel-host');
+      const [event] = JSON.parse(body) as Array<Record<string, unknown>>;
+      expect(event).not.toHaveProperty('host_name');
+      expect(event).toHaveProperty('type', 'tool_call');
+      expect(hostnameSpy).not.toHaveBeenCalled();
+    } finally {
+      hostnameSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('fetches the shared forwarder without passing any per-config telemetry args', async () => {
     // The forwarder resolves endpoint/enabled/pod/is_hyperforce from env itself, so the desktop
     // tool must not thread config into getProductTelemetry (that is what let the first caller's
@@ -435,6 +538,7 @@ describe('DesktopTool product telemetry', () => {
     expect(mockTelemetrySend).toHaveBeenCalledWith(
       'tool_call',
       expect.objectContaining({ session_id: '', success: true }),
+      { includeHostName: false },
     );
   });
 
@@ -459,6 +563,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -482,6 +587,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '400',
         error_message: 'args-validation',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -501,6 +607,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -525,6 +632,7 @@ describe('DesktopTool product telemetry', () => {
         error_code: '',
         error_message: '',
       }),
+      { includeHostName: false },
     );
   });
 
@@ -555,6 +663,15 @@ describe('DesktopTool product telemetry', () => {
         success: false,
         error_code: '',
         error_message: '',
+      }),
+      { includeHostName: false },
+    );
+
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Tool execution exceeded the Desktop call deadline',
+        level: 'error',
+        logger: 'tool',
       }),
     );
   });

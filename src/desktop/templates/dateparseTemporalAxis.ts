@@ -7,7 +7,7 @@
  * yields a continuous month axis. When the ONLY temporal-looking field in the dataset
  * is a STRING (e.g. a "2025-08" month column), pointing the axis at that string would
  * ask Tableau to Month-Trunc a string — which it cannot, so the axis renders wrong (or
- * the singer falls back to value-sorted bars, the observed e4 failure).
+ * the agent falls back to value-sorted bars).
  *
  * This GLUE step (like waterfallAnchorFilter / facetSplice) runs on the RAW template
  * BEFORE the frozen core rewrite, and ONLY when the binder opted a slot into

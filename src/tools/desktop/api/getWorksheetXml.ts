@@ -7,8 +7,8 @@ import { getWorksheetXml, isRouteMissing } from '../../../desktop/wrappers/getWo
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
-  UnknownError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { clearStickyWorksheetFile } from '../authoring/fields/worksheetEditBuffer.js';
 import { artifactNameParam, sessionParam, xmlModeParam } from '../params.js';

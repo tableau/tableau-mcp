@@ -15,19 +15,19 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { listTemplateNames, readBookmark } from '../../../../desktop/templates/templatePath.js';
 import { createTemplateRuntimeSnapshot } from '../../../../desktop/templates/templateRuntimeSnapshot.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-} from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { attachNextAction, prefillNextAction } from '../../structuredContent.js';
 import { DesktopTool } from '../../tool.js';
+import { distinctCacheId } from '../fields/worksheetCache.js';
 import {
   buildWorksheetsFromTemplatesParamsSchema,
   worksheetAggregationSchema,
 } from '../templates/buildWorksheetsFromTemplates.js';
 import { dashboardCreationPrerequisite } from './dashboardCreationPrerequisite.js';
+import { validateLayoutSpec } from './dashboardZones.js';
 
 type PlannerField = string | { query: string; datasource?: string };
 type PlannerFieldRequest = { query: string; datasource?: string };
@@ -103,7 +103,7 @@ export const getPlanDashboardCreationTool = (
     server,
     name: 'plan-dashboard-creation',
     title: toolTitle,
-    description: 'Plan tasks; manual registration.',
+    description: 'Plan; older Desktop needs views',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
@@ -127,6 +127,19 @@ export const getPlanDashboardCreationTool = (
               `KPI worksheet "${invalidKpi.name}" requires exactly one field; received ${invalidKpi.fields.length}. Create one KPI worksheet per measure.`,
             ).toErr();
           }
+
+          const layoutError = validateLayoutSpec(
+            {
+              kpis: worksheets.filter((ws) => ws.type === 'kpi').map((ws) => ws.name),
+              charts: worksheets.filter((ws) => ws.type === 'chart').map((ws) => ws.name),
+              layoutType: layout?.type ?? 'auto-grid',
+              gridColumns: layout?.gridColumns,
+              kpiStripHeight: layout?.kpiStripHeight,
+              customZones: layout?.zones,
+            },
+            title,
+          );
+          if (layoutError) return layoutError.toErr();
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -258,7 +271,7 @@ export const getPlanDashboardCreationTool = (
           // Cache workbook for subagents
           const workbookFile = cache.getCacheFilePath({
             prefix: 'workbook',
-            id: 'for-parallel-build',
+            id: `for-parallel-build-${distinctCacheId(dashboardName, resolvedSession)}`,
           });
 
           // Build worksheet tasks
@@ -266,8 +279,10 @@ export const getPlanDashboardCreationTool = (
           const snapshots = new Map<string, ReturnType<typeof createTemplateRuntimeSnapshot>>();
           const worksheetTasks = [];
           for (const ws of worksheets) {
-            const safeWsName = ws.name.replace(/[^a-zA-Z0-9]/g, '_');
-            const worksheetFile = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
+            const worksheetFile = cache.getCacheFilePath({
+              prefix: 'worksheet',
+              id: distinctCacheId(ws.name, resolvedSession),
+            });
             const templateName = selectTemplate(ws);
             const resolvedEntries = ws.fields
               .map(normalizePlannerField)
@@ -360,8 +375,10 @@ export const getPlanDashboardCreationTool = (
             });
           }
 
-          const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-          const dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
+          const dashboardFile = cache.getCacheFilePath({
+            prefix: 'dashboard',
+            id: distinctCacheId(dashboardName, resolvedSession),
+          });
 
           const canParallelize = worksheets.length >= 5;
           const recommendedParallelism = Math.min(worksheets.length, 10);
@@ -390,6 +407,7 @@ export const getPlanDashboardCreationTool = (
           const registration = dashboardCreationPrerequisite(
             dashboardName,
             dashboardTask.worksheetNames,
+            executor.desktopApiVersion,
           );
 
           const plan = {
@@ -435,9 +453,10 @@ export const getPlanDashboardCreationTool = (
               dependsOn: 'phase2Parallel',
             },
             phase4Dashboard: {
-              dependsOn: 'phase3Registration',
-              description:
-                'Apply the dashboard only after Desktop has registered every requested worksheet view',
+              dependsOn: registration.required ? 'phase3Registration' : 'phase2Parallel',
+              description: registration.required
+                ? 'Apply the dashboard only after Desktop has registered every requested worksheet view'
+                : 'Apply the dashboard after every worksheet is rendered; Desktop registers missing views',
               refreshCaches: [
                 {
                   tool: 'get-workbook-xml',
@@ -494,14 +513,16 @@ export const getPlanDashboardCreationTool = (
 
           lines.push(
             '',
-            'PHASE 3: Register Views in Tableau Desktop (required user action)',
-            ...(registration.required
-              ? registration.instructions
-              : ['No worksheets requested; no registration needed.']),
+            registration.required
+              ? 'PHASE 3: Register Views in Tableau Desktop (required user action)'
+              : 'PHASE 3: Native Registration During Dashboard Apply',
+            ...registration.instructions,
             '',
             'PHASE 4: Refresh Caches and Apply Dashboard',
-            'Only after Phase 3: get-workbook-xml and get-dashboard-xml with mode="file", then build-and-apply-dashboard using their returned file paths.',
-            'Dashboard apply checks the live registrations and verifies readback. A missing registration stops the apply without a write.',
+            `${registration.required ? 'Only after manual registration' : 'After all worksheet applies finish'}: get-workbook-xml and get-dashboard-xml with mode="file", then build-and-apply-dashboard using their returned file paths.`,
+            registration.required
+              ? 'Dashboard apply checks the live registrations and verifies readback. A missing registration stops the apply without a write.'
+              : 'Desktop registers missing views during the surgical apply; readback verifies the layout and registrations.',
           );
 
           if (aggregationWarnings.length > 0) {

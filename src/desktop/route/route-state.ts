@@ -13,7 +13,7 @@ export type { AskShape, RouteClass };
 /**
  * A deflection issued by the gate. Carries the {tool, ts} receipt shape plus the issued
  * next_route marker, the one-line agent-actionable text, and the normalized ask KEY it was
- * issued for (the per-session one-shot dedup key — a2td used the episode id).
+ * issued for (the per-session one-shot dedup key).
  */
 export interface RouteDeflection {
   /** The scratch-entry tool whose call was deflected. */
@@ -74,6 +74,7 @@ export interface BindRecoveryProposalContext {
     session: string;
     ask: string;
     target_worksheet?: string;
+    datasource?: string;
     auto_apply: true;
   };
   recommended?: {
@@ -392,12 +393,6 @@ export class SessionRouteStateStore {
       if (terminalAsk !== undefined) {
         state.bindRecoveryByAsk.delete(terminalAsk);
         continue;
-      }
-
-      const selfIsTerminal = !this.isActiveBindRecovery(record);
-      if (selfIsTerminal) {
-        state.bindRecoveryByAsk.delete(ask);
-        return false;
       }
 
       state.bindRecoveryByAsk.delete(ask);
@@ -853,6 +848,29 @@ export class SessionRouteStateStore {
       ...record,
       preDispatchRetryAllowance: { proposalSignature, remaining: 0 },
     });
+  }
+
+  /**
+   * Undo one reservation: drop only the attempt that carries `reservationId`, and delete the
+   * record only when no attempts remain, so a concurrent call's outcome on the same ask survives.
+   */
+  releaseBindRecoveryReservation(
+    sessionId: string | undefined,
+    ask: string,
+    reservationId: number | undefined,
+  ): boolean {
+    if (reservationId === undefined) return false;
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !record) return false;
+    const attempts = record.attempts.filter((attempt) => attempt.reservationId !== reservationId);
+    if (attempts.length === record.attempts.length) return false;
+    if (attempts.length === 0) {
+      state.bindRecoveryByAsk.delete(ask);
+    } else {
+      state.bindRecoveryByAsk.set(ask, { ...record, attempts });
+    }
+    return true;
   }
 
   clearBindRecovery(sessionId: string | undefined, ask: string): boolean {

@@ -40,7 +40,8 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
   const mcpServer = new MCPServerStdio({
     command: 'node',
     args: ['build/index.js'],
-    env,
+    // The MCP SDK passes only a safe env whitelist plus this, so the child would default to telemetry on.
+    env: { ...env, PRODUCT_TELEMETRY_ENABLED: 'false' },
     cacheToolsList: true,
   });
 
@@ -63,7 +64,7 @@ export async function getDesktopMcpServer(): Promise<MCPServerStdio> {
   const mcpServer = new MCPServerStdio({
     command: 'node',
     args: [bundle],
-    env: { TRANSPORT: 'stdio' },
+    env: { TRANSPORT: 'stdio', PRODUCT_TELEMETRY_ENABLED: 'false' },
     cacheToolsList: true,
   });
 

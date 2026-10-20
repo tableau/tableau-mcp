@@ -3,15 +3,14 @@
 /**
  * Reproducible trim for `src/desktop/data/twb-example-index.json`.
  *
- * WHY: the full index is ~10.3 MB and (once the desktop variant is published)
- * rides into the npm tarball via `build.ts` copying `src/desktop/data`. Only the
+ * WHY: Desktop source builds stage this index and Desktop SEA builds embed it. Only the
  * `search-workbook-examples` tool consumes it, through
  * `src/desktop/search/searchLibrary.ts::searchWorkbookExamples`, which:
  *   - scores each entry on its `features` tags (exact +10 / partial +5),
  *     `name` substring (+3), and — only when nothing else matched — a literal
  *     substring hit in a snippet's `xml` (+1);
  *   - returns at most TWB_RESULTS_LIMIT (15) entries.
- * It never reads `snippets[*].json` (a mechanical parse of `xml`, i.e. redundant).
+ * Each snippet carries only its `xml` fragment.
  *
  * RETRIEVAL-QUALITY GUARANTEE (oracle seeding): a naive per-feature quota trim
  * silently dropped the source top-15 for name-sensitive and XML-fallback queries
@@ -22,17 +21,21 @@
  * K=`maxPerFeature` quota then adds breadth on top. See the source-vs-trimmed
  * regression test at `src/desktop/search/trimmedTwbIndex.regression.test.ts`.
  *
- * INPUT (kept OUT of the tarball): src/desktop/data-source/twb-example-index.source.json.gz
- *   — a gzip of the untrimmed original (the 10 MB uncompressed twin is not
+ * INPUT (kept OUT of Desktop builds and executables):
+ *   src/desktop/data-source/twb-example-index.source.json.gz
+ *   — a gzip of the untrimmed original (the 3.5 MB uncompressed twin is not
  *   committed). It is not under `src/desktop/data`, so `build.ts` never copies it,
- *   and `.npmignore` publishes only `build/**`. `.gz` inputs are gunzipped in-memory.
- * OUTPUT (the committed, shipped file): src/desktop/data/twb-example-index.json
+ *   and the SEA builder never embeds it. `.gz` inputs are gunzipped in-memory.
+ * OUTPUT (the committed Desktop asset): src/desktop/data/twb-example-index.json
  *
  * Re-generate with:  npx tsx src/scripts/trimTwbExampleIndex.ts
- * Tune with flags:   --max-per-feature <N>  --keep-json  --in <path>  --out <path>  --pretty
+ * Tune with flags:   --max-per-feature <N>  --in <path>  --out <path>  --pretty
  *
  * The transform is deterministic (stable sorts, no randomness): same input +
  * same flags => byte-identical output.
+ *
+ * Entry ids are stable ordinals (`twb-NNNN`): a new source entry takes the next
+ * free number, never a renumber.
  */
 
 import { readFileSync, statSync, writeFileSync } from 'fs';
@@ -41,12 +44,11 @@ import { gunzipSync } from 'zlib';
 
 interface Snippet {
   xml?: string;
-  json?: unknown;
   [k: string]: unknown;
 }
 interface Entry {
   name: string;
-  relativePath: string;
+  id: string;
   features: string[];
   snippets: Record<string, Snippet>;
 }
@@ -55,7 +57,6 @@ interface Options {
   inPath: string;
   outPath: string;
   maxPerFeature: number;
-  keepJson: boolean;
   pretty: boolean;
 }
 
@@ -182,10 +183,15 @@ function scoreEntry(entry: Entry, allTerms: string[], q: string): number {
   return score;
 }
 
+/** Code-unit order on `id`, so the host's ICU locale can't change the sort. */
+function byIdOrder(a: Entry, b: Entry): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 /**
  * Deterministic top-K for a query, matching production retrieval. Entries are
- * canonicalised to relativePath order first — the same order the committed
- * (relativePath-sorted) index loads in, so ties break identically to the real
+ * canonicalised to id order first — the same order the committed (id-sorted)
+ * index loads in, so ties break identically to the real
  * `searchWorkbookExamples` reading the shipped file. Returns at most K entries.
  */
 export function topKForQuery(
@@ -195,7 +201,7 @@ export function topKForQuery(
 ): Entry[] {
   const { tags, rawQuery: q } = expandQueryAliases(query);
   const allTerms = [q, ...tags];
-  const ordered = [...entries].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  const ordered = [...entries].sort(byIdOrder);
   const scored: { entry: Entry; score: number }[] = [];
   for (const entry of ordered) {
     const score = scoreEntry(entry, allTerms, q);
@@ -228,13 +234,11 @@ function parseArgs(argv: string[]): Options {
     inPath: process.env.TWB_SOURCE_PATH ?? DEFAULT_IN,
     outPath: process.env.TWB_INDEX_OUT_PATH ?? DEFAULT_OUT,
     maxPerFeature: 80,
-    keepJson: false,
     pretty: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--max-per-feature') opts.maxPerFeature = Number(argv[++i]);
-    else if (arg === '--keep-json') opts.keepJson = true;
     else if (arg === '--pretty') opts.pretty = true;
     else if (arg === '--in') opts.inPath = argv[++i];
     else if (arg === '--out') opts.outPath = argv[++i];
@@ -260,15 +264,6 @@ function snippetKey(entry: Entry): string {
   return JSON.stringify(canonical);
 }
 
-function stripJson(entry: Entry): Entry {
-  const snippets: Record<string, Snippet> = {};
-  for (const [feature, snippet] of Object.entries(entry.snippets)) {
-    const { json: _json, ...rest } = snippet;
-    snippets[feature] = rest;
-  }
-  return { ...entry, snippets };
-}
-
 function featureCounts(entries: Entry[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const e of entries) {
@@ -286,19 +281,15 @@ function main(): void {
   const inSnippets = input.reduce((n, e) => n + Object.keys(e.snippets).length, 0);
   const inFeatures = featureCounts(input);
 
-  // Rule 1: drop the redundant `json` snippet field (unless --keep-json).
-  const projected = opts.keepJson ? input : input.map(stripJson);
-
-  // Rule 2 (oracle seeding): compute the SOURCE top-15 for the whole query suite
-  // and pin those entries. Scoring uses only features/name/xml, which projection
-  // preserves, so pins computed on `projected` match production retrieval.
-  const suite = buildQuerySuite(projected);
-  const pinnedPaths = new Set<string>();
+  // Oracle seeding: compute the SOURCE top-15 for the whole query suite and pin
+  // those entries, so pins match production retrieval over the source.
+  const suite = buildQuerySuite(input);
+  const pinnedIds = new Set<string>();
   for (const query of suite) {
-    for (const entry of topKForQuery(projected, query)) pinnedPaths.add(entry.relativePath);
+    for (const entry of topKForQuery(input, query)) pinnedIds.add(entry.id);
   }
 
-  const byPath = [...projected].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  const byId = [...input].sort(byIdOrder);
 
   const kept: Entry[] = [];
   const seen = new Set<string>();
@@ -310,18 +301,18 @@ function main(): void {
   };
 
   // Pass A: pin oracle entries unconditionally (exempt from dedupe and quota).
-  for (const e of byPath) {
-    if (pinnedPaths.has(e.relativePath)) addEntry(e);
+  for (const e of byId) {
+    if (pinnedIds.has(e.id)) addEntry(e);
   }
   const pinnedCount = kept.length;
 
   // Pass B: dedupe the remaining (non-pinned) entries with identical snippet
-  // payloads. Deterministic representative = smallest relativePath; a pinned
+  // payloads. Deterministic representative = smallest id; a pinned
   // entry already occupies its payload key, so its non-pinned duplicates drop.
   let dupDropped = 0;
   const deduped: Entry[] = [];
-  for (const e of byPath) {
-    if (pinnedPaths.has(e.relativePath)) continue;
+  for (const e of byId) {
+    if (pinnedIds.has(e.id)) continue;
     const key = snippetKey(e);
     if (seen.has(key)) {
       dupDropped++;
@@ -332,14 +323,14 @@ function main(): void {
   }
 
   // Pass C: coverage-greedy per-feature cap on the remainder. Prefer multi-feature
-  // entries then smaller payloads (bytes) then path (stable). Pinned entries have
+  // entries then smaller payloads (bytes) then id (stable). Pinned entries have
   // already been counted, so the quota adds breadth on top of the oracle set.
   const ordered = [...deduped].sort((a, b) => {
     if (b.features.length !== a.features.length) return b.features.length - a.features.length;
     const sizeA = jsonBytes(a.snippets);
     const sizeB = jsonBytes(b.snippets);
     if (sizeA !== sizeB) return sizeA - sizeB;
-    return a.relativePath.localeCompare(b.relativePath);
+    return byIdOrder(a, b);
   });
   for (const entry of ordered) {
     const underQuota = entry.features.some((f) => (counts[f] ?? 0) < opts.maxPerFeature);
@@ -348,7 +339,7 @@ function main(): void {
   }
 
   // Deterministic committed order.
-  kept.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  kept.sort(byIdOrder);
 
   const output = opts.pretty ? JSON.stringify(kept, null, 2) : JSON.stringify(kept);
   writeFileSync(opts.outPath, output, 'utf8');
@@ -361,9 +352,7 @@ function main(): void {
   console.log('--- trimTwbExampleIndex ---');
   console.log(`in : ${opts.inPath}`);
   console.log(`out: ${opts.outPath}`);
-  console.log(
-    `options: maxPerFeature=${opts.maxPerFeature} keepJson=${opts.keepJson} pretty=${opts.pretty}`,
-  );
+  console.log(`options: maxPerFeature=${opts.maxPerFeature} pretty=${opts.pretty}`);
   console.log('');
   console.log(`entries : ${input.length} -> ${kept.length} (${pct(kept.length, input.length)})`);
   console.log(`snippets: ${inSnippets} -> ${outSnippets} (${pct(outSnippets, inSnippets)})`);
@@ -372,9 +361,9 @@ function main(): void {
   console.log('');
   console.log(`oracle  : suite=${suite.length} queries, pinned=${pinnedCount} entries`);
   for (const query of SMOKE_QUERIES) {
-    const src = topKForQuery(projected, query).map((e) => e.relativePath);
-    const trim = new Set(topKForQuery(kept, query).map((e) => e.relativePath));
-    const overlap = src.filter((p) => trim.has(p)).length;
+    const src = topKForQuery(input, query).map((e) => e.id);
+    const trim = new Set(topKForQuery(kept, query).map((e) => e.id));
+    const overlap = src.filter((id) => trim.has(id)).length;
     console.log(`  "${query}": source top-${src.length}, trimmed overlap ${overlap}/${src.length}`);
   }
   console.log('');

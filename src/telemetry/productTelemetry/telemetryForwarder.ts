@@ -1,14 +1,12 @@
 import os from 'os';
 
 import { log } from '../../logging/logger';
+import { DEFAULT_PRODUCT_TELEMETRY_ENDPOINT } from './telemetryEndpoint';
 
 type ValidPropertyValueType = string | number | boolean;
 type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
-
-/** Default product-telemetry endpoint; override via PRODUCT_TELEMETRY_ENDPOINT. */
-export const DEFAULT_PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
 
 export type TelemetryEventType = 'tool_call' | 'tableau_mcp_event';
 
@@ -46,7 +44,7 @@ export function resolveTelemetryEnv(): TelemetryEnv {
 export type TableauTelemetryJsonEvent = {
   type: TelemetryEventType;
   host_timestamp: string;
-  host_name: string;
+  host_name?: string;
   service_name: string;
   pod?: string;
   properties: PropertiesType;
@@ -68,7 +66,7 @@ class DirectTelemetryForwarder {
     }
 
     this.endpoint = endpoint;
-    this.enabled = enabled;
+    this.enabled = enabled && isValidEndpoint(endpoint);
     this.pod = pod;
     this.isHyperforce = isHyperforce;
   }
@@ -79,8 +77,13 @@ class DirectTelemetryForwarder {
    *
    * @param eventType - The event type/name
    * @param properties - Key-value properties for the event
+   * @param options.includeHostName - `false` omits host_name: Desktop runs on the user's machine.
    */
-  send(eventType: TelemetryEventType, properties: PropertiesType): void {
+  send(
+    eventType: TelemetryEventType,
+    properties: PropertiesType,
+    options?: { includeHostName?: boolean },
+  ): void {
     if (!this.enabled) {
       return;
     }
@@ -91,7 +94,7 @@ class DirectTelemetryForwarder {
         host_timestamp: formatHostTimestamp(new Date()),
         service_name: SERVICE_NAME,
         pod: this.pod,
-        host_name: getDefaultHostName(),
+        ...(options?.includeHostName === false ? {} : { host_name: getDefaultHostName() }),
         properties: {
           ...properties,
           podname: this.pod,
@@ -119,6 +122,23 @@ class DirectTelemetryForwarder {
         data: error,
       });
     }
+  }
+}
+
+// Checked once at construction so a bad endpoint logs once, not on every tool call.
+function isValidEndpoint(endpoint: string): boolean {
+  try {
+    // new Request() throws on credentials in the URL even though new URL() accepts them.
+    new Request(endpoint);
+    return true;
+  } catch (error) {
+    log({
+      message: 'Telemetry disabled: PRODUCT_TELEMETRY_ENDPOINT is not a valid URL',
+      level: 'error',
+      logger: 'telemetry',
+      data: error,
+    });
+    return false;
   }
 }
 

@@ -6,7 +6,7 @@ import { Err, Ok } from 'ts-results-es';
 import { hashSchemaSummary, sha256Hex } from '../../../../desktop/binder/memo.js';
 import * as schemaSummaryModule from '../../../../desktop/binder/schema-summary.js';
 import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -248,7 +248,7 @@ describe('dashboardHealthCheck read-only proof (import audit)', () => {
       '../../../../desktop/binder/schema-summary.js',
       '../../../../desktop/wrappers/getWorkbookXml.js',
       '../../../../desktop/session/sessionResolution.js',
-      '../../../../errors/mcpToolError.js',
+      '../../../../errors/mcpToolError.desktop.js',
       '../../../../server.desktop.js',
       '../../tool.js',
     ]);

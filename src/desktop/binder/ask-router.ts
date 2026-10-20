@@ -1,12 +1,11 @@
 // src/desktop/binder/ask-router.ts
 //
-// The route layer's SELECTOR (Slice B, ported from a2td src/binder/ask-router.ts).
-// SELECTOR-ONLY by design: it turns a masked ask into the single eligible template the
-// binder's own model-free matcher would pick, and NOTHING more. It never executes, never
-// binds fields, never touches a live schema — the a2td tier-ladder / validateBinding
-// disposer (routeAsk) is deliberately NOT ported (that is the binder's job, not the route
-// layer's). `route-spec.ts` reuses this exact seam for schema-free ask-SHAPE detection so
-// the route layer never re-derives classification.
+// The route layer's SELECTOR. SELECTOR-ONLY by design: it turns a masked ask into the
+// single eligible template the binder's own model-free matcher would pick, and NOTHING
+// more. It never executes, never binds fields, never touches a live schema — the
+// tier-ladder / validateBinding disposer is deliberately not part of this layer
+// (that is the binder's job). `route-spec.ts` reuses this exact seam for schema-free
+// ask-SHAPE detection so the route layer never re-derives classification.
 //
 // LOCKSTEP MIRROR: this file imports NOTHING from `./classify.ts` (the hash-gated
 // lockstep-core classifier stays byte-untouched). The matcher primitives below
@@ -143,7 +142,7 @@ function wonChartNoun(maskedAsk: string, keywords: string[]): boolean {
 /**
  * FAMILY-LEVEL spatial intent guard vocabulary — hand-mirrored from classify.ts
  * (this file must not import the classifier); a parity test enforces set equality.
- * See classify.ts for the full rationale (W-23447710, Cluster A selection half).
+ * See classify.ts for the full rationale (W-23447710).
  */
 const SPATIAL_INTENT_ALIASES: ReadonlySet<string> = new Set([
   'geo',

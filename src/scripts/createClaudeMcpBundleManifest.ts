@@ -320,7 +320,7 @@ const envVars = {
     type: 'string',
     title: 'Tool Profile',
     description:
-      "Tool registration profile: unset/'dynamic-authoring' registers the lean native-authoring surface (bind-template + guarded artifacts + author-* verbs), 'full' registers every Desktop tool, 'demo' the slim Desktop set, 'combined-lean' the full Desktop set plus a lazy web-tool loader.",
+      'This Web bundle registers tools eagerly; TOOL_PROFILE does not change its tool surface.',
     required: false,
     sensitive: false,
   },
@@ -405,6 +405,15 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Log Masking',
     description: 'Disable masking of credentials in logs. For debug purposes only.',
+    required: false,
+    sensitive: false,
+  },
+  NOTIFICATION_PAYLOAD_MAX_BYTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Notification Payload Max Bytes',
+    description:
+      'The maximum string length included in MCP client notifications and server logs before large payloads are redacted or truncated.',
     required: false,
     sensitive: false,
   },
@@ -644,7 +653,7 @@ const envVars = {
     type: 'string',
     title: 'Episode Events Directory',
     description:
-      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY.',
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY. Files persist until an operator removes them; use a dedicated directory with external retention.',
     required: false,
     sensitive: false,
   },
@@ -670,7 +679,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable Tableau Prep flow MCP tools',
     description:
-      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" and enable the "flow-tools" feature flag to enable the flow tool family.',
+      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). describe-flow additionally requires Tableau Server 2026.3+ and the server feature flag `features.getFlowDocumentRestApi`. This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" and enable the "flow-tools" feature flag to enable the flow tool family.',
     required: false,
     sensitive: false,
   },
@@ -707,6 +716,15 @@ const envVars = {
     title: 'Stale content min age (days)',
     description:
       'Minimum days since last access for content to be considered stale by the stale-content-cleanup-inform prompt. Defaults to 90.',
+    required: false,
+    sensitive: false,
+  },
+  PENDING_DELETION_MAX_AGE_DAYS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Pending deletion max batch age (days)',
+    description:
+      'Oldest cleanup batch (days) a delete-content confirm still accepts for a workbook or data source; older pending-deletion markers can no longer authorize a delete. Defaults to 30; range 1-90.',
     required: false,
     sensitive: false,
   },

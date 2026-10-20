@@ -1,6 +1,5 @@
-import { Zodios } from '@zodios/core';
-
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { flowDocumentApis } from '../apis/flowDocumentApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { FlowDocument } from '../types/flowDocument.js';
@@ -18,13 +17,14 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class FlowDocumentMethods extends AuthenticatedMethods<typeof flowDocumentApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, flowDocumentApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, flowDocumentApis, { axiosConfig }), creds);
   }
 
   /**
    * Returns the specified flow's document as sanitized JSON.
    *
    * Experimental: `GET {host}/api/exp/sites/:siteId/flows/:flowId/document`.
+   * Requires Tableau Server 2026.3+ and `features.getFlowDocumentRestApi=true`.
    * The response has credential/secret connection attributes and Tableau
    * identity attributes removed and email-shaped PII redacted server-side.
    *

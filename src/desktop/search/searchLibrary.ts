@@ -4,6 +4,8 @@ import fs from 'fs';
 import Fuse from 'fuse.js';
 import { basename, join } from 'path';
 
+import { getDesktopConfig } from '../../config.desktop.js';
+import { log } from '../../logging/logger.js';
 import { listDataAssetNames, readDataAsset } from '../assets.js';
 import { checkCommandPolicy } from '../guards/commandPolicy.js';
 import { loadCommandsReferenceDocument } from '../guards/commandsReference.js';
@@ -346,9 +348,7 @@ function collectReferenceNames(node: XmlElement): string[] {
 function loadWorkbookSchema(): WorkbookSchemaIndex {
   if (_schemaCache) return _schemaCache;
 
-  const workbookOverridePath = process.env.WORKBOOK_XSD_PATH;
-  const legacyOverridePath = process.env.SCHEMA_REFERENCE_PATH;
-  const overridePath = workbookOverridePath || legacyOverridePath;
+  const { workbookXsdPath: overridePath } = getDesktopConfig();
   let raw: string | null;
   try {
     raw = overridePath ? fs.readFileSync(overridePath, 'utf8') : readDataAsset(WORKBOOK_XSD_ASSET);
@@ -357,16 +357,6 @@ function loadWorkbookSchema(): WorkbookSchemaIndex {
   }
   if (raw === null) {
     throw new Error(`Workbook XSD not available: ${WORKBOOK_XSD_ASSET}`);
-  }
-  const rawStart = raw.trimStart();
-  if (
-    !workbookOverridePath &&
-    legacyOverridePath &&
-    (rawStart.startsWith('{') || rawStart.startsWith('['))
-  ) {
-    throw new Error(
-      'SCHEMA_REFERENCE_PATH is deprecated and must point to raw XSD; flattened JSON is not supported.',
-    );
   }
 
   const parseErrors: string[] = [];
@@ -908,20 +898,21 @@ function extractFeatures(name: string): string[] {
 function loadWorkbookExamples(): any[] {
   if (_examplesCache) return _examplesCache;
   _examplesCache = [];
+  const examplesDir = getDesktopConfig().examplesDir;
   const readExample =
-    process.env.EXAMPLES_DIR !== undefined
+    examplesDir !== undefined
       ? (f: string): string | null => {
           try {
-            return fs.readFileSync(join(process.env.EXAMPLES_DIR as string, f), 'utf8');
+            return fs.readFileSync(join(examplesDir, f), 'utf8');
           } catch {
             return null;
           }
         }
       : (f: string): string | null => readDataAsset(`examples/${f}`);
   const fileNames =
-    process.env.EXAMPLES_DIR !== undefined
-      ? fs.existsSync(process.env.EXAMPLES_DIR)
-        ? fs.readdirSync(process.env.EXAMPLES_DIR)
+    examplesDir !== undefined
+      ? fs.existsSync(examplesDir)
+        ? fs.readdirSync(examplesDir)
         : []
       : listDataAssetNames('examples');
   const files = fileNames.filter((f) => f.endsWith('.json') || f.endsWith('.md'));
@@ -949,16 +940,21 @@ function loadWorkbookExamples(): any[] {
 function loadTwbExampleIndex(): any[] {
   if (_twbIndexCache) return _twbIndexCache;
   _twbIndexCache = [];
-  const raw = process.env.TWB_INDEX_PATH
-    ? fs.existsSync(process.env.TWB_INDEX_PATH)
-      ? fs.readFileSync(process.env.TWB_INDEX_PATH, 'utf8')
+  const twbIndexPath = getDesktopConfig().twbIndexPath;
+  const raw = twbIndexPath
+    ? fs.existsSync(twbIndexPath)
+      ? fs.readFileSync(twbIndexPath, 'utf8')
       : null
     : readDataAsset('twb-example-index.json');
   if (raw === null) return _twbIndexCache;
   try {
     _twbIndexCache = JSON.parse(raw);
   } catch (e: any) {
-    console.error('Failed to load TWB example index:', e.message);
+    log({
+      message: `Failed to load TWB example index: ${e.message}`,
+      level: 'error',
+      logger: 'tool',
+    });
   }
   return _twbIndexCache!;
 }

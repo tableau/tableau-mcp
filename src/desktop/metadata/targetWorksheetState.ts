@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 
 import { parseInstanceRef } from '../templates/bookmarkTemplate.js';
+import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { listAvailableFields } from './field-builder.js';
 import { carryNamespaceDeclarations, findWorksheet, normalizeArray, parseXML } from './parser.js';
 import type { ParsedWindow } from './types.js';
@@ -123,9 +124,10 @@ function windowState(workbookXml: string, worksheetName: string): TargetElementS
       candidate['@_class'] === '' ||
       candidate['@_class'] === 'worksheet',
   );
-  const matchedName = worksheetWindows.find((candidate) => candidate['@_name'] === worksheetName)?.[
-    '@_name'
-  ];
+  const matchedName = worksheetWindows.find(
+    (candidate) =>
+      candidate['@_name'] !== undefined && parsedXmlNamesEqual(candidate['@_name'], worksheetName),
+  )?.['@_name'];
   const windows = worksheetWindows.filter(
     (candidate) => matchedName !== undefined && candidate['@_name'] === matchedName,
   );
@@ -192,8 +194,7 @@ function qualifiedReferences(value: string): Array<{ datasource: string; instanc
     const datasource = parseBracketSegment(value, index);
     if (!datasource || value.slice(datasource.end, datasource.end + 2) !== '.[') continue;
     const field = parseBracketSegment(value, datasource.end + 1);
-    if (!field)
-      throw new Error(`Malformed datasource-qualified reference near ${value.slice(index)}`);
+    if (!field) continue;
     references.push({ datasource: datasource.identifier, instance: field.identifier });
     index = field.end - 1;
   }

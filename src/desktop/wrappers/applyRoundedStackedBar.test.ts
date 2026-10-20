@@ -777,6 +777,9 @@ describe('applyRoundedStackedBar', () => {
       retrySafe: false,
       stage: 'document-warning',
     });
+    expect(outcome.state !== 'applied' && outcome.message).toContain(
+      'dropped-node: helper dropped',
+    );
   });
 
   it('keeps source drift returned by the per-sheet route before mutation', async () => {

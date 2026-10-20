@@ -248,3 +248,76 @@ describe('spliceBoundCalcDefinitions', () => {
     expect(twice).toBe(alreadyBodied);
   });
 });
+
+describe('spliceBoundGroupDefinitions - same group name in two datasources', () => {
+  const twoDatasources = TARGET_WORKBOOK.replace(
+    '</datasources>',
+    `<datasource name='Copy'>
+      <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Product Name (group)]' role='dimension' type='nominal'>
+        <calculation class='categorical-bin' column='[Product Name]' new-bin='true'>
+          <bin default-name='Edited' value='&quot;Edited&quot;'><value>&quot;X&quot;</value></bin>
+        </calculation>
+      </column>
+    </datasource>
+  </datasources>`,
+  );
+
+  it('splices the definition from the bound datasource, not the last one walked', () => {
+    const out = spliceBoundGroupDefinitions(HOLLOW_SHEET, GROUP_MAPPING, twoDatasources);
+
+    expect(out).toContain('Acme');
+    expect(out).not.toContain('Edited');
+  });
+});
+
+describe('spliceBoundGroupDefinitions - datasource names with XML metacharacters', () => {
+  const escaped = 'Sales &amp; Ops';
+  const workbook = TARGET_WORKBOOK.replace(
+    "name='Sample - Superstore'",
+    `name='${escaped}'`,
+  ).replace(
+    '</datasources>',
+    `<datasource name='Copy'>
+      <column datatype='string' name='[Product Name (group)]' role='dimension' type='nominal'>
+        <calculation class='categorical-bin' column='[Product Name]' new-bin='true'>
+          <bin default-name='Edited' value='&quot;Edited&quot;'><value>&quot;X&quot;</value></bin>
+        </calculation>
+      </column>
+    </datasource>
+  </datasources>`,
+  );
+  // The binder escapes the whole field_mapping value once, datasource included.
+  const mapping = {
+    Facet: `[${escaped}].[none:Product Name (group):nk]`,
+    Measure: `[${escaped}].[sum:Profit:qk]`,
+  };
+
+  it('picks the bound datasource definition when its name needs escaping', () => {
+    const out = spliceBoundGroupDefinitions(HOLLOW_SHEET, mapping, workbook);
+
+    expect(out).toContain('Acme');
+    expect(out).not.toContain('Edited');
+  });
+});
+
+describe('spliceBoundCalcDefinitions - datasource names with XML metacharacters', () => {
+  const escaped = 'Sales &amp; Ops';
+  const workbook = CALC_WORKBOOK.replace("name='federated.xyz'", `name='${escaped}'`).replace(
+    '</datasources>',
+    `<datasource name='Copy'>
+      <column datatype='real' name='[Profit Ratio]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='SUM([Edited])' />
+      </column>
+    </datasource>
+  </datasources>`,
+  );
+  const mapping = { Measure: `[${escaped}].[sum:Profit Ratio:qk]` };
+
+  it('picks the bound datasource calc definition when its name needs escaping', () => {
+    const out = spliceBoundCalcDefinitions(HOLLOW_CALC_SHEET, mapping, workbook);
+
+    expect(out).toContain('SUM([Profit])/SUM([Sales])');
+    expect(out).not.toContain('Edited');
+  });
+});

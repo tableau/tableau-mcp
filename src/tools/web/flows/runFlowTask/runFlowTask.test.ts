@@ -32,7 +32,6 @@ vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowToolsEnabled: true,
     flowWriteToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),

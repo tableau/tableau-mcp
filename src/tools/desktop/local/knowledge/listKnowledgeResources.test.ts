@@ -9,6 +9,7 @@ import { getListKnowledgeResourcesTool } from './listKnowledgeResources.js';
 vi.mock('../../../../desktop/knowledge/index.js');
 
 import { listKnowledgeResources } from '../../../../desktop/knowledge/index.js';
+import * as loggerModule from '../../../../logging/logger.js';
 
 const MOCK_RESOURCES = [
   {
@@ -24,6 +25,10 @@ const MOCK_RESOURCES = [
     mimeType: 'text/markdown' as const,
   },
 ];
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listKnowledgeResourcesTool', () => {
   beforeEach(() => {

@@ -12,6 +12,7 @@ import {
 } from '../../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../../features/init.js';
 import { useRestApi } from '../../../../restApiInstance.js';
+import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
 import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
@@ -26,7 +27,7 @@ import { mapFlowWriteError } from '../flowWriteErrors.js';
 const MIN_RUN_FLOW_SPEC_REST_VERSION = '3.14';
 
 const paramsSchema = {
-  flowId: z.string().nonempty(),
+  flowId: luidSchema,
   runMode: z.enum(['full', 'incremental']).optional(),
   outputStepIds: z
     .array(z.string().nonempty())

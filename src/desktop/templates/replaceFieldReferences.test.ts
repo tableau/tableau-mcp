@@ -1,6 +1,6 @@
 import { rewriteFieldReferences, type TemplateSlotReference } from './fieldReferenceRewriter.js';
 
-// W14-CM1 removed the thin `replaceFieldReferences` wrapper; both consumers now call
+// The thin `replaceFieldReferences` wrapper was removed; both consumers now call
 // the shared core (`rewriteFieldReferences`) directly. The wrapper was a pure
 // passthrough, so this suite is retargeted onto the core verbatim to KEEP its unique
 // coverage — the `$`-sequence literal guarantees (regex-replacement specials in field

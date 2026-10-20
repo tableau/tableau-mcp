@@ -4,13 +4,12 @@ import { runValidation } from '../registry.js';
 import { tooltipDimensionRequiresAttrRule } from './tooltipDimensionRequiresAttr.js';
 
 /**
- * P0 (GUS W-23447711, Lee Graber dogfood 2026-07-14): a none:/derivation="None"
- * dimension on <tooltip> in an aggregated view applies "successfully", then the
- * sheet renders blank with "cannot be converted to a measure using ATTR()" — the
- * only confirmed green-trace/failed-outcome shape in the dogfood backlog. Tooltip
- * is grain-neutral, so Tableau must ATTR()-wrap raw dimensions there; the authored
- * none: instance defeats that. The rule fires ONLY on tooltip (text/label join the
- * view grain, so none: is legitimate there) and ONLY in aggregated views.
+ * P0 (GUS W-23447711): a none:/derivation="None" dimension on <tooltip> in an aggregated
+ * view applies "successfully", then the sheet renders blank with "cannot be converted to a
+ * measure using ATTR()". Tooltip is grain-neutral, so Tableau must ATTR()-wrap raw
+ * dimensions there; the authored none: instance defeats that. The rule fires ONLY on
+ * tooltip (text/label join the view grain, so none: is legitimate there) and ONLY in
+ * aggregated views.
  */
 
 function ws({
@@ -51,6 +50,12 @@ describe('tooltip-dimension-requires-attr rule', () => {
     expect(issues[0].message).toContain('cannot be converted to a measure using ATTR()');
     expect(issues[0].message).toContain('FIX:');
     expect(issues[0].message).toContain('[DS].[attr:Segment:nk]');
+  });
+
+  it('sees an aggregate ref whose datasource name contains a ]]-escaped bracket', () => {
+    expect(
+      tooltipDimensionRequiresAttrRule.validate(ws({ cols: '[D]]S].[sum:Sales:qk]' })),
+    ).toHaveLength(1);
   });
 
   it('blocks validation when registered and the broken shape is present', () => {

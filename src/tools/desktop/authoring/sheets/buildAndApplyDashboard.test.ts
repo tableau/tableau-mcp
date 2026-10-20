@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -7,14 +7,22 @@ import * as getWorkbookXmlModule from '../../../../desktop/wrappers/getWorkbookX
 import * as injectViewpointsModule from '../../../../desktop/wrappers/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../../desktop/wrappers/loadDashboardXml.js';
 import * as loadWorkbookXmlModule from '../../../../desktop/wrappers/loadWorkbookXml.js';
-import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { TableauDesktopToolContext } from '../../toolContext.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getBuildAndApplyDashboardTool } from './buildAndApplyDashboard.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadDashboardXml.js');
@@ -36,11 +44,14 @@ describe('buildAndApplyDashboardTool', () => {
   });
 
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<cached/>');
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({
         validationWarnings: [],
+        documentWarnings: [],
         verifiedWorksheetNames: ['KPI 1', 'KPI 2', 'Chart 1', 'Chart 2'],
       }),
     );
@@ -78,6 +89,7 @@ describe('buildAndApplyDashboardTool', () => {
     vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
       Ok({
         validationWarnings: [],
+        documentWarnings: [],
         verifiedWorksheetNames: ['KPI 1', 'KPI 2', 'Chart 1', 'Chart 2'],
       }),
     );
@@ -101,12 +113,14 @@ describe('buildAndApplyDashboardTool', () => {
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
-  it('does not treat an unverified requested worksheet as registered', async () => {
+  it('shows Desktop warnings in the success body and gives a non-done next action', async () => {
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
     vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
-      Ok({ validationWarnings: [], verifiedWorksheetNames: ['KPI 1'] }),
-    );
-    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
-      Err({ type: 'invalid-response', error: new Error('transient read failure') }),
+      Ok({
+        validationWarnings: [],
+        documentWarnings: warnings,
+        verifiedWorksheetNames: ['KPI 1', 'Chart 1'],
+      }),
     );
 
     const result = await getToolResult({
@@ -114,15 +128,31 @@ describe('buildAndApplyDashboardTool', () => {
       worksheetNames: ['KPI 1', 'Chart 1'],
     });
 
-    expect(result.isError).toBe(true);
-    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
-    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.message).toContain('dropped-node: Removed an unsupported zone.');
+    expect(body.message).toContain('Desktop reported 1 warning(s)');
+    expect(body.message).not.toContain('Successfully');
+    expect(body.viewpointState).toBe('success');
+    expect(body.warnings).toEqual(warnings);
+    expect(result.structuredContent).toMatchObject({ nextAction: { kind: 'prefill' } });
+  });
+
+  it('omits warnings from a clean success body', async () => {
+    const result = await getToolResult({
+      layoutSpec: defaultLayoutSpec,
+      worksheetNames: ['KPI 1', 'Chart 1'],
+    });
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('warnings');
+    expect(result.structuredContent).toBeUndefined();
   });
 
   it('names the dashboard as the artifact on every write it makes', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
     const mockWorkbookLoad = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
       .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
@@ -142,7 +172,7 @@ describe('buildAndApplyDashboardTool', () => {
   it('should include a title text zone when title is provided', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok({ validationWarnings: [] }));
+      .mockResolvedValue(Ok({ validationWarnings: [], documentWarnings: [] }));
 
     await getToolResult({
       title: 'My Dashboard',
@@ -234,26 +264,6 @@ describe('buildAndApplyDashboardTool', () => {
       });
       expect(result.isError).toBe(true);
       expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each([undefined, []])(
-    'reports an incomplete result for missing verification %s',
-    async (verifiedWorksheetNames) => {
-      vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
-        Ok({
-          validationWarnings: [],
-          verifiedWorksheetNames,
-        }),
-      );
-      const result = await getToolResult({
-        layoutSpec: defaultLayoutSpec,
-        worksheetNames: ['KPI 1', 'Chart 1'],
-      });
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('viewpoint-verification');
-      expect(result.content[0].text).toContain('Do not replace the workbook');
     },
   );
 });

@@ -15,7 +15,8 @@ import {
   logInlineImageCapHit,
 } from '../../../desktop/limits/inlineImageCap.js';
 import { ExternalApiRead } from '../../../desktop/wrappers/readHarness.js';
-import { ImageExportTimeoutError, McpToolError } from '../../../errors/mcpToolError.js';
+import { ImageExportTimeoutError } from '../../../errors/mcpToolError.desktop.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 
 type BuildSheetImageToolResultArgs = {
   /** Tool name for cap-hit audit logging. */

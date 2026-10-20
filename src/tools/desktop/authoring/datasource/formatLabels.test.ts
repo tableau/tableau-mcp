@@ -56,6 +56,27 @@ describe('formatLabelsTool', () => {
     expect(appliedXml.match(/mark-labels-show/g)?.length).toBe(1);
   });
 
+  it("finds worksheets whose names contain &, < and ' and keeps $ replacements literal", async () => {
+    const name = "R&D <Q1> it's $& $1";
+    const escaped = 'R&amp;D &lt;Q1&gt; it&apos;s $&amp; $1';
+    const xml = BASE_XML.replace("name='Profit'", () => `name='${escaped}'`);
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { worksheetName: name, showLabels: true },
+      initialXml: xml,
+      readbackXml: labelsShown(xml, 'true'),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`name='${escaped}'`);
+
+    const rewritten = await getToolResult({
+      args: { worksheetName: name, showLabels: false },
+      initialXml: labelsShown(xml, 'true'),
+      readbackXml: labelsShown(xml, 'false'),
+    });
+    expect(rewritten.result.isError).toBe(false);
+  });
+
   it('rewrites an existing mark-labels rule (idempotent toggle to OFF)', async () => {
     const withOn = labelsShown(BASE_XML, 'true');
     const { result, applyWorkbookDocument } = await getToolResult({

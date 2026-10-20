@@ -23,9 +23,15 @@ export function decodeXmlEntities(value: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (ref, hex: string) => codePointText(ref, parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (ref, dec: string) => codePointText(ref, Number(dec)))
     .replace(/&amp;/g, '&');
+}
+
+// Out-of-range and surrogate references stay literal text instead of throwing.
+function codePointText(reference: string, codePoint: number): string {
+  const valid = codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff);
+  return valid ? String.fromCodePoint(codePoint) : reference;
 }
 
 export function normalizeXmlName(value: string): string {
@@ -58,17 +64,19 @@ export type ElementMatch = { start: number; end: number; text: string };
  *
  * The `name` selector is plain text; the serialized attribute is XML-escaped, so each
  * candidate's captured attribute value is entity-decoded and compared by string equality
- * (this also makes a name containing regex metacharacters match without escaping). The tag
+ * (this also makes a name containing regex metacharacters match without escaping). The selector
+ * is compared as-is after NFC/trim, never decoded again. The tag
  * name is still regex-escaped to guard against metacharacters in the tag.
  */
 export function findElement(xml: string, tagName: string, name: string): ElementMatch | null {
   const openRe = new RegExp(
-    `<${escapeRegExp(tagName)}\\b[^>]*?\\bname\\s*=\\s*(['"])(.*?)\\1[^>]*>`,
+    `<${escapeRegExp(tagName)}\\b[^>]*?(?:^|\\s)name\\s*=\\s*(['"])(.*?)\\1[^>]*>`,
     'gi',
   );
+  const wanted = normalizeParsedXmlName(name);
   let open: RegExpExecArray | null;
   while ((open = openRe.exec(xml)) !== null) {
-    if (!xmlNamesEqual(open[2], name)) {
+    if (normalizeParsedXmlName(decodeXmlEntities(open[2])) !== wanted) {
       continue;
     }
     const start = open.index;
@@ -96,7 +104,7 @@ export function parseOuterElement(xml: string): { tagName: string; name: string 
     return null;
   }
   const tagName = open[1];
-  const nameAttr = /\bname\s*=\s*(['"])(.*?)\1/.exec(open[2]);
+  const nameAttr = /(?:^|\s)name\s*=\s*(['"])(.*?)\1/.exec(open[2]);
   const name = nameAttr ? decodeXmlEntities(nameAttr[2]) : null;
   return { tagName, name };
 }

@@ -11,9 +11,17 @@ import { FileNotFoundError, FileReadError } from '../../../../errors/mcpToolErro
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { mockCacheFileArgsFromFs } from '../../api/applyPreamble.testUtils.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getResolveFieldTool } from './resolveField.js';
 
+vi.mock('../../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../desktop/cachePath.js')>()),
+  resolveCacheFileArg: vi.fn(),
+  readCacheFileArg: vi.fn(),
+  checkCacheFileArg: vi.fn(),
+  writeCacheFileArg: vi.fn(),
+}));
 vi.mock('../../../../desktop/wrappers/cacheFingerprint.js');
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/externalApi/discovery.js');
@@ -71,6 +79,7 @@ const notFoundResolution = {
 
 describe('resolveFieldTool', () => {
   beforeEach(() => {
+    mockCacheFileArgsFromFs();
     vi.clearAllMocks();
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
   });
@@ -182,9 +191,9 @@ describe('resolveFieldTool', () => {
 // W-23447478 (P0): resolve-field must self-heal a stale cache — a field that
 // exists only after a mid-session datasource connection. A cached not_found
 // triggers exactly one live re-snapshot + retry after resolving the optional
-// session. Ported by content from a2td #213 to tmcp's
-// error/result conventions (Ok-wrapped { resolution, isError } body; CallToolResult
-// .isError stays false — the not_found signal lives in the JSON body).
+// session. Results follow tmcp's error/result conventions (Ok-wrapped
+// { resolution, isError } body; CallToolResult .isError stays false — the not_found
+// signal lives in the JSON body).
 describe('resolve-field refresh-on-not_found (W-23447478)', () => {
   const SESSION = 'session-1';
   const STALE_XML =

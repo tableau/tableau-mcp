@@ -6,7 +6,7 @@ import * as getWorksheetXmlModule from '../../../desktop/wrappers/getWorksheetXm
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
-} from '../../../errors/mcpToolError.js';
+} from '../../../errors/mcpToolError.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -19,6 +19,10 @@ import { getGetWorksheetXmlTool } from './getWorksheetXml.js';
 vi.mock('../../../desktop/wrappers/getWorksheetXml.js');
 vi.mock('../authoring/fields/worksheetEditBuffer.js');
 vi.mock('fs');
+vi.mock('../../../desktop/cachePath.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../desktop/cachePath.js')>()),
+  writeCacheTextFile: vi.fn(),
+}));
 
 describe('getWorksheetXmlTool', () => {
   const inlineResultSchema = z.object({

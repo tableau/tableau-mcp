@@ -53,6 +53,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
   });
 
@@ -526,7 +527,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(appliedXml).toEqual([validXml]);
   });
 
-  it('Miller World Cup repro: telemetry-only parameter findings never block auto-apply', async () => {
+  it('World Cup workbook repro: telemetry-only parameter findings never block auto-apply', async () => {
     const telemetryIssues = [
       {
         ruleId: 'calc-field-names',

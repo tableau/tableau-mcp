@@ -1,5 +1,6 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { flowDocumentSchema } from '../types/flowDocument.js';
 
 // Experimental endpoint. It lives under `/api/exp` (NOT the versioned `/api/3.x`
@@ -10,7 +11,8 @@ const getFlowDocumentEndpoint = makeEndpoint({
   path: '/sites/:siteId/flows/:flowId/document',
   alias: 'getFlowDocument',
   description:
-    "Returns the specified flow's document as sanitized JSON. Experimental API (api/exp) that must be enabled server-side; requires the tableau:flows:download scope.",
+    "Returns the specified flow's document as sanitized JSON. Requires Tableau Server 2026.3+, the server feature flag `features.getFlowDocumentRestApi`, and the `tableau:flows:download` scope.",
+  parameters: [pathParam('siteId', 'segment'), pathParam('flowId')],
   response: flowDocumentSchema,
 });
 

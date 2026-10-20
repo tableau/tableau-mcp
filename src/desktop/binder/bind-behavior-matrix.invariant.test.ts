@@ -7,19 +7,18 @@ import { loadRuntimeTemplateCatalogSnapshots } from '../templates/runtimeTemplat
 import { bindTemplate } from './binder.js';
 import type { RuntimeTemplateDescriptor } from './manifest-types.js';
 
-// W60-INVARIANT-TESTS suite 3 — BIND BEHAVIOR MATRIX (the ww-ou-arrow regression lock).
+// BIND BEHAVIOR MATRIX (the ww-ou-arrow regression lock).
 //
-// Live-caught tonight: 'over-under arrow chart of ...' happily bound ww-ou-arrow on the
-// no-LLM path and fed a plain dimension into sports-score SPLIT parsing (fix b1490be5 —
-// compound-string-parse hazard demotion). This suite pins the whole observable bind
+// 'over-under arrow chart of ...' happily bound ww-ou-arrow on the no-LLM path and fed a
+// plain dimension into sports-score SPLIT parsing (fixed by compound-string-parse hazard
+// demotion). This suite pins the whole observable bind
 // surface against the committed Superstore fixture so a future change to classify.ts /
 // the runtime catalog can never silently flip a one-shot into a wrong bind or a fail-closed
 // propose into a bind.
 //
-// FIXTURE: the committed Superstore reference (Sample - Superstore) copied verbatim from
-// the factory (a2td tests/fixtures/superstore-scratch-ref.xml) into the repo test tree —
-// scope rules forbid a test reading an external absolute path, so the fixture is a
-// committed test asset here. Schema summarizes to (measures) Sales/Profit/Quantity/
+// FIXTURE: the committed Superstore reference (Sample - Superstore) copied verbatim
+// into the repo test tree — scope rules forbid a test reading an external absolute path,
+// so the fixture is a committed test asset here. Schema summarizes to (measures) Sales/Profit/Quantity/
 // Discount and (dims) Sub-Category/Category/Segment/Region/State-Province/Country-Region/
 // Order Date(temporal)/... .
 //
@@ -142,7 +141,7 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
   ],
   [
     'over-under arrow chart of Sales by Sub-Category',
-    // fix b1490be5: ww-ou-arrow carries the compound-string-parse hazard (its calcs SPLIT a
+    // ww-ou-arrow carries the compound-string-parse hazard (its calcs SPLIT a
     // sports-score string shape out of a bound field). That risk lives in the DATA, invisible
     // to any natural ask, so classifyNoLlm demotes the template unconditionally to propose.
     'compound-string-parse hazard demotion (ww-ou-arrow)',
@@ -207,11 +206,11 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
   ],
   [
     'control chart of Profit by Order Date',
-    'pinned-current-behavior: W62 stamp made control-chart-xmr eligible, but no-LLM classifier still proposes on this phrasing',
+    'pinned-current-behavior: control-chart-xmr is eligible, but no-LLM classifier still proposes on this phrasing',
   ],
   [
     'bubble chart of Profit, Discount, and Sales by Order ID',
-    'pinned-current-behavior: W62 stamp made correlation-bubble-chart eligible, but no-LLM classifier still proposes on this phrasing',
+    'pinned-current-behavior: correlation-bubble-chart is eligible, but no-LLM classifier still proposes on this phrasing',
   ],
   [
     'bubble chart of Sales versus Profit by Product Name sized by Quantity and Discount',
@@ -219,7 +218,7 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
   ],
   [
     'dot strip plot of Sales by Sub-Category over Order Date',
-    'pinned-current-behavior: W63 stamp made ranking-dot-strip-plot eligible, but its rows slot needs a MONTH-derivation temporal (deriv=mn) that this phrasing does not fill deterministically → propose (fail-open to the LLM path)',
+    'pinned-current-behavior: ranking-dot-strip-plot is eligible, but its rows slot needs a MONTH-derivation temporal (deriv=mn) that this phrasing does not fill deterministically → propose (fail-open to the LLM path)',
   ],
   // The filled-map cases live in ONE_SHOTS: runtime semantic roles distinguish the neutral
   // field_base_N slots, and the required country slot auto-completes when state is ask-named.

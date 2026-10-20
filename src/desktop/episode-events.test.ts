@@ -1,4 +1,5 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { getDesktopConfig } from '../config.desktop.js';
@@ -13,7 +14,7 @@ import { sessionRouteState } from './route/route-state.js';
 const tmpDirs: string[] = [];
 
 function tmpDir(): string {
-  const dir = mkdtempSync(join(process.cwd(), 'episode-events-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'episode-events-test-'));
   tmpDirs.push(dir);
   return dir;
 }
@@ -75,7 +76,10 @@ describe('episode event writer', () => {
       },
     ]);
     expect(events[0].ts).toEqual(expect.any(String));
-    expect(readdirSync(dir)[0]).toMatch(/^episodes-.*\.jsonl$/);
+    const [episodeFile] = readdirSync(dir);
+    expect(episodeFile).toMatch(/^episodes-.*\.jsonl$/);
+    expect(episodeFile).not.toMatch(/[<>:"/\\|?*]/);
+    expect(readFileSync(join(dir, episodeFile), 'utf-8')).toContain('"tool":"apply-worksheet"');
   });
 
   it('writes only bounded metadata for startup, Desktop RPC, and batch events', async () => {
