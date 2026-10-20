@@ -12,6 +12,7 @@ export const MAX_INT32 = 2147483647;
  *   ask for an equal-or-smaller `limit` itself. The `limit` argument cannot
  *   exceed this cap, so the matching set must be narrowed (filter) or the cap
  *   raised by an administrator.
+ *   On paged tools it means the cap hides items from the whole set, whatever the page or `limit`.
  */
 export type TruncationReason = 'requested-limit' | 'admin-cap';
 
