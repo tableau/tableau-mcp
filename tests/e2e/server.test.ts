@@ -23,8 +23,7 @@ describe('server', () => {
     setEnv();
     const config = new Config();
     flowReadExpected = config.flowToolsEnabled ?? flowToolsEnabled;
-    flowWriteExpected =
-      flowReadExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
+    flowWriteExpected = flowReadExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
   });
   afterAll(resetEnv);
 
