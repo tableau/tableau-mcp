@@ -8,7 +8,7 @@
 import { getConfig } from '../../config.js';
 import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
-import { isFlowToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
+import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
@@ -546,7 +546,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const authoringToolsEnabled =
     (await featureGate.isFeatureEnabled('authoring-tools')) &&
     (await isAuthoringAllowedForClient(clientId));
-  const flowToolsEnabled = await isFlowToolsEnabled(config);
+  const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
@@ -576,10 +576,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools follow FLOW_TOOLS_ENABLED when set, otherwise the flow-tools feature flag. When disabled they
-  // are not registered, so their scopes must not be advertised or enforced either — otherwise a
+  // Each Flow tool group requires the base flow gate and its own gate. When disabled the tools are
+  // not registered, so their scopes must not be advertised or enforced either — otherwise a
   // client could be asked to hold scopes for tools that don't exist.
-  if (!flowToolsEnabled) {
+  if (!flowReadToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
@@ -588,7 +588,6 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // Write tools additionally follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise flow-write-tools.
   if (!flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');

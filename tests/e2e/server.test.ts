@@ -10,6 +10,7 @@ import { McpClient } from './mcpClient.js';
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
+const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
 const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
 let flowReadExpected: boolean;
 let flowWriteExpected: boolean;
@@ -22,8 +23,9 @@ describe('server', () => {
   beforeAll(() => {
     setEnv();
     const config = new Config();
-    flowReadExpected = config.flowToolsEnabled ?? flowToolsEnabled;
-    flowWriteExpected = flowReadExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
+    const flowBaseExpected = config.flowToolsEnabled ?? flowToolsEnabled;
+    flowReadExpected = flowBaseExpected && (config.flowReadToolsEnabled ?? flowReadToolsEnabled);
+    flowWriteExpected = flowBaseExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
   });
   afterAll(resetEnv);
 
@@ -68,14 +70,13 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -105,9 +106,9 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Flow tools follow FLOW_TOOLS_ENABLED when set, otherwise the flow-tools flag.
+      // Read tools follow FLOW_TOOLS_ENABLED and FLOW_READ_TOOLS_ENABLED when set, otherwise their flags.
       if (!flowReadExpected) {
-        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+        expectedToolNames = expectedToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -129,7 +130,7 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Writes also follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise the flow-write-tools flag.
+      // Write tools follow FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       if (!flowWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
@@ -265,14 +266,13 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -306,9 +306,9 @@ describe('server', () => {
         );
       }
 
-      // Flow tools follow FLOW_TOOLS_ENABLED when set, otherwise the flow-tools flag.
+      // Read tools follow FLOW_TOOLS_ENABLED and FLOW_READ_TOOLS_ENABLED when set, otherwise their flags.
       if (!flowReadExpected) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -334,7 +334,7 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Writes also follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise the flow-write-tools flag.
+      // Write tools follow FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flags.
       if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),

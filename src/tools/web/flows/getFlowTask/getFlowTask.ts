@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../../config.js';
 import { McpToolError } from '../../../../errors/mcpToolError.js';
-import { isFlowToolsEnabled } from '../../../../features/flowTools.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
@@ -29,7 +29,7 @@ export const getGetFlowTaskTool = (server: WebMcpServer): WebTool<typeof paramsS
     server,
     name: 'get-flow-task',
     minRequiredRole: SiteRole.VIEWER,
-    disabled: new Provider(async () => !(await isFlowToolsEnabled(config))),
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Retrieves a single scheduled flow run task (the **schedule** for a Tableau Prep flow) by its task id. A flow run task describes when/how often a flow is configured to run — NOT a record of past executions (for run history use \`list-flow-runs\`).
 

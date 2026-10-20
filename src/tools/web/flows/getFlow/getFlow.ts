@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { FlowNotAllowedError } from '../../../../errors/mcpToolError.js';
-import { isFlowToolsEnabled } from '../../../../features/flowTools.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
@@ -88,7 +88,7 @@ export const getGetFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'get-flow',
     minRequiredRole: SiteRole.VIEWER,
-    disabled: new Provider(async () => !(await isFlowToolsEnabled(config))),
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Retrieves detailed information about a specific Tableau Prep flow, including the flow's metadata (name, description, owner, project, tags, parameters), its output step IDs and names, and optionally its input connections and recent run history. This is the primary tool to use when a user asks about a specific flow's structure, contents, recent runs, or input data sources.
 

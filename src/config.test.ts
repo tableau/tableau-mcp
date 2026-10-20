@@ -311,6 +311,21 @@ describe('Config', () => {
     },
   );
 
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the flow read environment override only when FLOW_READ_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', value);
+
+      expect(new Config().flowReadToolsEnabled).toBe(expected);
+    },
+  );
+
   it('should default insightsToolsEnabled to false', () => {
     const config = new Config();
     expect(config.insightsToolsEnabled).toBe(false);

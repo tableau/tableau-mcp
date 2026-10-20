@@ -174,9 +174,10 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:delete');
     });
 
-    it('should include tableau:mcp:flow:read when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:mcp:flow:read when flowToolsEnabled, flow-tools, and flow-read-tools are on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) =>
+          featureName === 'flow-tools' || featureName === 'flow-read-tools',
       );
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
@@ -186,9 +187,10 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:flow:read');
     });
 
-    it('should include tableau:mcp:flow:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+    it('should include tableau:mcp:flow:read when both flow environment overrides are true but the flags are disabled', async () => {
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
+        flowReadToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedMcpScopes();
@@ -546,9 +548,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:users:read');
     });
 
-    it('should include tableau:flows:read when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:flows:read when flowToolsEnabled, flow-tools, and flow-read-tools are on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) =>
+          featureName === 'flow-tools' || featureName === 'flow-read-tools',
       );
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
@@ -558,9 +561,10 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:flows:read');
     });
 
-    it('should include tableau:flows:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+    it('should include tableau:flows:read when both flow environment overrides are true but the flags are disabled', async () => {
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
+        flowReadToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedApiScopes();
@@ -576,9 +580,10 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
-    it('should include tableau:flows:download when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:flows:download when flowToolsEnabled, flow-tools, and flow-read-tools are on', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) =>
+          featureName === 'flow-tools' || featureName === 'flow-read-tools',
       );
       mockGetConfig.mockReturnValue({
         flowToolsEnabled: true,
@@ -822,6 +827,42 @@ describe('scopes', () => {
     ]);
   });
 
+  describe('flowReadToolsEnabled gating', () => {
+    it.each(
+      [undefined, false, true].flatMap((baseEnv) =>
+        [false, true].flatMap((baseFlag) =>
+          [undefined, false, true].flatMap((readEnv) =>
+            [false, true].map((readFlag) => ({ baseEnv, baseFlag, readEnv, readFlag })),
+          ),
+        ),
+      ),
+    )(
+      'advertises matching scopes for base env=$baseEnv, base FF=$baseFlag, read env=$readEnv, read FF=$readFlag',
+      async ({ baseEnv, baseFlag, readEnv, readFlag }) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          flowToolsEnabled: baseEnv,
+          flowReadToolsEnabled: readEnv,
+        } as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            (featureName === 'flow-tools' && baseFlag) ||
+            (featureName === 'flow-read-tools' && readFlag) ||
+            featureName === 'flow-write-tools',
+        );
+
+        const mcp = await getSupportedMcpScopes();
+        const api = await getSupportedApiScopes();
+        const baseEnabled = baseEnv ?? baseFlag;
+        const readEnabled = baseEnabled && (readEnv ?? readFlag);
+        expect(mcp.includes('tableau:mcp:flow:read')).toBe(readEnabled);
+        expect(api.includes('tableau:flows:download')).toBe(readEnabled);
+        // Write tools do not depend on the read gate.
+        expect(mcp.includes('tableau:mcp:flow:run')).toBe(baseEnabled);
+      },
+    );
+  });
+
   describe('flowWriteToolsEnabled gating', () => {
     it.each(
       [undefined, false, true].flatMap((baseEnv) =>
@@ -842,6 +883,7 @@ describe('scopes', () => {
         mocks.mockIsFeatureEnabled.mockImplementation(
           async (featureName: string) =>
             (featureName === 'flow-tools' && baseFlag) ||
+            featureName === 'flow-read-tools' ||
             (featureName === 'flow-write-tools' && writeFlag),
         );
 
@@ -900,7 +942,8 @@ describe('scopes', () => {
 
     it('excludes flow run scopes when both write controls are off', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) =>
+          featureName === 'flow-tools' || featureName === 'flow-read-tools',
       );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,

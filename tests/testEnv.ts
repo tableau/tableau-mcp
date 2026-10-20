@@ -50,6 +50,7 @@ export function getDefaultEnv(): EnvValues {
     'PAT_NAME',
     'PAT_VALUE',
     'FLOW_TOOLS_ENABLED',
+    'FLOW_READ_TOOLS_ENABLED',
     'FLOW_WRITE_TOOLS_ENABLED',
   ]);
 }

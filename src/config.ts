@@ -98,6 +98,7 @@ export class Config extends BaseConfig {
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
   flowToolsEnabled: boolean | undefined;
+  flowReadToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
   flowWriteToolsEnabled: boolean | undefined;
@@ -178,6 +179,7 @@ export class Config extends BaseConfig {
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
@@ -391,6 +393,7 @@ export class Config extends BaseConfig {
       }),
     );
     this.flowToolsEnabled = parseOptionalBoolean(flowToolsEnabled);
+    this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.

@@ -457,23 +457,45 @@ Enables product telemetry for tool usage tracking.
 
 ## `FLOW_TOOLS_ENABLED`
 
-Controls the Tableau Prep flow tool family. Flow tools are enabled by default.
+Controls the whole Tableau Prep flow tool family. Flow tools are enabled by default.
 
-- Read-only tools:
+- Default: unset, which enables Flow tools.
+- Set to `false` to disable all Flow tools: the read-only tools controlled by
+  [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled) and the mutating tools controlled by
+  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled).
+- Set to `true` to enable Flow tools explicitly. Any other value is treated as unset.
+- Each group of Flow tools requires this setting and its own setting.
+- [`EXCLUDE_TOOLS`](#exclude_tools) can still remove individual Flow tools, or all of them with
+  `EXCLUDE_TOOLS=flow`.
+
+| `FLOW_TOOLS_ENABLED` | `FLOW_READ_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
+| --- | --- | --- | --- |
+| unset or `true` | unset or `true` | unset or `true` | read-only and mutating flow tools |
+| unset or `true` | unset or `true` | `false` | read-only flow tools |
+| unset or `true` | `false` | unset or `true` | mutating flow tools |
+| unset or `true` | `false` | `false` | none |
+| `false` | any value | any value | none |
+
+<hr />
+
+## `FLOW_READ_TOOLS_ENABLED`
+
+Controls the read-only Flow tools. They are enabled by default when the Flow tools are enabled
+through [`FLOW_TOOLS_ENABLED`](#flow_tools_enabled).
+
+- Default: unset, which enables the read-only Flow tools.
+- Set to `false` to disable them while keeping the mutating Flow tools.
+- Set to `true` to enable them explicitly. Any other value is treated as unset.
+- `FLOW_TOOLS_ENABLED=false` disables these tools regardless of this setting.
+- When enabled, registers:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- Default: unset, which enables Flow tools.
-- Set to `false` to disable all Flow tools, including the mutating tools controlled by
-  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled).
-- Set to `true` to enable Flow tools explicitly. Any other value is treated as unset.
-- When disabled, Flow tools are not registered, and their OAuth scopes (`tableau:mcp:flow:read`
+- When disabled, these tools are not registered, and their OAuth scopes (`tableau:mcp:flow:read`
   and the REST API scopes the read tools use) are neither advertised nor accepted.
-- [`EXCLUDE_TOOLS`](#exclude_tools) can still remove individual Flow tools, or all of them with
-  `EXCLUDE_TOOLS=flow`.
 
 <hr />
 
@@ -519,12 +541,6 @@ approval, and the matching single-use confirmation token.
   advertised.
 - These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
 - Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
-
-| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
-| --- | --- | --- |
-| unset or `true` | unset or `true` | read-only and mutating flow tools |
-| unset or `true` | `false` | read-only flow tools |
-| `false` | any value | none |
 
 <hr />
 

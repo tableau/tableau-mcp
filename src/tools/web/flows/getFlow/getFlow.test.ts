@@ -85,23 +85,31 @@ describe('getFlowTool', () => {
     expect(getFlowTool.paramsSchema).toMatchObject({ flowId: expect.any(Object) });
   });
 
-  it.each([
-    { envEnabled: undefined, flagEnabled: false, enabled: false },
-    { envEnabled: undefined, flagEnabled: true, enabled: true },
-    { envEnabled: false, flagEnabled: false, enabled: false },
-    { envEnabled: false, flagEnabled: true, enabled: false },
-    { envEnabled: true, flagEnabled: false, enabled: true },
-    { envEnabled: true, flagEnabled: true, enabled: true },
-  ])(
-    'resolves flow availability for env=$envEnabled and FF=$flagEnabled',
-    async ({ envEnabled, flagEnabled, enabled }) => {
+  it.each(
+    [undefined, false, true].flatMap((baseEnv) =>
+      [false, true].flatMap((baseFlag) =>
+        [undefined, false, true].flatMap((readEnv) =>
+          [false, true].map((readFlag) => ({ baseEnv, baseFlag, readEnv, readFlag })),
+        ),
+      ),
+    ),
+  )(
+    'resolves read availability for base env=$baseEnv, base FF=$baseFlag, read env=$readEnv, read FF=$readFlag',
+    async ({ baseEnv, baseFlag, readEnv, readFlag }) => {
       const { getConfig } = await import('../../../../config.js');
       vi.mocked(getConfig).mockReturnValueOnce({
-        flowToolsEnabled: envEnabled,
+        flowToolsEnabled: baseEnv,
+        flowReadToolsEnabled: readEnv,
       } as ReturnType<typeof getConfig>);
-      mocks.mockIsFeatureEnabled.mockResolvedValue(flagEnabled);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          (featureName === 'flow-tools' && baseFlag) ||
+          (featureName === 'flow-read-tools' && readFlag),
+      );
       const tool = getGetFlowTool(new WebMcpServer());
-      expect(await Provider.from(tool.disabled)).toBe(!enabled);
+      expect(await Provider.from(tool.disabled)).toBe(
+        !((baseEnv ?? baseFlag) && (readEnv ?? readFlag)),
+      );
     },
   );
 

@@ -648,6 +648,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  FLOW_READ_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable read-only flow MCP tools',
+    description:
+      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default when flow tools are enabled. Set to "false" to disable them while keeping the mutating flow tools.',
+    required: false,
+    sensitive: false,
+  },
   INSIGHTS_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
