@@ -116,11 +116,17 @@ The maximum number of rows to return. Applied when `kind` is `ts-events`, `ts-us
 `site-content`, or `job-performance`; **ignored** for `stale-content`.
 
 The effective row limit is the **tightest** of:
-1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
+1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`), or `MAX_RESULT_LIMIT` when no
+   per-tool entry is set
 2. The caller-supplied `limit`
 
+When a row limit applies, the response includes `mcp.resultInfo` with `returnedCount` and
+`truncated`, next to any `mcp.warnings`. If `truncated` is `true`, more rows matched;
+`truncationReason` is `admin-cap` when a server cap cut the results, or `requested-limit` when this
+argument did. `mcp.resultInfo` is absent when no row limit applies.
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)
 
 <hr />
 
@@ -249,7 +255,10 @@ Example result:
       "Tableau Desktop - Last Access Date": "2026-07-28T09:14:00Z",
       "Tableau Prep - Last Access Date": null
     }
-  ]
+  ],
+  "mcp": {
+    "resultInfo": { "returnedCount": 1, "truncated": false }
+  }
 }
 ```
 
