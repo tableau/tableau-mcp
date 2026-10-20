@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 
 import { OverridableConfig } from '../../overridableConfig.js';
 import { TableauRestError } from '../../sdks/tableau/tableauRestError.js';
+import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './datasources/mockDatasources.js';
 import { mockFlow, mockOutputSteps } from './flows/getFlow/mockFlow.js';
@@ -626,7 +627,7 @@ describe('ResourceAccessChecker', () => {
       }
 
       function listResponse(
-        datasources: Array<typeof mockDatasource>,
+        datasources: Array<DataSource>,
         { pageNumber = 1, totalAvailable = datasources.length } = {},
       ): unknown {
         return { pagination: { pageNumber, pageSize: 1000, totalAvailable }, datasources };
@@ -787,6 +788,21 @@ describe('ResourceAccessChecker', () => {
           message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not have one of the allowed tags.`,
         });
         expect(mocks.mockListDatasources).not.toHaveBeenCalled();
+      });
+
+      it('should disallow a datasource the list returns without a project', async () => {
+        const { project: _project, ...noProjectDatasource } = mockDatasource;
+        mocks.mockListDatasources.mockResolvedValue(listResponse([noProjectDatasource]));
+
+        expect(
+          await createChecker({ projectIds: new Set([allowedProjectId]) }).isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            extra,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: `${baseMessage} The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
+        });
       });
 
       it('should find the datasource by name and disallow it when it is not in an allowed project', async () => {
