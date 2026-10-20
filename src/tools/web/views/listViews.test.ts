@@ -434,7 +434,7 @@ describe('listViewsTool', () => {
         pageNumber?: number;
         limit?: number;
         maxResultLimit?: number | null;
-      }): Promise<{ ids: Array<string>; totalAvailable: number }> {
+      }): Promise<{ ids: Array<string>; totalAvailable: number; parsed: any }> {
         const result = await getToolResult(params);
         expect(result.isError).toBe(false);
         invariant(result.content[0].type === 'text');
@@ -442,6 +442,7 @@ describe('listViewsTool', () => {
         return {
           ids: parsed.data.map((v: { id: string }) => v.id),
           totalAvailable: parsed.totalAvailable,
+          parsed,
         };
       }
 
@@ -478,6 +479,54 @@ describe('listViewsTool', () => {
         const page2 = await getPageOfIds({ pageNumber: 2, maxResultLimit: 1200 });
         expect(page2.ids).toEqual(viewIdsFrom(1000, 1200));
         expect(page2.totalAvailable).toBe(1200);
+      });
+
+      it('reports admin-cap in mcp.resultInfo when the cap hides allowed views', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed: p1 } = await getPageOfIds({ maxResultLimit: 1200 });
+        expect(Object.keys(p1).sort()).toEqual(['data', 'mcp', 'totalAvailable']);
+        expect(p1.mcp).toEqual({
+          resultInfo: { returnedCount: 1000, truncated: true, truncationReason: 'admin-cap' },
+        });
+
+        const { parsed: p2 } = await getPageOfIds({ pageNumber: 2, maxResultLimit: 1200 });
+        expect(p2.mcp.resultInfo).toEqual({
+          returnedCount: 200,
+          truncated: true,
+          truncationReason: 'admin-cap',
+        });
+      });
+
+      it('reports admin-cap on a limit: 1 call under a binding cap', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed } = await getPageOfIds({ limit: 1, maxResultLimit: 1200 });
+
+        expect(parsed.totalAvailable).toBe(1200);
+        expect(parsed.mcp.resultInfo).toEqual({
+          returnedCount: 1,
+          truncated: true,
+          truncationReason: 'admin-cap',
+        });
+      });
+
+      it('omits mcp when the cap equals the allowed count', async () => {
+        stubAllowedViews(viewIdsFrom(0, 3));
+
+        const { parsed } = await getPageOfIds({ maxResultLimit: 3 });
+
+        expect(Object.keys(parsed).sort()).toEqual(['data', 'totalAvailable']);
+        expect(parsed.totalAvailable).toBe(3);
+      });
+
+      it('omits mcp when there is no cap', async () => {
+        stubAllowedViews(viewIdsFrom(0, 1500));
+
+        const { parsed } = await getPageOfIds({ maxResultLimit: null });
+
+        expect(Object.keys(parsed).sort()).toEqual(['data', 'totalAvailable']);
+        expect(parsed.totalAvailable).toBe(1500);
       });
 
       it('skips 403/404 views and backfills pages with the next allowed views', async () => {
