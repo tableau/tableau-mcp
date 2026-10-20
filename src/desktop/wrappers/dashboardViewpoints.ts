@@ -371,20 +371,35 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
   );
   return (
     expectedChildren.length === actualChildren.length &&
+    layoutGeometryMatches(expected, actual, expectedChildren, actualChildren) &&
     expectedChildren.every((child, index) => containsAuthoredContent(child, actualChildren[index]))
   );
+}
+
+function isFlow(element: Element): boolean {
+  return (
+    element.tagName === 'zone' &&
+    element.getAttribute('type-v2') === 'layout-flow' &&
+    ['vert', 'horz'].includes(element.getAttribute('param') ?? '')
+  );
+}
+
+function isHiddenByUser(zone: Element): boolean {
+  for (let element: Element | null = zone; element?.tagName === 'zone'; ) {
+    if (['true', '1'].includes(element.getAttribute('hidden-by-user') ?? '')) return true;
+    const parent: Element['parentNode'] = element.parentNode;
+    element = parent?.nodeType === 1 ? (parent as Element) : null;
+  }
+  return false;
 }
 
 function hasDesktopManagedGeometry(zone: Element): boolean {
   if (
     ['true', '1'].includes(zone.getAttribute('is-fixed') ?? '') ||
-    zone.hasAttribute('fixed-size')
+    zone.hasAttribute('fixed-size') ||
+    isHiddenByUser(zone)
   )
     return false;
-  const isFlow = (element: Element): boolean =>
-    element.tagName === 'zone' &&
-    element.getAttribute('type-v2') === 'layout-flow' &&
-    ['vert', 'horz'].includes(element.getAttribute('param') ?? '');
   const parent = zone.parentNode;
   if (parent?.nodeType !== 1) return false;
   const container = parent as Element;
@@ -395,6 +410,102 @@ function hasDesktopManagedGeometry(zone: Element): boolean {
     (isFlow(zone) &&
       container.tagName === 'zone' &&
       container.getAttribute('type-v2') === 'layout-basic')
+  );
+}
+
+// Bounds use the same absolute virtual coordinates as Desktop's layout strategies.
+type ZoneBounds = [left: number, top: number, right: number, bottom: number];
+
+function zoneBounds(zone: Element): ZoneBounds | undefined {
+  const values = ['x', 'y', 'w', 'h'].map((attribute) => zone.getAttribute(attribute));
+  if (values.some((value) => !value?.trim() || !Number.isInteger(Number(value)))) return;
+  const [x, y, w, h] = values.map(Number);
+  return [x, y, x + w, y + h];
+}
+
+function sameCoordinates(expected: Element, actual: Element): boolean {
+  return ['x', 'y', 'w', 'h'].every((attribute) => {
+    const a = expected.getAttribute(attribute);
+    const b = actual.getAttribute(attribute);
+    return a === b || (a?.trim() && b?.trim() && Math.abs(Number(a) - Number(b)) <= 1);
+  });
+}
+
+function union(bounds: ZoneBounds[]): ZoneBounds {
+  return [
+    Math.min(...bounds.map((rect) => rect[0])),
+    Math.min(...bounds.map((rect) => rect[1])),
+    Math.max(...bounds.map((rect) => rect[2])),
+    Math.max(...bounds.map((rect) => rect[3])),
+  ];
+}
+
+function containsBounds(parent: ZoneBounds, child: ZoneBounds): boolean {
+  return (
+    child[0] >= parent[0] - 1 &&
+    child[1] >= parent[1] - 1 &&
+    child[2] <= parent[2] + 1 &&
+    child[3] <= parent[3] + 1
+  );
+}
+
+function layoutGeometryMatches(
+  expected: Element,
+  actual: Element,
+  expectedChildren: Element[],
+  actualChildren: Element[],
+): boolean {
+  if (
+    expected.tagName !== 'zone' ||
+    isHiddenByUser(expected) ||
+    (!isFlow(expected) && expected.getAttribute('type-v2') !== 'layout-basic')
+  )
+    return true;
+  const pairs = expectedChildren.flatMap((child, index) =>
+    child.tagName === 'zone' ? [{ expected: child, actual: actualChildren[index] }] : [],
+  );
+  // Preserve the existing comparison for unchanged authored geometry, including
+  // intermediate layouts that Desktop has not normalized yet.
+  if (
+    pairs.length === 0 ||
+    (sameCoordinates(expected, actual) &&
+      pairs.every((pair) => sameCoordinates(pair.expected, pair.actual)))
+  )
+    return true;
+  const visible = isFlow(expected) ? pairs.filter((pair) => !isHiddenByUser(pair.expected)) : pairs;
+  if (visible.length === 0) return true;
+  const parent = zoneBounds(actual);
+  const before = visible.map((pair) => zoneBounds(pair.expected));
+  const after = visible.map((pair) => zoneBounds(pair.actual));
+  if (!parent || before.some((rect) => !rect) || after.some((rect) => !rect)) return false;
+  const oldBounds = before as ZoneBounds[];
+  const newBounds = after as ZoneBounds[];
+  if (newBounds.some((rect) => !containsBounds(parent, rect))) return false;
+  if (isFlow(expected)) {
+    const axis = expected.getAttribute('param') === 'horz' ? 0 : 1;
+    const cross = axis === 0 ? 1 : 0;
+    // FlowStrategy shares one cross-axis rectangle and advances the primary axis
+    // in child order. Insets may shrink the client rectangle inside the parent.
+    return newBounds.every(
+      (rect, index) =>
+        Math.abs(rect[cross] - newBounds[0][cross]) <= 1 &&
+        Math.abs(rect[cross + 2] - newBounds[0][cross + 2]) <= 1 &&
+        (index === 0 || Math.abs(rect[axis] - newBounds[index - 1][axis + 2]) <= 1),
+    );
+  }
+  // BasicStrategy applies one bounding-box transform to every child. Independent
+  // sibling resizing or swapping is not automatic title/worksheet reflow.
+  const oldExtent = union(oldBounds);
+  const newExtent = union(newBounds);
+  return oldBounds.every((rect, index) =>
+    rect.every((edge, edgeIndex) => {
+      const axis = edgeIndex % 2;
+      const oldSize = oldExtent[axis + 2] - oldExtent[axis];
+      const newSize = newExtent[axis + 2] - newExtent[axis];
+      if (oldSize <= 0 || newSize <= 0) return false;
+      const mapped = newExtent[axis] + ((edge - oldExtent[axis]) * newSize) / oldSize;
+      return Math.abs(mapped - newBounds[index][edgeIndex]) <= 1;
+    }),
   );
 }
 
