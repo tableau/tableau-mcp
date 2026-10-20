@@ -626,3 +626,106 @@ describe('native single-horizontal fixed-height fitting', () => {
     expect(verify(expected, render([0, 0, 100000, 12500], cache))).toBe(false);
   });
 });
+
+describe('shipped tiled strategy hints', () => {
+  function visualBasic(rects: Rect[]): string {
+    const names = rects.map((_, index) => `Sheet ${index + 1}`);
+    return basic(
+      rects
+        .map((rect, index) => zone(index + 2, rect, `type-v2="visual" name="${names[index]}"`))
+        .join(''),
+    )
+      .replace('type-v2="layout-basic"', 'type-v2="layout-basic" layout-strategy-id="flow"')
+      .replace(
+        '<workbook>',
+        `<workbook><worksheets>${names.map((name) => `<worksheet name="${name}"/>`).join('')}</worksheets>`,
+      )
+      .replace(
+        '<viewpoints/>',
+        `<viewpoints>${names.map((name) => `<viewpoint name="${name}"/>`).join('')}</viewpoints>`,
+      );
+  }
+
+  it('rejects the exact off-canvas one-unit managed worksheet probe', () => {
+    const expected = flowChildren([
+      [0, 0, 100000, 30000],
+      [0, 30000, 100000, 70000],
+    ]);
+    const actual = flowChildren([
+      [0, 0, 100000, 30000],
+      [-999999, 999999, 1, 1],
+    ]);
+    expect(verify(expected, actual)).toBe(false);
+  });
+
+  it('normalizes direct visual children of a Basic layout carrying the shipped flow hint', () => {
+    const expected = visualBasic([[1000, 1000, 98000, 98000]]);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, visualBasic([full]))).toBe(true);
+    expect(verify(expected, visualBasic([full]).replace(' layout-strategy-id="flow"', ''))).toBe(
+      true,
+    );
+  });
+
+  it('retains Basic sibling relationships when a flow strategy hint is ignored natively', () => {
+    const expected = visualBasic([
+      [0, 0, 50000, 100000],
+      [50000, 0, 50000, 100000],
+    ]);
+    const redistributed = visualBasic([
+      [0, 0, 10000, 100000],
+      [10000, 0, 90000, 100000],
+    ]);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, redistributed)).toBe(false);
+  });
+
+  it('rejects an actual-only nondefault layout-strategy-id on Flow', () => {
+    const expected = flowChildren([
+      [0, 0, 100000, 30000],
+      [0, 30000, 100000, 70000],
+    ]);
+    const actual = expected.replace('id="1"', 'id="1" layout-strategy-id="distribute-evenly"');
+    expect(verify(expected, actual)).toBe(false);
+  });
+
+  it('accepts native omission of the default Flow strategy hint during reflow', () => {
+    const expected = flowChildren([
+      [0, 0, 100000, 30000],
+      [0, 30000, 100000, 70000],
+    ]).replace('id="1"', 'id="1" layout-strategy-id="flow"');
+    const actual = flowChildren([
+      [0, 0, 100000, 10000],
+      [0, 10000, 100000, 90000],
+    ]);
+    expect(verify(expected, actual)).toBe(true);
+  });
+
+  it('requires unchanged geometry for a Flow with an unsupported native strategy', () => {
+    const hint = (xml: string): string =>
+      xml.replace('id="1"', 'id="1" layout-strategy-id="distribute-evenly"');
+    const expected = hint(
+      flowChildren([
+        [0, 0, 100000, 30000],
+        [0, 30000, 100000, 70000],
+      ]),
+    );
+    const actual = hint(
+      flowChildren([
+        [0, 0, 100000, 10000],
+        [0, 10000, 100000, 90000],
+      ]),
+    );
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, actual)).toBe(false);
+    expect(verify(expected, expected.replace(' layout-strategy-id="distribute-evenly"', ''))).toBe(
+      false,
+    );
+    expect(
+      verify(
+        expected,
+        expected.replace('layout-strategy-id="distribute-evenly"', 'layout-strategy-id="flow"'),
+      ),
+    ).toBe(false);
+  });
+});

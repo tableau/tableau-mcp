@@ -60,7 +60,14 @@ function strategyHidden(zone: Element): boolean {
 }
 
 function hasOverride(zone: Element): boolean {
-  return zone.hasAttribute('strategy-id') || zone.hasAttribute('layout-horz');
+  const strategy = zone.getAttribute('layout-strategy-id');
+  const basicDefault =
+    zone.getAttribute('type-v2') === 'layout-basic' && ['basic', 'flow'].includes(strategy ?? '');
+  return (
+    zone.hasAttribute('strategy-id') ||
+    zone.hasAttribute('layout-horz') ||
+    (strategy !== null && strategy !== 'flow' && !basicDefault)
+  );
 }
 
 function isFlow(zone: Element): boolean {
@@ -73,6 +80,15 @@ function isFlow(zone: Element): boolean {
 
 function isBasic(zone: Element): boolean {
   return zone.getAttribute('type-v2') === 'layout-basic' && !hasOverride(zone);
+}
+
+export function canOmitDefaultStrategy(expected: Element, actual: Element): boolean {
+  if (expected.tagName !== 'zone' || actual.hasAttribute('layout-strategy-id')) return false;
+  const strategy = expected.getAttribute('layout-strategy-id');
+  return (
+    (isBasic(expected) && ['basic', 'flow'].includes(strategy ?? '')) ||
+    (isFlow(expected) && strategy === 'flow')
+  );
 }
 
 export function hasDesktopManagedGeometry(zone: Element): boolean {
@@ -323,6 +339,11 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
   for (const override of ['strategy-id', 'layout-horz']) {
     if (expected.getAttribute(override) !== actual.getAttribute(override)) return false;
   }
+  if (
+    expected.getAttribute('layout-strategy-id') !== actual.getAttribute('layout-strategy-id') &&
+    !canOmitDefaultStrategy(expected, actual)
+  )
+    return false;
   const aSpacing = spacing(expected);
   const bSpacing = spacing(actual);
   if (JSON.stringify(aSpacing) !== JSON.stringify(bSpacing)) return false;

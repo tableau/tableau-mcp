@@ -3,7 +3,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import type { ValidationIssue } from '../validation/types.js';
 import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
-import { hasDesktopManagedGeometry, layoutGeometryMatches } from './dashboardLayoutGeometry.js';
+import {
+  canOmitDefaultStrategy,
+  hasDesktopManagedGeometry,
+  layoutGeometryMatches,
+} from './dashboardLayoutGeometry.js';
 
 function parse(xml: string): Document {
   return new DOMParser({
@@ -326,6 +330,12 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     const present = attribute.namespaceURI
       ? actual.hasAttributeNS(attribute.namespaceURI, localName)
       : actual.hasAttribute(attribute.name);
+    if (
+      !present &&
+      attribute.name === 'layout-strategy-id' &&
+      canOmitDefaultStrategy(expected, actual)
+    )
+      continue;
     if (!present) return false;
     const actualValue = attribute.namespaceURI
       ? actual.getAttributeNS(attribute.namespaceURI, localName)
@@ -334,8 +344,6 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     if (attribute.name === 'name') {
       if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
     } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
-      // Floating/fixed geometry is authored; automatic flow geometry is recomputed
-      // by Desktop, including text fitting and the remaining worksheet area.
       if (
         !attribute.value.trim() ||
         !actualValue.trim() ||
@@ -344,7 +352,6 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
       )
         return false;
       if (hasDesktopManagedGeometry(expected)) {
-        // A populated tile must not disappear into a zero/negative-sized rectangle.
         if (
           ['w', 'h'].includes(attribute.name) &&
           Number(attribute.value) > 0 &&

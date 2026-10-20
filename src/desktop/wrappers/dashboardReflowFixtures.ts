@@ -1,6 +1,3 @@
-// Dashboard submitted/readback regression for W-24587662.
-// Identity fields use sample values; geometry, styles and title text preserve
-// the observed Desktop reflow. Tests supply workbook windows separately.
 export const REFLOW_DASHBOARD_NAME = 'Tiled Layout Reflow';
 export const REFLOW_WORKSHEET_NAME = 'Sample Worksheet';
 export const REFLOW_DASHBOARD_ID = '{00000000-0000-0000-0000-000000000001}';
