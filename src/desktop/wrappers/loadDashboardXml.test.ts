@@ -953,8 +953,14 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('fails CLOSED (retriable error, no dispatch) when the live workbook read errors, so a transient read cannot silently disable the guard', async () => {
-      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+    it.each([
+      { zones: true, verifyReadback: false, worksheetNames: [] },
+      { zones: false, verifyReadback: true, worksheetNames: [] },
+      { zones: false, verifyReadback: false, worksheetNames: ['Sheet 1'] },
+    ])('fails closed when the required snapshot read errors: %j', async (options) => {
+      const dashboardXml = options.zones
+        ? `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`
+        : validXml;
       const { executor, calls } = dispatchingExecutor(
         liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
       );
@@ -970,21 +976,27 @@ describe('loadDashboardXml (External Client API transport)', () => {
         executor,
         signal: mockSignal,
         focus: NO_FOCUS,
+        verifyReadback: options.verifyReadback,
+        worksheetNames: options.worksheetNames,
       });
 
-      expect(result.isErr()).toBe(true);
-      if (result.isErr()) {
-        expect(result.error.type).toBe('execute-command-error');
-      }
+      expect(result).toMatchObject({ error: { type: 'execute-command-error', error: readError } });
       expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(executor.listDashboards).not.toHaveBeenCalled();
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('reuses the locked snapshot and verifies the surgical apply', async () => {
-      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
-      const { executor, calls } = dispatchingExecutor(
-        liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
-      );
+    it.each([
+      { zones: true, verifyReadback: true, worksheetNames: [], reads: 2 },
+      { zones: true, verifyReadback: false, worksheetNames: [], reads: 1 },
+      { zones: false, verifyReadback: true, worksheetNames: [], reads: 2 },
+      { zones: false, verifyReadback: false, worksheetNames: ['Sheet 1'], reads: 1 },
+      { zones: false, verifyReadback: false, worksheetNames: [], reads: 0 },
+    ])('shares one pre-apply snapshot only when needed: %j', async (options) => {
+      const dashboardXml = options.zones
+        ? `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`
+        : validXml;
+      const { executor } = dispatchingExecutor(liveWorkbook(['Sales Dashboard'], ['Sheet 1']));
 
       const result = await loadDashboardXml({
         dashboardName,
@@ -992,11 +1004,40 @@ describe('loadDashboardXml (External Client API transport)', () => {
         executor,
         signal: mockSignal,
         focus: NO_FOCUS,
+        requireExistingSheet: true,
+        verifyReadback: options.verifyReadback,
+        worksheetNames: options.worksheetNames,
       });
 
       expect(result.isOk()).toBe(true);
-      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
-      expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(options.reads);
+      expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+      const applyOrder = vi.mocked(executor.applyDashboardDocument).mock.invocationCallOrder[0];
+      expect(
+        vi
+          .mocked(executor.getWorkbookDocument)
+          .mock.invocationCallOrder.filter((order) => order < applyOrder),
+      ).toHaveLength(options.reads > 0 ? 1 : 0);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('checks explicit worksheet registrations even without worksheet zones or readback', async () => {
+      const { executor } = dispatchingExecutor(liveWorkbook([dashboardName], []));
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: validXml,
+        worksheetNames: ['Sheet 1'],
+        verifyReadback: false,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+      expect(result).toMatchObject({
+        error: { error: { type: 'registration-required', worksheetNames: ['Sheet 1'] } },
+      });
+      expect(executor.getWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     });
   });
 

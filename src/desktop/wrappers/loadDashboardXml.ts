@@ -134,22 +134,6 @@ function resolveCanonicalDashboardName(
   return Ok(xmlName);
 }
 
-// Registration checks and readback must share a snapshot read under the apply lock.
-// Zone-less cached applies need no snapshot unless the caller requests verification.
-async function readDashboardSnapshotInLock(
-  dashboardXml: string,
-  { executor, signal }: WithExecutorAndAbortSignal,
-): Promise<Result<WorkbookDocument | null, SnapshotOrApplyError>> {
-  if (dashboardWorksheetNames(dashboardXml).length === 0) {
-    return Ok(null);
-  }
-  const workbookResult = await executor.getWorkbookDocument(signal);
-  if (workbookResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: workbookResult.error });
-  }
-  return Ok(workbookResult.value);
-}
-
 type SnapshotOrApplyError =
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError };
@@ -243,14 +227,12 @@ export async function loadDashboardXml({
   const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
   const perSheetResult = await withApplyLock(
     async (): Promise<Result<PerSheetApplyOutcome, SnapshotOrApplyError>> => {
-      const workbookSnapshot = await readDashboardSnapshotInLock(xml, { executor, signal });
-      if (workbookSnapshot.isErr()) {
-        return Err(workbookSnapshot.error);
-      }
-      let snapshot = workbookSnapshot.value;
-      if (snapshot === null && (verifyReadback || worksheetNames.length > 0)) {
+      let snapshot: WorkbookDocument | null = null;
+      if (dashboardWorksheetNames(xml).length > 0 || verifyReadback || worksheetNames.length > 0) {
         const workbook = await executor.getWorkbookDocument(signal);
-        if (workbook.isErr()) return Err({ type: 'execute-command-error', error: workbook.error });
+        if (workbook.isErr()) {
+          return Err({ type: 'execute-command-error', error: workbook.error });
+        }
         snapshot = workbook.value;
       }
       const expectedInstanceId = snapshot?.instanceId ?? executor.desktopInstanceId;
