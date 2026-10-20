@@ -218,14 +218,19 @@ export function validateParametersAgainstDatasourceMetadata(
           });
         }
         continue;
-      case 'LIST':
-        if (!matchingParameter.members.includes(parameter.value)) {
+      case 'LIST': {
+        // Members can be plain values or { value, alias } objects, so compare against the underlying value in both cases.
+        const allowedValues = matchingParameter.members.map((member) =>
+          member !== null && typeof member === 'object' ? member.value : member,
+        );
+        if (!allowedValues.includes(parameter.value)) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [${matchingParameter.members.join(', ')}].`,
+            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [${allowedValues.join(', ')}].`,
           });
         }
         continue;
+      }
       case 'QUANTITATIVE_DATE':
         if (typeof parameter.value !== 'string' || isNaN(Date.parse(parameter.value))) {
           validationErrors.push({
