@@ -1276,7 +1276,7 @@ function hasParameterActionSettings(
   });
 }
 
-function nextActionName(xml: string): string {
+export function nextActionName(xml: string): string {
   const used = new Set(
     [...xml.matchAll(/\bname=(['"])\[Action(\d+)[^\]]*\]\1/g)].map((match) => Number(match[2])),
   );
@@ -1831,7 +1831,11 @@ function renderDependencyColumn(field: ResolvedFilterField): string {
 //   Specific fields (linkExpression set) -> a tsl: <link> of field locators plus a <command> keeping
 //     only the target param, with the fields declared in sibling <datasources>/<datasource-dependencies>
 //     blocks (see spliceActionIntoWorkbook's deps handling).
-function renderFilterAction(caption: string, actionName: string, action: FilterAction): string {
+export function renderFilterAction(
+  caption: string,
+  actionName: string,
+  action: FilterAction,
+): string {
   const activationXml = renderActivation(action.activation, action.autoClear);
 
   const sourceXml = renderSourceElement(
@@ -2072,7 +2076,7 @@ function hasHighlightAction(xml: string, expected: HighlightAction, caption?: st
 }
 
 // The shape of a filter action
-type FilterAction = {
+export type FilterAction = {
   target: string;
   sourceWorksheet: string;
   sourceDashboard: string;
@@ -2126,7 +2130,7 @@ function splitSheetList(value: string | undefined): string[] {
 }
 
 // True when an <action> block is the filter action described by `expected`
-function filterActionMatches(block: string, expected: FilterAction): boolean {
+export function filterActionMatches(block: string, expected: FilterAction): boolean {
   const commandTag = block.match(/<command\b[^>]*>/)?.[0];
   if (commandTag === undefined || getAttr(commandTag, 'command') !== 'tsc:tsl-filter') {
     return false;
@@ -2257,8 +2261,8 @@ function hasFilterDependencies(
 }
 
 // Where an action should be spliced: inside an existing <actions> block (innerStart just past
-// <actions>, close at </actions>), or in a fresh block anchored right after the top-level
-// </datasources> when none exists yet.
+// <actions>, close at </actions>), or in a fresh block anchored by the XSD child order (see
+// ACTIONS_PREDECESSORS) when none exists yet.
 type ActionsSite =
   | { kind: 'existing'; innerStart: number; close: number }
   | { kind: 'empty'; start: number; end: number; opening: string }
@@ -2282,13 +2286,48 @@ function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationErro
     return new Ok({ kind: 'existing', innerStart: opening.index + opening[0].length, close });
   }
 
-  const dsClose = xml.indexOf('</datasources>');
-  if (dsClose === -1) {
-    return new XmlModificationError(
-      'cannot place actions: no </datasources> anchor in document',
-    ).toErr();
+  const children = topLevelChildren(xml);
+  const precedingEnd = children
+    .filter((child) => ACTIONS_PREDECESSORS.test(child.name))
+    .reduce((max, child) => Math.max(max, child.end), -1);
+  if (precedingEnd !== -1) {
+    return new Ok({ kind: 'fresh', insertAt: precedingEnd });
   }
-  return new Ok({ kind: 'fresh', insertAt: dsClose + '</datasources>'.length });
+  const worksheets = children.find((child) => child.name === 'worksheets');
+  if (worksheets !== undefined) {
+    return new Ok({ kind: 'fresh', insertAt: worksheets.start });
+  }
+  return new XmlModificationError(
+    'cannot place actions: no top-level <datasources> or <worksheets> anchor in document',
+  ).toErr();
+}
+
+// WHY: twb XSD orders datasources, datasource-relationships, mapsources, shared-views, actions, worksheets.
+const ACTIONS_PREDECESSORS = /^(?:datasources|datasource-relationships|mapsources|shared-views)$/;
+
+// Direct children of the root element with their [start, end) offsets. Skips comments, CDATA,
+// processing instructions and quoted attribute values.
+function topLevelChildren(xml: string): { name: string; start: number; end: number }[] {
+  const children: { name: string; start: number; end: number }[] = [];
+  const open: { name: string; start: number }[] = [];
+  const tag =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<(\/?)([A-Za-z_][\w.:-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g;
+  for (let match = tag.exec(xml); match !== null; match = tag.exec(xml)) {
+    const name = match[2];
+    if (name === undefined) continue;
+    const end = match.index + match[0].length;
+    if (match[1] === '/') {
+      const opened = open.pop();
+      if (opened !== undefined && open.length === 1) {
+        children.push({ name: opened.name, start: opened.start, end });
+      }
+    } else if (match[4] === '/') {
+      if (open.length === 1) children.push({ name, start: match.index, end });
+    } else {
+      open.push({ name, start: match.index });
+    }
+  }
+  return children;
 }
 
 // twb_2026.2.0.xsd fixes the child order of <actions> as a sequence of families:
@@ -2325,10 +2364,10 @@ function familySlotOffset(inner: string, familyIndex: number): number {
   return offset;
 }
 
-// Splice a new action into the workbook-level <actions> block, creating the block between
-// </datasources> and <worksheets> if it does not yet exist. The action lands in its XSD
+// Splice a new action into the workbook-level <actions> block, creating the block in its XSD
+// slot (before <worksheets>) if it does not yet exist. The action lands in its XSD
 // family slot (see ACTION_FAMILY_MARKERS) rather than at the end of the block.
-function spliceActionIntoWorkbook(
+export function spliceActionIntoWorkbook(
   xml: string,
   actionXml: string,
   deps?: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
@@ -2460,7 +2499,7 @@ function escapeXml(value: string): string {
     .replaceAll('"', '&quot;');
 }
 
-function unescapeXml(value: string): string {
+export function unescapeXml(value: string): string {
   return value
     .replaceAll('&quot;', '"')
     .replaceAll('&apos;', "'")

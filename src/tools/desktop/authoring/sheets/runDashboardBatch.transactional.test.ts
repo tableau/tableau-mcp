@@ -28,6 +28,7 @@ vi.mock('../../../../desktop/session/sessionResolution.js');
 // referenced via existingWorksheetNames and must resolve as a genuinely rendered worksheet.
 const BASELINE = `<?xml version="1.0"?>
 <workbook>
+  <datasources><datasource name="federated.x"/></datasources>
   <worksheets>
     <worksheet name="Existing"><table><rows>Existing</rows></table></worksheet>
   </worksheets>
@@ -285,6 +286,7 @@ async function callBatch(
       gridColumns: undefined,
       kpiWorksheetNames: undefined,
       replaceExisting,
+      crossFilter: undefined,
     },
     {
       ...getMockRequestHandlerExtra(),

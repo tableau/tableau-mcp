@@ -61,6 +61,15 @@ import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool, resolveEpisodeKey } from '../../tool.js';
 import {
+  type FilterAction,
+  filterActionMatches,
+  getAttr,
+  nextActionName,
+  renderFilterAction,
+  spliceActionIntoWorkbook,
+  unescapeXml,
+} from '../datasource/authorAction.js';
+import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
   emptyWorksheetWarning,
@@ -77,20 +86,21 @@ const paramsSchema = {
     .array(z.string().trim().min(1).max(255))
     .max(7)
     .optional()
-    .describe('Live non-KPI chart worksheet names in dashboard order.'),
+    .describe('Live non-KPI sheets in order.'),
   title: z.string().trim().min(1).max(255).optional(),
   layoutType: z
     .enum(['auto-grid', 'rows', 'columns', 'executive-summary'])
     .optional()
-    .describe('Dashboard layout; executive-summary uses KPI and chart roles.'),
+    .describe('executive-summary: KPI + chart roles.'),
   gridColumns: z.number().int().min(1).max(6).optional(),
   kpiWorksheetNames: z
     .array(z.string().trim().min(1).max(255))
     .min(1)
     .max(5)
     .optional()
-    .describe('Live KPI worksheet names in display order from left to right.'),
+    .describe('Live KPI sheet names, left to right.'),
   replaceExisting: z.boolean().optional(),
+  crossFilter: z.boolean().optional().describe('Filter on click; default true.'),
 };
 
 type AppliedState = true | false | 'unknown';
@@ -125,6 +135,7 @@ type StepReceipt =
       replaced: boolean;
       verification: { status: 'passed'; issues: [] };
       warnings?: string[];
+      filterActions?: Array<{ name?: string; caption: string; sourceWorksheet?: string }>;
     }
   | {
       index: number;
@@ -183,7 +194,7 @@ export const getRunDashboardBatchTool = (
     server,
     name: 'run-dashboard-batch',
     title: 'Dashboard',
-    description: 'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
+    description: 'Apply staged sheets; compose live KPI/chart sheets as a dashboard.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -202,6 +213,7 @@ export const getRunDashboardBatchTool = (
         gridColumns,
         kpiWorksheetNames,
         replaceExisting = false,
+        crossFilter,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -224,6 +236,7 @@ export const getRunDashboardBatchTool = (
           gridColumns,
           kpiWorksheetNames,
           replaceExisting,
+          crossFilter,
         },
         callback: async (): Promise<Result<RunDashboardBatchResult, McpToolError>> => {
           const orderedArtifactIds = artifactIds ?? [];
@@ -520,6 +533,53 @@ export const getRunDashboardBatchTool = (
               );
             }
 
+            const chartSheets = worksheetNames.filter(
+              (name) => !(canonicalKpiWorksheetNames ?? []).some((kpi) => xmlNamesEqual(kpi, name)),
+            );
+            const wantsCrossFilter = crossFilter !== false && worksheetNames.length >= 2;
+            const roundedSheets = wantsCrossFilter
+              ? worksheetNames.filter((name) => hasRoundedBarHelpers(candidateXml, name))
+              : [];
+            const crossFilterExpected: FilterAction[] =
+              wantsCrossFilter && roundedSheets.length === 0
+                ? chartSheets
+                    .filter(
+                      (sheet) => !hasUserTargetedFilterAction(candidateXml, dashboardName, sheet),
+                    )
+                    .map((sheet) => crossFilterAction(dashboardName, sheet))
+                : [];
+            const roundedWarnings =
+              roundedSheets.length > 0
+                ? [
+                    `Skipped filter actions on '${clip(dashboardName)}': rounded bars on '${roundedSheets
+                      .slice(0, 3)
+                      .map(clip)
+                      .join("', '")}' disappear when other sheets filter them.`,
+                  ]
+                : [];
+            let staleSources: string[] = [];
+            const reservedXml = candidateXml;
+            try {
+              if (replaced) {
+                const pruned = removeStaleFilterActions(
+                  candidateXml,
+                  dashboardName,
+                  crossFilterExpected,
+                );
+                candidateXml = pruned.xml;
+                staleSources = pruned.sources;
+              }
+              candidateXml = addCrossFilterActions(candidateXml, crossFilterExpected, reservedXml);
+            } catch (error) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Could not add dashboard filter actions: ${getExceptionMessage(error)}`,
+                'candidateBuild',
+              );
+            }
+
             const candidateBlockingIssues = introducedBlockingValidationIssues(
               runValidation(workbookXml, 'workbook').issues,
               runValidation(candidateXml, 'workbook').issues,
@@ -634,6 +694,20 @@ export const getRunDashboardBatchTool = (
             }
 
             const emptyWorksheetNames = findBlankWorksheetNames(polled.value, worksheetNames);
+            const filterReceipt = crossFilterReceipt(
+              polled.value,
+              candidateXml,
+              crossFilterExpected,
+              dashboardName,
+              staleSources,
+            );
+            const dashboardWarnings = [
+              ...(emptyWorksheetNames.length > 0
+                ? [emptyWorksheetWarning(emptyWorksheetNames)]
+                : []),
+              ...roundedWarnings,
+              ...filterReceipt.warnings,
+            ];
 
             await hideStartPage({ executor, signal: extra.signal });
             await activateSheetWithValidatedGoto({
@@ -664,9 +738,8 @@ export const getRunDashboardBatchTool = (
               worksheets: worksheetNames,
               replaced,
               verification: { status: 'passed', issues: [] },
-              ...(emptyWorksheetNames.length > 0
-                ? { warnings: [emptyWorksheetWarning(emptyWorksheetNames)] }
-                : {}),
+              ...(dashboardWarnings.length > 0 ? { warnings: dashboardWarnings } : {}),
+              ...(filterReceipt.applied.length > 0 ? { filterActions: filterReceipt.applied } : {}),
             });
             return Ok({ applied: true, retrySafe: false, steps: successSteps });
           } catch (error) {
@@ -707,6 +780,190 @@ export const getRunDashboardBatchTool = (
 
   return tool;
 };
+
+// Tableau's own "Use as Filter": one on-select, all-fields filter action per chart sheet.
+function crossFilterAction(dashboardName: string, sourceWorksheet: string): FilterAction {
+  return {
+    target: dashboardName,
+    sourceWorksheet,
+    sourceDashboard: dashboardName,
+    sourceExcludeSheets: [],
+    activation: 'on-select',
+    autoClear: true,
+    onEmpty: false,
+    singleSelect: false,
+  };
+}
+
+const ACTION_BLOCK = /<action\b[^>]*>[\s\S]*?<\/action>/g;
+
+function findFilterActionBlock(xml: string, expected: FilterAction): string | undefined {
+  return [...xml.matchAll(ACTION_BLOCK)]
+    .map((match) => match[0])
+    .find((block) => filterActionMatches(block, expected));
+}
+
+// WHY: reservedXml still holds pruned stale actions, which stay live on Desktop and keep their names.
+function addCrossFilterActions(xml: string, expected: FilterAction[], reservedXml: string): string {
+  let result = xml;
+  for (const action of expected) {
+    if (findFilterActionBlock(result, action) !== undefined) continue;
+    const captions = new Set(
+      [...result.matchAll(ACTION_BLOCK), ...reservedXml.matchAll(ACTION_BLOCK)].map((match) =>
+        unescapeXml(getAttr(match[0].match(/^<action\b[^>]*>/)?.[0] ?? '', 'caption') ?? ''),
+      ),
+    );
+    let n = 1;
+    while (captions.has(`Filter ${n} (generated)`)) n += 1;
+    const spliced = spliceActionIntoWorkbook(
+      result,
+      renderFilterAction(
+        `Filter ${n} (generated)`,
+        nextActionName(`${result}${reservedXml}`),
+        action,
+      ),
+    );
+    if (spliced.isErr()) throw new Error(spliced.error.message);
+    result = spliced.value;
+  }
+  return result;
+}
+
+// A filter action from this sheet that the exact generated one would clash with: the user edited it or made their own.
+function hasUserTargetedFilterAction(xml: string, dashboardName: string, sheet: string): boolean {
+  const exact = crossFilterAction(dashboardName, sheet);
+  const fromSheet = [...xml.matchAll(ACTION_BLOCK)]
+    .map((match) => match[0])
+    .filter((block) => {
+      const source = block.match(/<source\b[^>]*>/)?.[0] ?? '';
+      const target = [...block.matchAll(/<param\b[^>]*>/g)]
+        .map((param) => param[0])
+        .find((param) => getAttr(param, 'name') === 'target');
+      return (
+        getAttr(block.match(/<command\b[^>]*>/)?.[0] ?? '', 'command') === 'tsc:tsl-filter' &&
+        unescapeXml(getAttr(source, 'dashboard') ?? '') === dashboardName &&
+        unescapeXml(getAttr(source, 'worksheet') ?? '') === sheet &&
+        target !== undefined &&
+        unescapeXml(getAttr(target, 'value') ?? '') === dashboardName
+      );
+    });
+  return fromSheet.length > 0 && !fromSheet.some((block) => filterActionMatches(block, exact));
+}
+
+// WHY: Desktop keeps a replaced dashboard's old generated actions; drop only generated-caption ones.
+const GENERATED_CAPTION = /^Filter [1-9]\d* \(generated\)$/;
+
+function removeStaleFilterActions(
+  xml: string,
+  dashboardName: string,
+  expected: FilterAction[],
+): { xml: string; sources: string[] } {
+  const sources: string[] = [];
+  let result = xml;
+  for (const block of [...xml.matchAll(ACTION_BLOCK)].map((match) => match[0])) {
+    const source = unescapeXml(
+      getAttr(block.match(/<source\b[^>]*>/)?.[0] ?? '', 'worksheet') ?? '',
+    );
+    const caption = unescapeXml(
+      getAttr(block.match(/^<action\b[^>]*>/)?.[0] ?? '', 'caption') ?? '',
+    );
+    if (
+      source === '' ||
+      !GENERATED_CAPTION.test(caption) ||
+      expected.some((action) => action.sourceWorksheet === source) ||
+      !filterActionMatches(block, crossFilterAction(dashboardName, source))
+    ) {
+      continue;
+    }
+    result = result.replace(block, () => '');
+    sources.push(source);
+  }
+  result = result.replace(/<actions>\s*<\/actions>/, '');
+  return { xml: result, sources };
+}
+
+const MAX_LISTED = 5;
+const MAX_NAME = 40;
+
+function clip(value: string): string {
+  return value.length > MAX_NAME ? `${value.slice(0, MAX_NAME)}...` : value;
+}
+
+function boundedList(items: string[]): string {
+  const listed = items.slice(0, MAX_LISTED).map(clip).join(', ');
+  return items.length > MAX_LISTED ? `${listed}, and ${items.length - MAX_LISTED} more` : listed;
+}
+
+// Rounded-bar sheets carry hidden helper columns (see refine/roundStackedBar.ts helperPrefix).
+function hasRoundedBarHelpers(xml: string, sheetName: string): boolean {
+  const fragment = extractSheetXml(xml, sheetName);
+  return fragment !== null && /\bname=["']\[(?:\w+:)?__tmcp_round_/.test(fragment);
+}
+
+function crossFilterReceipt(
+  polledXml: string,
+  candidateXml: string,
+  expected: FilterAction[],
+  dashboardName: string,
+  staleSources: string[],
+): {
+  applied: Array<{ name?: string; caption: string; sourceWorksheet?: string }>;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const staleLive = staleSources.flatMap((source) => {
+    const block = findFilterActionBlock(polledXml, crossFilterAction(dashboardName, source));
+    if (block === undefined) return [];
+    const tag = block.match(/^<action\b[^>]*>/)?.[0] ?? '';
+    return [`'${unescapeXml(getAttr(tag, 'caption') ?? '')}'`];
+  });
+  if (staleLive.length > 0) {
+    warnings.push(
+      `Old filter actions are still live: ${boundedList(staleLive)}. This Desktop build cannot remove actions; remove them in Dashboard > Actions.`,
+    );
+  }
+  if (expected.length === 0) return { applied: [], warnings };
+  const applied: Array<{ name: string; caption: string; sourceWorksheet: string }> = [];
+  const missing: string[] = [];
+  for (const action of expected) {
+    const block = findFilterActionBlock(polledXml, action);
+    if (block === undefined) {
+      missing.push(action.sourceWorksheet);
+      continue;
+    }
+    const tag = block.match(/^<action\b[^>]*>/)?.[0] ?? '';
+    applied.push({
+      name: unescapeXml(getAttr(tag, 'name') ?? ''),
+      caption: unescapeXml(getAttr(tag, 'caption') ?? ''),
+      sourceWorksheet: action.sourceWorksheet.slice(0, 64),
+    });
+  }
+  const extraLive =
+    (polledXml.match(/<action\b/g)?.length ?? 0) - (candidateXml.match(/<action\b/g)?.length ?? 0);
+  const appended = extraLive > staleLive.length;
+  if (missing.length > 0) {
+    const dashboard = JSON.stringify(dashboardName);
+    warnings.push(
+      `Dashboard filter actions did not persist for: ${boundedList(missing)}. The dashboard is applied. Check Dashboard > Actions before retrying, because some Desktop builds rename new actions and author-action can report a miss when one landed. To add one, call author-action mode:'filter' sourceDashboard:${dashboard} sourceWorksheet:'<sheet>' targetSheet:${dashboard} caption:'Filter N (generated)' clearSelection:'show-all', with N unique.`,
+    );
+  }
+  if (appended) {
+    warnings.push(
+      'This Desktop build adds actions instead of replacing them, so the workbook may hold duplicate actions. Remove the copies in Dashboard > Actions.',
+    );
+  }
+  return { applied: missing.length === 0 ? boundedFilterActions(applied) : [], warnings };
+}
+
+// Keeps the receipt under the SDK truncation limit when sheet names are long.
+function boundedFilterActions<T extends { name: string; caption: string; sourceWorksheet: string }>(
+  actions: T[],
+): Array<{ name?: string; caption: string; sourceWorksheet?: string }> {
+  if (JSON.stringify(actions).length <= 600) return actions;
+  const withoutName = actions.map(({ caption, sourceWorksheet }) => ({ caption, sourceWorksheet }));
+  if (JSON.stringify(withoutName).length <= 600) return withoutName;
+  return actions.map(({ caption }) => ({ caption }));
+}
 
 function verifyBatchReadback(
   workbookXml: string,

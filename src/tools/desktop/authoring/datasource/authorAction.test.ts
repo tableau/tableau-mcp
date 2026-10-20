@@ -7,6 +7,7 @@ import {
   getAuthorActionTool,
   parseAuthorActionArgs,
   resolveClearOption,
+  spliceActionIntoWorkbook,
 } from './authorAction.js';
 import {
   appliedDocumentXml,
@@ -2177,5 +2178,36 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('caption collision');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('spliceActionIntoWorkbook fresh <actions> placement', () => {
+  const ACTION = "<action caption='A' name='[Action1]' />";
+  const placed = (xml: string): string => {
+    const result = spliceActionIntoWorkbook(xml, ACTION);
+    invariant(result.isOk());
+    return result.value;
+  };
+
+  it('lands after <mapsources> and <shared-views>, not right after </datasources>', () => {
+    const xml =
+      '<workbook><datasources><datasource name="a" /></datasources><mapsources><mapsource name="m" /></mapsources><shared-views><shared-view name="s" /></shared-views><worksheets><worksheet name="W"><datasources><datasource name="a" /></datasources></worksheet></worksheets></workbook>';
+    const out = placed(xml);
+    expect(out).toContain('</shared-views><actions>');
+    expect(out.indexOf('</mapsources>')).toBeLessThan(out.indexOf('<actions>'));
+    expect(out.indexOf('</actions>')).toBeLessThan(out.indexOf('<worksheets>'));
+  });
+
+  it('ignores a nested </datasources> inside worksheets', () => {
+    const xml =
+      '<workbook><worksheets><worksheet name="W"><datasources><datasource name="a" /></datasources></worksheet></worksheets></workbook>';
+    const out = placed(xml);
+    expect(out).toBe(
+      `<workbook><actions>${ACTION}</actions><worksheets><worksheet name="W"><datasources><datasource name="a" /></datasources></worksheet></worksheets></workbook>`,
+    );
+  });
+
+  it('errors when there is no top-level anchor', () => {
+    expect(spliceActionIntoWorkbook('<workbook></workbook>', ACTION).isErr()).toBe(true);
   });
 });

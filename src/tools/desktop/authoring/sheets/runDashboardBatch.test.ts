@@ -91,7 +91,7 @@ describe('runDashboardBatchTool', () => {
     const entry = await getDesktopToolListEntry(tool);
     expect(entry.title).toBe('Dashboard');
     expect(entry.description).toBe(
-      'Apply staged worksheets and compose live KPI/chart sheets into one dashboard.',
+      'Apply staged sheets; compose live KPI/chart sheets as a dashboard.',
     );
     expect(entry.inputSchema).toMatchObject({
       properties: {
@@ -105,18 +105,18 @@ describe('runDashboardBatchTool', () => {
         existingWorksheetNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Live non-KPI chart worksheet names in dashboard order.',
+          description: 'Live non-KPI sheets in order.',
         },
         title: { type: 'string' },
         layoutType: {
           type: 'string',
-          description: 'Dashboard layout; executive-summary uses KPI and chart roles.',
+          description: 'executive-summary: KPI + chart roles.',
         },
         gridColumns: { type: 'integer' },
         kpiWorksheetNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Live KPI worksheet names in display order from left to right.',
+          description: 'Live KPI sheet names, left to right.',
         },
         replaceExisting: { type: 'boolean' },
       },
@@ -125,7 +125,7 @@ describe('runDashboardBatchTool', () => {
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
-    expect(JSON.stringify(entry).length).toBe(1_315);
+    expect(JSON.stringify(entry).length).toBe(1_310);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
@@ -701,6 +701,553 @@ describe('runDashboardBatchTool', () => {
   });
 });
 
+describe('run-dashboard-batch click-to-filter actions', () => {
+  const filterActionBlocks = (xml: string): string[] =>
+    [...xml.matchAll(/<action\b[^>]*>[\s\S]*?<\/action>/g)]
+      .map((match) => match[0])
+      .filter((block) => block.includes('tsc:tsl-filter'));
+  const dashboardWarnings = (result: CallToolResult): string[] =>
+    bodyOf(result).steps.find((step: any) => step.operation === 'dashboard').warnings ?? [];
+
+  it('adds one Use as Filter action per chart sheet and none for KPI sheets', async () => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      layoutType: 'executive-summary',
+      kpiWorksheetNames: ['Existing A'],
+      executor: harness.executor,
+    });
+
+    expect(result.isError).toBe(false);
+    const actions = filterActionBlocks(harness.posts[0]);
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toBe(
+      "<action caption='Filter 1 (generated)' name='[Action1]'>" +
+        "<activation auto-clear='true' type='on-select' />" +
+        "<source type='sheet' worksheet='Existing B' dashboard='Executive Overview' />" +
+        "<command command='tsc:tsl-filter'><param name='special-fields' value='all' />" +
+        "<param name='target' value='Executive Overview' /></command></action>",
+    );
+    expect(harness.posts[0]).not.toContain("worksheet='Existing A'");
+    expect(bodyOf(result).steps[0]).toMatchObject({
+      filterActions: [
+        { name: '[Action1]', caption: 'Filter 1 (generated)', sourceWorksheet: 'Existing B' },
+      ],
+    });
+  });
+
+  it('adds two uniquely captioned actions for an auto-grid of two charts', async () => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      layoutType: 'auto-grid',
+      executor: harness.executor,
+    });
+
+    const actions = filterActionBlocks(harness.posts[0]);
+    expect(actions).toHaveLength(2);
+    expect(actions[0]).toContain("caption='Filter 1 (generated)'");
+    expect(actions[1]).toContain("caption='Filter 2 (generated)'");
+    expect(actions[1]).toContain("name='[Action2]'");
+    expect(bodyOf(result).steps[0].filterActions).toHaveLength(2);
+  });
+
+  it('adds no actions when crossFilter is false', async () => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      crossFilter: false,
+      executor: harness.executor,
+    });
+
+    expect(harness.posts[0]).not.toContain('<action');
+    expect(bodyOf(result).steps[0]).not.toHaveProperty('filterActions');
+  });
+
+  it('adds no actions to a single-sheet dashboard', async () => {
+    const harness = statefulExecutor();
+
+    await callBatch([], { existingWorksheetNames: ['Existing A'], executor: harness.executor });
+
+    expect(harness.posts[0]).not.toContain('<action');
+  });
+
+  it('publishes crossFilter as optional', async () => {
+    const entry = await getDesktopToolListEntry(
+      getRunDashboardBatchTool(new DesktopMcpServer(), { store: artifactStore([]) }),
+    );
+    expect(entry.inputSchema.properties).toHaveProperty('crossFilter');
+    expect(entry.inputSchema.required).not.toContain('crossFilter');
+  });
+
+  describe('existing set and parameter actions', () => {
+    const existing =
+      "<actions><edit-group-action name='[Action7]' /><edit-parameter-action name='[Action8]' /></actions>";
+    const initialXml = WORKBOOK_XML.replace('</datasources>', `</datasources>${existing}`);
+
+    it('keeps them once, in family order, on an appending Desktop', async () => {
+      const harness = statefulExecutor({ initialXml, appendActions: true });
+
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        executor: harness.executor,
+      });
+
+      expect(harness.posts).toHaveLength(1);
+      expect(harness.posts[0]).not.toMatch(/\[Action7\]|\[Action8\]/);
+      const live = harness.live();
+      expect(liveActionNames(live)).toEqual(['[Action1]', '[Action2]', '[Action7]', '[Action8]']);
+      expect(live.match(/<actions\b/g)).toHaveLength(1);
+      expect(filterActionBlocks(live)).toHaveLength(2);
+      expect(live.lastIndexOf('</action>')).toBeLessThan(live.indexOf('<edit-group-action'));
+      expect(live.indexOf('<edit-group-action')).toBeLessThan(
+        live.indexOf('<edit-parameter-action'),
+      );
+    });
+
+    it('re-sends the full document on a replacing Desktop', async () => {
+      const harness = statefulExecutor({ initialXml });
+
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        executor: harness.executor,
+      });
+
+      expect(harness.posts).toHaveLength(2);
+      expect(harness.posts[0]).not.toMatch(/\[Action7\]|\[Action8\]/);
+      const live = harness.live();
+      expect(liveActionNames(live)).toEqual(['[Action1]', '[Action2]', '[Action7]', '[Action8]']);
+      expect(live.match(/<actions\b/g)).toHaveLength(1);
+      expect(live.lastIndexOf('</action>')).toBeLessThan(live.indexOf('<edit-group-action'));
+      expect(live.indexOf('<edit-group-action')).toBeLessThan(
+        live.indexOf('<edit-parameter-action'),
+      );
+    });
+  });
+
+  it('creates the actions block right after datasources when none exists', async () => {
+    const harness = statefulExecutor();
+
+    await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: harness.executor,
+    });
+
+    const xml = harness.posts[0];
+    expect(xml.indexOf('</datasources><actions>')).toBeGreaterThan(-1);
+    expect(xml.indexOf('</actions>')).toBeLessThan(xml.indexOf('<worksheets'));
+  });
+
+  it('does not duplicate a matching action when replacing a dashboard', async () => {
+    const first = statefulExecutor();
+    await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: first.executor,
+    });
+    const second = statefulExecutor({ initialXml: first.posts[0], appendActions: true });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      replaceExisting: true,
+      executor: second.executor,
+    });
+
+    expect(filterActionBlocks(second.posts[0])).toHaveLength(0);
+    expect(liveActionCaptions(second.live())).toEqual([
+      'Filter 1 (generated)',
+      'Filter 2 (generated)',
+    ]);
+    expect(bodyOf(result).steps[0].filterActions).toHaveLength(2);
+    expect(dashboardWarnings(result)).toEqual([]);
+  });
+
+  it('keeps the batch applied and warns when Desktop drops an action', async () => {
+    const harness = statefulExecutor({
+      readbackTransform: (xml) => xml.replace(/<action\b[^>]*>[\s\S]*?<\/action>/, ''),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: harness.executor,
+    });
+
+    expect(bodyOf(result)).toMatchObject({ applied: true });
+    expect(bodyOf(result).steps[0]).not.toHaveProperty('filterActions');
+    expect(dashboardWarnings(result).join(' ')).toContain('Existing A');
+    expect(dashboardWarnings(result).join(' ')).toContain("author-action mode:'filter'");
+  });
+
+  describe('stale generated filter actions on rebuild', () => {
+    const USER_ACTIONS =
+      "<action caption='Mine highlight' name='[Action90]'><activation type='on-select' /><source type='sheet' worksheet='Existing A' dashboard='Executive Overview' /><command command='tsc:tsl-highlight'><param name='target' value='Executive Overview' /></command></action>" +
+      "<action caption='Mine filter' name='[Action91]'><activation auto-clear='true' type='on-select' /><source type='sheet' worksheet='Existing A' dashboard='Executive Overview' /><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='Executive Overview' /><param name='exclude' value='Existing B' /></command></action>";
+
+    async function firstBuild(withUserActions = false): Promise<string> {
+      const first = statefulExecutor();
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        executor: first.executor,
+      });
+      return withUserActions
+        ? first.posts[0].replace('</actions>', `${USER_ACTIONS}</actions>`)
+        : first.posts[0];
+    }
+
+    it('removes generated actions when rebuilt with crossFilter false', async () => {
+      const second = statefulExecutor({ initialXml: await firstBuild() });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        replaceExisting: true,
+        crossFilter: false,
+        executor: second.executor,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(second.posts[0]).not.toContain('<action');
+      expect(dashboardWarnings(result)).toEqual([]);
+    });
+
+    it('leaves the old action of a chart that became a KPI live and warns', async () => {
+      const second = statefulExecutor({ initialXml: await firstBuild(), appendActions: true });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        layoutType: 'executive-summary',
+        kpiWorksheetNames: ['Existing A'],
+        replaceExisting: true,
+        executor: second.executor,
+      });
+
+      expect(second.posts[0]).not.toContain('<action');
+      expect(liveActionCaptions(second.live())).toEqual([
+        'Filter 1 (generated)',
+        'Filter 2 (generated)',
+      ]);
+      expect(dashboardWarnings(result)).toEqual([
+        "Old filter actions are still live: 'Filter 1 (generated)'. This Desktop build cannot remove actions; remove them in Dashboard > Actions.",
+      ]);
+    });
+
+    it('removes the action of a sheet dropped from the dashboard', async () => {
+      const second = statefulExecutor({ initialXml: await firstBuild() });
+
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A'],
+        replaceExisting: true,
+        executor: second.executor,
+      });
+
+      expect(second.posts[0]).not.toContain('<action');
+    });
+
+    it('warns when removed actions are still live after readback', async () => {
+      const initialXml = await firstBuild();
+      const stale = filterActionBlocks(initialXml)
+        .find((block) => /worksheet=.Existing B./.test(block))!
+        .replace('[Action2]', '[Action2_0123456789ABCDEF0123456789ABCDEF]');
+      const second = statefulExecutor({
+        initialXml,
+        readbackTransform: (xml) =>
+          xml.replace('<worksheets', `<actions>${stale}</actions><worksheets`),
+      });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A'],
+        replaceExisting: true,
+        executor: second.executor,
+      });
+
+      expect(bodyOf(result)).toMatchObject({ applied: true });
+      expect(dashboardWarnings(result)).toEqual([
+        "Old filter actions are still live: 'Filter 2 (generated)'. This Desktop build cannot remove actions; remove them in Dashboard > Actions.",
+      ]);
+    });
+
+    it('keeps a user action with the generated shape but a user caption', async () => {
+      const initialXml = (await firstBuild()).replace(
+        /caption=(["'])Filter 1 \(generated\)\1/,
+        "caption='Region filter'",
+      );
+      const second = statefulExecutor({ initialXml, appendActions: true });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        replaceExisting: true,
+        crossFilter: false,
+        executor: second.executor,
+      });
+
+      expect(second.posts[0]).not.toContain('<action');
+      expect(liveActionCaptions(second.live())).toEqual(['Region filter', 'Filter 2 (generated)']);
+      expect(dashboardWarnings(result)).toEqual([
+        "Old filter actions are still live: 'Filter 2 (generated)'. This Desktop build cannot remove actions; remove them in Dashboard > Actions.",
+      ]);
+    });
+
+    it('keeps sourceWorksheet and drops names when the receipt is large', async () => {
+      const names = Array.from({ length: 6 }, (_, i) => `Chart ${i}`);
+      const harness = statefulExecutor({
+        initialXml: renderedWorkbook(names),
+        readbackTransform: (xml) =>
+          xml.replace(
+            /name=(["'])\[Action(\d+)\]\1/g,
+            "name='[Action$2_0123456789ABCDEF0123456789ABCDEF]'",
+          ),
+      });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: names,
+        executor: harness.executor,
+      });
+
+      const receipt = bodyOf(result).steps[0].filterActions;
+      expect(receipt).toHaveLength(6);
+      expect(receipt[0]).toEqual({ caption: 'Filter 1 (generated)', sourceWorksheet: 'Chart 0' });
+    });
+
+    it('leaves user-authored highlight and non-matching filter actions alone', async () => {
+      const second = statefulExecutor({
+        initialXml: await firstBuild(true),
+        appendActions: true,
+      });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        replaceExisting: true,
+        crossFilter: false,
+        executor: second.executor,
+      });
+
+      expect(second.posts[0]).not.toContain('<action');
+      expect(liveActionCaptions(second.live())).toEqual([
+        'Filter 1 (generated)',
+        'Filter 2 (generated)',
+        'Mine highlight',
+        'Mine filter',
+      ]);
+      expect(dashboardWarnings(result)).toEqual([
+        "Old filter actions are still live: 'Filter 1 (generated)', 'Filter 2 (generated)'. This Desktop build cannot remove actions; remove them in Dashboard > Actions.",
+      ]);
+    });
+  });
+
+  describe.each([
+    ['append', true],
+    ['replace', false],
+  ])('user-targeted filter actions on rebuild (%s Desktop)', (_label, appendActions) => {
+    const rebuild = async (
+      initialXml: string,
+    ): Promise<{ live: string; result: CallToolResult }> => {
+      const second = statefulExecutor({ initialXml, appendActions });
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        replaceExisting: true,
+        executor: second.executor,
+      });
+      return { live: second.live(), result };
+    };
+    const built = async (): Promise<string> => {
+      const first = statefulExecutor();
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        executor: first.executor,
+      });
+      return first.posts[0];
+    };
+    const actionFor = (xml: string, sheet: string): string =>
+      filterActionBlocks(xml).find((block) => new RegExp(`worksheet=.${sheet}.`).test(block))!;
+    const fromSheet = (xml: string, sheet: string): string[] =>
+      filterActionBlocks(xml).filter((block) => new RegExp(`worksheet=.${sheet}.`).test(block));
+
+    it('adds nothing for a sheet whose generated action the user edited', async () => {
+      const initial = await built();
+      const a = actionFor(initial, 'Existing A');
+      const edited = a.replace(
+        '</command>',
+        "<param name='exclude' value='Existing B' /></command>",
+      );
+      const { live, result } = await rebuild(initial.replace(a, edited));
+
+      expect(fromSheet(live, 'Existing A')).toHaveLength(1);
+      expect(fromSheet(live, 'Existing A')[0]).toMatch(/name=.exclude./);
+      expect(fromSheet(live, 'Existing B')).toHaveLength(1);
+      expect(dashboardWarnings(result)).toEqual([]);
+    });
+
+    it('still adds the missing action for the other sheet', async () => {
+      const initial = await built();
+      const a = actionFor(initial, 'Existing A');
+      const b = actionFor(initial, 'Existing B');
+      const edited = a.replace(
+        '</command>',
+        "<param name='exclude' value='Existing B' /></command>",
+      );
+      const { live, result } = await rebuild(initial.replace(a, edited).replace(b, ''));
+
+      expect(fromSheet(live, 'Existing A')).toHaveLength(1);
+      expect(fromSheet(live, 'Existing B')).toHaveLength(1);
+      expect(liveActionCaptions(live)).toEqual(['Filter 1 (generated)', 'Filter 2 (generated)']);
+      expect(dashboardWarnings(result).join(' ')).not.toContain('did not persist');
+    });
+
+    it('adds nothing for a sheet with a user-made filter action', async () => {
+      const initial = await built();
+      const a = actionFor(initial, 'Existing A');
+      const mine = a
+        .replace(/caption=(["'])Filter 1 \(generated\)\1/, "caption='Region filter'")
+        .replace('</command>', "<param name='exclude' value='Existing B' /></command>");
+      const { live, result } = await rebuild(initial.replace(a, mine));
+
+      expect(fromSheet(live, 'Existing A')).toHaveLength(1);
+      expect(liveActionCaptions(live)).toEqual(['Region filter', 'Filter 2 (generated)']);
+      expect(dashboardWarnings(result)).toEqual([]);
+    });
+
+    it('keeps an exact generated action as applied', async () => {
+      const { live, result } = await rebuild(await built());
+
+      expect(liveActionCaptions(live)).toEqual(['Filter 1 (generated)', 'Filter 2 (generated)']);
+      expect(bodyOf(result).steps[0].filterActions).toHaveLength(2);
+      expect(dashboardWarnings(result)).toEqual([]);
+    });
+  });
+
+  it('does not reuse a stale action name or caption for a new sheet', async () => {
+    const names = ['Existing A', 'Existing B', 'Existing C'];
+    const first = statefulExecutor({ initialXml: renderedWorkbook(names) });
+    await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: first.executor,
+    });
+    const second = statefulExecutor({ initialXml: first.posts[0], appendActions: true });
+
+    await callBatch([], {
+      existingWorksheetNames: ['Existing C', 'Existing B'],
+      replaceExisting: true,
+      executor: second.executor,
+    });
+
+    const live = second.live();
+    expect(liveActionCaptions(live)).toEqual([
+      'Filter 1 (generated)',
+      'Filter 2 (generated)',
+      'Filter 3 (generated)',
+    ]);
+    expect(liveActionNames(live)).toEqual(['[Action1]', '[Action2]', '[Action3]']);
+  });
+
+  it('puts the full dashboard name in the recovery call', async () => {
+    const name = `Executive's ${'very long dashboard name '.repeat(3)}`.trim().slice(0, 60);
+    const harness = statefulExecutor({
+      readbackTransform: (xml) => xml.replace(/<actions>[\s\S]*?<\/actions>/, ''),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      dashboardName: name,
+      executor: harness.executor,
+    });
+
+    expect(name).toHaveLength(60);
+    expect(dashboardWarnings(result)[0]).toContain(
+      `sourceDashboard:${JSON.stringify(name)} sourceWorksheet:'<sheet>' targetSheet:${JSON.stringify(name)}`,
+    );
+  });
+
+  describe('rounded-bar sheets', () => {
+    const rounded = (xml: string, sheet: string): string =>
+      xml.replace(
+        new RegExp(`(<worksheet name="${sheet}">)`),
+        '$1<datasource-dependencies datasource="d"><column datatype="real" name="[__tmcp_round_0123456789ab_x]" role="measure" type="quantitative"/></datasource-dependencies>',
+      );
+
+    it('adds no filter actions and warns, even with crossFilter true', async () => {
+      const harness = statefulExecutor({ initialXml: rounded(WORKBOOK_XML, 'Existing B') });
+
+      const result = await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        crossFilter: true,
+        executor: harness.executor,
+      });
+
+      expect(bodyOf(result)).toMatchObject({ applied: true });
+      expect(harness.posts[0]).not.toContain('tsc:tsl-filter');
+      expect(dashboardWarnings(result)).toEqual([
+        "Skipped filter actions on 'Executive Overview': rounded bars on 'Existing B' disappear when other sheets filter them.",
+      ]);
+    });
+
+    it('removes prior generated actions when a sheet became rounded', async () => {
+      const first = statefulExecutor();
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        executor: first.executor,
+      });
+      const second = statefulExecutor({ initialXml: rounded(first.posts[0], 'Existing A') });
+
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        replaceExisting: true,
+        executor: second.executor,
+      });
+
+      expect(second.posts[0]).not.toContain('tsc:tsl-filter');
+    });
+  });
+
+  it('gives a complete author-action recovery call when actions did not persist', async () => {
+    const harness = statefulExecutor({
+      readbackTransform: (xml) => xml.replace(/<action\b[^>]*>[\s\S]*?<\/action>/, ''),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: harness.executor,
+    });
+
+    expect(dashboardWarnings(result)).toEqual([
+      "Dashboard filter actions did not persist for: Existing A. The dashboard is applied. Check Dashboard > Actions before retrying, because some Desktop builds rename new actions and author-action can report a miss when one landed. To add one, call author-action mode:'filter' sourceDashboard:\"Executive Overview\" sourceWorksheet:'<sheet>' targetSheet:\"Executive Overview\" caption:'Filter N (generated)' clearSelection:'show-all', with N unique.",
+    ]);
+  });
+
+  it('bounds the did-not-persist warning for many long sheet names', async () => {
+    const names = Array.from({ length: 7 }, (_, i) => `${'Long sheet name '.repeat(5)}${i}`);
+    const harness = statefulExecutor({
+      initialXml: renderedWorkbook(names),
+      readbackTransform: (xml) => xml.replace(/<actions>[\s\S]*?<\/actions>/, ''),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: names,
+      executor: harness.executor,
+    });
+
+    const warning = dashboardWarnings(result)[0];
+    expect(warning).toContain('and 2 more');
+    expect(warning.length).toBeLessThan(700);
+  });
+
+  it('keeps the batch applied and warns when Desktop appends duplicate actions', async () => {
+    const harness = statefulExecutor({
+      readbackTransform: (xml) => xml.replace(/(<action\b[^>]*>[\s\S]*?<\/action>)/, '$1$1'),
+    });
+
+    const result = await callBatch([], {
+      existingWorksheetNames: ['Existing A', 'Existing B'],
+      executor: harness.executor,
+    });
+
+    expect(bodyOf(result)).toMatchObject({ applied: true });
+    expect(dashboardWarnings(result)).toEqual([
+      'This Desktop build adds actions instead of replacing them, so the workbook may hold duplicate actions. Remove the copies in Dashboard > Actions.',
+    ]);
+  });
+});
+
 async function callBatch(
   artifactIds: string[],
   options: {
@@ -711,6 +1258,9 @@ async function callBatch(
     kpiWorksheetNames?: string[];
     layoutType?: 'auto-grid' | 'rows' | 'columns' | 'executive-summary';
     gridColumns?: number;
+    crossFilter?: boolean;
+    replaceExisting?: boolean;
+    dashboardName?: string;
   } = {},
 ): Promise<CallToolResult> {
   const tool = getRunDashboardBatchTool(new DesktopMcpServer(), {
@@ -722,10 +1272,14 @@ async function callBatch(
       session: '12345',
       artifactIds,
       ...BATCH,
+      ...(options.dashboardName !== undefined
+        ? { dashboardName: options.dashboardName, title: options.dashboardName }
+        : {}),
       gridColumns: options.gridColumns,
       layoutType: options.layoutType ?? BATCH.layoutType,
       kpiWorksheetNames: options.kpiWorksheetNames,
-      replaceExisting: false,
+      replaceExisting: options.replaceExisting ?? false,
+      crossFilter: options.crossFilter,
       ...(options.existingWorksheetNames !== undefined
         ? { existingWorksheetNames: options.existingWorksheetNames }
         : {}),
@@ -738,17 +1292,49 @@ async function callBatch(
   );
 }
 
+const ACTION_ELEMENT =
+  /<(action|edit-group-action|edit-parameter-action)\b[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g;
+const FAMILY = ['action', 'edit-group-action', 'edit-parameter-action'];
+
+function actionElements(xml: string): string[] {
+  const block = xml.match(/<actions>([\s\S]*?)<\/actions>/)?.[1] ?? '';
+  return [...block.matchAll(ACTION_ELEMENT)].map((match) => match[0]);
+}
+
+function appendLiveActions(liveXml: string, postedXml: string): string {
+  const family = (element: string): number => FAMILY.indexOf(element.match(/^<([\w-]+)/)![1]);
+  const all = [...actionElements(liveXml), ...actionElements(postedXml)].sort(
+    (a, b) => family(a) - family(b),
+  );
+  const without = postedXml.replace(/<actions>[\s\S]*?<\/actions>/, '');
+  return all.length === 0
+    ? without
+    : without.replace('<worksheets', `<actions>${all.join('')}</actions><worksheets`);
+}
+
+// Names of every top-level action in document order.
+function liveActionNames(xml: string): string[] {
+  return actionElements(xml).map((element) => element.match(/\bname=["']([^"']+)["']/)![1]);
+}
+
+function liveActionCaptions(xml: string): string[] {
+  return actionElements(xml).map((element) => element.match(/\bcaption=["']([^"']+)["']/)![1]);
+}
+
 function statefulExecutor({
   initialXml = WORKBOOK_XML,
   failAfterDispatch = false,
   driftBeforeApply = false,
   readbackTransform,
+  appendActions = false,
 }: {
   initialXml?: string;
   failAfterDispatch?: boolean;
   driftBeforeApply?: boolean;
   readbackTransform?: (xml: string) => string;
-} = {}): { executor: ExternalApiToolExecutor; posts: string[] } {
+  // Desktop 0.2.21: a POST keeps every live action and adds the posted ones.
+  appendActions?: boolean;
+} = {}): { executor: ExternalApiToolExecutor; posts: string[]; live: () => string } {
   let current = initialXml;
   let readCount = 0;
   const posts: string[] = [];
@@ -774,7 +1360,7 @@ function statefulExecutor({
         if (failAfterDispatch) {
           return Err({ type: 'command-timed-out' as const, error: 'timed out' });
         }
-        current = xml;
+        current = appendActions ? appendLiveActions(current, xml) : xml;
         return Ok({ command_id: 'apply-1', status: 'completed' as const, submitted_at: 'now' });
       },
     ),
@@ -782,7 +1368,7 @@ function statefulExecutor({
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
   } as unknown as ExternalApiToolExecutor;
-  return { executor, posts };
+  return { executor, posts, live: () => current };
 }
 
 function artifactStore(
@@ -828,7 +1414,7 @@ function artifactTitle(artifactId: string): string {
 // live and rendered in the workbook; tests that need an unrendered worksheet build their own
 // blank `<table/>` fixture directly rather than going through this helper.
 function renderedWorkbook(names: string[]): string {
-  return `<?xml version="1.0"?><workbook><worksheets>${names
+  return `<?xml version="1.0"?><workbook><datasources><datasource name="federated.x"/></datasources><worksheets>${names
     .map((name) => `<worksheet name="${name}"><table><rows>${name}</rows></table></worksheet>`)
     .join('')}</worksheets><windows>${names
     .map((name) => `<window class="worksheet" name="${name}"/>`)
@@ -839,7 +1425,7 @@ function rankedWorkbook(): string {
   const column = '[Sample - Superstore].[none:Product Name:nk]';
   const level = '[none:Product Name:nk]';
   const sales = '[Sample - Superstore].[sum:Sales:qk]';
-  return `<?xml version="1.0"?><workbook><worksheets>
+  return `<?xml version="1.0"?><workbook><datasources><datasource name="federated.x"/></datasources><worksheets>
     <worksheet name="Top Products"><table><view>
       <datasource-dependencies datasource="Sample - Superstore">
         <column-instance column="[Product Name]" derivation="None" name="${level}" pivot="key" type="nominal"/>
