@@ -404,15 +404,35 @@ describe('Desktop tiled-layout reflow (W-24587662)', () => {
     expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(true);
   });
 
-  it('accepts reflow inside an inset flow client rectangle', () => {
-    let actual = zoneAttribute(readback, '6', 'x', '1000');
-    actual = zoneAttribute(actual, '6', 'y', '1000');
-    actual = zoneAttribute(actual, '6', 'w', '98000');
-    actual = zoneAttribute(actual, '7', 'x', '1000');
-    actual = zoneAttribute(actual, '7', 'y', '7380');
-    actual = zoneAttribute(actual, '7', 'w', '98000');
-    actual = zoneAttribute(actual, '7', 'h', '91620');
-    expect(matches(actual)).toBe(true);
+  it('requires authored spacing for an inset flow client rectangle', () => {
+    // At 1024 x 768, native conversion rounds each 8px inset to 781 x 1042.
+    let actual = zoneAttribute(readback, '6', 'x', '781');
+    actual = zoneAttribute(actual, '6', 'y', '1042');
+    actual = zoneAttribute(actual, '6', 'w', '98438');
+    actual = zoneAttribute(actual, '7', 'x', '781');
+    actual = zoneAttribute(actual, '7', 'y', '7422');
+    actual = zoneAttribute(actual, '7', 'w', '98438');
+    actual = zoneAttribute(actual, '7', 'h', '91536');
+    expect(matches(actual)).toBe(false);
+    const withMargin = (xml: string): string => {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      const flow = Array.from(doc.getElementsByTagName('zone')).find(
+        (zone) => zone.getAttribute('id') === '5',
+      )!;
+      const style = doc.createElement('zone-style');
+      const format = doc.createElement('format');
+      format.setAttribute('attr', 'margin');
+      format.setAttribute('value', '8');
+      style.appendChild(format);
+      flow.appendChild(style);
+      return new XMLSerializer().serializeToString(doc);
+    };
+    expect(
+      createDashboardReadbackVerifier(
+        withMargin(submitted),
+        REFLOW_DASHBOARD_NAME,
+      )(withMargin(actual)),
+    ).toBe(true);
   });
 
   it('accepts reflow inside a floating container outside the dashboard', () => {
