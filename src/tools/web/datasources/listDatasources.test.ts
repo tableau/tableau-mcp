@@ -325,6 +325,44 @@ describe('listDatasourcesTool', () => {
       );
     });
 
+    describe('datasource without a project', () => {
+      const noProjectDatasource = {
+        id: '3d4c7c20-c0b9-4880-a225-9bdc657b21f8',
+        name: 'Deleted Datasource',
+        tags: {},
+      };
+      const boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      };
+
+      it('should exclude it when a project allowlist is set', () => {
+        const result = constrainDatasources({
+          datasources: [mockDatasources.datasources[0], noProjectDatasource],
+          boundedContext: {
+            ...boundedContext,
+            projectIds: new Set([mockDatasources.datasources[0].project.id]),
+          },
+        });
+
+        invariant(result.type === 'success');
+        expect(result.result).toEqual([mockDatasources.datasources[0]]);
+      });
+
+      it('should keep it when no project allowlist is set', () => {
+        const result = constrainDatasources({
+          datasources: [mockDatasources.datasources[0], noProjectDatasource],
+          boundedContext,
+        });
+
+        invariant(result.type === 'success');
+        expect(result.result).toEqual([mockDatasources.datasources[0], noProjectDatasource]);
+      });
+    });
+
     test.each(
       getCombinationsOfBoundedContextInputs({
         projectIds: [null, new Set([mockDatasources.datasources[0].project.id])],

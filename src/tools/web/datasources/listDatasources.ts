@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { PublishedDataSource } from '../../../sdks/tableau/types/dataSource.js';
+import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import {
@@ -38,7 +38,7 @@ const paramsSchema = {
     ),
 };
 
-type ListDatasourcesResult = GetPageResult<PublishedDataSource> & {
+type ListDatasourcesResult = GetPageResult<DataSource> & {
   mcp?: {
     resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
   };
@@ -191,9 +191,9 @@ export function constrainDatasources({
   datasources,
   boundedContext,
 }: {
-  datasources: Array<PublishedDataSource>;
+  datasources: Array<DataSource>;
   boundedContext: BoundedContext;
-}): ConstrainedResult<Array<PublishedDataSource>> {
+}): ConstrainedResult<Array<DataSource>> {
   if (datasources.length === 0) {
     return {
       type: 'empty',
@@ -204,7 +204,7 @@ export function constrainDatasources({
 
   const { projectIds, datasourceIds, tags } = boundedContext;
   if (projectIds) {
-    datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
+    datasources = datasources.filter((datasource) => projectIds.has(datasource.project?.id ?? ''));
   }
 
   if (datasourceIds) {
