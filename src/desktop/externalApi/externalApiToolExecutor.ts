@@ -26,7 +26,7 @@ import {
   WorkbookDocument,
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
-import { classifySessionFatalError } from './sessionFatalError.js';
+import { classifySessionFatalError, isSessionFatalError } from './sessionFatalError.js';
 import {
   ApiRoot,
   apiRootSchema,
@@ -1504,6 +1504,11 @@ function mapInvokeDialogActionError(
   ) {
     const mapped = mapClientError(error, pinnedPid);
     if (mapped.type === 'command-failed' && mapped.error !== undefined) {
+      // A session-fatal 5xx already instructs the agent to stop every command and read; the
+      // dialog-inspection guidance (which permits a get-active-dialogs read) would contradict it.
+      if (isSessionFatalError(mapped.error)) {
+        return mapped;
+      }
       return {
         type: 'command-failed',
         error: {

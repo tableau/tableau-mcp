@@ -2116,6 +2116,42 @@ describe('ExternalApiToolExecutor', () => {
       ).toHaveLength(1);
     });
 
+    it('surfaces a session-fatal 5xx without the contradictory dialog-inspection guidance', async () => {
+      server.setOverride('POST /v0/app:invokeDialogAction', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'problem',
+          title: 'Internal Error',
+          status: 500,
+          instance: '/v0/mock',
+          code: 'operation-failed',
+          tableauErrorCode: 'E71AE512',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.recoverable).toBe(false);
+        // Session-fatal guidance wins: stop every command and read, restart Desktop.
+        expect(error.error?.message).toContain('restart Tableau Desktop');
+        expect(error.error?.message).toContain('including reads');
+        // The dialog-inspection guidance would permit a get-active-dialogs read, contradicting it.
+        expect(error.error?.message).not.toContain('outcome is indeterminate');
+        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+      }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+        ),
+      ).toHaveLength(1);
+    });
+
     it('maps an unstructured HTTP 500 problem and marks the action indeterminate', async () => {
       server.setOverride('POST /v0/app:invokeDialogAction', {
         status: 500,
