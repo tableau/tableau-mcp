@@ -1,5 +1,6 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
+import { Config } from '../../src/config.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
@@ -10,21 +11,21 @@ const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
 const flowToolsEnabled = Boolean(features['flow-tools']);
 const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
-
-// Mirrors parseOptionalBoolean in src/config.ts: only "true" or "false" overrides the flag.
-function envOverride(value: string | undefined): boolean | undefined {
-  return value === 'true' ? true : value === 'false' ? false : undefined;
-}
-const flowReadExpected = envOverride(process.env.FLOW_TOOLS_ENABLED) ?? flowToolsEnabled;
-const flowWriteExpected =
-  flowReadExpected && (envOverride(process.env.FLOW_WRITE_TOOLS_ENABLED) ?? flowWriteToolsEnabled);
+let flowReadExpected: boolean;
+let flowWriteExpected: boolean;
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
-  beforeAll(setEnv);
+  beforeAll(() => {
+    setEnv();
+    const config = new Config();
+    flowReadExpected = config.flowToolsEnabled ?? flowToolsEnabled;
+    flowWriteExpected =
+      flowReadExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
+  });
   afterAll(resetEnv);
 
   describe('default variant', () => {
