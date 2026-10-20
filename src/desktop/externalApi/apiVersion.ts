@@ -4,12 +4,21 @@ export const START_PAGE_MIN_API_VERSION: ApiVersionFloor = '0.2.11';
 export const WORKBOOK_DIAGNOSTICS_MIN_API_VERSION: ApiVersionFloor = '0.2.16';
 export const SCREENSHOT_MIN_API_VERSION: ApiVersionFloor = '0.2.17';
 export const DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION: ApiVersionFloor = '0.2.22';
+export const WORKBOOK_ACTION_REPLACEMENT_MIN_API_VERSION: ApiVersionFloor = '0.2.24';
 
 export function supportsDashboardVisualRegistration(apiVersion: string | undefined): boolean {
   return (
     apiVersion !== undefined &&
     /^\d+\.\d+\.\d+$/.test(apiVersion) &&
     apiVersionAtLeast(apiVersion, DASHBOARD_VISUAL_REGISTRATION_MIN_API_VERSION)
+  );
+}
+
+export function supportsWorkbookActionReplacement(apiVersion: string | undefined): boolean {
+  return (
+    apiVersion !== undefined &&
+    /^\d+\.\d+\.\d+$/.test(apiVersion) &&
+    apiVersionAtLeast(apiVersion, WORKBOOK_ACTION_REPLACEMENT_MIN_API_VERSION)
   );
 }
 

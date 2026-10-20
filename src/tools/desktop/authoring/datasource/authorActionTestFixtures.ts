@@ -133,12 +133,14 @@ export async function getToolResult({
   initialXml = BASE_XML,
   readbackXml,
   desktop = 'replace',
+  desktopApiVersion,
 }: {
   args: AuthorActionArgs;
   initialXml?: string;
   readbackXml?: string;
   // 'replace' models a build that drops live actions the POST omits; 'append' keeps them.
   desktop?: 'replace' | 'append';
+  desktopApiVersion?: string;
 }): Promise<{
   result: CallToolResult;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
@@ -179,6 +181,7 @@ export async function getToolResult({
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue({
       desktopInstanceId,
+      desktopApiVersion,
       executeCommand,
       getWorkbookDocument,
       applyWorkbookDocument,

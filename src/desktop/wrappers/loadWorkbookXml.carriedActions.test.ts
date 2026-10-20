@@ -27,6 +27,7 @@ function fakeDesktop(
   behavior: Behavior,
   initialActions: string[],
   instanceId: string | undefined = `inst-${behavior}`,
+  desktopApiVersion?: string,
 ): {
   executor: ExternalApiToolExecutor;
   posted: string[];
@@ -65,6 +66,7 @@ function fakeDesktop(
     getWorkbookDocument,
     applyWorkbookDocument,
     desktopInstanceId: instanceId,
+    desktopApiVersion,
   });
   return {
     executor,
@@ -104,6 +106,33 @@ describe('whole-workbook apply and live actions', () => {
     xml = payload,
   ): ReturnType<typeof loadWorkbookXml> =>
     advanceThrough(loadWorkbookXml({ xml, executor, signal, focus: NO_FOCUS }));
+
+  it.each(['0.2.24', '0.3.0'])(
+    'API %s: one POST of the full document, no readback after, no memo',
+    async (version) => {
+      const d = fakeDesktop('replace', three, 'inst-shared', version);
+      expect((await run(d.executor)).isOk()).toBe(true);
+      expect(d.posted).toEqual([payload]);
+      const getMock = vi.mocked(d.executor.getWorkbookDocument);
+      expect(getMock).toHaveBeenCalledTimes(1);
+      expect(getMock.mock.invocationCallOrder[0]).toBeLessThan(
+        d.applyWorkbookDocument.mock.invocationCallOrder[0],
+      );
+
+      const older = fakeDesktop('append', three, 'inst-shared', '0.2.21');
+      expect((await run(older.executor)).isOk()).toBe(true);
+      expect(parseActions(older.posted[0]).actions.map((a) => a.name)).toEqual(['[Action4]']);
+    },
+  );
+
+  it.each(['0.2.23', undefined, '0.2.24-dev'])(
+    'API %s: still strips carried actions',
+    async (version) => {
+      const d = fakeDesktop('append', three, 'inst-old', version);
+      expect((await run(d.executor)).isOk()).toBe(true);
+      expect(parseActions(d.posted[0]).actions.map((a) => a.name)).toEqual(['[Action4]']);
+    },
+  );
 
   it('append build: one POST that leaves out the carried actions; ends with 4', async () => {
     const d = fakeDesktop('append', three);

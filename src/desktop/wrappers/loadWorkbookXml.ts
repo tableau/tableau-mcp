@@ -1,6 +1,7 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
+import { supportsWorkbookActionReplacement } from '../externalApi/apiVersion.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
@@ -240,7 +241,7 @@ async function postWorkbookText({
   });
 }
 
-// Appending Desktop builds copy every live action on each POST, so carried actions are left out.
+// Below External API 0.2.24 Desktop appends posted actions to live ones, so carried actions are left out; 0.2.24+ replaces them.
 async function applyWithoutCarriedActions({
   xml,
   liveXml,
@@ -254,6 +255,11 @@ async function applyWithoutCarriedActions({
 } & WithExecutorAndAbortSignal): Promise<
   Result<{ posted: ApplyTextOk; postedXml: string }, ExecuteCommandError>
 > {
+  if (supportsWorkbookActionReplacement(executor.desktopApiVersion)) {
+    const posted = await postWorkbookText({ xml, executor, signal, applyOptions });
+    return posted.map((value) => ({ posted: value, postedXml: xml }));
+  }
+
   const instanceId = executor.desktopInstanceId;
   const stripped =
     liveXml !== undefined && actionHandlingByInstance.get(instanceId ?? '') !== 'replace'

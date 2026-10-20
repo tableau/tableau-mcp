@@ -1,4 +1,8 @@
-import { apiVersionAtLeast, supportsDashboardVisualRegistration } from './apiVersion.js';
+import {
+  apiVersionAtLeast,
+  supportsDashboardVisualRegistration,
+  supportsWorkbookActionReplacement,
+} from './apiVersion.js';
 
 describe('apiVersionAtLeast', () => {
   it.each([
@@ -46,5 +50,24 @@ describe('dashboard registration support', () => {
     ['0.3.0', true],
   ])('gates registration for API version %s', (version, supported) => {
     expect(supportsDashboardVisualRegistration(version)).toBe(supported);
+  });
+});
+
+describe('workbook action replacement support', () => {
+  it.each([
+    ['0.2.24', true],
+    ['0.2.25', true],
+    ['0.3.0', true],
+    ['1.0.0', true],
+    [undefined, false],
+    ['', false],
+    ['0.2.23', false],
+    ['0.2.21', false],
+    ['0.2.24-dev', false],
+    ['0.3', false],
+    ['0.3.unknown', false],
+    ['0.2.24garbage', false],
+  ])('gates action replacement for API version %s', (version, supported) => {
+    expect(supportsWorkbookActionReplacement(version)).toBe(supported);
   });
 });

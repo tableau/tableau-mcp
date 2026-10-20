@@ -3,6 +3,7 @@ import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
+import { supportsWorkbookActionReplacement } from '../../../../desktop/externalApi/apiVersion.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
 import {
   parseXmlBoolean,
@@ -618,6 +619,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                 if (appendError) return appendError.toErr();
                 const readbackActions = readWorkbookActions(outcome.workbookXml);
                 if (
+                  !supportsWorkbookActionReplacement(executor.desktopApiVersion) &&
                   readbackActions.isOk() &&
                   baselineActions.value.every((action) =>
                     readbackActions.value.some((candidate) => candidate.name === action.name),
@@ -628,7 +630,9 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                   ).toErr();
                 }
                 return new XmlModificationError(
-                  'action deletion did not survive readback, or other action identities changed; this requires Desktop support for replacing workbook actions',
+                  supportsWorkbookActionReplacement(executor.desktopApiVersion)
+                    ? 'action deletion did not survive readback, or other action identities changed; read the workbook again before retrying'
+                    : 'action deletion did not survive readback, or other action identities changed; this requires Desktop support for replacing workbook actions',
                 ).toErr();
               }
               return new Ok({

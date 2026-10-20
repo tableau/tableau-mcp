@@ -191,6 +191,115 @@ describe('author-action edit/delete', () => {
     });
   });
 
+  describe('on a Desktop build that replaces workbook actions (API 0.2.24+)', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    async function settle<T>(promise: Promise<T>): Promise<T> {
+      let done = false;
+      const wrapped = promise.finally(() => {
+        done = true;
+      });
+      while (!done) await vi.advanceTimersByTimeAsync(300);
+      return wrapped;
+    }
+
+    it('delete posts the full remaining document once', async () => {
+      const initialXml = withActions(WORKBOOK, UNRELATED + CASES[2].definition);
+      const { result, applyWorkbookDocument } = await settle(
+        getToolResult({
+          args: { operation: 'delete', actionName: '[Action7]' },
+          initialXml,
+          desktopApiVersion: '0.2.24',
+        }),
+      );
+      expect(result.isError).toBe(false);
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument)).map((action) => action.name),
+      ).toEqual(['[Action3]']);
+    });
+
+    it('create posts the full document once, live actions included', async () => {
+      const { result, applyWorkbookDocument } = await settle(
+        getToolResult({
+          args: {
+            caption: 'Created',
+            sourceWorksheet: 'Profit',
+            sourceField: `[${DATASOURCE_NAME}].[Profit]`,
+            targetParameter: '[Parameters].[Parameter 1]',
+          },
+          initialXml: withActions(WORKBOOK, UNRELATED),
+          readbackXml: withActions(
+            WORKBOOK,
+            UNRELATED +
+              CASES[0].definition.replace('[Action7]', '[Action1]').replace('Original', 'Created'),
+          ),
+          desktopApiVersion: '0.2.24',
+        }),
+      );
+      expect(result.isError).toBe(false);
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument))
+          .map((action) => action.name)
+          .sort(),
+      ).toEqual(['[Action1]', '[Action3]']);
+    });
+
+    it('edit posts the full document once, live actions included', async () => {
+      const { result, applyWorkbookDocument } = await settle(
+        getToolResult({
+          args: {
+            operation: 'edit',
+            actionName: '[Action7]',
+            mode: 'parameter',
+            caption: 'Edited',
+            sourceWorksheet: 'Profit',
+            ...CASES[0].args,
+          },
+          initialXml: withActions(WORKBOOK, UNRELATED + CASES[0].definition),
+          readbackXml: withActions(
+            WORKBOOK,
+            UNRELATED + CASES[0].definition.replace('Original', 'Edited'),
+          ),
+          desktopApiVersion: '0.2.24',
+        }),
+      );
+      expect(result.isError).toBe(false);
+      expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument))
+          .map((action) => action.name)
+          .sort(),
+      ).toEqual(['[Action3]', '[Action7]']);
+    });
+
+    it.each([
+      ['0.2.24', false],
+      ['0.2.21', true],
+    ])('delete failure on API %s: keeps-actions text is %s', async (version, expected) => {
+      const initialXml = withActions(WORKBOOK, UNRELATED + CASES[2].definition);
+      const { result } = await settle(
+        getToolResult({
+          args: { operation: 'delete', actionName: '[Action7]' },
+          initialXml,
+          readbackXml: initialXml,
+          desktop: 'append',
+          desktopApiVersion: version,
+        }),
+      );
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const text = result.content[0].text;
+      expect(text.includes('keeps workbook actions on load')).toBe(expected);
+      if (!expected) {
+        expect(text).toContain('read the workbook again before retrying');
+        expect(text).not.toContain('requires Desktop support');
+      }
+    });
+  });
+
   describe.each(['missing', 'renamed', 'rewritten'] as const)(
     'failed edit recovery: %s',
     (failure) => {
@@ -864,6 +973,9 @@ describe('author-action edit/delete', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).not.toContain('Copies were added');
+      if (failure !== 'retained') {
+        expect(result.content[0].text).toContain('this requires Desktop support');
+      }
     },
   );
 
