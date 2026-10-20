@@ -110,6 +110,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       { code: 'document-warning', message: 'Dropped unsupported formatting.' },
     ];
     const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
       applyWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           command_id: 'apply-1',
@@ -139,6 +140,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
 
   it('keeps malformed optional diagnostics separate from document warnings', async () => {
     const executor = makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
       applyWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
           command_id: 'apply-malformed-diagnostics',
@@ -306,7 +308,10 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       appliedXml.push(xml);
       return Err(error);
     });
-    const mockExecutor = makeExecutorMock({ applyWorkbookDocument });
+    const mockExecutor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+    });
 
     const result = await loadWorkbookXml({
       xml: validXml,
@@ -476,7 +481,10 @@ describe('loadWorkbookXml (External Client API transport)', () => {
   it('should return execute-command-error when the apply POST fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'Timeout' };
     const applyWorkbookDocument = vi.fn().mockResolvedValue(Err(error));
-    const mockExecutor = makeExecutorMock({ applyWorkbookDocument });
+    const mockExecutor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
+    });
 
     const result = await loadWorkbookXml({
       xml: validXml,

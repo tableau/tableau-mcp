@@ -1348,6 +1348,7 @@ describe('authorActionTool (filter mode)', () => {
       "<param name='target' value='Details' /></command>" +
       '</action>';
     const { result, applyWorkbookDocument } = await getToolResult({
+      desktop: 'append',
       args: {
         mode: 'filter',
         caption: 'Sub-Category Filter',
@@ -1441,6 +1442,7 @@ describe('authorActionTool (filter mode)', () => {
       "<param name='target' value='Details' /></command>" +
       '</action>';
     const { result, applyWorkbookDocument } = await getToolResult({
+      desktop: 'append',
       args: {
         mode: 'filter',
         caption: 'New Filter',
@@ -1478,6 +1480,7 @@ describe('authorActionTool (filter mode)', () => {
       "<param name='target' value='Details' /></command>" +
       '</action>';
     const { result, applyWorkbookDocument } = await getToolResult({
+      desktop: 'append',
       args: {
         mode: 'filter',
         caption: 'New Filter',

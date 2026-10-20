@@ -490,7 +490,7 @@ export async function loadWorksheetXml({
   // On (apply-worksheet): replace an existing worksheet by id via the per-sheet `/document` route,
   // leaving other sheets untouched. That route is replace-only, so a name that resolves to no live
   // worksheet surfaces a `sheet-absent` error instead of creating one.
-  // Off (legacy whole-workbook builders, refine-worksheet): the worksheet may be net-new, so the
+  // Off (legacy whole-workbook builders): the worksheet may be net-new, so the
   // whole-workbook re-post upserts it (appending when absent). That is the create path.
   requireExistingSheet?: boolean;
   artifactApply?: ArtifactWorksheetApplyOptions;
@@ -602,6 +602,7 @@ export async function loadWorksheetXml({
 
       const applyResult = await applyWorkbookText({
         xml: workbookDoc,
+        liveXml: workbookResult.value,
         focus: canonicalFocus,
         executor,
         signal,
@@ -816,6 +817,7 @@ async function loadWorksheetXmlViaExternalApi({
 
     const applyResult = await applyWorkbookText({
       xml: workbookDoc,
+      liveXml: workbookResult.value,
       focus,
       executor,
       signal,

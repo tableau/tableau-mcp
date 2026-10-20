@@ -1,15 +1,14 @@
 import { z } from 'zod';
 
+import {
+  readWorkbookActions,
+  WorkbookAction,
+} from '../../../../desktop/metadata/workbookActions.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getAuthorActionTool } from './authorAction.js';
-import {
-  editedActionSettingsMatch,
-  readWorkbookActions,
-  removeWorkbookAction,
-  WorkbookAction,
-} from './authorActionLifecycle.js';
+import { editedActionSettingsMatch, removeWorkbookAction } from './authorActionLifecycle.js';
 import {
   appliedDocumentXml,
   AuthorActionArgs,
@@ -135,6 +134,63 @@ describe('author-action edit/delete', () => {
     },
   );
 
+  describe('on a Desktop build that keeps workbook actions on load', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    async function settle<T>(promise: Promise<T>): Promise<T> {
+      let done = false;
+      const wrapped = promise.finally(() => {
+        done = true;
+      });
+      while (!done) await vi.advanceTimersByTimeAsync(300);
+      return wrapped;
+    }
+
+    it('delete leaves all actions in place and says to remove it in Dashboard > Actions', async () => {
+      const initialXml = withActions(WORKBOOK, UNRELATED + CASES[2].definition);
+      const { result, applyWorkbookDocument } = await settle(
+        getToolResult({
+          args: { operation: 'delete', actionName: '[Action7]' },
+          initialXml,
+          readbackXml: initialXml,
+          desktop: 'append',
+        }),
+      );
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('keeps workbook actions on load');
+      expect(result.content[0].text).toContain('Dashboard > Actions');
+      expect(result.content[0].text).toContain('Original');
+      // The remaining action is carried, so the POST does not re-send it.
+      expect(appliedDocumentXml(applyWorkbookDocument)).not.toContain('[Action3]');
+    });
+
+    it('create posts only the new action, not the live ones', async () => {
+      const { result, applyWorkbookDocument } = await settle(
+        getToolResult({
+          args: {
+            caption: 'Created',
+            sourceWorksheet: 'Profit',
+            sourceField: `[${DATASOURCE_NAME}].[Profit]`,
+            targetParameter: '[Parameters].[Parameter 1]',
+          },
+          initialXml: withActions(WORKBOOK, UNRELATED),
+          readbackXml: withActions(
+            WORKBOOK,
+            UNRELATED +
+              CASES[0].definition.replace('[Action7]', '[Action1]').replace('Original', 'Created'),
+          ),
+          desktop: 'append',
+        }),
+      );
+      expect(result.isError).toBe(false);
+      expect(
+        actions(appliedDocumentXml(applyWorkbookDocument)).map((action) => action.name),
+      ).toEqual(['[Action1]']);
+    });
+  });
+
   describe.each(['missing', 'renamed', 'rewritten'] as const)(
     'failed edit recovery: %s',
     (failure) => {
@@ -149,6 +205,7 @@ describe('author-action edit/delete', () => {
                 ? replacement.replace('[Action7]', '[Action17]')
                 : replacement.replace("worksheet='Profit'", "worksheet='Details'");
           const { result, applyWorkbookDocument } = await getToolResult({
+            desktop: 'append',
             args: {
               operation: 'edit',
               actionName: '[Action7]',
@@ -701,6 +758,7 @@ describe('author-action edit/delete', () => {
             .replace('[Action7]', '[Action17]')
             .replace('Original', 'Edited');
           const { result, applyWorkbookDocument } = await getToolResult({
+            desktop: 'append',
             args:
               operation === 'delete'
                 ? { operation, actionName: '[Action7]' }
@@ -735,6 +793,7 @@ describe('author-action edit/delete', () => {
       it('does not diagnose added copies when an original name is absent', async () => {
         const definition = CASES[2].definition;
         const { result, applyWorkbookDocument } = await getToolResult({
+          desktop: 'append',
           args:
             operation === 'delete'
               ? { operation, actionName: '[Action7]' }
@@ -765,6 +824,7 @@ describe('author-action edit/delete', () => {
   it('keeps creation readback failures separate from edit/delete compatibility errors', async () => {
     const definition = CASES[2].definition;
     const { result, applyWorkbookDocument } = await getToolResult({
+      desktop: 'append',
       args: {
         mode: 'url',
         caption: 'New',

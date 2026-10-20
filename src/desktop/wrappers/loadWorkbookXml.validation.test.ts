@@ -14,6 +14,10 @@ beforeEach(() => {
   vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
 });
 
+// Whole-workbook applies always read the live document first.
+const liveWorkbook = (): ReturnType<typeof vi.fn> =>
+  vi.fn().mockResolvedValue(Ok({ xml: '<workbook/>' }));
+
 describe('loadWorkbookXml validation preflight', () => {
   it.each(
     [false, true].flatMap((cachedLiveRelative) =>
@@ -114,7 +118,10 @@ describe('loadWorkbookXml validation preflight', () => {
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
 
     const result = await loadWorkbookXml({
       xml,
@@ -233,7 +240,10 @@ describe('loadWorkbookXml validation preflight', () => {
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
     const result = await loadWorkbookXml({
       xml: injected.xml,
       executor,
@@ -318,7 +328,10 @@ describe('loadWorkbookXml validation preflight', () => {
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
 
     const result = await loadWorkbookXml({
       xml: candidateXml,
@@ -361,7 +374,10 @@ describe('loadWorkbookXml validation preflight', () => {
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
 
     const result = await loadWorkbookXml({
       xml: candidateXml,
@@ -388,7 +404,10 @@ describe('loadWorkbookXml validation preflight', () => {
       "<zone h='98000' id='4' name='Missing Sheet' w='98000' x='1000' y='1000' />" +
       '</zone></zones></dashboard></dashboards></workbook>';
     const applyWorkbookDocument = vi.fn();
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
 
     const result = await loadWorkbookXml({
       xml: candidateXml,
@@ -422,7 +441,10 @@ describe('loadWorkbookXml validation preflight', () => {
     const baselineXml = datasourceStart + firstReference + datasourceEnd;
     const candidateXml = datasourceStart + firstReference + secondReference + datasourceEnd;
     const applyWorkbookDocument = vi.fn();
-    const executor = makeExecutorMock({ applyWorkbookDocument });
+    const executor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: liveWorkbook(),
+    });
 
     const result = await loadWorkbookXml({
       xml: candidateXml,

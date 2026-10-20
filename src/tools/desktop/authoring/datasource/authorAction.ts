@@ -4,6 +4,11 @@ import { z } from 'zod';
 
 import { bareName, summarizeSchema } from '../../../../desktop/binder/schema-summary.js';
 import { validateWorkbookDocumentApply } from '../../../../desktop/guards/workbookDocumentGuard.js';
+import {
+  parseXmlBoolean,
+  readWorkbookActions,
+  WorkbookAction,
+} from '../../../../desktop/metadata/workbookActions.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../../errors/mcpToolError.desktop.js';
@@ -17,10 +22,7 @@ import {
   appendedActionsError,
   editedActionSettingsMatch,
   editRecoveryError,
-  parseXmlBoolean,
-  readWorkbookActions,
   removeWorkbookAction,
-  WorkbookAction,
 } from './authorActionLifecycle.js';
 import {
   DatasourceElement,
@@ -65,8 +67,7 @@ export type SourceFieldAggregation = z.infer<typeof sourceFieldAggregationSchema
 
 // Primitives in, action XML server-side, readback out. An action wires a mark
 // interaction on a source sheet to a target parameter, set, URL, filter, or highlight.
-// Full workbook applies replace the action list. Editing keeps the selected action's
-// internal name so persisted references and undo/redo track the same action.
+// Editing keeps the action's internal name so undo/redo and references track it.
 const paramsSchema = {
   session: sessionParam(),
   operation: z
@@ -615,6 +616,17 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                   baselineActions.value,
                 );
                 if (appendError) return appendError.toErr();
+                const readbackActions = readWorkbookActions(outcome.workbookXml);
+                if (
+                  readbackActions.isOk() &&
+                  baselineActions.value.every((action) =>
+                    readbackActions.value.some((candidate) => candidate.name === action.name),
+                  )
+                ) {
+                  return new XmlModificationError(
+                    `This Desktop build keeps workbook actions on load, so author-action cannot delete. Remove "${removed.value.action.caption}" in Dashboard > Actions (or Worksheet > Actions).`,
+                  ).toErr();
+                }
                 return new XmlModificationError(
                   'action deletion did not survive readback, or other action identities changed; this requires Desktop support for replacing workbook actions',
                 ).toErr();

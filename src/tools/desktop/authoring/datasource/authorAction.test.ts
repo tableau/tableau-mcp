@@ -447,6 +447,32 @@ describe('authorActionTool', () => {
     expect(legacyAt).toBeLessThan(paramAt);
   });
 
+  it('on a build that keeps live actions, posts the new url action without the existing parameter action', async () => {
+    const existingParam =
+      "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";
+    const added =
+      "<action caption='Open Details' name='[Action2]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<link caption='' expression='https://example.com/' />" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'url',
+        caption: 'Open Details',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+      },
+      initialXml: withActions(BASE_XML, existingParam),
+      readbackXml: withActions(BASE_XML, added + existingParam),
+      desktop: 'append',
+    });
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain('caption="Open Details"');
+    expect(loaded).not.toContain('edit-parameter-action');
+  });
+
   it('inserts a set action ahead of an existing parameter action (XSD family order)', async () => {
     const existingParam =
       "<edit-parameter-action caption='Existing Param' name='[Action1]'></edit-parameter-action>";

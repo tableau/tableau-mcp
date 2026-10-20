@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { parseActions } from '../../../../desktop/metadata/workbookActions.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
@@ -124,15 +125,20 @@ export type AuthorActionArgs = {
   urlEncode?: boolean;
 };
 
+let fixtureCount = 0;
+
 // Invokes author-action's callback directly against mocked External API calls
 export async function getToolResult({
   args,
   initialXml = BASE_XML,
   readbackXml,
+  desktop = 'replace',
 }: {
   args: AuthorActionArgs;
   initialXml?: string;
   readbackXml?: string;
+  // 'replace' models a build that drops live actions the POST omits; 'append' keeps them.
+  desktop?: 'replace' | 'append';
 }): Promise<{
   result: CallToolResult;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
@@ -142,19 +148,37 @@ export async function getToolResult({
   const executeCommand = vi
     .fn()
     .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  // A replace build serves the posted document until the guard re-sends the full one.
+  let servedAfterPost: string | undefined;
   const getWorkbookDocument = vi.fn(async () => {
+    if (servedAfterPost !== undefined) {
+      return new Ok({
+        xml: servedAfterPost,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      });
+    }
     return new Ok({
       xml: documents[Math.min(readCount++, documents.length - 1)],
       applicationVersion: undefined,
       xsdPayloadVersion: undefined,
     });
   });
-  const applyWorkbookDocument = vi.fn(async () => {
+  let posts = 0;
+  const applyWorkbookDocument = vi.fn(async (xml: string) => {
+    posts += 1;
+    const postedNames = new Set(parseActions(xml).actions.map((action) => action.name));
+    const dropsLiveAction = parseActions(initialXml).actions.some(
+      (action) => !postedNames.has(action.name),
+    );
+    servedAfterPost = desktop === 'replace' && posts === 1 && dropsLiveAction ? xml : undefined;
     return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
+  const desktopInstanceId = `author-action-fixture-${desktop}-${++fixtureCount}`;
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue({
+      desktopInstanceId,
       executeCommand,
       getWorkbookDocument,
       applyWorkbookDocument,
@@ -204,9 +228,9 @@ export async function getToolResult({
   return { result, applyWorkbookDocument };
 }
 
-// The XML handed to the first apply-workbook-document call.
+// The XML handed to the final apply-workbook-document call (a replace build gets a full re-send).
 export function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
-  const xml = applyWorkbookDocument.mock.calls[0]?.[0];
+  const xml = applyWorkbookDocument.mock.calls.at(-1)?.[0];
   invariant(typeof xml === 'string', 'applyWorkbookDocument was not called with document XML');
   return xml;
 }

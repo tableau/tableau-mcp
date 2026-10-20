@@ -94,7 +94,10 @@ describe('derivation preflight — apply-workbook path', () => {
     const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
-    const mockExecutor = makeExecutorMock({ applyWorkbookDocument });
+    const mockExecutor = makeExecutorMock({
+      applyWorkbookDocument,
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: '<workbook/>' })),
+    });
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('Month-Trunc'),
