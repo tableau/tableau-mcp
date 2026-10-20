@@ -23,7 +23,6 @@ export function classifySessionFatalError(
   return {
     ...error,
     recoverable: false,
-    sessionFatal: true,
     message: error.message.startsWith(SESSION_FATAL_GUIDANCE)
       ? error.message
       : `${SESSION_FATAL_GUIDANCE}\n${error.message}`,

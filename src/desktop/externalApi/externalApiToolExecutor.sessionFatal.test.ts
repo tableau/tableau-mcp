@@ -58,7 +58,6 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
           code: 'operation-failed',
           'tableau-error-code': tableauErrorCode,
           recoverable: false,
-          sessionFatal: true,
           message: expect.stringContaining('Stop all commands'),
         },
       });
@@ -91,7 +90,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
     expect(result.unwrapErr()).toMatchObject({
       type: 'command-failed',
       error: {
-        sessionFatal: true,
+        recoverable: false,
         message: expect.stringContaining('restart Tableau Desktop'),
       },
       result: { changed: false },
@@ -128,7 +127,6 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
       expect(result.unwrapErr()).toMatchObject({
         type: 'command-failed',
         error: {
-          sessionFatal: true,
           recoverable: false,
           message: expect.stringContaining('including reads'),
         },
@@ -168,7 +166,7 @@ describe('ExternalApiToolExecutor session-fatal errors', () => {
     expect(result.unwrapErr()).toMatchObject({
       type: 'command-failed',
       error: {
-        sessionFatal: true,
+        recoverable: false,
         'tableau-error-code': 'E71AE512',
         message: expect.stringContaining('restart Tableau Desktop'),
       },

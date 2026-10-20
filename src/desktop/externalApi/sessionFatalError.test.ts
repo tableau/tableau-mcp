@@ -8,7 +8,7 @@ describe('session-fatal error classification', () => {
 
       const classified = classifySessionFatalError(original);
 
-      expect(classified).toMatchObject({ code, recoverable: false, sessionFatal: true });
+      expect(classified).toMatchObject({ code, recoverable: false });
       expect(classified.message).toContain('Internal Error');
       expect(classified.message).toContain('restart Tableau Desktop');
       expect(original).toEqual({ code, message: 'Internal Error', recoverable: true });
@@ -58,7 +58,6 @@ describe('session-fatal error classification', () => {
       code: 'E71AE512',
       message: diagnostic,
       recoverable: false,
-      sessionFatal: true,
     });
 
     expect(classified.message.slice(0, 512)).toContain('restart Tableau Desktop');
