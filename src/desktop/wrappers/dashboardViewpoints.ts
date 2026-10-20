@@ -313,8 +313,8 @@ function expandedName(element: Element): string {
 }
 
 /**
- * Compare every submitted attribute, ordered layout node, style and text value. Allow
- * Desktop to add defaults/metadata that were not authored (for example a new simple-id).
+ * Compare authored attributes, ordered layout nodes, styles and text. Allow Desktop
+ * to reflow automatic tiled geometry and add defaults/metadata that were not authored.
  * Never allow added/removed/reordered zones or device layouts inside authored collections.
  */
 function containsAuthoredContent(expected: Element, actual: Element): boolean {
@@ -333,15 +333,24 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     if (attribute.name === 'name') {
       if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
     } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
-      // Desktop rounds zone coordinates during serialization (as in compose-dashboard).
+      // Floating/fixed geometry is authored; automatic flow geometry is recomputed
+      // by Desktop, including text fitting and the remaining worksheet area.
       if (
         !attribute.value.trim() ||
         !actualValue.trim() ||
         !Number.isInteger(Number(attribute.value)) ||
-        !Number.isInteger(Number(actualValue)) ||
-        Math.abs(Number(attribute.value) - Number(actualValue)) > 1
+        !Number.isInteger(Number(actualValue))
       )
         return false;
+      if (hasDesktopManagedGeometry(expected)) {
+        // A populated tile must not disappear into a zero/negative-sized rectangle.
+        if (
+          ['w', 'h'].includes(attribute.name) &&
+          Number(attribute.value) > 0 &&
+          Number(actualValue) <= 0
+        )
+          return false;
+      } else if (Math.abs(Number(attribute.value) - Number(actualValue)) > 1) return false;
     } else if (attribute.value !== actualValue) return false;
   }
   const text = (element: Element): string => {
@@ -363,6 +372,29 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
   return (
     expectedChildren.length === actualChildren.length &&
     expectedChildren.every((child, index) => containsAuthoredContent(child, actualChildren[index]))
+  );
+}
+
+function hasDesktopManagedGeometry(zone: Element): boolean {
+  if (
+    ['true', '1'].includes(zone.getAttribute('is-fixed') ?? '') ||
+    zone.hasAttribute('fixed-size')
+  )
+    return false;
+  const isFlow = (element: Element): boolean =>
+    element.tagName === 'zone' &&
+    element.getAttribute('type-v2') === 'layout-flow' &&
+    ['vert', 'horz'].includes(element.getAttribute('param') ?? '');
+  const parent = zone.parentNode;
+  if (parent?.nodeType !== 1) return false;
+  const container = parent as Element;
+  // Floating flow containers live directly under <zones>; their outer bounds
+  // remain authored. Only a known tiled parent can recompute this zone's bounds.
+  return (
+    isFlow(container) ||
+    (isFlow(zone) &&
+      container.tagName === 'zone' &&
+      container.getAttribute('type-v2') === 'layout-basic')
   );
 }
 

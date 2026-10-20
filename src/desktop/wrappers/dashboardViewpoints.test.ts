@@ -1,5 +1,11 @@
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
+import {
+  readbackReflowDashboard,
+  REFLOW_DASHBOARD_NAME,
+  reflowWorkbook,
+  submittedReflowDashboard,
+} from './dashboardReflowFixtures.js';
 import {
   composeDashboardWorkbook,
   createDashboardReadbackVerifier,
@@ -266,5 +272,81 @@ describe('dashboard content readback', () => {
 
   it('rejects malformed readback', () => {
     expect(matches('<workbook><dashboard')).toBe(false);
+  });
+});
+
+describe('Desktop tiled-layout reflow (W-24587662)', () => {
+  const submitted = reflowWorkbook(submittedReflowDashboard);
+  const readback = reflowWorkbook(readbackReflowDashboard);
+  const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);
+
+  function zoneAttribute(xml: string, id: string, attribute: string, value: string): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const zone = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === id,
+    )!;
+    zone.setAttribute(attribute, value);
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  function floatFlowContainer(xml: string): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const flow = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === '5',
+    )!;
+    // Native floating containers are siblings of the tiled layout-basic root.
+    doc.getElementsByTagName('zones')[0].appendChild(flow);
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  it('accepts the captured tiled reflow with native metadata and matching viewpoint state', () => {
+    expect(matches(submitted)).toBe(true);
+    expect(matches(readback)).toBe(true);
+  });
+
+  it.each([
+    { name: 'empty coordinate', attribute: 'x', value: '' },
+    { name: 'noninteger coordinate', attribute: 'y', value: '0.5' },
+    { name: 'zero-width worksheet', attribute: 'w', value: '0' },
+    { name: 'negative-height worksheet', attribute: 'h', value: '-1' },
+  ])('still rejects a $name after reflow', ({ attribute, value }) => {
+    expect(matches(zoneAttribute(readback, '7', attribute, value))).toBe(false);
+  });
+
+  it.each([
+    { zoneId: '5', attribute: 'is-fixed', value: 'true' },
+    { zoneId: '7', attribute: 'is-fixed', value: '1' },
+    { zoneId: '7', attribute: 'is-fixed', value: 'true' },
+    { zoneId: '7', attribute: 'fixed-size', value: '600' },
+  ])('preserves authored geometry for zone $zoneId with $attribute=$value', (setting) => {
+    const expected = zoneAttribute(submitted, setting.zoneId, setting.attribute, setting.value);
+    const actual = zoneAttribute(readback, setting.zoneId, setting.attribute, setting.value);
+    expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(false);
+  });
+
+  it('still rejects changed bounds of a floating flow container', () => {
+    const expected = floatFlowContainer(submitted);
+    const actual = floatFlowContainer(readback);
+    const matchesFloating = createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME);
+    expect(matchesFloating(expected)).toBe(true);
+    expect(matchesFloating(actual)).toBe(false);
+  });
+
+  it('still requires the native worksheet registration after reflow', () => {
+    expect(matches(reflowWorkbook(readbackReflowDashboard, false))).toBe(false);
+  });
+
+  it('still rejects a changed flow direction, worksheet, title, style, or dashboard size', () => {
+    const changed = [
+      zoneAttribute(readback, '5', 'param', 'horz'),
+      zoneAttribute(readback, '7', 'name', 'Another worksheet'),
+      readback.replace('Coachella Artists per Day: 2022 vs 2026', 'Changed title'),
+      readback.replace("fontsize='20'", "fontsize='10'"),
+      readback.replace("maxwidth='1024'", "maxwidth='900'"),
+    ];
+    for (const xml of changed) {
+      expect(xml).not.toBe(readback);
+      expect(matches(xml)).toBe(false);
+    }
   });
 });
