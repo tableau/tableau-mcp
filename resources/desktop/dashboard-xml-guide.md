@@ -34,8 +34,9 @@ A Tableau dashboard consists of zones that contain worksheets, text, images, or 
 </dashboard>
 ```
 
-NOTE: Remember to also add viewpoints to the window element! See "Critical: Viewpoints" section
-below.
+NOTE: Worksheet view registration belongs to the dashboard window, not the dashboard fragment.
+Desktop API 0.2.22 and newer repairs registration for submitted worksheet zones during dashboard
+apply. See "Critical: Viewpoints" below for older-build safeguards.
 
 ## Key Concepts
 
@@ -78,6 +79,12 @@ below.
 ```
 
 Note: The worksheet name goes in the `name` attribute on the zone itself, NOT in a child element.
+Use no `type-v2` attribute (or the supported `type-v2="visual"`); never invent
+`type-v2="worksheet"`, which can leave an unsafe zone that crashes Tableau when removed.
+
+Existing blank worksheets are valid dashboard content. Do not add marks, fields, or datasource
+bindings merely to place a worksheet in a dashboard. Build chart content only when the user asks for
+it. A missing visual document indicates dashboard-window registration, not worksheet emptiness.
 
 #### 3. Text Zone
 
@@ -201,7 +208,7 @@ Note: The worksheet name goes in the `name` attribute on the zone itself, NOT in
 6. **Worksheet zones**: To reference a worksheet, use the `name` attribute directly on the zone
    element (NOT a child `<zone-pane>` element)
 7. **Zone styling**: Worksheet zones should include `<zone-style>` with border and margin formatting
-8. **Validate after changes**: Use `tableau-apply-dashboard` which validates before sending
+8. **Validate after changes**: Use `apply-dashboard` which validates before sending
 
 ## Critical Rules
 
@@ -211,19 +218,22 @@ Note: The worksheet name goes in the `name` attribute on the zone itself, NOT in
   `name` attribute
 - **Include zone-style**: Every worksheet zone should have a `<zone-style>` child with border/margin
   formats
-- **⚠️ CRITICAL: Sync viewpoints**: For EVERY worksheet in zones, you MUST add a matching
-  `<viewpoint>` in the window element. This is separate from the dashboard element - it goes in
-  `<windows><window class="dashboard">`. Without this, Tableau will fail with "Internal Error".
+- **Worksheet content may be blank**: Placement does not require marks or fields.
+- **View registration is separate**: Every referenced worksheet needs a corresponding dashboard
+  window view. Desktop API 0.2.22 and newer repairs missing registrations for submitted zones. On
+  older or unknown versions, register the worksheets in Desktop before applying the layout.
 
 ## Critical: Viewpoints
 
-**IMPORTANT**: When you add worksheets to a dashboard's zones, you MUST also add corresponding
-viewpoints to the dashboard's **window element** (NOT the dashboard element itself).
+**IMPORTANT**: Worksheet view registration belongs to the dashboard's **window element** (NOT the
+dashboard element itself). Native `HasVisualDoc` checks that registration; it does not check marks
+or fields in the worksheet.
 
 The viewpoints go in:
 `<workbook><windows><window class="dashboard" name="DashboardName"><viewpoints>`
 
-For each worksheet referenced in zones (by `name` attribute), add:
+For each worksheet referenced in zones (by `name` attribute), the window has a corresponding
+viewpoint, for example:
 
 ```xml
 <viewpoint name="WorksheetName">
@@ -248,57 +258,26 @@ Example: If your dashboard has zones with `name="Sheet 1"` and `name="Sheet 2"`,
 </window>
 ```
 
-**Without matching viewpoints, Tableau will reject the dashboard with an internal error.**
+The dashboard-only endpoint repairs missing view registrations for submitted worksheet zones on
+Desktop API 0.2.22 and newer, including blank worksheets. MCP verifies repaired registration in
+readback before reporting success. Existing viewpoint settings are preserved. Extra requested
+worksheet names outside the submitted zones must already be registered, even on supported builds.
+
+On older or unknown API versions, missing registration is blocked before dispatch. Add the
+worksheets to the dashboard in Desktop, then re-read the dashboard before retrying. Do not populate
+a blank worksheet, change its zone type, or replace the whole workbook as a workaround.
 
 ## Workflow
 
-### ⚠️ CRITICAL: Application Order Matters!
+1. Confirm the dashboard and referenced worksheets exist in the open workbook.
+2. Check the discovered Desktop API version. On older or unknown versions, add any unregistered
+   worksheets to the dashboard in Desktop first, without changing their content.
+3. Use `get-dashboard-xml` to read the current dashboard fragment.
+4. Edit the fragment's zones, retaining the dashboard identity and valid worksheet zone types.
+5. Use `apply-dashboard` for the surgical dashboard-only write, then inspect readback.
 
-**The Problem:** `tableau-apply-workbook` replaces the **ENTIRE** workbook state. If you apply a
-dashboard, then apply a stale workbook XML, your dashboard changes will be **OVERWRITTEN**.
-
-### Recommended: Use `tableau-apply-dashboard-with-viewpoints`
-
-This tool handles both safely:
-
-1. Gets a fresh workbook (includes your dashboard changes)
-2. Adds viewpoints automatically
-3. Applies both in the correct order
-
-```typescript
-tableau-apply-dashboard-with-viewpoints({
-  dashboard_name: "My Dashboard",
-  dashboard_file: "path/to/dashboard.xml",
-  worksheet_names: ["Sheet 1", "Sheet 2"]
-})
-```
-
-### Manual Workflow (If Needed)
-
-If you must edit manually, follow this order:
-
-1. `tableau-get-dashboard` - Get current dashboard XML
-2. Edit dashboard zones XML
-3. `tableau-apply-dashboard` - Apply dashboard changes **FIRST**
-4. `tableau-get-workbook` - Get **FRESH** workbook (includes dashboard changes)
-5. Edit workbook to add viewpoints to the dashboard window
-6. `tableau-apply-workbook` - Apply window viewpoint changes
-
-**⚠️ WRONG ORDER (Will Overwrite Dashboard):**
-
-```typescript
-// ❌ WRONG - Stale workbook overwrites dashboard
-tableau - get - workbook(); // Gets workbook
-tableau - apply - dashboard(); // Applies dashboard
-tableau - apply - workbook(); // Overwrites dashboard with stale workbook!
-```
-
-**✅ CORRECT ORDER:**
-
-```typescript
-// ✅ CORRECT - Fresh workbook includes dashboard
-tableau - apply - dashboard(); // Apply dashboard first
-tableau - get - workbook(); // Get fresh workbook (includes dashboard)
-// Edit viewpoints
-tableau - apply - workbook(); // Apply fresh workbook with viewpoints
-```
+The apply path reads a locked live snapshot for registration checks, pins the Desktop instance, and
+checks cached source drift. It never falls back to a worksheet or whole-workbook write.
+Whole-workbook replacement can overwrite concurrent edits, even when based on a fresh read. If
+verification fails after an accepted write, changes may have been applied: re-read before retrying
+rather than blindly repeating the apply.

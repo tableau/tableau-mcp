@@ -56,6 +56,15 @@ const GET_ACTIVE_DIALOGS_TIMEOUT_GUIDANCE =
   'invoke-dialog-action without a fresh exact result. Ask the user to inspect and handle any open ' +
   'Tableau dialog, then call list-instances to confirm the session is still reachable.';
 
+// The replay-safety core of the indeterminate guidance, with no dialog-inspection read clause. A
+// session-fatal dialog action still needs this part: its first outcome is unknown, so even after a
+// Desktop restart the agent must not blindly replay a possibly-consequential action. The read clause
+// is split out below because it permits a get-active-dialogs call, which a dead session forbids.
+export const INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE =
+  'The invoke-dialog-action outcome is indeterminate: the action may already have been invoked even ' +
+  'though no valid response confirmed the outcome. Do not call invoke-dialog-action again or click ' +
+  'another action. Ask the user to handle any consequential choice.';
+
 export const INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE =
   'The invoke-dialog-action outcome is indeterminate: the action may already have been invoked even ' +
   'though no valid response confirmed the outcome. Do not call invoke-dialog-action again or click ' +

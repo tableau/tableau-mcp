@@ -11,8 +11,8 @@ import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo, TruncationReason } from '../../_lib/truncation.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
-import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
 import {
   applyFlowTaskFilters,
   parseAndValidateFlowTasksFilterString,
@@ -32,7 +32,7 @@ const paramsSchema = {
 export type ListFlowTasksResultInfo = {
   returnedCount: number;
   truncated: boolean;
-  truncationReason?: ListFlowsTruncationReason;
+  truncationReason?: TruncationReason;
   // Always known — every matching task is fetched before the limit is applied.
   totalAvailable: number;
 };

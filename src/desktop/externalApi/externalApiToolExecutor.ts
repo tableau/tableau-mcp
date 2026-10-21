@@ -8,6 +8,7 @@ import {
   BLOCKING_DIALOG_GUIDANCE,
   desktopCallTimeoutMessage,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
+  INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
   isDesktopCallTimeout,
 } from '../callDeadline.js';
 import {
@@ -26,6 +27,7 @@ import {
   WorkbookDocument,
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
+import { classifySessionFatalError, isSessionFatalError } from './sessionFatalError.js';
 import {
   ApiRoot,
   apiRootSchema,
@@ -1243,12 +1245,12 @@ function buildCommandStatus(
     const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
     return Err({
       type: 'command-failed',
-      error: {
+      error: classifySessionFatalError({
         code: outcome.envelopeError?.code ?? 'operation-failed',
         message: outcome.envelopeError?.message ?? `Command ${namespace}:${command} failed`,
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-      },
+      }),
       ...(outcome.result !== undefined ? { result: outcome.result } : {}),
       ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
@@ -1364,12 +1366,12 @@ function mapClientError(
       const tableauErrorCode = error.tableauErrorCode ?? error.code;
       return {
         type: 'command-failed',
-        error: {
+        error: classifySessionFatalError({
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
           ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-        },
+        }),
       };
     }
     case 'unauthorized':
@@ -1503,11 +1505,18 @@ function mapInvokeDialogActionError(
   ) {
     const mapped = mapClientError(error, pinnedPid);
     if (mapped.type === 'command-failed' && mapped.error !== undefined) {
+      // A session-fatal 5xx must not carry the full indeterminate guidance: its get-active-dialogs
+      // read clause contradicts the stop-all-commands-and-reads contract. But the replay-safety core
+      // (the action may already have run; do not re-invoke it; ask the user about any consequential
+      // choice) still holds — the first outcome is unknown even after a restart — so append only that.
+      const guidance = isSessionFatalError(mapped.error)
+        ? INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE
+        : INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE;
       return {
         type: 'command-failed',
         error: {
           ...mapped.error,
-          message: appendInvokeDialogActionIndeterminateGuidance(mapped.error.message),
+          message: `${mapped.error.message} ${guidance}`,
         },
       };
     }
