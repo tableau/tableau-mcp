@@ -554,9 +554,9 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   // Mirrors the per-client `disabled` provider on the authoring tool registrations.
+  const authoringAllowedForClient = await isAuthoringAllowedForClient(clientId);
   const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) &&
-    (await isAuthoringAllowedForClient(clientId));
+    (await featureGate.isFeatureEnabled('authoring-tools')) && authoringAllowedForClient;
   const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
@@ -623,6 +623,10 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!dataAppsEnabled) {
     enabledTools.delete('scaffold-data-app');
     enabledTools.delete('move-workbook');
+  }
+
+  if (!authoringAllowedForClient) {
+    enabledTools.delete('scaffold-data-app');
   }
 
   return enabledTools;

@@ -807,6 +807,25 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:workbooks:update');
     });
 
+    it.each([
+      { clientId: claudeClientId, authoringWithSlack: false, expected: true },
+      { clientId: undefined, authoringWithSlack: false, expected: true },
+      { clientId: slackClientId, authoringWithSlack: false, expected: false },
+      { clientId: slackClientId, authoringWithSlack: true, expected: true },
+    ])(
+      'advertises scaffold-data-app scope when data-apps is on: $clientId, authoring-with-slack=$authoringWithSlack',
+      async ({ clientId, authoringWithSlack, expected }) => {
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (flag: string) =>
+            flag === 'data-apps' || (flag === 'authoring-with-slack' && authoringWithSlack),
+        );
+        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+
+        const scopes = await getSupportedApiScopes(clientId);
+        expect(scopes.includes('tableau:packages:read')).toBe(expected);
+      },
+    );
+
     it('should require base publish scopes plus projects read, excluding optional permissions read', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
 
