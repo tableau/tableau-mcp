@@ -1323,6 +1323,20 @@ describe('ExternalApiToolExecutor', () => {
     });
 
     it('gets ordered native Show Me options without narrowing runtime type tokens', async () => {
+      await server.close();
+      server = await startMockExternalApiServer({
+        workbookXml: `<workbook><datasources>
+          <datasource name="Sample - Superstore">
+            <column name="[Region]" datatype="string" role="dimension" type="nominal" />
+            <column name="[Sales]" datatype="real" role="measure" type="quantitative" />
+          </datasource>
+        </datasources><worksheets><worksheet name="Sales by Region"><table><view>
+          <datasource-dependencies datasource="Sample - Superstore">
+            <column-instance name="[none:Region:nk]" column="[Region]" />
+            <column-instance name="[sum:Sales:qk]" column="[Sales]" />
+          </datasource-dependencies>
+        </view></table></worksheet></worksheets></workbook>`,
+      });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
@@ -1350,6 +1364,28 @@ describe('ExternalApiToolExecutor', () => {
         selectionMode: 'explicit',
         fieldsSelectedInSchemaViewer: '[Sample - Superstore].[sum:Sales:qk]',
       });
+    });
+
+    it('does not dispatch Show Me when the metadata instance has changed', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const getResult = await executor.getWorksheetShowMeOptions(
+        'sheet-sales',
+        {},
+        signal,
+        'other',
+      );
+      const applyResult = await executor.showMeWorksheet(
+        'sheet-sales',
+        { showMeType: 'bar-horiz' },
+        signal,
+        'other',
+      );
+
+      expect(getResult.isErr()).toBe(true);
+      expect(applyResult.isErr()).toBe(true);
+      expect(server.requests).toHaveLength(0);
     });
 
     it('gets a dashboard item by id', async () => {

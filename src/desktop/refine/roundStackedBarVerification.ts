@@ -1040,16 +1040,154 @@ function targetWorkbookOwners(
   };
 }
 
-function hasNonEmptyTopLevelActions(workbook: Element): boolean {
-  return childElements(workbook, 'actions').some(
-    (actions) =>
-      actions.attributes.length > 0 ||
-      Array.from(actions.childNodes).some(
-        (node) =>
-          node.nodeType === 1 ||
-          ((node.nodeType === 3 || node.nodeType === 4) && Boolean(node.nodeValue?.trim())),
-      ),
+const GENERIC_ACTION_REFUSAL =
+  "This workbook has actions rounded bars can't support yet. Remove them in Dashboard > Actions or Worksheet > Actions, then try again.";
+const MAX_LISTED_DASHBOARDS = 3;
+const MAX_LISTED_NAME_LENGTH = 40;
+
+function normalizeName(value: string | null | undefined): string {
+  return (value ?? '').trim().normalize('NFC').toLowerCase();
+}
+
+function isStoryboard(dashboard: Element): boolean {
+  return (
+    normalizeName(dashboard.getAttribute('type')) === 'storyboard' ||
+    normalizeName(dashboard.getAttribute('type-v2')) === 'storyboard'
   );
+}
+
+function descendantElements(element: Element): Element[] {
+  return Array.from(element.getElementsByTagName('*'));
+}
+
+function attributeValues(element: Element): string[] {
+  return Array.from(element.attributes).map((attribute) => attribute.value);
+}
+
+function mentionsName(node: Node, name: string): boolean {
+  if (node.nodeType === 3 || node.nodeType === 4) return normalizeName(node.nodeValue) === name;
+  if (
+    node.nodeType === 1 &&
+    attributeValues(node as Element).some((value) => normalizeName(value) === name)
+  ) {
+    return true;
+  }
+  return Array.from(node.childNodes).some((child) => mentionsName(child, name));
+}
+
+function clipName(name: string): string {
+  return name.slice(0, MAX_LISTED_NAME_LENGTH);
+}
+
+type ActionVerdict =
+  | { kind: 'safe' }
+  | { kind: 'unsafe' }
+  | { kind: 'reaches-target'; name: string };
+
+function judgeFilterAction(
+  action: Element,
+  worksheetName: string,
+  dashboards: Element[],
+): ActionVerdict {
+  const unsafe: ActionVerdict = { kind: 'unsafe' };
+  // Covers a source worksheet, source dashboard or target that names the sheet.
+  if (mentionsName(action, worksheetName)) return unsafe;
+  const commands = childElements(action, 'command');
+  const sources = childElements(action, 'source');
+  if (
+    commands.length !== 1 ||
+    sources.length !== 1 ||
+    commands[0].getAttribute('command') !== 'tsc:tsl-filter' ||
+    action.getElementsByTagName('link').length > 0
+  ) {
+    return unsafe;
+  }
+  const targets = childElements(commands[0], 'param').filter(
+    (param) => param.getAttribute('name') === 'target',
+  );
+  const sourceDashboard = sources[0].getAttribute('dashboard') ?? '';
+  if (
+    targets.length !== 1 ||
+    sourceDashboard.trim() === '' ||
+    targets[0].getAttribute('value') !== sourceDashboard
+  ) {
+    return unsafe;
+  }
+  const matching = dashboards.filter(
+    (dashboard) => dashboard.getAttribute('name') === sourceDashboard,
+  );
+  // Fail closed on case/spacing siblings in case Tableau resolves the target loosely.
+  const looseMatches = dashboards.filter(
+    (dashboard) => normalizeName(dashboard.getAttribute('name')) === normalizeName(sourceDashboard),
+  );
+  if (matching.length !== 1 || looseMatches.length !== 1 || isStoryboard(matching[0])) {
+    return unsafe;
+  }
+
+  const dashboard = matching[0];
+  const otherDashboardNames = new Set(
+    dashboards
+      .filter((other) => other !== dashboard)
+      .map((other) => normalizeName(other.getAttribute('name'))),
+  );
+  let namesOtherDashboard = false;
+  for (const element of descendantElements(dashboard)) {
+    for (const value of attributeValues(element)) {
+      const normalized = normalizeName(value);
+      if (normalized === worksheetName) {
+        return { kind: 'reaches-target', name: dashboard.getAttribute('name')?.trim() ?? '' };
+      }
+      if (otherDashboardNames.has(normalized)) namesOtherDashboard = true;
+    }
+  }
+  return namesOtherDashboard ? unsafe : { kind: 'safe' };
+}
+
+function targetDashboardList(names: string[]): string {
+  const unique = [...new Set(names)];
+  const shown = unique
+    .slice(0, MAX_LISTED_DASHBOARDS)
+    .map((name) => `'${clipName(name)}'`)
+    .join(', ');
+  const more = unique.length - MAX_LISTED_DASHBOARDS;
+  return more > 0 ? `${shown} and ${more} more` : shown;
+}
+
+// Filter actions are dimension filters: only ones targeting a dashboard that holds the sheet can break it.
+function topLevelActionsRefusal(workbook: Element, worksheetCanonicalName: string): string | null {
+  const blocks = childElements(workbook, 'actions');
+  const worksheetName = normalizeName(worksheetCanonicalName);
+  const hasContent = (block: Element): boolean =>
+    block.attributes.length > 0 ||
+    Array.from(block.childNodes).some(
+      (node) => node.nodeType !== 3 || Boolean(node.nodeValue?.trim()),
+    );
+  if (!blocks.some(hasContent) && blocks.length <= 1) return null;
+  if (blocks.length > 1 || worksheetName === '') return GENERIC_ACTION_REFUSAL;
+
+  const block = blocks[0];
+  if (block.attributes.length > 0) return GENERIC_ACTION_REFUSAL;
+  const actions: Element[] = [];
+  for (const node of Array.from(block.childNodes)) {
+    if (node.nodeType === 1 && (node as Element).tagName === 'action') {
+      actions.push(node as Element);
+    } else if (!(node.nodeType === 3 && (node.nodeValue ?? '').trim() === '')) {
+      return GENERIC_ACTION_REFUSAL;
+    }
+  }
+  const dashboardsContainer = topLevelContainer(workbook, 'dashboards');
+  const dashboards = dashboardsContainer ? childElements(dashboardsContainer, 'dashboard') : [];
+  const reaching: string[] = [];
+  let unsafe = false;
+  for (const action of actions) {
+    const verdict = judgeFilterAction(action, worksheetName, dashboards);
+    if (verdict.kind === 'unsafe') unsafe = true;
+    else if (verdict.kind === 'reaches-target') reaching.push(verdict.name);
+  }
+  if (reaching.length > 0) {
+    return `Rounded bars disappear when other sheets on ${targetDashboardList(reaching)} filter this chart. Remove those filter actions in Dashboard > Actions, or remove '${clipName(worksheetCanonicalName)}' from the dashboard, then try again.`;
+  }
+  return unsafe ? GENERIC_ACTION_REFUSAL : null;
 }
 
 function canonicalUnrelatedWorkbookContent(
@@ -1150,13 +1288,8 @@ export function verifyRoundStackedBarSourceWorkbook(
       );
     }
   }
-  if (hasNonEmptyTopLevelActions(workbook)) {
-    addFinding(
-      findings,
-      'action',
-      'Source workbook contains top-level actions; rounded-bar conversion cannot prove their dashboard-wide semantics safe.',
-    );
-  }
+  const actionRefusal = topLevelActionsRefusal(workbook, worksheetName);
+  if (actionRefusal) addFinding(findings, 'action', actionRefusal);
   if (owners.datasources.length !== 1) {
     addFinding(
       findings,

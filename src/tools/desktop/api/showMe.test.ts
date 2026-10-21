@@ -42,6 +42,13 @@ const accepted202 = (operationId: string): MockOverride => ({
   body: JSON.stringify({ id: operationId, kind: 'tabdoc:show-me', state: 'RUNNING' }),
 });
 
+const SHOW_ME_WORKBOOK_XML = `<workbook><datasources>
+  <datasource name="Superstore" caption="Sample - Superstore">
+    <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative" />
+    <column name="[Profit]" caption="Profit" datatype="real" role="measure" type="quantitative" />
+  </datasource>
+</datasources></workbook>`;
+
 function showMePosts(server: MockExternalApiServer): Array<{ path: string; body: string }> {
   return server.requests.filter(
     (request) => request.method === 'POST' && request.path.includes(':showMe'),
@@ -97,7 +104,7 @@ describe('show-me tool', () => {
     [{ showMeType: 'bar-horiz' }, { showMeType: 'bar-horiz' }],
     [
       { showMeType: 'bar-horiz', dataSource: 'Sample - Superstore' },
-      { showMeType: 'bar-horiz', dataSource: 'Sample - Superstore' },
+      { showMeType: 'bar-horiz', dataSource: 'Superstore' },
     ],
     [
       { showMeType: 'bar-horiz', fieldsSelectedInSchemaViewer: [] },
@@ -121,7 +128,7 @@ describe('show-me tool', () => {
       },
       {
         showMeType: 'scatter',
-        dataSource: 'Sample - Superstore',
+        dataSource: 'Superstore',
         fieldsSelectedInSchemaViewer: ['[Superstore].[Sales]', '[Superstore].[Profit]'],
       },
     ],
@@ -139,6 +146,36 @@ describe('show-me tool', () => {
         operationStatus: 'completed',
         worksheet: { id: WORKSHEET_ID, name: WORKSHEET_NAME },
       });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('canonicalizes captions before dispatch and blocks a mixed invalid selection', async () => {
+    const harness = await startHarness();
+    try {
+      const captionResult = await harness.callTool({
+        worksheet: WORKSHEET_NAME,
+        showMeType: 'bar-horiz',
+        dataSource: 'Sample - Superstore',
+        fieldsSelectedInSchemaViewer: ['Sales', '[Sample - Superstore].[Profit]'],
+      });
+      expect(captionResult.isError).toBe(false);
+      expect(JSON.parse(showMePosts(harness.server)[0].body)).toEqual({
+        showMeType: 'bar-horiz',
+        dataSource: 'Superstore',
+        fieldsSelectedInSchemaViewer: ['[Superstore].[Sales]', '[Superstore].[Profit]'],
+      });
+
+      const invalidResult = await harness.callTool({
+        worksheet: WORKSHEET_NAME,
+        showMeType: 'bar-horiz',
+        fieldsSelectedInSchemaViewer: ['[Superstore].[Sales]', 'Missing'],
+      });
+      expect(invalidResult.isError).toBe(true);
+      expect(showMePosts(harness.server)).toHaveLength(1);
+      invariant(invalidResult.content[0].type === 'text');
+      expect(invalidResult.content[0].text).toContain('fieldsSelectedInSchemaViewer[1]');
     } finally {
       await harness.close();
     }
@@ -365,7 +402,7 @@ async function startHarness(): Promise<{
   callTool: (args: Record<string, unknown>) => Promise<CallToolResult>;
   close: () => Promise<void>;
 }> {
-  const server = await startMockExternalApiServer();
+  const server = await startMockExternalApiServer({ workbookXml: SHOW_ME_WORKBOOK_XML });
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
   return {

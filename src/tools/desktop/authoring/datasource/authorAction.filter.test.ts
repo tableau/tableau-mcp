@@ -1494,4 +1494,45 @@ describe('authorActionTool (filter mode)', () => {
     expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['no excludes', undefined, "<source type='sheet' dashboard='Overview' />"],
+    [
+      'KPI sheet excluded',
+      ['KPI Sales'],
+      "<source type='sheet' dashboard='Overview'><exclude-sheet name='KPI Sales' /></source>",
+    ],
+  ] as const)(
+    'pins the click-to-filter offer action (%s)',
+    async (_label, excludeSourceSheets, sourceXml) => {
+      const workbook = buildWorkbookXml({
+        worksheets: ['KPI Sales', 'Profit', 'Details'],
+        dashboards: [{ name: 'Overview', zones: ['KPI Sales', 'Profit', 'Details'] }],
+      });
+      const expectedAction =
+        "<action caption='Click to filter (Overview)' name='[Action1]'>" +
+        "<activation auto-clear='true' type='on-select' />" +
+        sourceXml +
+        "<command command='tsc:tsl-filter'>" +
+        "<param name='special-fields' value='all' />" +
+        "<param name='target' value='Overview' /></command>" +
+        '</action>';
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'filter',
+          caption: 'Click to filter (Overview)',
+          sourceWorksheet: '',
+          sourceDashboard: 'Overview',
+          targetSheet: 'Overview',
+          clearSelection: 'show-all',
+          ...(excludeSourceSheets ? { excludeSourceSheets: [...excludeSourceSheets] } : {}),
+        },
+        initialXml: workbook,
+        readbackXml: withActions(workbook, expectedAction),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+    },
+  );
 });

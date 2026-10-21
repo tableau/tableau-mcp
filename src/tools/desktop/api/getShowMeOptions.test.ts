@@ -39,6 +39,13 @@ const defaultOptions: ShowMeOptionsResult = {
   ],
 };
 
+const SHOW_ME_WORKBOOK_XML = `<workbook><datasources>
+  <datasource name="federated.sales" caption="Sample - Superstore">
+    <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative" />
+    <column name="[Profit]" caption="Profit" datatype="real" role="measure" type="quantitative" />
+  </datasource>
+</datasources></workbook>`;
+
 type ToolArgs = {
   session?: string;
   worksheet: string;
@@ -107,6 +114,7 @@ describe('getShowMeOptionsTool', () => {
         expectedId,
         {},
         expect.any(AbortSignal),
+        undefined,
       );
     },
   );
@@ -162,6 +170,9 @@ describe('getShowMeOptionsTool', () => {
       'sheet-sales',
       expectedQuery,
       expect.any(AbortSignal),
+      args.dataSource !== undefined || args.fieldsSelectedInSchemaViewer !== undefined
+        ? 'instance-show-me'
+        : undefined,
     );
   });
 
@@ -213,7 +224,40 @@ describe('getShowMeOptionsTool', () => {
     const { executor } = await invoke({ args: { worksheet: 'Sales by Region' }, signal });
 
     expect(executor.listWorksheets).toHaveBeenCalledWith(signal);
-    expect(executor.getWorksheetShowMeOptions).toHaveBeenCalledWith('sheet-sales', {}, signal);
+    expect(executor.getWorksheetShowMeOptions).toHaveBeenCalledWith(
+      'sheet-sales',
+      {},
+      signal,
+      undefined,
+    );
+  });
+
+  it('normalizes caption selections and rejects an unknown field before discovery', async () => {
+    const caption = await invoke({
+      args: {
+        worksheet: 'Sales by Region',
+        dataSource: 'Sample - Superstore',
+        fieldsSelectedInSchemaViewer: ['[Sales]', '[Sample - Superstore].[Profit]'],
+      },
+    });
+
+    expect(caption.result.isError).toBe(false);
+    expect(caption.executor.getWorksheetShowMeOptions).toHaveBeenCalledWith(
+      'sheet-sales',
+      {
+        dataSource: 'federated.sales',
+        fieldsSelectedInSchemaViewer: ['[federated.sales].[Sales]', '[federated.sales].[Profit]'],
+      },
+      expect.any(AbortSignal),
+      'instance-show-me',
+    );
+
+    const unknown = await invoke({
+      args: { worksheet: 'Sales by Region', fieldsSelectedInSchemaViewer: ['Missing'] },
+    });
+    expect(unknown.result.isError).toBe(true);
+    expect(unknown.executor.getWorksheetShowMeOptions).not.toHaveBeenCalled();
+    expect(resultText(unknown.result)).toContain('fieldsSelectedInSchemaViewer[0]');
   });
 });
 
@@ -238,7 +282,21 @@ async function invoke({
     .mockImplementation(async (_worksheetId, _query: ShowMeOptionsQuery) =>
       discoveryError ? Err(discoveryError) : Ok(response),
     );
-  const executor = makeExecutorMock({ listWorksheets, getWorksheetShowMeOptions });
+  const getWorkbookDocument = vi
+    .fn<ExternalApiToolExecutor['getWorkbookDocument']>()
+    .mockResolvedValue(
+      Ok({
+        xml: SHOW_ME_WORKBOOK_XML,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+        instanceId: 'instance-show-me',
+      }),
+    );
+  const executor = makeExecutorMock({
+    listWorksheets,
+    getWorkbookDocument,
+    getWorksheetShowMeOptions,
+  });
   const tool = getShowMeOptionsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   const base = getMockRequestHandlerExtra();

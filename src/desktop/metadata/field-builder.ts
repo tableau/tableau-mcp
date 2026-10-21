@@ -4,7 +4,7 @@
 
 import { createCalculationAggregationResolver } from '../formulaAggregation.js';
 import { normalizeArray, parseXML } from './parser.js';
-import { AggregationType, type FieldReference } from './types.js';
+import { AggregationType, type FieldReference, type ParsedWorkbook } from './types.js';
 
 export function inferRoleFromType(localType: string | undefined): string {
   if (!localType) return 'dimension';
@@ -86,8 +86,17 @@ export function buildColumnRef(fieldRef: FieldReference): string {
 export function listAvailableFields(
   workbookXml: string,
 ): Array<FieldReference & { column_ref: string }> {
-  const workbook = parseXML(workbookXml);
+  return listAvailableFieldsFromWorkbook(parseXML(workbookXml));
+}
 
+/**
+ * List fields from an already-parsed workbook. This preserves the public XML
+ * helper while allowing callers that need multiple metadata projections to
+ * share one parse.
+ */
+export function listAvailableFieldsFromWorkbook(
+  workbook: ParsedWorkbook,
+): Array<FieldReference & { column_ref: string }> {
   // Look at workbook-level datasources
   const datasources = normalizeArray(workbook.workbook?.datasources?.datasource);
   if (datasources.length === 0) {

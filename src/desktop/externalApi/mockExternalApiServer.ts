@@ -1,6 +1,8 @@
 import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 
+import { listAvailableFields } from '../metadata/field-builder.js';
+import { normalizeArray, parseXML } from '../metadata/parser.js';
 import {
   type DatasourceItem,
   DialogList,
@@ -349,6 +351,20 @@ export async function startMockExternalApiServer(
 ): Promise<MockExternalApiServer> {
   let token = options.token ?? DEFAULT_TOKEN;
   const workbookXml = options.workbookXml ?? DEFAULT_WORKBOOK_XML;
+  const strictShowMeFields = new Set(
+    listAvailableFields(workbookXml).flatMap((field) => [
+      field.column_ref,
+      `[${field.datasource}].${field.columnName}`,
+    ]),
+  );
+  rawShowMeBaseFieldRefs(workbookXml).forEach((field) => strictShowMeFields.add(field));
+  declaredShowMeFieldRefs(workbookXml).forEach((field) => strictShowMeFields.add(field));
+  const strictShowMeDatasources = new Set(
+    listAvailableFields(workbookXml).map((field) => field.datasource),
+  );
+  rawShowMeDatasourceNames(workbookXml).forEach((datasource) =>
+    strictShowMeDatasources.add(datasource),
+  );
   const dialogs = DEFAULT_DIALOGS.map((dialog) => ({
     ...dialog,
     buttons: [...(dialog.buttons ?? [])],
@@ -766,6 +782,26 @@ export async function startMockExternalApiServer(
         sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
         return;
       }
+      const selectedFields = url.searchParams.getAll('fieldsSelectedInSchemaViewer');
+      if (selectedFields.some((field) => !strictShowMeFields.has(field))) {
+        sendProblem(
+          res,
+          400,
+          'invalid-query-parameter',
+          'Show Me fields must be known internal identities.',
+        );
+        return;
+      }
+      const dataSource = url.searchParams.get('dataSource');
+      if (dataSource !== null && !strictShowMeDatasources.has(dataSource)) {
+        sendProblem(
+          res,
+          400,
+          'invalid-query-parameter',
+          'Show Me datasource must be an internal identity.',
+        );
+        return;
+      }
       sendJson(res, 200, {
         worksheet: { id: worksheet.id, name: worksheet.name },
         options: DEFAULT_SHOW_ME_OPTIONS,
@@ -1041,6 +1077,32 @@ export async function startMockExternalApiServer(
           400,
           'invalid-request-body',
           'showMe `fieldsSelectedInSchemaViewer` must be an array of strings.',
+        );
+        return;
+      }
+      if (
+        request.dataSource !== undefined &&
+        (!strictShowMeDatasources.has(request.dataSource) || typeof request.dataSource !== 'string')
+      ) {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'Show Me datasource must be an internal identity.',
+        );
+        return;
+      }
+      if (
+        Array.isArray(request.fieldsSelectedInSchemaViewer) &&
+        request.fieldsSelectedInSchemaViewer.some(
+          (field) => typeof field !== 'string' || !strictShowMeFields.has(field),
+        )
+      ) {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'Show Me fields must be known internal identities.',
         );
         return;
       }
@@ -1322,4 +1384,69 @@ export async function startMockExternalApiServer(
     close: (): Promise<void> =>
       new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
+}
+function declaredShowMeFieldRefs(workbookXml: string): string[] {
+  const refs: string[] = [];
+  const visit = (node: unknown, datasource: string | undefined): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => visit(item, datasource));
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const currentDatasource =
+      typeof record['@_datasource'] === 'string'
+        ? record['@_datasource']
+        : typeof record['@_name'] === 'string' && record['column-instance'] !== undefined
+          ? record['@_name']
+          : datasource;
+    if (currentDatasource !== undefined) {
+      for (const instance of normalizeArray(record['column-instance'])) {
+        const candidate = instance as Record<string, unknown>;
+        if (typeof candidate['@_name'] === 'string') {
+          refs.push(`[${currentDatasource}].${candidate['@_name']}`);
+        }
+      }
+    }
+    Object.entries(record)
+      .filter(([key]) => !key.startsWith('@_') && key !== 'column-instance')
+      .forEach(([, child]) => visit(child, currentDatasource));
+  };
+  visit(parseXML(workbookXml), undefined);
+  return refs;
+}
+
+function rawShowMeDatasourceNames(workbookXml: string): string[] {
+  return normalizeArray(parseXML(workbookXml).workbook?.datasources?.datasource)
+    .map((datasource) => (datasource as Record<string, unknown>)['@_name'])
+    .filter((name): name is string => typeof name === 'string');
+}
+
+function rawShowMeBaseFieldRefs(workbookXml: string): string[] {
+  const refs: string[] = [];
+  const visit = (node: unknown, datasource: string | undefined): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => visit(item, datasource));
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    const currentDatasource =
+      typeof record['@_datasource'] === 'string'
+        ? record['@_datasource']
+        : typeof record['@_name'] === 'string' && record.column !== undefined
+          ? record['@_name']
+          : datasource;
+    if (currentDatasource !== undefined) {
+      for (const column of normalizeArray(record.column)) {
+        const name = (column as Record<string, unknown>)['@_name'];
+        if (typeof name === 'string') refs.push(`[${currentDatasource}].${name}`);
+      }
+    }
+    Object.entries(record)
+      .filter(([key]) => !key.startsWith('@_') && key !== 'column')
+      .forEach(([, child]) => visit(child, currentDatasource));
+  };
+  visit(parseXML(workbookXml), undefined);
+  return refs;
 }
