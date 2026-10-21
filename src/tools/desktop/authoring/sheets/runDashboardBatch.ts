@@ -26,6 +26,7 @@ import {
 import {
   captureTargetWorksheetState,
   compareTargetWorksheetState,
+  worksheetWindowsAllHidden,
 } from '../../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -1075,11 +1076,16 @@ function boundedVerification(verification: ReadbackVerificationResult): Readback
 function artifactDriftReasons(
   reservation: Reservation,
   workbookXml: string,
-  /** The first read: when given, the window's `hidden` is ignored on both sides. */
+  /** The first read: when given and the worksheet's window was hidden there, `hidden` is ignored on both sides. */
   firstReadXml?: string,
 ): string | undefined {
   const { targetState, worksheetXml } = reservation.artifact;
-  const options = { ignoreWindowHidden: firstReadXml !== undefined };
+  // Desktop's delete only turns hidden -> visible; a new hide is another author's change.
+  const options = {
+    ignoreWindowHidden:
+      firstReadXml !== undefined &&
+      worksheetWindowsAllHidden(firstReadXml, targetState.worksheetName),
+  };
   const comparison = compareTargetWorksheetState(
     firstReadXml === undefined
       ? targetState

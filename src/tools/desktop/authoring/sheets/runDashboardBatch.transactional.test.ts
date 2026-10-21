@@ -1061,6 +1061,47 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(harness.posts).toHaveLength(1);
       });
 
+      it('rebuildDrift: another author hid a visible staged target after the delete', async () => {
+        const seeded = BASELINE.replace(
+          '</worksheets>',
+          '<worksheet name="New A"><table><rows>Mine</rows></table></worksheet></worksheets>',
+        )
+          .replace('<windows>', '<windows><window class="worksheet" name="New A"/>')
+          .replace(/(<dashboard name="Keep">[\s\S]*?<zones>)/, '$1<zone name="New A"/>');
+        const keep = /<dashboard name="Keep">[\s\S]*?<\/dashboard>/.exec(seeded)?.[0] ?? '';
+        expect(keep.match(/<zones>/g)).toHaveLength(1);
+        expect(keep).toContain('<zone name="New A"/>');
+        let hidden = false;
+        const harness = statefulExecutor({
+          initialXml: seeded,
+          afterDelete: (xml) => {
+            const next = xml.replace(
+              /(<window class="worksheet") (name="New A")/,
+              '$1 hidden="true" $2',
+            );
+            hidden = next !== xml && /hidden="true" name="New A"/.test(next);
+            return next;
+          },
+        });
+
+        const result = await callBatch(
+          artifactStore(['a1'], { baselineXml: seeded }),
+          harness.executor,
+          ['a1'],
+          true,
+        );
+
+        expect(hidden).toBe(true);
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'rebuildDrift',
+            `${NOT_APPLIED_DRIFT} Cause: Artifact "a1" ("New A") changed after it was built: target-window-drift.`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+        expect(harness.current()).toMatch(/hidden="true" name="New A"/);
+      });
+
       it('rebuildDrift: an action not tied to the dashboard was deleted after the delete', async () => {
         const harness = statefulExecutor({
           initialXml: WITH_ACTION.replace("dashboard='Executive Overview'", "dashboard='Keep'"),
