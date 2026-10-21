@@ -25,6 +25,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
 import {
   getEmbeddedDatasourceVersionHint,
   getVizqlDataServiceDisabledError,
@@ -47,13 +48,32 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 
 const paramsSchema = {
   datasourceLuid: luidSchema,
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
   query: querySchema,
-  limit: z.number().int().min(1).optional(),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    // VDS's rowLimit width is unverified; keep limit + 1 within int32.
+    .max(MAX_INT32 - 1)
+    .optional()
+    .describe(
+      "Max rows to return. When a row limit applies (this or a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason 'admin-cap' means a server cap cut them — narrow filters or aggregate.",
+    ),
 };
 
 type QueryDatasourceResult = QueryOutput & {
   mcp?: {
-    warnings: ContextFilterWarning[];
+    warnings?: ContextFilterWarning[];
+    resultInfo?: {
+      returnedCount: number;
+      truncated: boolean;
+      truncationReason?: TruncationReason;
+    };
   };
 };
 
@@ -85,11 +105,14 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, query, limit },
+      extra,
+    ): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, query },
+        args: { datasourceLuid, workbookLuid, query },
         callback: async () => {
           try {
             validateQuery({ datasourceLuid, query, rules });
@@ -99,6 +122,8 @@ export const getQueryDatasourceTool = (
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 
@@ -109,14 +134,17 @@ export const getQueryDatasourceTool = (
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
-            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            ? Math.min(maxResultLimit, limit ?? MAX_INT32 - 1)
             : limit;
 
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
           const options: QueryRequest['options'] = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            ...(rules.dontSpecifyRowLimits ? {} : { rowLimit }),
+            ...(rules.dontSpecifyRowLimits || rowLimit === undefined
+              ? {}
+              : { rowLimit: rowLimit + 1 }),
           };
 
           const credentials = getDatasourceCredentials(datasourceLuid);
@@ -194,15 +222,31 @@ export const getQueryDatasourceTool = (
                 );
               }
 
-              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
-                result.value.data.length = rowLimit;
+              let resultInfo: NonNullable<QueryDatasourceResult['mcp']>['resultInfo'];
+              if (rowLimit) {
+                const data = result.value.data;
+                const truncatedByLimit = !!data && data.length > rowLimit;
+                if (data && truncatedByLimit) {
+                  data.length = rowLimit;
+                }
+
+                resultInfo = {
+                  returnedCount: data?.length ?? 0,
+                  ...buildTruncationInfo({
+                    truncatedByLimit,
+                    maxResultLimit,
+                    llmLimit: limit,
+                    effectiveLimit: rowLimit,
+                  }),
+                };
               }
 
-              if (contextWarnings.length > 0) {
+              if (contextWarnings.length > 0 || resultInfo) {
                 return new Ok({
                   ...result.value,
                   mcp: {
-                    warnings: contextWarnings,
+                    ...(contextWarnings.length > 0 && { warnings: contextWarnings }),
+                    ...(resultInfo && { resultInfo }),
                   },
                 });
               }

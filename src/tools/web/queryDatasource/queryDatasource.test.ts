@@ -1,9 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
-import { queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { Query, queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -57,6 +58,9 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
+  mockRestQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -64,8 +68,16 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       signIn: vi.fn(),
       signOut: vi.fn(),
+      siteId: 'test-site-id',
       vizqlDataServiceMethods: {
         queryDatasource: mocks.mockQueryDatasource,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockRestQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
       },
     }),
   ),
@@ -98,6 +110,18 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
+  it('should bound limit so that limit + 1 fits in a 32-bit int', async () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
+    const schema = z.object(await Provider.from(queryDatasourceTool.paramsSchema));
+    const base = {
+      datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      query: { fields: [{ fieldCaption: 'Category' }] },
+    };
+
+    expect(schema.safeParse({ ...base, limit: 2147483646 }).success).toBe(true);
+    expect(schema.safeParse({ ...base, limit: 2147483647 }).success).toBe(false);
+  });
+
   it('should return error when query args fail validation', async () => {
     const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
     const callback = await Provider.from(queryDatasourceTool.callback);
@@ -106,6 +130,7 @@ describe('queryDatasourceTool', () => {
       {
         datasourceLuid: '',
         query: { fields: [{ fieldCaption: 'Category' }] },
+        workbookLuid: undefined,
         limit: undefined,
       },
       getMockRequestHandlerExtra(),
@@ -156,7 +181,10 @@ describe('queryDatasourceTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...mockVdsResponses.success,
+      mcp: { resultInfo: { returnedCount: 3, truncated: false } },
+    });
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -165,7 +193,7 @@ describe('queryDatasourceTool', () => {
         debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
-        rowLimit: 100,
+        rowLimit: 101,
       },
       query: {
         fields: [
@@ -189,7 +217,10 @@ describe('queryDatasourceTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...mockVdsResponses.success,
+      mcp: { resultInfo: { returnedCount: 3, truncated: false } },
+    });
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -211,6 +242,118 @@ describe('queryDatasourceTool', () => {
           },
         ],
       },
+    });
+  });
+
+  describe('row limit truncation', () => {
+    const rows = (n: number): { data: Array<Record<string, unknown>> } => ({
+      data: Array.from({ length: n }, (_, i) => ({ Category: `C${i}`, 'SUM(Profit)': i })),
+    });
+
+    async function getParsed(args: Parameters<typeof getToolResult>[0]): Promise<any> {
+      const result = await getToolResult(args);
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('should report admin-cap truncation and trim to the cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(3);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('should keep the requested rowLimit within int32 for a maximal cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2147483647');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(2147483647);
+    });
+
+    it('should not report truncation when exactly the limit rows match', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '3');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({});
+
+      expect(parsed.data).toHaveLength(3);
+      expect(parsed.mcp).toEqual({ resultInfo: { returnedCount: 3, truncated: false } });
+    });
+
+    it('should report requested-limit when the caller limit binds under a larger cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '10');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ limit: 2 });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options.rowLimit).toBe(3);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'requested-limit' },
+      });
+    });
+
+    it('should send no rowLimit and no mcp key when no limit or cap applies', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+      const parsed = await getParsed({});
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed).toEqual(mockVdsResponses.success);
+      expect(parsed).not.toHaveProperty('mcp');
+    });
+
+    it('should return context warnings and resultInfo together', async () => {
+      vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'true');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+      const parsed = await getParsed({
+        limit: 100,
+        query: {
+          fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Profit', function: 'SUM' }],
+          filters: [
+            {
+              field: { fieldCaption: 'Category' },
+              filterType: 'TOP',
+              howMany: 2,
+              direction: 'TOP',
+              fieldToMeasure: { fieldCaption: 'Profit', function: 'SUM' },
+            },
+            {
+              field: { fieldCaption: 'Region' },
+              filterType: 'SET',
+              values: ['East'],
+              exclude: false,
+            },
+          ],
+        },
+      });
+
+      expect(parsed.mcp.warnings).toHaveLength(1);
+      expect(parsed.mcp.warnings[0].type).toBe('MISSING_CONTEXT_ON_DIMENSION_FILTER');
+      expect(parsed.mcp.resultInfo).toEqual({ returnedCount: 3, truncated: false });
+    });
+
+    it('should trim and report admin-cap on versions that cannot send a rowLimit', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ productVersion: testProductVersion2025_3 });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
     });
   });
 
@@ -364,6 +507,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -411,6 +555,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -452,6 +597,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -491,6 +637,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -549,6 +696,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          workbookLuid: undefined,
           limit: undefined,
         },
         getMockRequestHandlerExtra(),
@@ -620,14 +768,66 @@ describe('queryDatasourceTool', () => {
 
     expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const datasourceLuid = '71db762b-6201-466b-93da-57cc0aec8ed9';
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockRestQueryDatasource.mockResolvedValue({
+        id: datasourceLuid,
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: datasourceLuid } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+    });
+
+    it('should query an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockQueryDatasource).toHaveBeenCalled();
+    });
+
+    it('should not query an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult({
   limit,
   productVersion,
+  workbookLuid,
+  query,
 }: {
+  query?: Query;
   limit?: number;
   productVersion?: ProductVersion;
+  workbookLuid?: string;
 } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(
     new WebMcpServer(),
@@ -637,12 +837,13 @@ async function getToolResult({
   return await callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
-      query: {
+      query: query ?? {
         fields: [
           { fieldCaption: 'Category' },
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      workbookLuid,
       limit,
     },
     getMockRequestHandlerExtra(),

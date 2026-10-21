@@ -268,6 +268,56 @@ describe('getWorkbookTool', () => {
       ]);
     });
 
+    describe('when a scope restricts workbooks', () => {
+      // INCLUDE_DATASOURCE_IDS is an absolute allowlist: even when a workbook scope admits the
+      // workbook, embedded datasources outside the allowlist are filtered out — otherwise
+      // get-workbook would list an embedded datasource that query-datasource then denies.
+      beforeEach(() => {
+        vi.stubEnv('INCLUDE_WORKBOOK_IDS', workbookId);
+        mocks.mockGraphql.mockResolvedValue({
+          data: {
+            workbooksConnection: {
+              nodes: [
+                {
+                  luid: workbookId,
+                  upstreamDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                  embeddedDatasources: [
+                    {
+                      name: 'Embedded DS',
+                      parentPublishedDatasources: [{ luid: 'pub-luid-1', name: 'Published DS' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        mocks.mockQueryWorkbookConnections.mockResolvedValue([
+          { id: 'conn-1', datasource: { id: 'emb-luid-1', name: 'Embedded DS' } },
+        ]);
+      });
+
+      it('filters an embedded DS that is not in INCLUDE_DATASOURCE_IDS, keeping its allowed parent', async () => {
+        vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'pub-luid-1');
+
+        const response = await getResponseData({ workbookId });
+
+        // emb-luid-1 is dropped (not in the allowlist); its parent pub-luid-1 is, so it survives
+        // as a standalone published entry.
+        expect(response.data.upstreamDatasources).toEqual([
+          { luid: 'pub-luid-1', name: 'Published DS', datasourceType: 'published' },
+        ]);
+      });
+
+      it('filters both the embedded DS and the published DS when neither is in INCLUDE_DATASOURCE_IDS', async () => {
+        vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-luid');
+
+        const response = await getResponseData({ workbookId });
+
+        expect(response.data.upstreamDatasources).toBeUndefined();
+      });
+    });
+
     it('omits the publishedParent when two connections share an embedded name across LUIDs', async () => {
       mocks.mockGraphql.mockResolvedValue({
         data: {

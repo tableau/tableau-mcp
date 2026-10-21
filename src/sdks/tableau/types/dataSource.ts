@@ -38,10 +38,7 @@ export const dataSourceSchema = z.object({
 
 export type DataSource = z.infer<typeof dataSourceSchema>;
 
-// Query Data Sources (list) returns published data sources only, so `project` is always present.
-// Used by the list endpoint to get a non-optional `project` without narrowing at call sites.
-export const publishedDataSourceSchema = dataSourceSchema.extend({
-  project: projectSchema,
-});
-
-export type PublishedDataSource = z.infer<typeof publishedDataSourceSchema>;
+// Some servers return a `project` on embedded data sources too, so `parentType` is checked first.
+export function isEmbeddedDatasource(datasource: DataSource): boolean {
+  return datasource.parentType === 'Workbook' || !datasource.project;
+}

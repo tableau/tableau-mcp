@@ -181,6 +181,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'Generate an insight bundle for the current aggregated value',
     );
     expect(tool.paramsSchema).toMatchObject({ bundleRequest: expect.any(Object) });
+    expect(tool.registrationConditions).toEqual(['RequiresPulse']);
   });
 
   it('should handle API errors gracefully', async () => {

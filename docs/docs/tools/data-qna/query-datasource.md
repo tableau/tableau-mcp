@@ -14,6 +14,10 @@ data.
 - [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
   from REST API (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is
   enabled)
+- [Query Workbook Connections](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook_connections)
+  and
+  [Get Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook)
+  (if `workbookLuid` is provided and tool scoping is enabled)
 
 ## Environment variables
 
@@ -79,9 +83,26 @@ Example:
 
 The maximum number of rows to return. The tool will return at most this many rows.
 
+When a row limit applies (this argument, `MAX_RESULT_LIMIT` or a per-tool `MAX_RESULT_LIMITS` entry),
+the response includes `mcp.resultInfo` with `returnedCount` and `truncated`. If `truncated` is
+`true`, more rows matched; `truncationReason` is `admin-cap` when a server cap cut the results, or
+`requested-limit` when this argument did. `mcp.resultInfo` is absent when no row limit applies.
+
 Example: `2000`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)
+
+<hr />
+
+### `workbookLuid`
+
+The LUID of the workbook an embedded (workbook) data source belongs to, potentially retrieved by the
+[Get Workbook](../../tools/workbooks/get-workbook.md) tool. Required to access an embedded data
+source when [tool scoping](../../configuration/mcp-config/tool-scoping.md#embedded-data-sources) is
+enabled. Ignored for published data sources.
+
+Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 ## Example result
 
