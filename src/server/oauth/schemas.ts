@@ -160,6 +160,19 @@ export const introspectionResponseSchema = externalTokenClaimsObjectSchema
     tokenType: token_type,
   }));
 
+/** OpenID Connect Discovery 1.0 provider metadata (only the fields token validation needs). */
+export const openIdConfigurationSchema = z
+  .object({
+    issuer: z.string(),
+    jwks_uri: z.string(),
+    id_token_signing_alg_values_supported: z.array(z.string()).optional(),
+  })
+  .transform(({ issuer, jwks_uri, id_token_signing_alg_values_supported }) => ({
+    issuer,
+    jwksUri: jwks_uri,
+    idTokenSigningAlgValuesSupported: id_token_signing_alg_values_supported,
+  }));
+
 export type ExternalTokenClaims = z.infer<typeof externalTokenClaimsSchema>;
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;

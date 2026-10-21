@@ -1,6 +1,13 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { KeyObject } from 'crypto';
-import { compactDecrypt, createRemoteJWKSet, jwtVerify, JWTVerifyGetKey } from 'jose';
+import {
+  compactDecrypt,
+  createRemoteJWKSet,
+  customFetch,
+  decodeProtectedHeader,
+  jwtVerify,
+  JWTVerifyGetKey,
+} from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
@@ -9,6 +16,7 @@ import { AUDIT_LOGGER, log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import invariant from '../../utils/invariant.js';
+import { isHttpsOrLoopbackUrl, LOOPBACK_HOSTS } from './loopbackHosts.js';
 import {
   buildResourceIdentifier,
   canonicalizeLoopbackHost,
@@ -20,6 +28,7 @@ import {
   introspectionResponseSchema,
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
+  openIdConfigurationSchema,
   TableauAuthInfo,
   tableauBearerTokenSchema,
 } from './schemas';
@@ -306,7 +315,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
   }
 }
 
-const INTROSPECTION_TIMEOUT_MS = 5000;
+const EXTERNAL_REQUEST_TIMEOUT_MS = 5000;
 
 // Asymmetric only, so an HS* token never verifies even if a key resolver yields a shared secret.
 const EXTERNAL_JWT_ALGORITHMS = [
@@ -324,6 +333,8 @@ const EXTERNAL_JWT_ALGORITHMS = [
 ];
 const EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS = 5;
 
+type JwtVerification = { getKey: JWTVerifyGetKey; algorithms: string[] };
+
 function usernameFromClaim(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value.trim() && !/\p{Cc}/u.test(value) ? value : undefined;
@@ -335,14 +346,15 @@ function usernameFromClaim(value: unknown): string | undefined {
 
 /**
  * Validates tokens from an external OAuth/OIDC authorization server: JWT access tokens (RFC 9068)
- * or OpenID Connect ID tokens against its JWKS, or opaque tokens through token introspection
- * (RFC 7662). The configured claim becomes the Tableau username; outbound Tableau auth stays
- * direct-trust or UAT.
+ * or OpenID Connect ID tokens against its JWKS (configured, or read from its OpenID Connect
+ * discovery document), or opaque tokens through token introspection (RFC 7662). The configured
+ * claim becomes the Tableau username; outbound Tableau auth stays direct-trust or UAT.
  */
 export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private readonly external: NonNullable<Config['oauth']['external']>;
   private readonly fetch: typeof fetch;
   private readonly getKey: JWTVerifyGetKey | undefined;
+  private discovery: Promise<JwtVerification> | undefined;
 
   constructor({
     fetch = globalThis.fetch,
@@ -355,31 +367,39 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     this.fetch = fetch;
     this.getKey =
       getKey ??
-      (this.external.jwksUri ? createRemoteJWKSet(new URL(this.external.jwksUri)) : undefined);
+      (this.external.jwksUri
+        ? createRemoteJWKSet(new URL(this.external.jwksUri), { [customFetch]: this.fetch })
+        : undefined);
   }
 
   async validate(token: string): Promise<AccessTokenValidatorResult> {
     try {
-      const claims = this.getKey
-        ? await this.verifyJwt(token, this.getKey)
-        : await this.introspect(token);
+      const claims = this.external.introspectionUri
+        ? await this.introspect(token)
+        : await this.verifyJwt(token);
       if (claims.isErr()) {
         return this.reject(claims.error);
       }
 
       return this.toAuthInfo(token, claims.value);
     } catch (error) {
-      return this.reject(error instanceof Error ? error.message : 'unknown error');
+      return this.reject(truncateForLog(error instanceof Error ? error.message : 'unknown error'));
     }
   }
 
-  private async verifyJwt(
-    token: string,
-    getKey: JWTVerifyGetKey,
-  ): Promise<Result<ExternalTokenClaims, string>> {
+  private async verifyJwt(token: string): Promise<Result<ExternalTokenClaims, string>> {
+    // Reject a non-JWT bearer before it can trigger a discovery fetch.
+    decodeProtectedHeader(token);
+    // jose checks the alg allowlist before it calls getKey, so discovery must finish first.
+    const verification = await this.jwtVerification();
+    if (verification.isErr()) {
+      return verification;
+    }
+
+    const { getKey, algorithms } = verification.value;
     const { payload } = await jwtVerify(token, getKey, {
       issuer: this.config.oauth.issuer,
-      algorithms: EXTERNAL_JWT_ALGORITHMS,
+      algorithms,
       clockTolerance: EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS,
       requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat'],
     });
@@ -388,6 +408,85 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     return claims.success
       ? Ok(claims.data)
       : Err(`invalid claims: ${fromError(claims.error).toString()}`);
+  }
+
+  private async jwtVerification(): Promise<Result<JwtVerification, string>> {
+    if (this.getKey) {
+      return Ok({ getKey: this.getKey, algorithms: EXTERNAL_JWT_ALGORITHMS });
+    }
+
+    invariant(this.external.discovery, 'OAUTH_EXTERNAL_DISCOVERY is not enabled');
+    this.discovery ??= this.discover().catch((error: unknown) => {
+      this.discovery = undefined;
+      throw error;
+    });
+    try {
+      return Ok(await this.discovery);
+    } catch (error) {
+      return Err(
+        `discovery failed: ${truncateForLog(error instanceof Error ? error.message : 'unknown error')}`,
+      );
+    }
+  }
+
+  private async discover(): Promise<JwtVerification> {
+    const { issuer } = this.config.oauth;
+    const response = await this.fetch(
+      `${issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+      {
+        headers: { Accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`openid-configuration returned HTTP ${response.status}`);
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      // JSON.parse errors quote the start of the body.
+      throw new Error('openid-configuration is not valid JSON');
+    }
+
+    const parsed = openIdConfigurationSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new Error(`invalid openid-configuration: ${fromError(parsed.error).toString()}`);
+    }
+
+    const { issuer: documentIssuer, jwksUri, idTokenSigningAlgValuesSupported } = parsed.data;
+    if (documentIssuer !== issuer) {
+      throw new Error(`issuer mismatch: got '${truncateForLog(documentIssuer)}'`);
+    }
+
+    let jwksUrl: URL;
+    try {
+      jwksUrl = new URL(jwksUri);
+    } catch {
+      throw new Error('jwks_uri is not a valid URL');
+    }
+    // Plain http only when both the jwks_uri and the issuer are loopback.
+    if (
+      jwksUrl.protocol !== 'https:' &&
+      !(isHttpsOrLoopbackUrl(jwksUrl) && LOOPBACK_HOSTS.has(new URL(issuer).hostname))
+    ) {
+      throw new Error(
+        `jwks_uri must use https unless it and the issuer are both loopback: '${truncateForLog(jwksUri)}'`,
+      );
+    }
+
+    const algorithms = idTokenSigningAlgValuesSupported
+      ? EXTERNAL_JWT_ALGORITHMS.filter((alg) => idTokenSigningAlgValuesSupported.includes(alg))
+      : EXTERNAL_JWT_ALGORITHMS;
+    if (algorithms.length === 0) {
+      throw new Error(
+        `id_token_signing_alg_values_supported lists no supported asymmetric algorithm: [${truncateForLog(idTokenSigningAlgValuesSupported?.join(', ') ?? '')}]`,
+      );
+    }
+
+    return { getKey: createRemoteJWKSet(jwksUrl, { [customFetch]: this.fetch }), algorithms };
   }
 
   private async introspect(token: string): Promise<Result<ExternalTokenClaims, string>> {
@@ -406,7 +505,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
       },
       body: new URLSearchParams({ token, token_type_hint: 'access_token' }),
       redirect: 'error',
-      signal: AbortSignal.timeout(INTROSPECTION_TIMEOUT_MS),
+      signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       return Err(`introspection endpoint returned HTTP ${response.status}`);

@@ -53,9 +53,12 @@ To set it up:
 - Set [`OAUTH_ISSUER`](#oauth_issuer) to your IdP's issuer and
   [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) to `false`. Tokens with any other
   `iss` are rejected.
-- Set exactly one of [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWTs: access tokens or
-  OpenID Connect ID tokens) or
-  [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) (opaque tokens).
+- Set exactly one of:
+  - [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) to `true` (JWTs, with the keys read from
+    your IdP's OpenID Connect discovery document).
+  - [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWTs: access tokens or OpenID Connect ID
+    tokens).
+  - [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) (opaque tokens).
 - Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`, or to `uat` with
   `{OAUTH_USERNAME}` in `UAT_USERNAME_CLAIM`.
 - Have your IdP set the token's `aud` to this server's resource identifier: the
@@ -90,7 +93,19 @@ Also note:
 ### Accept OpenID Connect ID tokens
 
 If your IdP signs users in with OpenID Connect ID tokens instead of access tokens, the MCP server
-can accept those as the bearer token:
+can accept those as the bearer token. If your IdP publishes an OpenID Connect discovery document,
+the issuer is enough:
+
+```bash
+OAUTH_ISSUER=https://idp.example.com
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+OAUTH_EXTERNAL_DISCOVERY=true
+OAUTH_GLOBAL_RESOURCE_URIS=<this-mcp-server-client-id>
+OAUTH_DISABLE_SCOPES=true
+OAUTH_EXTERNAL_USERNAME_CLAIM_NAME=employee_id
+```
+
+Otherwise, set the JWKS URL yourself:
 
 ```bash
 OAUTH_ISSUER=https://idp.example.com
@@ -106,7 +121,9 @@ the audience is the only check that ties a token to this server.
 
 On each request, the MCP server checks that:
 
-- The token is signed with an asymmetric algorithm by a key from the JWKS.
+- The token is signed with an asymmetric algorithm by a key from the JWKS. With discovery, if the
+  document lists `id_token_signing_alg_values_supported`, the algorithm must be one it lists. This
+  applies to access tokens too.
 - `iss` equals `OAUTH_ISSUER` exactly and `aud` is an accepted value.
 - The token has not expired (`exp`) and is already valid (`nbf`, if present), allowing 5 seconds of
   clock skew.
@@ -143,6 +160,8 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 When you [use your own identity provider](#use-your-own-identity-provider-self-hosted-only), set it
 to the provider's issuer exactly as it appears in the token's `iss` claim. A trailing slash matters.
+With [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery), it must use `https` unless the host is
+loopback.
 
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
@@ -396,9 +415,10 @@ or [your own identity provider](#use-your-own-identity-provider-self-hosted-only
 
 The JWKS URL of your identity provider. When set, the MCP server accepts JWTs signed by a key from
 this URL: access tokens ([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
-[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set this or
-[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri), not both. Must use `https`
-unless the host is loopback. See
+[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set only one of this,
+[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery), or
+[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri). Must use `https` unless the
+host is loopback. See
 [Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
 
 - Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
@@ -408,12 +428,41 @@ unless the host is loopback. See
 
 <hr />
 
+### `OAUTH_EXTERNAL_DISCOVERY`
+
+When `true`, the MCP server reads your identity provider's
+[OpenID Connect discovery document](https://openid.net/specs/openid-connect-discovery-1_0.html) at
+`OAUTH_ISSUER` + `/.well-known/openid-configuration` (without a doubled `/` if the issuer ends in
+one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with the same checks as
+[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). Set only one of this,
+[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), or
+[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri). See
+[Accept OpenID Connect ID tokens](#accept-openid-connect-id-tokens).
+
+- Default: `false`. Any value other than `true` leaves it off.
+- [`OAUTH_ISSUER`](#oauth_issuer) must use `https` unless the host is loopback, and must not contain
+  a username or password.
+- The document is read on the first request, then kept for the life of the process. If your provider
+  moves its `jwks_uri`, restart the MCP server. If the read fails, the request is rejected and the
+  next request tries again.
+- The document's `issuer` must equal `OAUTH_ISSUER` exactly, including any trailing slash.
+- `jwks_uri` must use `https` unless both its host and the `OAUTH_ISSUER` host are loopback. It can
+  be on another host than the issuer.
+- If the document lists `id_token_signing_alg_values_supported`, a token's algorithm must be one it
+  lists. This applies to access tokens too. Only RS, PS, ES, and EdDSA algorithms are accepted, so
+  if the list has none of them, every token is rejected.
+- If your provider doesn't serve the document at that path, set
+  [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) instead.
+
+<hr />
+
 ### `OAUTH_EXTERNAL_INTROSPECTION_URI`
 
 The token introspection endpoint ([RFC 7662](https://www.rfc-editor.org/rfc/rfc7662)) of your
 identity provider. When set, the MCP server sends each access token to this endpoint to check it.
-Set this or [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), not both. Must use `https` unless
-the host is loopback.
+Set only one of this, [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), or
+[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery). Must use `https` unless the host is
+loopback.
 
 <hr />
 

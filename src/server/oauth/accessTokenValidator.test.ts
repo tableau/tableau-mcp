@@ -4,6 +4,7 @@ import {
   createLocalJWKSet,
   exportJWK,
   generateKeyPair,
+  JSONWebKeySet,
   JWTVerifyGetKey,
   SignJWT,
   UnsecuredJWT,
@@ -896,6 +897,23 @@ describe('ExternalAccessTokenValidator', () => {
         expect(output).not.toContain(signature);
       }
     });
+
+    it('truncates a long rejection reason built from the token header', async () => {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+      const encode = (value: unknown): string =>
+        Buffer.from(JSON.stringify(value)).toString('base64url');
+      // jose quotes unknown crit names in its error before it resolves a key.
+      const header = { alg: 'RS256', kid: 'key-1', crit: ['x'.repeat(400)] };
+      const token = `${encode(header)}.${encode(rfc9068Claims())}.c2lnbmF0dXJl`;
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+      const reasons = capturedLines().map((line) => JSON.parse(line).data.reason);
+      expect(reasons).toEqual([expect.stringMatching(/\.\.\. \(truncated\)$/)]);
+      expect(reasons[0].length).toBeLessThanOrEqual(256 + '... (truncated)'.length);
+    });
   });
 
   describe('OIDC ID tokens', () => {
@@ -990,6 +1008,389 @@ describe('ExternalAccessTokenValidator', () => {
       const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
 
       expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+  });
+
+  describe('OpenID Connect discovery', () => {
+    const OWN_CLIENT_ID = 'tableau-mcp-client';
+    const DISCOVERY_URL = `${EXTERNAL_ISSUER}/.well-known/openid-configuration`;
+    // Another origin than the issuer, as with Google (accounts.google.com -> www.googleapis.com).
+    const JWKS_URI = 'https://keys.idp-cdn.example.com/oauth2/v3/certs';
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    let jwks: JSONWebKeySet;
+
+    beforeAll(async () => {
+      // No alg on the JWK, so the same RSA key can verify RS256 and PS256.
+      jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'disc-key-1', use: 'sig' }] };
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
+    });
+
+    function openIdConfiguration(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        issuer: EXTERNAL_ISSUER,
+        authorization_endpoint: `${EXTERNAL_ISSUER}/authorize`,
+        token_endpoint: `${EXTERNAL_ISSUER}/token`,
+        jwks_uri: JWKS_URI,
+        response_types_supported: ['code', 'id_token'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+        ...overrides,
+      });
+    }
+
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    function discoveryFetch(
+      document: Record<string, unknown> = openIdConfiguration(),
+      discoveryUrl = DISCOVERY_URL,
+    ): ReturnType<typeof vi.fn<typeof globalThis.fetch>> {
+      return vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url === discoveryUrl) {
+          return jsonResponse(document);
+        }
+        if (url === document.jwks_uri) {
+          return jsonResponse(jwks);
+        }
+        return new Response('Not Found', { status: 404 });
+      });
+    }
+
+    function fetchedUrls(fetch: ReturnType<typeof vi.fn<typeof globalThis.fetch>>): string[] {
+      return fetch.mock.calls.map(([url]) => String(url));
+    }
+
+    function idTokenClaims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        sub: 'u-7f3a9c2e-opaque',
+        aud: OWN_CLIENT_ID,
+        iat: now,
+        exp: now + 3600,
+        auth_time: now - 30,
+        nonce: 'n-0S6_WzA2Mj',
+        employee_id: '1234567',
+        ...overrides,
+      });
+    }
+
+    async function signIdToken({
+      alg = 'RS256',
+      claims = idTokenClaims(),
+    }: { alg?: string; claims?: Record<string, unknown> } = {}): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg, typ: 'JWT', kid: 'disc-key-1' })
+        .sign(privateKey);
+    }
+
+    async function rejectionReasons(
+      validator: ExternalAccessTokenValidator,
+      token: string,
+    ): Promise<string[]> {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+
+      expect(errorOf(await validator.validate(token))).toBe(INVALID_TOKEN_ERROR);
+
+      return capturedLines().map((line) => JSON.parse(line).data.reason);
+    }
+
+    it('reads the document, then its JWKS, and accepts a valid ID token', async () => {
+      const fetch = discoveryFetch();
+      const token = await signIdToken();
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: '',
+        scopes: [],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('1234567'),
+      });
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+      const [, init] = fetch.mock.calls[0];
+      expect(init).toMatchObject({ redirect: 'error', headers: { Accept: 'application/json' } });
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('reads the document once per validator', async () => {
+      const fetch = discoveryFetch();
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const token = await signIdToken();
+
+      expect((await validator.validate(token)).isOk()).toBe(true);
+      expect((await validator.validate(token)).isOk()).toBe(true);
+
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+    });
+
+    it('makes one document request for concurrent first validations', async () => {
+      const fetch = discoveryFetch();
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const token = await signIdToken();
+
+      const results = await Promise.all([validator.validate(token), validator.validate(token)]);
+
+      expect(results.map((result) => result.isOk())).toEqual([true, true]);
+      expect(fetchedUrls(fetch).filter((url) => url === DISCOVERY_URL)).toHaveLength(1);
+    });
+
+    it('reads the document for an issuer with a trailing slash', async () => {
+      const issuer = `${EXTERNAL_ISSUER}/`;
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(openIdConfiguration({ issuer }));
+      const token = await signIdToken({ claims: idTokenClaims({ iss: issuer }) });
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(token);
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchedUrls(fetch)[0]).toBe(DISCOVERY_URL);
+    });
+
+    it.each([
+      ['another issuer', 'https://evil.example.com'],
+      ['the issuer with an added trailing slash', `${EXTERNAL_ISSUER}/`],
+    ])('rejects the token when the document issuer is %s', async (_, issuer) => {
+      const fetch = discoveryFetch(openIdConfiguration({ issuer }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: issuer mismatch: got '${issuer}'`]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it.each([
+      [
+        'http://keys.idp-cdn.example.com/certs',
+        "jwks_uri must use https unless it and the issuer are both loopback: 'http://keys.idp-cdn.example.com/certs'",
+      ],
+      ['not a url', 'jwks_uri is not a valid URL'],
+    ])('rejects the token when jwks_uri is %s', async (jwksUri, reason) => {
+      const fetch = discoveryFetch(openIdConfiguration({ jwks_uri: jwksUri }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: ${reason}`]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it('accepts an http jwks_uri on a loopback host when the issuer is loopback', async () => {
+      const issuer = 'http://127.0.0.1:8080/realms/mcp';
+      const jwksUri = 'http://127.0.0.1:8080/realms/mcp/certs';
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(
+        openIdConfiguration({ issuer, jwks_uri: jwksUri }),
+        `${issuer}/.well-known/openid-configuration`,
+      );
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(
+        await signIdToken({ claims: idTokenClaims({ iss: issuer }) }),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchedUrls(fetch)).toEqual([`${issuer}/.well-known/openid-configuration`, jwksUri]);
+    });
+
+    it('rejects an http jwks_uri on a remote host from a loopback issuer', async () => {
+      const issuer = 'http://127.0.0.1:8080/realms/mcp';
+      const jwksUri = 'http://keys.idp-cdn.example.com/certs';
+      const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(
+        openIdConfiguration({ issuer, jwks_uri: jwksUri }),
+        discoveryUrl,
+      );
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(
+        validator,
+        await signIdToken({ claims: idTokenClaims({ iss: issuer }) }),
+      );
+
+      expect(reasons).toEqual([
+        `discovery failed: jwks_uri must use https unless it and the issuer are both loopback: '${jwksUri}'`,
+      ]);
+      expect(fetchedUrls(fetch)).toEqual([discoveryUrl]);
+    });
+
+    it('rejects an http loopback jwks_uri from a remote issuer', async () => {
+      const jwksUri = 'http://127.0.0.1:8080/jwks';
+      const fetch = discoveryFetch(openIdConfiguration({ jwks_uri: jwksUri }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([
+        `discovery failed: jwks_uri must use https unless it and the issuer are both loopback: '${jwksUri}'`,
+      ]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it.each<[string, Record<string, unknown>, string]>([
+      [
+        'issuer is missing',
+        openIdConfiguration({ issuer: undefined }),
+        'Validation error: Required at "issuer"',
+      ],
+      [
+        'jwks_uri is missing',
+        openIdConfiguration({ jwks_uri: undefined }),
+        'Validation error: Required at "jwks_uri"',
+      ],
+      [
+        'id_token_signing_alg_values_supported is not an array',
+        openIdConfiguration({ id_token_signing_alg_values_supported: 'RS256' }),
+        'Validation error: Expected array, received string at "id_token_signing_alg_values_supported"',
+      ],
+    ])('rejects the token when the document %s', async (_, document, validationError) => {
+      const validator = new ExternalAccessTokenValidator({ fetch: discoveryFetch(document) });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([
+        `discovery failed: invalid openid-configuration: ${validationError}`,
+      ]);
+    });
+
+    it.each<[string, () => Promise<Response>]>([
+      ['returns HTTP 404', async () => new Response('Not Found', { status: 404 })],
+      ['is not valid JSON', async () => new Response('<html>maintenance</html>')],
+      [
+        'request fails',
+        async () => {
+          throw new TypeError('fetch failed');
+        },
+      ],
+    ])(
+      'rejects the token when the document %s, and retries on the next request',
+      async (_, failure) => {
+        const fetch = discoveryFetch();
+        fetch.mockImplementationOnce(failure);
+        const validator = new ExternalAccessTokenValidator({ fetch });
+        const token = await signIdToken();
+
+        expect(errorOf(await validator.validate(token))).toBe(INVALID_TOKEN_ERROR);
+        expect((await validator.validate(token)).isOk()).toBe(true);
+
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, DISCOVERY_URL, JWKS_URI]);
+      },
+    );
+
+    it('narrows the algorithms to those the document lists', async () => {
+      const token = await signIdToken({ alg: 'PS256' });
+      const rs256Only = new ExternalAccessTokenValidator({ fetch: discoveryFetch() });
+      const unlisted = new ExternalAccessTokenValidator({
+        fetch: discoveryFetch(
+          openIdConfiguration({ id_token_signing_alg_values_supported: undefined }),
+        ),
+      });
+
+      expect((await unlisted.validate(token)).isOk()).toBe(true);
+      expect(await rejectionReasons(rs256Only, token)).toEqual([
+        expect.stringContaining('"alg" (Algorithm) Header Parameter value not allowed'),
+      ]);
+    });
+
+    it('rejects every token when the document lists only symmetric algorithms', async () => {
+      const fetch = discoveryFetch(
+        openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256'] }),
+      );
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([
+        'discovery failed: id_token_signing_alg_values_supported lists no supported asymmetric algorithm: [HS256]',
+      ]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it('rejects an HS256 token even when the document lists HS256', async () => {
+      const fetch = discoveryFetch(
+        openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256', 'RS256'] }),
+      );
+      const token = await new SignJWT(idTokenClaims())
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+        .sign(new TextEncoder().encode('a-shared-secret-of-at-least-32-bytes'));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, token);
+
+      // jose's allowlist message, not its JWKS resolver's, and no JWKS fetch.
+      expect(reasons).toEqual(['"alg" (Algorithm) Header Parameter value not allowed']);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it('rejects a bearer that is not a JWT without reading the document', async () => {
+      const fetch = discoveryFetch();
+      fetch.mockResolvedValue(new Response('Not Found', { status: 404 }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, '2YotnFZFEjr1zCsicMWpAA');
+
+      expect(reasons).toEqual(['Invalid Token or Protected Header formatting']);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('fetches a configured OAUTH_EXTERNAL_JWKS_URI with the injected fetch', async () => {
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'false');
+      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', JWKS_URI);
+      const fetch = discoveryFetch();
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(
+        await signIdToken(),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchedUrls(fetch)).toEqual([JWKS_URI]);
+    });
+
+    it('skips discovery when a key resolver is injected', async () => {
+      const fetch = discoveryFetch();
+
+      const result = await new ExternalAccessTokenValidator({
+        fetch,
+        getKey: createLocalJWKSet(jwks),
+      }).validate(await signIdToken());
+
+      expect(result.isOk()).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('truncates a long discovery failure reason', async () => {
+      const message = `fetch failed: ${'x'.repeat(300)}`;
+      const fetch = discoveryFetch();
+      fetch.mockRejectedValueOnce(new TypeError(message));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: ${message.slice(0, 256)}... (truncated)`]);
+    });
+
+    it('never logs the document body', async () => {
+      const leakCheck = 'leak-check-body';
+      const fetch = discoveryFetch();
+      fetch.mockResolvedValueOnce(new Response(`${leakCheck} not json`));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual(['discovery failed: openid-configuration is not valid JSON']);
+      expect(reasons.join()).not.toContain(leakCheck.slice(0, 10));
     });
   });
 

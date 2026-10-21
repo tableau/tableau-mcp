@@ -12,7 +12,7 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
-import { LOOPBACK_HOSTS } from './server/oauth/loopbackHosts.js';
+import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -91,6 +91,7 @@ export class Config extends BaseConfig {
       introspectionUri: string;
       introspectionClientId: string;
       introspectionClientSecret: string;
+      discovery: boolean;
       usernameClaimName: string;
     } | null;
   };
@@ -175,6 +176,7 @@ export class Config extends BaseConfig {
       OAUTH_EXTERNAL_INTROSPECTION_URI: oauthExternalIntrospectionUri,
       OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID: oauthExternalIntrospectionClientId,
       OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET: oauthExternalIntrospectionClientSecret,
+      OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
       OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
@@ -307,6 +309,7 @@ export class Config extends BaseConfig {
         oauthExternalIntrospectionUri,
         oauthExternalIntrospectionClientId,
         oauthExternalIntrospectionClientSecret,
+        oauthExternalDiscovery === 'true',
         oauthExternalUsernameClaimName,
       ].some(Boolean)
         ? {
@@ -314,6 +317,7 @@ export class Config extends BaseConfig {
             introspectionUri: oauthExternalIntrospectionUri ?? '',
             introspectionClientId: oauthExternalIntrospectionClientId ?? '',
             introspectionClientSecret: oauthExternalIntrospectionClientSecret ?? '',
+            discovery: oauthExternalDiscovery === 'true',
             usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
           }
         : null,
@@ -608,8 +612,14 @@ function validateServer(server: string): void {
 
 function validateOAuthExternal({
   auth,
-  oauth: { enabled, embeddedAuthzServer },
-  external: { jwksUri, introspectionUri, introspectionClientId, introspectionClientSecret },
+  oauth: { enabled, embeddedAuthzServer, issuer },
+  external: {
+    jwksUri,
+    introspectionUri,
+    introspectionClientId,
+    introspectionClientSecret,
+    discovery,
+  },
   usernameTemplate,
 }: {
   auth: AuthType;
@@ -623,9 +633,9 @@ function validateOAuthExternal({
     );
   }
 
-  if (!jwksUri === !introspectionUri) {
+  if ([jwksUri, introspectionUri, discovery].filter(Boolean).length !== 1) {
     throw new Error(
-      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI must be set',
+      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set',
     );
   }
 
@@ -635,14 +645,25 @@ function validateOAuthExternal({
     );
   }
 
-  validateHttpsOrLoopbackUri(
-    jwksUri ? 'OAUTH_EXTERNAL_JWKS_URI' : 'OAUTH_EXTERNAL_INTROSPECTION_URI',
-    jwksUri || introspectionUri,
-  );
+  if (discovery) {
+    // The issuer becomes the discovery document's fetch target.
+    const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
+    // undici repeats the full URL, password included, in its errors.
+    if (issuerUrl.username || issuerUrl.password) {
+      throw new Error(
+        'The environment variable OAUTH_ISSUER must not contain a username or password',
+      );
+    }
+  } else {
+    validateHttpsOrLoopbackUri(
+      jwksUri ? 'OAUTH_EXTERNAL_JWKS_URI' : 'OAUTH_EXTERNAL_INTROSPECTION_URI',
+      jwksUri || introspectionUri,
+    );
+  }
 
   if (auth !== 'direct-trust' && auth !== 'uat') {
     throw new Error(
-      'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_INTROSPECTION_URI is set, AUTH must be "direct-trust" or "uat"',
+      'When OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"',
     );
   }
 
@@ -655,7 +676,7 @@ function validateOAuthExternal({
   }
 }
 
-function validateHttpsOrLoopbackUri(name: string, uri: string): void {
+function validateHttpsOrLoopbackUri(name: string, uri: string): URL {
   let url: URL;
   try {
     url = new URL(uri);
@@ -663,12 +684,11 @@ function validateHttpsOrLoopbackUri(name: string, uri: string): void {
     throw new Error(`The environment variable ${name} is not a valid URL`);
   }
 
-  if (
-    url.protocol !== 'https:' &&
-    !(url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))
-  ) {
+  if (!isHttpsOrLoopbackUrl(url)) {
     throw new Error(`The environment variable ${name} must use https unless its host is loopback`);
   }
+
+  return url;
 }
 
 function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
