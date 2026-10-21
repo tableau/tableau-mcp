@@ -8,7 +8,10 @@ import {
   emitEpisodeEvent,
   episodeSessionIdFromArgs,
 } from '../../../../desktop/episode-events.js';
-import type { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
+import type {
+  ExecuteCommandError,
+  ExecuteCommandWarning,
+} from '../../../../desktop/externalApi/executorTypes.js';
 import { isRouteMissing } from '../../../../desktop/externalApi/toolUtils.js';
 import {
   deleteDashboard,
@@ -42,7 +45,6 @@ import {
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
 import { hideStartPage } from '../../../../desktop/wrappers/applyFocus.js';
-import { deleteDashboardGuarded } from '../../../../desktop/wrappers/deleteDashboardGuarded.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   describeLoadWorkbookXmlError,
@@ -80,6 +82,7 @@ import {
   resolveLiveWorksheetNames,
   validateComposeDashboardInput,
 } from './composeDashboardCore.js';
+import { removeDashboard } from './replaceDashboard.js';
 
 const paramsSchema = {
   session: sessionParam({ max: 64 }),
@@ -183,6 +186,13 @@ type BatchReadbackVerification = {
   dashboardIssues: string[];
 };
 
+/** How far a replace got; it alone picks the note a failure carries. */
+type Removal = {
+  phase: 'sent' | 'hidden' | 'removed' | 'ready';
+  warnings: string[];
+  actionCount?: number;
+};
+
 const MAX_DYNAMIC_TEXT_LENGTH = 384;
 const MAX_BATCH_WORKSHEETS = 7;
 
@@ -258,20 +268,13 @@ export const getRunDashboardBatchTool = (
             for (const reservation of reservations) artifactStore.consume(reservation.lease);
           };
 
-          // sentNote is set when the delete dispatches; removedNote replaces it once removal is confirmed.
-          let sentNote: string | undefined;
-          let removedNote: string | undefined;
-          let removalWarnings: string[] = [];
+          let removal: Removal | undefined;
           const failBatch = (
             stage: string,
             cause: string,
-            options: {
-              verification?: BatchReadbackVerification;
-              applied?: boolean;
-              withoutNote?: boolean;
-            } = {},
+            options: { verification?: BatchReadbackVerification; applied?: boolean } = {},
           ): ReturnType<typeof unknownBatch> => {
-            const note = options.withoutNote ? undefined : (removedNote ?? sentNote);
+            const note = removal && removalNote(dashboardName, removal);
             return unknownBatch({
               artifactIds: orderedArtifactIds,
               reservations,
@@ -279,7 +282,7 @@ export const getRunDashboardBatchTool = (
               stage,
               error: [
                 ...(note ? [note, `Cause: ${boundedText(cause)}`] : [boundedText(cause)]),
-                ...removalWarnings,
+                ...(removal?.warnings ?? []),
               ].join(' '),
               verification: options.verification,
               unapplied: options.applied === false,
@@ -653,22 +656,22 @@ export const getRunDashboardBatchTool = (
             }
 
             let baseXml = workbookXml;
-            let notAppliedNote: string | undefined;
             let carried: CarriedActions | undefined;
             if (existingDashboardName && originalActions && existingDashboardId) {
               // A same-name apply edits zones in place and a story point survives a workbook removal, so delete natively.
-              const deleted = await deleteDashboardGuarded({
+              const removed = await removeDashboard({
                 executor,
                 signal: extra.signal,
                 dashboardId: existingDashboardId,
+                dashboardName,
                 expectedWorkbookXml: workbookXml,
                 expectedInstanceId: liveInstanceId,
                 onDispatch: () => {
                   executionStarted = true;
-                  sentNote = `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.`;
+                  removal = { phase: 'sent', warnings: [] };
                 },
               });
-              if (deleted.kind === 'drift') {
+              if (removed.kind === 'drift') {
                 return preflightInputFailure(
                   steps,
                   orderedArtifactIds,
@@ -680,11 +683,11 @@ export const getRunDashboardBatchTool = (
                   'workbookDrift',
                 );
               }
-              if (deleted.kind === 'failed') {
+              if (removed.kind === 'failed') {
                 // The real applyDocument dispatches before the HTTP call, so a 404 arrives dispatched.
-                const routeMissing = isRouteMissing(deleted.error);
-                if (deleted.dispatched && !routeMissing) {
-                  return failBatch('removeExisting', describeDesktopError(deleted.error), {
+                const routeMissing = isRouteMissing(removed.error);
+                if (removed.dispatched && !routeMissing) {
+                  return failBatch('removeExisting', describeDesktopError(removed.error), {
                     applied: false,
                   });
                 }
@@ -694,57 +697,31 @@ export const getRunDashboardBatchTool = (
                   dashboardName,
                   routeMissing
                     ? 'This Desktop build cannot delete a dashboard natively, so the dashboard cannot be replaced. Nothing was changed.'
-                    : describeDesktopError(deleted.error),
+                    : describeDesktopError(removed.error),
                   routeMissing ? 'deleteRouteMissing' : 'preDispatchRemoval',
                 );
               }
-              removalWarnings = [
-                ...deleted.warnings
-                  .slice(0, 3)
-                  .map(({ code, message }) =>
-                    boundedText(
-                      `Desktop reported a warning while removing the old dashboard - ${code}: ${message}`,
-                    ),
-                  ),
-                ...(deleted.warnings.length > 3
-                  ? [
-                      `Desktop reported ${deleted.warnings.length - 3} more warning${deleted.warnings.length === 4 ? '' : 's'} while removing the old dashboard.`,
-                    ]
-                  : []),
-              ];
-
-              const couldNotConfirm = (reason: string): ReturnType<typeof unknownBatch> =>
-                failBatch('removeExisting', `Could not confirm the removal: ${reason}.`, {
+              const warnings = removalWarningLines(removed.warnings);
+              if (removed.kind === 'unconfirmed') {
+                removal = { phase: 'sent', warnings };
+                const reason =
+                  'readError' in removed
+                    ? describeDesktopError(removed.readError)
+                    : boundedUnexpectedError(removed.thrown);
+                return failBatch('removeExisting', `Could not confirm the removal: ${reason}.`, {
                   applied: false,
                 });
-              let thrown: unknown;
-              const gone = await pollReadback({
-                read: () => getWorkbookXml({ executor, signal: extra.signal }),
-                settled: (xml) => !dashboardPresent(xml, dashboardName),
-                signal: extra.signal,
-              }).catch((error: unknown) => {
-                thrown = error;
-                return undefined;
-              });
-              if (gone === undefined) return couldNotConfirm(boundedUnexpectedError(thrown));
-              if (!gone.ok) return couldNotConfirm(describeDesktopError(gone.error));
-              if (!gone.settled) {
+              }
+              if (removed.kind === 'hidden') {
+                removal = { phase: 'hidden', warnings };
                 return failBatch(
                   'removeExisting',
                   `Desktop did not remove "${dashboardName}"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it.`,
-                  { applied: false, withoutNote: true },
+                  { applied: false },
                 );
               }
-              const notApplied = (count: number | undefined): string =>
-                `The old dashboard "${dashboardName}" was removed${
-                  count === undefined
-                    ? ', with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.'
-                    : count > 0
-                      ? `, with the ${count} action${count === 1 ? '' : 's'} tied to it, and the new one was not applied. Run undo-workbook to restore them.`
-                      : ' and the new one was not applied. Run undo-workbook to restore it.'
-                }`;
-              removedNote = notApplied(undefined);
-              baseXml = gone.value;
+              removal = { phase: 'removed', warnings };
+              baseXml = removed.xml;
               const rebuilt = assembleCandidate(baseXml, undefined);
               if (!rebuilt.ok)
                 return failBatch('rebuildCandidate', rebuilt.message, { applied: false });
@@ -753,7 +730,7 @@ export const getRunDashboardBatchTool = (
                 return failBatch('rebuildRead', carriedResult.error, { applied: false });
               }
               carried = carriedResult.value;
-              removedNote = notApplied(carried.actions.length);
+              removal.actionCount = carried.actions.length;
               const withActions = insertCarriedActions(rebuilt.xml, carried);
               if (withActions.isErr()) {
                 return failBatch('rebuildCandidate', withActions.error, { applied: false });
@@ -762,8 +739,7 @@ export const getRunDashboardBatchTool = (
               const rebuildError = candidateValidationError(baseXml, candidateXml);
               if (rebuildError)
                 return failBatch('rebuildValidation', rebuildError, { applied: false });
-              removedNote = `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
-              notAppliedNote = notApplied(carried.actions.length);
+              removal.phase = 'ready';
             }
 
             let dispatchAttempted = false;
@@ -787,7 +763,7 @@ export const getRunDashboardBatchTool = (
               const error = describeLoadError(applyResult.error);
               if (dispatchAttempted) return failBatch('apply', error);
               if (replaced) {
-                removedNote = notAppliedNote ?? removedNote;
+                if (removal) removal.phase = 'removed';
                 return failBatch('rebuildApply', error, { applied: false });
               }
               return preflightInputFailure(
@@ -853,7 +829,7 @@ export const getRunDashboardBatchTool = (
               (action) => !survivingActions.has(action.name),
             );
             const warnings = [
-              ...removalWarnings,
+              ...(removal?.warnings ?? []),
               ...(emptyWorksheetNames.length > 0
                 ? [emptyWorksheetWarning(emptyWorksheetNames)]
                 : []),
@@ -1073,6 +1049,40 @@ function boundedVerification(verification: ReadbackVerificationResult): Readback
     : verification;
 }
 
+function removalNote(dashboardName: string, { phase, actionCount }: Removal): string | undefined {
+  if (phase === 'hidden') return undefined;
+  if (phase === 'sent') {
+    return `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.`;
+  }
+  if (phase === 'ready') {
+    return `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
+  }
+  return `The old dashboard "${dashboardName}" was removed${
+    actionCount === undefined
+      ? ', with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.'
+      : actionCount > 0
+        ? `, with the ${actionCount} action${actionCount === 1 ? '' : 's'} tied to it, and the new one was not applied. Run undo-workbook to restore them.`
+        : ' and the new one was not applied. Run undo-workbook to restore it.'
+  }`;
+}
+
+function removalWarningLines(warnings: readonly ExecuteCommandWarning[]): string[] {
+  return [
+    ...warnings
+      .slice(0, 3)
+      .map(({ code, message }) =>
+        boundedText(
+          `Desktop reported a warning while removing the old dashboard - ${code}: ${message}`,
+        ),
+      ),
+    ...(warnings.length > 3
+      ? [
+          `Desktop reported ${warnings.length - 3} more warning${warnings.length === 4 ? '' : 's'} while removing the old dashboard.`,
+        ]
+      : []),
+  ];
+}
+
 function describeDesktopError(error: ExecuteCommandError): string {
   return new DesktopCommandExecutionError(error).getErrorText();
 }
@@ -1082,17 +1092,6 @@ function isStoryboard(workbookXml: string, name: string): boolean {
     ([open]) =>
       /\btype=(['"])storyboard\1/.test(open) &&
       xmlNamesEqual(decodeXmlEntities(/\bname=(['"])(.*?)\1/.exec(open)?.[2] ?? ''), name),
-  );
-}
-
-function dashboardPresent(workbookXml: string, name: string): boolean {
-  return (
-    listWorkbookDashboards(workbookXml).some((existing) => xmlNamesEqual(existing, name)) ||
-    [...workbookXml.matchAll(/<window\b[^>]*>/g)].some(
-      ([open]) =>
-        /\bclass=(['"])dashboard\1/.test(open) &&
-        xmlNamesEqual(decodeXmlEntities(/\bname=(['"])(.*?)\1/.exec(open)?.[2] ?? ''), name),
-    )
   );
 }
 
