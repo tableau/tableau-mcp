@@ -2245,8 +2245,8 @@ function hasFilterDependencies(
 }
 
 // Where an action should be spliced: inside an existing <actions> block (innerStart just past
-// <actions>, close at </actions>), or in a fresh block anchored right after the top-level
-// </datasources> when none exists yet.
+// <actions>, close at </actions>), or in a fresh block right before
+// <worksheets>, its slot in the twb XSD, when none exists yet.
 type ActionsSite =
   | { kind: 'existing'; innerStart: number; close: number }
   | { kind: 'empty'; start: number; end: number; opening: string }
@@ -2270,13 +2270,13 @@ function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationErro
     return new Ok({ kind: 'existing', innerStart: opening.index + opening[0].length, close });
   }
 
-  const dsClose = xml.indexOf('</datasources>');
-  if (dsClose === -1) {
+  const worksheets = /<worksheets[\s>/]/.exec(xml);
+  if (worksheets === null) {
     return new XmlModificationError(
-      'cannot place actions: no </datasources> anchor in document',
+      'cannot place actions: no <worksheets> anchor in document',
     ).toErr();
   }
-  return new Ok({ kind: 'fresh', insertAt: dsClose + '</datasources>'.length });
+  return new Ok({ kind: 'fresh', insertAt: worksheets.index });
 }
 
 // twb_2026.2.0.xsd fixes the child order of <actions> as a sequence of families:
@@ -2313,10 +2313,10 @@ function familySlotOffset(inner: string, familyIndex: number): number {
   return offset;
 }
 
-// Splice a new action into the workbook-level <actions> block, creating the block between
-// </datasources> and <worksheets> if it does not yet exist. The action lands in its XSD
+// Splice a new action into the workbook-level <actions> block, creating the block just
+// before <worksheets> if it does not yet exist. The action lands in its XSD
 // family slot (see ACTION_FAMILY_MARKERS) rather than at the end of the block.
-function spliceActionIntoWorkbook(
+export function spliceActionIntoWorkbook(
   xml: string,
   actionXml: string,
   deps?: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
