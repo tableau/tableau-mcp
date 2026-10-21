@@ -116,7 +116,11 @@ function worksheetState(workbookXml: string, worksheetName: string): TargetEleme
   return { state: 'present', sha256: sha256(stableStringify(worksheet)) };
 }
 
-function windowState(workbookXml: string, worksheetName: string): TargetElementState {
+function windowState(
+  workbookXml: string,
+  worksheetName: string,
+  ignoreHidden: boolean,
+): TargetElementState {
   const workbook = parseXML(workbookXml);
   const worksheetWindows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window).filter(
     (candidate) =>
@@ -149,6 +153,7 @@ function windowState(workbookXml: string, worksheetName: string): TargetElementS
       );
     };
     const candidate = stripVolatileNavigation(window) as Record<string, unknown>;
+    if (ignoreHidden) delete candidate['@_hidden'];
     const prefixes = new Set<string>();
     collectUsedNamespacePrefixes(candidate, prefixes);
     const local = relevantNamespaces(candidate, prefixes);
@@ -380,11 +385,12 @@ export function captureTargetWorksheetState(
   workbookXml: string,
   worksheetName: string,
   worksheetXml: string,
+  { ignoreWindowHidden = false }: { ignoreWindowHidden?: boolean } = {},
 ): TargetWorksheetState {
   return {
     worksheetName,
     target: worksheetState(workbookXml, worksheetName),
-    targetWindow: windowState(workbookXml, worksheetName),
+    targetWindow: windowState(workbookXml, worksheetName, ignoreWindowHidden),
     dependenciesSha256: dependencyFingerprint(workbookXml, worksheetXml),
   };
 }
@@ -393,11 +399,13 @@ export function compareTargetWorksheetState(
   expected: TargetWorksheetState,
   latestWorkbookXml: string,
   worksheetXml: string,
+  options: { ignoreWindowHidden?: boolean } = {},
 ): TargetWorksheetStateComparison {
   const latest = captureTargetWorksheetState(
     latestWorkbookXml,
     expected.worksheetName,
     worksheetXml,
+    options,
   );
   const reasons: TargetWorksheetDriftReason[] = [];
   if (stableStringify(latest.target) !== stableStringify(expected.target)) {

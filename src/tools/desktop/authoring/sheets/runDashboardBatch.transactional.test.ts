@@ -624,7 +624,7 @@ describe('run-dashboard-batch transactional apply', () => {
       const store = artifactStore(['a1']);
       const consume = vi.spyOn(store, 'consume');
       const release = vi.spyOn(store, 'release');
-      const harness = statefulExecutor({ guardedReadXml: 'drift', guardedReadCall: 4 });
+      const harness = statefulExecutor({ readErrorAtCall: 4 });
 
       const result = await callBatch(store, harness.executor, ['a1'], true);
 
@@ -771,8 +771,7 @@ describe('run-dashboard-batch transactional apply', () => {
       const harness = statefulExecutor({
         initialXml: WITH_ACTION,
         dropActionsOnRemoval: true,
-        guardedReadXml: 'drift',
-        guardedReadCall: 4,
+        readErrorAtCall: 4,
         deleteWarnings: [{ code: 'w1', message: 'm' }],
       });
 
@@ -801,6 +800,7 @@ describe('run-dashboard-batch transactional apply', () => {
       const W2 = 'Desktop reported a warning while removing the old dashboard - w2: n';
       const ONE_WARNING = [{ code: 'w1', message: 'm' }];
       const NOT_APPLIED = `${REMOVED}, with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
+      const NOT_APPLIED_DRIFT = `${REMOVED}, with the actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing.`;
       const NOT_APPLIED_NONE = `${REMOVED} and the new one was not applied. Run undo-workbook to restore it.`;
       const NOT_APPLIED_ONE = `${REMOVED}, with the 1 action tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
       const MAY_NOT = `${REMOVED} and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
@@ -990,6 +990,104 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(harness.posts).toHaveLength(0);
       });
 
+      it('rebuildDrift: another author created a staged target after the delete', async () => {
+        const theirs = '<worksheet name="New A"><table><rows>Theirs</rows></table></worksheet>';
+        const harness = statefulExecutor({
+          afterDelete: (xml) => xml.replace('</worksheets>', `${theirs}</worksheets>`),
+        });
+
+        const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'rebuildDrift',
+            `${NOT_APPLIED_DRIFT} Cause: Artifact "a1" ("New A") changed after it was built: target-worksheet-drift.`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+        expect(harness.current()).toContain(theirs);
+      });
+
+      it('rebuildDrift: another author edited a staged target after the delete', async () => {
+        const seeded = BASELINE.replace(
+          '</worksheets>',
+          '<worksheet name="New A"><table><rows>Mine</rows></table></worksheet></worksheets>',
+        );
+        const edited = '<worksheet name="New A"><table><rows>Theirs</rows></table></worksheet>';
+        const harness = statefulExecutor({
+          initialXml: seeded,
+          afterDelete: (xml) => xml.replace(/<worksheet name="New A">.*?<\/worksheet>/s, edited),
+        });
+
+        const result = await callBatch(
+          artifactStore(['a1'], { baselineXml: seeded }),
+          harness.executor,
+          ['a1'],
+          true,
+        );
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'rebuildDrift',
+            `${NOT_APPLIED_DRIFT} Cause: Artifact "a1" ("New A") changed after it was built: target-worksheet-drift.`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+        expect(harness.current()).toContain(edited);
+      });
+
+      it('a staged target that Desktop unhid with the old dashboard is not drift', async () => {
+        const hiddenWindow = '<window class="worksheet" hidden="true" name="New A"/>';
+        const seeded = BASELINE.replace(
+          '</worksheets>',
+          '<worksheet name="New A"><table><rows>Mine</rows></table></worksheet></worksheets>',
+        ).replace('<windows>', `<windows>${hiddenWindow}`);
+        const harness = statefulExecutor({
+          initialXml: seeded,
+          afterDelete: (xml) => {
+            expect(xml).toMatch(/hidden="true" name="New A"/);
+            return xml.replace(/ hidden="true"(?= name="New A")/, '');
+          },
+        });
+
+        const result = await callBatch(
+          artifactStore(['a1'], { baselineXml: seeded }),
+          harness.executor,
+          ['a1'],
+          true,
+        );
+
+        expect(result.isError).toBe(false);
+        expect(harness.posts).toHaveLength(1);
+      });
+
+      it('rebuildDrift: an action not tied to the dashboard was deleted after the delete', async () => {
+        const harness = statefulExecutor({
+          initialXml: WITH_ACTION.replace("dashboard='Executive Overview'", "dashboard='Keep'"),
+          afterDelete: (xml) => xml.replace(/<actions>.*?<\/actions>\s*/s, ''),
+        });
+
+        const result = await callBatch(artifactStore([]), harness.executor, [], true);
+
+        expect(bodyOf(result)).toEqual({
+          applied: 'unknown',
+          retrySafe: false,
+          steps: [
+            {
+              index: 0,
+              operation: 'dashboard',
+              dashboardName: 'Executive Overview',
+              state: 'unknown',
+              retrySafe: false,
+              stage: 'rebuildDrift',
+              error: `${NOT_APPLIED_DRIFT} Cause: The workbook changed after the old dashboard was removed: action "[Action1]" is gone.`,
+            },
+          ],
+        });
+        expect(harness.posts).toHaveLength(0);
+        expect(harness.current()).not.toContain('[Action1]');
+      });
+
       it('a throw mid-rebuild is unexpected-error with the not-applied count, worksheets unknown', async () => {
         const restore = vi
           .spyOn(carryWorkbookActions, 'restoreTabPosition')
@@ -1029,8 +1127,23 @@ describe('run-dashboard-batch transactional apply', () => {
         expect(bodyOf(result)).toEqual(
           unknownAt(
             'rebuildApply',
-            `${REMOVED}, with the 2 actions tied to it, and the new one was not applied. Run undo-workbook to restore them. Cause: The workbook changed before the authoring write.`,
+            `${REMOVED}, with the 2 actions tied to it, and the new one was not applied. The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing. Cause: The workbook changed before the authoring write.`,
           ),
+        );
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('rebuildApply: a pre-dispatch failure that is not a drift keeps the undo advice', async () => {
+        const harness = statefulExecutor({
+          initialXml: WITH_ACTION,
+          dropActionsOnRemoval: true,
+          readErrorAtCall: 4,
+        });
+
+        const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt('rebuildApply', `${NOT_APPLIED_ONE} Cause: ${READ_TIMED_OUT}`),
         );
         expect(harness.posts).toHaveLength(0);
       });
@@ -1314,6 +1427,7 @@ function artifactStore(
   options: {
     worksheetXmls?: Record<string, string>;
     windowXmls?: Record<string, string>;
+    baselineXml?: string;
   } = {},
 ): TemplateArtifactStore {
   const store = new TemplateArtifactStore();
@@ -1332,7 +1446,11 @@ function artifactStore(
       fieldMapping: {},
       worksheetXml,
       windowXml: options.windowXmls?.[artifactId] ?? `<window class="worksheet" name="${title}"/>`,
-      targetState: captureTargetWorksheetState(BASELINE, title, worksheetXml),
+      targetState: captureTargetWorksheetState(
+        options.baselineXml ?? BASELINE,
+        title,
+        worksheetXml,
+      ),
     } satisfies TemplateWorksheetArtifact);
   }
   return store;

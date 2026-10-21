@@ -1,6 +1,6 @@
 import { Err, Ok, type Result } from 'ts-results-es';
 
-import { decodeXmlEntities, findElement } from '../../../../desktop/xmlElement.js';
+import { decodeXmlEntities, findElement, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import { getAttr, spliceActionIntoWorkbook } from '../datasource/authorAction.js';
 import { readWorkbookActions, type WorkbookAction } from '../datasource/authorActionLifecycle.js';
 
@@ -10,7 +10,7 @@ const ACTIONS_BLOCK = /<actions\b[^>]*>[\s\S]*?<\/actions>/;
 const DATASOURCES_BLOCK = /<datasources>[\s\S]*?<\/datasources>/;
 const DATASOURCE_ENTRY = /<datasource\b[^>]*?(?:\/>|>[\s\S]*?<\/datasource>)/g;
 const DEPENDENCY_BLOCK = /<datasource-dependencies\b[\s\S]*?<\/datasource-dependencies>/g;
-const DEPENDENCY_COLUMN = /<column(?:-instance)?\s[^>]*?(?:\/>|>[\s\S]*?<\/column>)/g;
+const DEPENDENCY_COLUMN = /<(column(?:-instance)?)\s[^>]*?(?:\/>|>[\s\S]*?<\/\1>)/g;
 const LATER_FAMILIES = /<nav-action\b|<edit-group-action\b|<edit-parameter-action\b/;
 
 type Keyed = { key: string; xml: string };
@@ -18,6 +18,7 @@ type Dependency = Keyed & { columns: Keyed[] };
 export type ActionSiblings = { datasources: Keyed[]; dependencies: Dependency[] };
 export type CarriedActions = { actions: WorkbookAction[]; siblings: ActionSiblings };
 export type ReadActions = { actions: WorkbookAction[]; siblings: ActionSiblings };
+export type CarryOutcome = CarriedActions & { drift?: string };
 
 const keyOf = (tag: string, attribute: string): string =>
   decodeXmlEntities(getAttr(/^<[^>]*>/.exec(tag)?.[0] ?? '', attribute) ?? '');
@@ -55,15 +56,33 @@ export function readVerbatimWorkbookActions(xml: string): Result<ReadActions, st
   return Ok({ actions: result, siblings: readSiblings(block) });
 }
 
-/** What the re-read lost: actions by name, and sibling entries or columns the action block no longer holds. */
+// An action goes with the dashboard when a tag names it as its source dashboard or its target.
+function isTiedToDashboard(action: WorkbookAction, dashboardName: string): boolean {
+  return [...action.xml.matchAll(/<[\w-]+\b[^>]*>/g)].some(([tag]) => {
+    const named = /^<param\b/.test(tag)
+      ? getAttr(tag, 'name') === 'target'
+        ? getAttr(tag, 'value')
+        : undefined
+      : getAttr(tag, 'dashboard');
+    return named !== undefined && xmlNamesEqual(named, dashboardName);
+  });
+}
+
+/**
+ * What the re-read lost that went with the deleted dashboard, plus drift: anything else the re-read lost
+ * was removed by another author after the delete and must not be put back.
+ */
 export function carriedFrom(
   original: ReadActions,
   afterXml: string,
-): Result<CarriedActions, string> {
+  dashboardName: string,
+): Result<CarryOutcome, string> {
   const after = readVerbatimWorkbookActions(afterXml);
   if (after.isErr()) return Err(after.error);
   const present = new Set(after.value.actions.map((action) => action.name));
-  const actions = original.actions.filter((action) => !present.has(action.name));
+  const lost = original.actions.filter((action) => !present.has(action.name));
+  const actions = lost.filter((action) => isTiedToDashboard(action, dashboardName));
+  const untied = lost.find((action) => !actions.includes(action));
   const hasDatasource = new Set(after.value.siblings.datasources.map((entry) => entry.key));
   const afterDependencies = new Map(
     after.value.siblings.dependencies.map((dependency) => [dependency.key, dependency]),
@@ -79,13 +98,22 @@ export function carriedFrom(
     const columns = dependency.columns.filter((column) => !keptColumns.has(column.key));
     if (columns.length > 0) dependencies.push({ ...dependency, columns });
   }
-  return Ok({
-    actions,
-    siblings: {
-      datasources: original.siblings.datasources.filter((entry) => !hasDatasource.has(entry.key)),
-      dependencies,
-    },
-  });
+  const siblings = {
+    datasources: original.siblings.datasources.filter((entry) => !hasDatasource.has(entry.key)),
+    dependencies,
+  };
+  const siblingsLost = siblings.datasources.length > 0 || dependencies.length > 0;
+  const gone = 'The workbook changed after the old dashboard was removed:';
+  if (untied)
+    return Ok({ actions: [], siblings, drift: `${gone} action "${untied.name}" is gone.` });
+  if (siblingsLost && actions.length === 0) {
+    return Ok({
+      actions,
+      siblings,
+      drift: `${gone} datasource entries or columns used by the actions are gone.`,
+    });
+  }
+  return Ok({ actions, siblings });
 }
 
 export function insertCarriedActions(xml: string, carried: CarriedActions): Result<string, string> {

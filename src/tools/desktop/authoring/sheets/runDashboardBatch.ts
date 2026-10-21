@@ -23,7 +23,10 @@ import {
   extractSheetXml,
   upsertWorksheetAndWindowIntoWorkbook,
 } from '../../../../desktop/metadata/sheets.js';
-import { compareTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
+import {
+  captureTargetWorksheetState,
+  compareTargetWorksheetState,
+} from '../../../../desktop/metadata/targetWorksheetState.js';
 import { resolveSession } from '../../../../desktop/session/sessionResolution.js';
 import {
   getTemplateArtifactStore,
@@ -272,9 +275,15 @@ export const getRunDashboardBatchTool = (
           const failBatch = (
             stage: string,
             cause: string,
-            options: { verification?: BatchReadbackVerification; applied?: boolean } = {},
+            options: {
+              verification?: BatchReadbackVerification;
+              applied?: boolean;
+              drifted?: boolean;
+            } = {},
           ): ReturnType<typeof unknownBatch> => {
-            const note = removal && removalNote(dashboardName, removal);
+            const note =
+              removal &&
+              removalNote(dashboardName, removal, options.drifted ?? stage === 'rebuildDrift');
             return unknownBatch({
               artifactIds: orderedArtifactIds,
               reservations,
@@ -434,18 +443,14 @@ export const getRunDashboardBatchTool = (
                 );
                 return incomplete({ applied: false, retrySafe: true, steps });
               }
-              const comparison = compareTargetWorksheetState(
-                reservation.artifact.targetState,
-                workbookXml,
-                reservation.artifact.worksheetXml,
-              );
-              if (!comparison.ok) {
+              const drift = artifactDriftReasons(reservation, workbookXml);
+              if (drift) {
                 appendPreflightArtifactFailure(
                   steps,
                   orderedArtifactIds,
                   index,
                   dashboardName,
-                  `The workbook changed after this artifact was built: ${comparison.reasons.join(', ')}.`,
+                  `The workbook changed after this artifact was built: ${drift}.`,
                 );
                 return incomplete({ applied: false, retrySafe: true, steps });
               }
@@ -722,12 +727,27 @@ export const getRunDashboardBatchTool = (
               }
               removal = { phase: 'removed', warnings };
               baseXml = removed.xml;
+              // The rebuild writes against removed.xml, so every staged target is re-checked against it.
+              for (const reservation of reservations) {
+                // Desktop unhides a deleted dashboard's orphaned sheets, so their window `hidden` is not drift.
+                const drift = artifactDriftReasons(reservation, baseXml, workbookXml);
+                if (drift) {
+                  return failBatch(
+                    'rebuildDrift',
+                    `Artifact "${reservation.artifact.id}" ("${reservation.artifact.title}") changed after it was built: ${drift}.`,
+                    { applied: false },
+                  );
+                }
+              }
               const rebuilt = assembleCandidate(baseXml, undefined);
               if (!rebuilt.ok)
                 return failBatch('rebuildCandidate', rebuilt.message, { applied: false });
-              const carriedResult = carriedFrom(originalActions, baseXml);
+              const carriedResult = carriedFrom(originalActions, baseXml, existingDashboardName);
               if (carriedResult.isErr()) {
                 return failBatch('rebuildRead', carriedResult.error, { applied: false });
+              }
+              if (carriedResult.value.drift) {
+                return failBatch('rebuildDrift', carriedResult.value.drift, { applied: false });
               }
               carried = carriedResult.value;
               removal.actionCount = carried.actions.length;
@@ -764,7 +784,10 @@ export const getRunDashboardBatchTool = (
               if (dispatchAttempted) return failBatch('apply', error);
               if (replaced) {
                 if (removal) removal.phase = 'removed';
-                return failBatch('rebuildApply', error, { applied: false });
+                return failBatch('rebuildApply', error, {
+                  applied: false,
+                  drifted: isWorkbookDrift(applyResult.error),
+                });
               }
               return preflightInputFailure(
                 steps,
@@ -1049,7 +1072,30 @@ function boundedVerification(verification: ReadbackVerificationResult): Readback
     : verification;
 }
 
-function removalNote(dashboardName: string, { phase, actionCount }: Removal): string | undefined {
+function artifactDriftReasons(
+  reservation: Reservation,
+  workbookXml: string,
+  /** The first read: when given, the window's `hidden` is ignored on both sides. */
+  firstReadXml?: string,
+): string | undefined {
+  const { targetState, worksheetXml } = reservation.artifact;
+  const options = { ignoreWindowHidden: firstReadXml !== undefined };
+  const comparison = compareTargetWorksheetState(
+    firstReadXml === undefined
+      ? targetState
+      : captureTargetWorksheetState(firstReadXml, targetState.worksheetName, worksheetXml, options),
+    workbookXml,
+    worksheetXml,
+    options,
+  );
+  return comparison.ok ? undefined : comparison.reasons.join(', ');
+}
+
+function removalNote(
+  dashboardName: string,
+  { phase, actionCount }: Removal,
+  drifted: boolean,
+): string | undefined {
   if (phase === 'hidden') return undefined;
   if (phase === 'sent') {
     return `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.`;
@@ -1057,13 +1103,18 @@ function removalNote(dashboardName: string, { phase, actionCount }: Removal): st
   if (phase === 'ready') {
     return `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
   }
-  return `The old dashboard "${dashboardName}" was removed${
+  const removed = `The old dashboard "${dashboardName}" was removed${
     actionCount === undefined
-      ? ', with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.'
+      ? ', with the actions tied to it, and the new one was not applied.'
       : actionCount > 0
-        ? `, with the ${actionCount} action${actionCount === 1 ? '' : 's'} tied to it, and the new one was not applied. Run undo-workbook to restore them.`
-        : ' and the new one was not applied. Run undo-workbook to restore it.'
+        ? `, with the ${actionCount} action${actionCount === 1 ? '' : 's'} tied to it, and the new one was not applied.`
+        : ' and the new one was not applied.'
   }`;
+  if (drifted) {
+    // Undo reverses only the latest change, which here is the other author's edit.
+    return `${removed} The workbook changed again after the removal, so undo-workbook would first reverse that newer change. Check with the user before undoing.`;
+  }
+  return `${removed} Run undo-workbook to restore ${actionCount === 0 ? 'it' : 'them'}.`;
 }
 
 function removalWarningLines(warnings: readonly ExecuteCommandWarning[]): string[] {
@@ -1102,10 +1153,12 @@ function describeLoadError(error: LoadWorkbookXmlFailure): string {
   return describeLoadWorkbookXmlError(error.error);
 }
 
+function isWorkbookDrift(error: LoadWorkbookXmlFailure): boolean {
+  return error.type === 'load-workbook-xml-error' && error.error.type === 'workbook-drift';
+}
+
 function loadFailureStage(error: LoadWorkbookXmlFailure): string {
-  return error.type === 'load-workbook-xml-error' && error.error.type === 'workbook-drift'
-    ? 'workbookDrift'
-    : 'preDispatchApply';
+  return isWorkbookDrift(error) ? 'workbookDrift' : 'preDispatchApply';
 }
 
 function batchApplyOutcome(result: CallToolResult, executionStarted: boolean): BatchApplyOutcome {
