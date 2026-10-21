@@ -275,7 +275,7 @@ describe('dashboard content readback', () => {
   });
 });
 
-describe('Desktop tiled-layout reflow (W-24587662)', () => {
+describe('Desktop tiled-layout reflow', () => {
   const submitted = reflowWorkbook(submittedReflowDashboard);
   const readback = reflowWorkbook(readbackReflowDashboard);
   const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);

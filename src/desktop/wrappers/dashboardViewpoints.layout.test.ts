@@ -296,7 +296,7 @@ describe.each<Axis>(['vert', 'horz'])('native %s flow allocation', (axis) => {
   });
 
   it('accepts the native integer-division remainder across six scalable children', () => {
-    // FlowMetrics::GrowZones divides remaining PP space by the number of
+    // GrowZones divides remaining virtual space by the number of
     // unbounded scalable children; 100000 / 6 leaves a four-unit remainder.
     const render = (sizes: number[]): string => {
       let offset = 0;
@@ -907,7 +907,7 @@ describe('native single-horizontal fixed-height fitting', () => {
     const style =
       '<zone-style><format attr="margin-top" value="5"/><format attr="margin-bottom" value="7"/></zone-style>';
     const expected = render([0, 0, 50000, 100000], cache, style);
-    // (100 + 5 + 7)px * 100000 / 800px = 14000 PP.
+    // (100 + 5 + 7)px * 100000 / 800px = 14000 virtual units.
     expect(verify(expected, render([0, 0, 100000, 14000], cache, style))).toBe(true);
   });
 

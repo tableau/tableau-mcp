@@ -11,7 +11,7 @@ function integer(value: string | null): number | undefined {
   return Number.isSafeInteger(parsed) && parsed >= minInt && parsed <= maxInt ? parsed : undefined;
 }
 
-export function validZoneGeometry(zone: Element): boolean {
+function validZoneGeometry(zone: Element): boolean {
   for (const attribute of coordinates) {
     if (zone.hasAttribute(attribute) && integer(zone.getAttribute(attribute)) === undefined)
       return false;
@@ -518,13 +518,11 @@ function singleHorizontalHeight(expected: Element, client: Bounds): number | und
     : 300;
   const insets = spacing(expected);
   if (fixed === undefined || fixed < 0 || !primary || primary.unbounded || !insets) return;
-  // Only GrowZones invokes SetSingleHorizontal; ShrinkZones keeps full height.
+  // Native GrowZones fits a singleton's fixed height only when its submitted width fits.
+  // Readback-only cache metrics cannot authorize this exception.
   if (primary.initial > client[2] - client[0]) return;
   const height = pixelUnits(expected, fixed + insets[0][1] + insets[0][3], 1);
   if (height === undefined || height < 0) return;
-  // FlowMetrics::SetSingleHorizontal fits one fixed-height child and gives it
-  // the full primary width. Only submitted metrics authorize this exception;
-  // an actual-only cache must not justify a corrupted cross-axis allocation.
   return Math.min(height, client[3] - client[1]);
 }
 
@@ -607,9 +605,8 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
         )
       : undefined;
   if (primaryAllocation === false) return false;
-  // Without a complete sizing model, changed primary allocations must fill the
-  // client. Retained allocations may leave a tail,
-  // as fixed-only flows do. Native integer division leaves < childCount units.
+  // With incomplete metrics, changed allocations must fill the client except for
+  // integer remainders. Unchanged fixed-only flows may retain trailing space.
   if (
     visible.length > 0 &&
     !primaryUnchanged &&

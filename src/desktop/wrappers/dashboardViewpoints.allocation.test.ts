@@ -24,6 +24,56 @@ function fragment(xml: string): string {
   );
 }
 
+async function verifyAppliedAllocation(
+  expected: string,
+  actual: string,
+  accepted: boolean,
+  worksheetNames: string[],
+): Promise<void> {
+  vi.useFakeTimers();
+  const xml = fragment(expected);
+  expect(runValidation(xml, 'dashboard').valid).toBe(true);
+  expect(runValidation(fragment(actual), 'dashboard').valid).toBe(true);
+  const composed = composeDashboardWorkbook(expected, 'D', xml).unwrap().xml;
+  expect(createDashboardReadbackVerifier(composed, 'D')(actual)).toBe(accepted);
+  let live = expected;
+  const instanceId = 'allocation-instance';
+  const executor = makeExecutorMock({
+    desktopApiVersion: '0.2.24',
+    listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
+    getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml })),
+    getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),
+    applyDashboardDocument: vi.fn().mockImplementation(async () => {
+      live = actual;
+      return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+    }),
+  });
+  const signal = new AbortController().signal;
+  const pending = loadDashboardXml({
+    dashboardName: 'D',
+    xml,
+    requireExistingSheet: true,
+    verifyReadback: true,
+    focus: { navigate: 'none', reason: 'intermediate-leg' },
+    executor,
+    signal,
+  });
+  await vi.runAllTimersAsync();
+  const result = await pending;
+  if (accepted) {
+    expect(result.unwrap().verifiedWorksheetNames).toEqual(worksheetNames);
+  } else {
+    expect(result).toMatchObject({ error: { error: { type: 'verification-failed' } } });
+  }
+  expect(executor.applyDashboardDocument).toHaveBeenCalledExactlyOnceWith(
+    'dash-1',
+    expect.any(String),
+    signal,
+    { expectedInstanceId: instanceId },
+  );
+  expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+}
+
 describe.each(
   (['vert', 'horz'] as const).flatMap((axis) => [false, true].map((pixels) => ({ axis, pixels }))),
 )('shared $axis allocations with unknown metrics (pixels=$pixels)', ({ axis, pixels }) => {
@@ -103,53 +153,10 @@ describe.each(
   it.each(kinds.flatMap((type) => [false, true].map((accepted) => ({ type, accepted }))))(
     'verifies the composed expectation and original-instance apply for $type (accepted=$accepted)',
     async ({ type, accepted }) => {
-      vi.useFakeTimers();
       const metrics = [metricFor(type), metricFor(type), undefined];
       const expected = render([300, 600, 100], metrics);
       const actual = render(accepted ? [450, 450, 100] : [400, 500, 100], metrics);
-      const xml = fragment(expected);
-      expect(runValidation(xml, 'dashboard').valid).toBe(true);
-      expect(runValidation(fragment(actual), 'dashboard').valid).toBe(true);
-      const composed = composeDashboardWorkbook(expected, 'D', xml).unwrap().xml;
-      expect(createDashboardReadbackVerifier(composed, 'D')(actual)).toBe(accepted);
-      let live = expected;
-      const instanceId = 'shared-allocation-instance';
-      const executor = makeExecutorMock({
-        desktopApiVersion: '0.2.24',
-        listDashboards: vi
-          .fn()
-          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
-        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml })),
-        getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),
-        applyDashboardDocument: vi.fn().mockImplementation(async () => {
-          live = actual;
-          return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
-        }),
-      });
-      const signal = new AbortController().signal;
-      const pending = loadDashboardXml({
-        dashboardName: 'D',
-        xml,
-        requireExistingSheet: true,
-        verifyReadback: true,
-        focus: { navigate: 'none', reason: 'intermediate-leg' },
-        executor,
-        signal,
-      });
-      await vi.runAllTimersAsync();
-      const result = await pending;
-      if (accepted) {
-        expect(result.unwrap().verifiedWorksheetNames).toEqual(['Sheet 0', 'Sheet 1']);
-      } else {
-        expect(result).toMatchObject({ error: { error: { type: 'verification-failed' } } });
-      }
-      expect(executor.applyDashboardDocument).toHaveBeenCalledExactlyOnceWith(
-        'dash-1',
-        expect.any(String),
-        signal,
-        { expectedInstanceId: instanceId },
-      );
-      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      await verifyAppliedAllocation(expected, actual, accepted, ['Sheet 0', 'Sheet 1']);
     },
   );
 
@@ -270,53 +277,10 @@ describe.each(
   it.each([false, true])(
     'verifies final manual allocation after the automatic cap fills its budget (accepted=%s)',
     async (accepted) => {
-      vi.useFakeTimers();
       const sizes = accepted ? [10, 54, 936] : [10, 32, 958];
       const expected = render(sizes, manualLastMetrics, { crossInset: 10 });
       const actual = render(sizes, manualLastMetrics);
-      const xml = fragment(expected);
-      expect(runValidation(xml, 'dashboard').valid).toBe(true);
-      expect(runValidation(fragment(actual), 'dashboard').valid).toBe(true);
-      const composed = composeDashboardWorkbook(expected, 'D', xml).unwrap().xml;
-      expect(createDashboardReadbackVerifier(composed, 'D')(actual)).toBe(accepted);
-      let live = expected;
-      const instanceId = 'manual-last-budget-instance';
-      const executor = makeExecutorMock({
-        desktopApiVersion: '0.2.24',
-        listDashboards: vi
-          .fn()
-          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
-        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml })),
-        getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),
-        applyDashboardDocument: vi.fn().mockImplementation(async () => {
-          live = actual;
-          return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
-        }),
-      });
-      const signal = new AbortController().signal;
-      const pending = loadDashboardXml({
-        dashboardName: 'D',
-        xml,
-        requireExistingSheet: true,
-        verifyReadback: true,
-        focus: { navigate: 'none', reason: 'intermediate-leg' },
-        executor,
-        signal,
-      });
-      await vi.runAllTimersAsync();
-      const result = await pending;
-      if (accepted) {
-        expect(result.unwrap().verifiedWorksheetNames).toEqual(['Sheet 1', 'Sheet 2']);
-      } else {
-        expect(result).toMatchObject({ error: { error: { type: 'verification-failed' } } });
-      }
-      expect(executor.applyDashboardDocument).toHaveBeenCalledExactlyOnceWith(
-        'dash-1',
-        expect.any(String),
-        signal,
-        { expectedInstanceId: instanceId },
-      );
-      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      await verifyAppliedAllocation(expected, actual, accepted, ['Sheet 1', 'Sheet 2']);
     },
   );
 });
