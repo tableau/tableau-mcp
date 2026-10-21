@@ -53,7 +53,8 @@ To set it up:
 - Set [`OAUTH_ISSUER`](#oauth_issuer) to your IdP's issuer and
   [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) to `false`. Tokens with any other
   `iss` are rejected.
-- Set exactly one of [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWT access tokens) or
+- Set exactly one of [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWTs: access tokens or
+  OpenID Connect ID tokens) or
   [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) (opaque tokens).
 - Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`, or to `uat` with
   `{OAUTH_USERNAME}` in `UAT_USERNAME_CLAIM`.
@@ -61,11 +62,14 @@ To set it up:
   [`OAUTH_RESOURCE_URI`](#oauth_resource_uri) origin with the `/tableau-mcp` path, or a value in
   [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris). Clients request it with the
   `resource` parameter ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)). The MCP server accepts
-  any token with a matching `aud`, so use a value unique to this server: never a client ID or a
-  shared default audience such as Okta's `api://default`.
-- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. In this mode the
-  scopes also keep out ID tokens and tokens meant for other apps, so setting
-  [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) to `true` removes that check.
+  any token with a matching `aud`, so use a value unique to this server. A client ID is fine only if
+  it is this MCP server's own client ID and no other app receives tokens for it. Never use a client
+  ID shared with another app, or a shared default audience such as Okta's `api://default`.
+- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. The scopes also
+  keep out tokens without `tableau:mcp:*` scopes, including ID tokens and tokens meant for other
+  apps. Accepting ID tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
+  The audience is then the only check that ties a token to this server, so do this only when every
+  accepted audience is unique to this server.
 
 :::warning
 
@@ -80,6 +84,37 @@ Also note:
 - Passthrough auth (`ENABLE_PASSTHROUGH_AUTH`) runs first. A request with a valid Tableau session is
   accepted without checking a bearer token.
 - The token's `client_id` (or `azp`) claim is used as the client ID, which is sent to telemetry.
+- Each rejected token writes one `external-token-rejected` record to the `audit` logger, whatever
+  [`LOG_LEVEL`](env-vars#log_level) is set to.
+
+### Accept OpenID Connect ID tokens
+
+If your IdP signs users in with OpenID Connect ID tokens instead of access tokens, the MCP server
+can accept those as the bearer token:
+
+```bash
+OAUTH_ISSUER=https://idp.example.com
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+OAUTH_EXTERNAL_JWKS_URI=https://idp.example.com/keys
+OAUTH_GLOBAL_RESOURCE_URIS=<this-mcp-server-client-id>
+OAUTH_DISABLE_SCOPES=true
+OAUTH_EXTERNAL_USERNAME_CLAIM_NAME=<username-claim>
+```
+
+Use this MCP server's own client ID only if no other app receives tokens for it: with scopes off,
+the audience is the only check that ties a token to this server.
+
+On each request, the MCP server checks that:
+
+- The token is signed with an asymmetric algorithm by a key from the JWKS.
+- `iss` equals `OAUTH_ISSUER` exactly and `aud` is an accepted value.
+- The token has not expired (`exp`) and is already valid (`nbf`, if present), allowing 5 seconds of
+  clock skew.
+- `iss`, `sub`, `aud`, `exp`, and `iat` are present.
+- The [username claim](#oauth_external_username_claim_name) is valid.
+
+Results are not cached. A rejected token gets one generic `401` and an `external-token-rejected`
+audit log record with the reason, never the token.
 
 <hr />
 
@@ -207,14 +242,16 @@ nor [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris) is rejected with
 
 ### `OAUTH_GLOBAL_RESOURCE_URIS`
 
-One or more additional resource URLs that are also accepted in a token's `aud` claim. Use this when
-clients may reach the deployment through an environment-wide global URL in addition to the
-pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
+One or more additional values that are also accepted in a token's `aud` claim. Use this when clients
+may reach the deployment through an environment-wide global URL in addition to the pod-specific
+[`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 
 - Optional. When unset, only the `OAUTH_RESOURCE_URI` value is accepted.
-- Accepts a single URL or a comma-separated list of URLs.
-- Each value is matched against `aud`, so set it to the global resource URL the
-  authorization server stamps into the claim (for example `https://mcp.tableau.com`).
+- Accepts a single value or a comma-separated list of values.
+- Each value is matched against `aud`, so set it to the value the authorization server stamps into
+  the claim (for example `https://mcp.tableau.com`). With
+  [your own identity provider](#use-your-own-identity-provider-self-hosted-only), a value may be
+  this MCP server's own client ID, to [accept ID tokens](#accept-openid-connect-id-tokens).
 - Applies only when using a Tableau authorization server or
   [your own identity provider](#use-your-own-identity-provider-self-hosted-only)
   ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
@@ -265,6 +302,9 @@ Disable scope enforcement and scope challenges.
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
+- With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
+  required to [accept ID tokens](#accept-openid-connect-id-tokens), which carry no scopes. It is
+  safe only when every accepted audience is unique to this MCP server.
 
 <hr />
 
@@ -354,11 +394,17 @@ or [your own identity provider](#use-your-own-identity-provider-self-hosted-only
 
 ### `OAUTH_EXTERNAL_JWKS_URI`
 
-The JWKS URL of your identity provider. When set, the MCP server accepts JWT access tokens
-([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) signed by a key from this URL. Set this or
+The JWKS URL of your identity provider. When set, the MCP server accepts JWTs signed by a key from
+this URL: access tokens ([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
+[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set this or
 [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri), not both. Must use `https`
 unless the host is loopback. See
 [Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
+
+- Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
+- `exp` and `nbf` allow 5 seconds of clock skew.
+- `iss`, `sub`, `aud`, `exp`, and `iat` must be present.
+- Keys are cached and fetched again when a token names an unknown key ID (`kid`).
 
 <hr />
 
@@ -389,8 +435,10 @@ The client secret for
 
 ### `OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`
 
-The name of the access token claim to use as the Tableau username. The claim's value must be a
-non-empty string. Surrounding spaces in the name are trimmed, and an empty name falls back to `sub`.
+The name of the token claim to use as the Tableau username. The claim's value must be a non-empty
+string, or a whole number from 0 to 9007199254740991, which is used as its decimal string. In a JWT,
+`sub` itself must be a non-empty string, so a number works only in a custom username claim.
+Surrounding spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 - Default: `sub`
 

@@ -5,7 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { Config, getConfig } from '../../config.js';
-import { log } from '../../logging/logger.js';
+import { AUDIT_LOGGER, log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import invariant from '../../utils/invariant.js';
@@ -308,10 +308,36 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
 const INTROSPECTION_TIMEOUT_MS = 5000;
 
+// Asymmetric only, so an HS* token never verifies even if a key resolver yields a shared secret.
+const EXTERNAL_JWT_ALGORITHMS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+  'Ed25519',
+];
+const EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS = 5;
+
+function usernameFromClaim(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim() && !/\p{Cc}/u.test(value) ? value : undefined;
+  }
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? String(value)
+    : undefined;
+}
+
 /**
- * Validates access tokens from an external OAuth/OIDC authorization server: JWTs against its JWKS
- * (RFC 9068) or opaque tokens through token introspection (RFC 7662). The configured claim becomes
- * the Tableau username; outbound Tableau auth stays direct-trust or UAT.
+ * Validates tokens from an external OAuth/OIDC authorization server: JWT access tokens (RFC 9068)
+ * or OpenID Connect ID tokens against its JWKS, or opaque tokens through token introspection
+ * (RFC 7662). The configured claim becomes the Tableau username; outbound Tableau auth stays
+ * direct-trust or UAT.
  */
 export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private readonly external: NonNullable<Config['oauth']['external']>;
@@ -353,7 +379,9 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
   ): Promise<Result<ExternalTokenClaims, string>> {
     const { payload } = await jwtVerify(token, getKey, {
       issuer: this.config.oauth.issuer,
-      requiredClaims: ['exp'],
+      algorithms: EXTERNAL_JWT_ALGORITHMS,
+      clockTolerance: EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS,
+      requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat'],
     });
 
     const claims = externalTokenClaimsSchema.safeParse(payload);
@@ -421,18 +449,15 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     const { aud = [], azp, clientId, exp, scope, scp } = claims;
     const { allowedAudiences, matches } = matchAudience({ aud, config: this.config });
     if (!matches) {
-      log({
-        message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog([aud].flat().join(', '))}'`,
-        level: 'error',
-        logger: 'oauth',
-      });
-      return new Err('Token audience does not match this MCP server');
+      return this.reject(
+        `audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog([aud].flat().join(', '))}'`,
+      );
     }
 
     const { usernameClaimName } = this.external;
     const claimsByName: Record<string, unknown> = claims;
-    const username = claimsByName[usernameClaimName];
-    if (typeof username !== 'string' || !username.trim() || /\p{Cc}/u.test(username)) {
+    const username = usernameFromClaim(claimsByName[usernameClaimName]);
+    if (username === undefined) {
       return this.reject(`missing or invalid '${truncateForLog(usernameClaimName)}' claim`);
     }
 
@@ -454,9 +479,10 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
 
   private reject(reason: string): AccessTokenValidatorResult {
     log({
-      message: `External access token rejected: ${reason}`,
-      level: 'error',
-      logger: 'oauth',
+      message: 'external-token-rejected',
+      level: 'warning',
+      logger: AUDIT_LOGGER,
+      data: { reason },
     });
     return new Err('Invalid or expired access token');
   }

@@ -139,10 +139,14 @@ const externalTokenClaimsObjectSchema = z
   })
   .passthrough();
 
-/** Claims of a verified RFC 9068 JWT access token from an external authorization server. */
-export const externalTokenClaimsSchema = externalTokenClaimsObjectSchema.transform(
-  ({ client_id, ...claims }) => ({ ...claims, clientId: client_id }),
-);
+/** Claims of a verified JWT (RFC 9068 access token or OIDC ID token) from an external IdP. */
+export const externalTokenClaimsSchema = externalTokenClaimsObjectSchema
+  // A refine, not a typed field, so introspection output (where sub is optional) still fits the type.
+  .refine(({ sub }) => typeof sub === 'string' && sub.length > 0, {
+    message: 'sub must be a non-empty string',
+    path: ['sub'],
+  })
+  .transform(({ client_id, ...claims }) => ({ ...claims, clientId: client_id }));
 
 /** RFC 7662 token introspection response from an external authorization server. */
 export const introspectionResponseSchema = externalTokenClaimsObjectSchema

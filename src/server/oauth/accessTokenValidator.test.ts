@@ -6,6 +6,7 @@ import {
   generateKeyPair,
   JWTVerifyGetKey,
   SignJWT,
+  UnsecuredJWT,
 } from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
@@ -608,6 +609,15 @@ describe('matchAudience', () => {
   ])('matches aud %j: %s', (aud, matches) => {
     expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
   });
+
+  it.each([
+    ['my-client-id', true],
+    ['my-client-id-2', false],
+  ])('matches a client ID global resource value exactly (aud %j: %s)', (aud, matches) => {
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', 'my-client-id');
+
+    expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
+  });
 });
 
 describe('ExternalAccessTokenValidator', () => {
@@ -617,7 +627,6 @@ describe('ExternalAccessTokenValidator', () => {
   const INTROSPECTION_CLIENT_ID = 'mcp-resource-server';
   const INTROSPECTION_SECRET = 'introspection-s3cret';
   const INVALID_TOKEN_ERROR = 'Invalid or expired access token';
-  const AUDIENCE_ERROR = 'Token audience does not match this MCP server';
   const now = Math.floor(Date.now() / 1000);
   const tableauAuthInfo = (username: string): Record<string, unknown> => ({
     type: 'X-Tableau-Auth',
@@ -632,6 +641,12 @@ describe('ExternalAccessTokenValidator', () => {
 
   function errorOf(result: Awaited<ReturnType<ExternalAccessTokenValidator['validate']>>): string {
     return result.isErr() ? result.error : 'not an error';
+  }
+
+  function captureLogs(): () => string[] {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    return () => [...consoleSpy.mock.calls, ...stderrSpy.mock.calls].flat().map(String);
   }
 
   beforeEach(() => {
@@ -750,6 +765,11 @@ describe('ExternalAccessTokenValidator', () => {
       ['the username claim is missing', { sub: undefined }],
       ['the username claim is blank', { sub: '   ' }],
       ['the username claim has a control character', { sub: 'jdoe\nadmin' }],
+      ['iat is missing', { iat: undefined }],
+      ['iat is not a number', { iat: 'yesterday' }],
+      ['aud is missing', { aud: undefined }],
+      ['sub is not a string', { sub: 42 }],
+      ['sub is empty', { sub: '' }],
     ])('rejects the token when %s', async (_, overrides) => {
       const token = await sign(rfc9068Claims(overrides));
 
@@ -766,7 +786,210 @@ describe('ExternalAccessTokenValidator', () => {
 
       const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
 
-      expect(errorOf(result)).toBe(AUDIENCE_ERROR);
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each([undefined, ''])(
+      'rejects a token with sub %j even when the custom username claim is present',
+      async (sub) => {
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
+        const token = await sign(rfc9068Claims({ sub, tableau_username: 'jdoe' }));
+
+        const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+        expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+      },
+    );
+
+    it('rejects an HS256 token even if the key resolver returns a shared secret', async () => {
+      const secret = new TextEncoder().encode('a-shared-secret-of-at-least-32-bytes');
+      const token = await new SignJWT(rfc9068Claims())
+        .setProtectedHeader({ alg: 'HS256', typ: 'at+jwt' })
+        .sign(secret);
+      const getSecret: JWTVerifyGetKey = async () => secret;
+
+      const result = await new ExternalAccessTokenValidator({ getKey: getSecret }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an unsigned token (alg none)', async () => {
+      const token = new UnsecuredJWT(rfc9068Claims()).encode();
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each(['ES256', 'PS256', 'EdDSA'])('accepts a token signed with %s', async (alg) => {
+      const keyPair = await generateKeyPair(alg);
+      const algGetKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg, kid: 'alg-key' }],
+      });
+      const token = await new SignJWT(rfc9068Claims())
+        .setProtectedHeader({ alg, typ: 'at+jwt', kid: 'alg-key' })
+        .sign(keyPair.privateKey);
+
+      const result = await new ExternalAccessTokenValidator({ getKey: algGetKey }).validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    describe('clock skew', () => {
+      const FIXED_NOW = 1_800_000_000;
+
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(FIXED_NOW * 1000);
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it.each<[string, Record<string, unknown>, boolean]>([
+        ['exp passed 3 s ago', { exp: FIXED_NOW - 3 }, true],
+        ['exp passed 6 s ago', { exp: FIXED_NOW - 6 }, false],
+        ['nbf is 3 s ahead', { nbf: FIXED_NOW + 3 }, true],
+        ['nbf is 6 s ahead', { nbf: FIXED_NOW + 6 }, false],
+      ])('when %s, accepts the token: %s', async (_, overrides, accepted) => {
+        const token = await sign(
+          rfc9068Claims({ iat: FIXED_NOW, exp: FIXED_NOW + 3600, ...overrides }),
+        );
+
+        const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+        expect(result.isOk()).toBe(accepted);
+      });
+    });
+
+    it('writes one audit record per rejection, even at LOG_LEVEL=emergency, without the token', async () => {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+      const tokens = [
+        await sign(rfc9068Claims({ aud: 'https://other-pod.example.com/tableau-mcp' })),
+        await sign(rfc9068Claims(), otherPrivateKey),
+      ];
+
+      for (const token of tokens) {
+        await new ExternalAccessTokenValidator({ getKey }).validate(token);
+      }
+
+      const lines = capturedLines();
+      expect(lines.map((line) => JSON.parse(line))).toEqual([
+        expect.objectContaining({
+          logger: 'audit',
+          message: 'external-token-rejected',
+          data: { reason: expect.stringContaining('audience mismatch') },
+        }),
+        expect.objectContaining({
+          logger: 'audit',
+          message: 'external-token-rejected',
+          data: { reason: expect.any(String) },
+        }),
+      ]);
+      const output = lines.join();
+      for (const token of tokens) {
+        const [, payload, signature] = token.split('.');
+        expect(output).not.toContain(token);
+        expect(output).not.toContain(payload);
+        expect(output).not.toContain(signature);
+      }
+    });
+  });
+
+  describe('OIDC ID tokens', () => {
+    const OWN_CLIENT_ID = 'tableau-mcp-client';
+    let privateKey: CryptoKey;
+    let getKey: JWTVerifyGetKey;
+
+    beforeAll(async () => {
+      const keyPair = await generateKeyPair('RS256');
+      privateKey = keyPair.privateKey;
+      getKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg: 'RS256', kid: 'id-key-1' }],
+      });
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
+    });
+
+    function idTokenClaims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        sub: 'u-7f3a9c2e-opaque',
+        aud: OWN_CLIENT_ID,
+        iat: now,
+        exp: now + 3600,
+        auth_time: now - 30,
+        nonce: 'n-0S6_WzA2Mj',
+        employee_id: '1234567',
+        ...overrides,
+      });
+    }
+
+    async function signIdToken(claims: Record<string, unknown>): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'id-key-1' })
+        .sign(privateKey);
+    }
+
+    it("accepts an ID token whose aud is this server's own client ID", async () => {
+      const token = await signIdToken(idTokenClaims());
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: '',
+        scopes: [],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('1234567'),
+      });
+    });
+
+    it('uses a numeric username claim as its decimal string', async () => {
+      const token = await signIdToken(idTokenClaims({ employee_id: 1234567 }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap().extra).toEqual(tableauAuthInfo('1234567'));
+    });
+
+    it.each<[string, unknown]>([
+      ['a fraction', 1.5],
+      ['an unsafe integer', 2 ** 53],
+      ['negative', -1],
+      ['a boolean', true],
+      ['an array', ['1234567']],
+      ['an object', {}],
+      ['empty', ''],
+    ])('rejects the token when the username claim is %s', async (_, employeeId) => {
+      const token = await signIdToken(idTokenClaims({ employee_id: employeeId }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an ID token for another client', async () => {
+      const token = await signIdToken(idTokenClaims({ aud: 'other-client' }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an ID token without iat', async () => {
+      const token = await signIdToken(idTokenClaims({ iat: undefined }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
     });
   });
 
@@ -868,7 +1091,7 @@ describe('ExternalAccessTokenValidator', () => {
         OPAQUE_TOKEN,
       );
 
-      expect(errorOf(result)).toBe(AUDIENCE_ERROR);
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
     });
 
     it('rejects the token when the introspection endpoint returns a non-2xx status', async () => {
@@ -913,8 +1136,8 @@ describe('ExternalAccessTokenValidator', () => {
       }).validate(leakCheckToken);
 
       const output = [...consoleSpy.mock.calls, ...stderrSpy.mock.calls].flat().map(String).join();
-      expect(output).toContain('External access token rejected');
-      expect(output).toContain('Access token audience mismatch');
+      expect(output).toContain('external-token-rejected');
+      expect(output).toContain('audience mismatch');
       expect(output).toContain('introspection response is not valid JSON');
       expect(output).not.toContain(OPAQUE_TOKEN);
       expect(output).not.toContain(leakCheckToken.slice(0, 10));
