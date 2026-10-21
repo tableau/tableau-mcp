@@ -28,18 +28,11 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   // reuse the dashboard per-sheet path). The whole-workbook write seam has been removed.
   'src/desktop/wrappers/loadDashboardXml.ts': ['loadDashboardXml:forward'],
   'src/tools/desktop/authoring/binder/bindTemplate.ts': ['loadWorkbookXml:artifact'],
-  'src/tools/desktop/authoring/sheets/buildAndApplyWorksheet.ts': ['loadWorksheetXml:artifact'],
-  'src/tools/desktop/authoring/sheets/batchCreateAndCacheSheets.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyDashboard.ts': ['loadDashboardXml:artifact'],
-  'src/tools/desktop/authoring/sheets/applyDashboardWithViewpoints.ts': [
-    'loadDashboardXml:artifact',
-  ],
-  'src/tools/desktop/authoring/sheets/buildAndApplyDashboard.ts': ['loadDashboardXml:artifact'],
   'src/tools/desktop/api/applyWorksheetArtifact.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/composeDashboardCore.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/authoring/sheets/runDashboardBatch.ts': ['loadWorkbookXml:none'],
   'src/tools/desktop/authoring/datasource/applyAndVerify.ts': ['loadWorkbookXml:restore'],
-  'src/tools/desktop/authoring/datasource/formatLabels.ts': ['loadWorkbookXml:artifact'],
   'src/tools/desktop/api/applyWorkbook.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/api/applyWorksheet.ts': ['loadWorksheetXml:artifact'],
   'src/tools/desktop/authoring/sheets/refineWorksheet.ts': ['loadWorksheetXml:artifact'],

@@ -15,7 +15,7 @@ const EXTRA_FILES = [
   'src/desktop/binder/explicit-bind.ts',
 ] as const;
 
-const CONDITIONAL_TOOLS = ['inject-template', 'apply-workbook', 'apply-dashboard'] as const;
+const CONDITIONAL_TOOLS = ['apply-workbook', 'apply-dashboard'] as const;
 
 // Kebab-case tokens emitted by desktop tools that are NOT tool-name references: XML
 // element/attribute/value vocabulary, External Client API operation names (load-*),
@@ -66,11 +66,9 @@ const NON_TOOL_VOCABULARY = [
   'custom-theme',
   'dashboard-image',
   'dashboard-only',
-  'dashboard-xml-guide',
   'data-catalog-connect-to-file',
   'data-source-order',
   'datasource-dependencies',
-  'datasource-mismatch',
   'datatype-customized',
   'date-time',
   'dates-and-times',
@@ -79,7 +77,6 @@ const NON_TOOL_VOCABULARY = [
   'dependency-failed',
   'derivation-illegal',
   'desktop-instance-missing',
-  'diff-corpus',
   'do-nothing',
   'down-saved',
   'duplicate-slot-binding',
@@ -103,14 +100,12 @@ const NON_TOOL_VOCABULARY = [
   'filter-field',
   'filter-group',
   'follow-up',
-  'for-parallel-build',
   'formatted-text',
   'generate-viz-from-notional-spec',
   'get-calc-details-pres-model-for-formula',
   'get-dashboard-xml-error',
   'get-worksheet-xml-error',
   'high-level',
-  'ignored-redundant-aggregation',
   'in-dashboard',
   'in-place',
   'in-use',
@@ -123,7 +118,6 @@ const NON_TOOL_VOCABULARY = [
   'invalid-xml',
   'is-leaf-connection',
   'is-leaf-connection-ui',
-  'judgment-needed',
   'keep-current',
   'kind-mismatch',
   'kpi-text',
@@ -141,7 +135,6 @@ const NON_TOOL_VOCABULARY = [
   'load-worksheet',
   'load-worksheet-xml-error',
   'malformed-worksheet-fragment',
-  'mark-labels',
   'mark-labels-show',
   'missing-required-slot',
   'multi-select',
@@ -154,7 +147,6 @@ const NON_TOOL_VOCABULARY = [
   'non-federated',
   'non-string',
   'non-template',
-  'none-available',
   'not-applied',
   'not-found',
   'not-run',
@@ -168,7 +160,6 @@ const NON_TOOL_VOCABULARY = [
   'packaged-workbook',
   'param-domain-type',
   // Field resolver transformation marker, not a callable tool.
-  'parsed-aggregation-prefix',
   'part-to-whole-waterfall',
   'post-apply',
   'post-apply-read',
@@ -179,24 +170,15 @@ const NON_TOOL_VOCABULARY = [
   'preflight-invariant',
   'prior-version',
   'quantitative-or-categorical',
-  'ranking-ordered-bar',
   're-call',
   're-enables',
-  're-inject',
-  're-planning',
   're-read',
   're-reading',
-  're-resolve',
   're-run',
-  're-scoped',
   'readback-verification',
   // Health-check repair-primitive codes, not tools the model can call.
-  'reinject-from-template',
-  'render-diagnostics',
   'required-slot-missing',
   'row-level',
-  'safe-by-construction',
-  'screenshot-diff',
   'selected-fields',
   'selection-clear-set-option',
   'self-closing',
@@ -214,7 +196,6 @@ const NON_TOOL_VOCABULARY = [
   'single-select',
   'sizing-mode',
   'slot-not-offered',
-  'slot-to-field',
   'source-field',
   'special-fields',
   'specific-zone',
@@ -243,7 +224,6 @@ const NON_TOOL_VOCABULARY = [
   'template-owned',
   'text-format',
   'theme-json-syntax',
-  'too-new',
   'top-level',
   'top-n',
   'tsl-filter',
@@ -267,18 +247,14 @@ const NON_TOOL_VOCABULARY = [
   'validation-failed',
   'validation-passing',
   'var-p',
-  'viz-specific',
   'well-formed',
   'window-screenshot',
-  'workbook-change',
   'workbook-datasource',
   'workbook-drift',
   'workbook-read',
   'worksheet-edit-buffer',
   'worksheet-image',
-  'zone-delete',
   'zone-style',
-  'zone-surgery',
 ] as const;
 
 const TOOL_NAME_CANDIDATE_RE = /\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/g;
@@ -357,8 +333,6 @@ const PREFIXED_ALLOWED_TOKENS = new Set([
 const PREFIXED_ALLOWED_FILES = new Set([
   // QUERY_TOOL_JARGON is a search stop-word list, never rendered.
   'src/desktop/knowledge/index.ts',
-  // APPLY_INSTRUCTION is dropped on the served auto-apply path.
-  'src/desktop/binder/binder.ts',
 ]);
 
 const scannedCandidates = sourceFiles().flatMap((fullPath) => {

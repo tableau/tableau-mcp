@@ -238,7 +238,7 @@ describe('computeZones — executive summary', () => {
   });
 });
 
-describe('computeZones — KPI strip (build-and-apply-dashboard only; unchanged behavior)', () => {
+describe('computeZones — KPI strip (unchanged behavior)', () => {
   it('KPI zones tile the top strip before the chart grid', () => {
     const zones = computeZones(undefined, spec({ kpis: ['K1', 'K2'], charts: ['A'] }));
     const kpiZones = zones.filter(

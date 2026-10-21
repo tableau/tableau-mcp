@@ -333,7 +333,7 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     if (attribute.name === 'name') {
       if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
     } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
-      // Desktop rounds zone coordinates during serialization (as in compose-dashboard).
+      // Desktop rounds zone coordinates during serialization.
       if (
         !attribute.value.trim() ||
         !actualValue.trim() ||
