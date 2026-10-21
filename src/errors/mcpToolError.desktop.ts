@@ -1,6 +1,10 @@
 import { BLOCKING_DIALOG_GUIDANCE } from '../desktop/callDeadline.js';
 import { ExecuteCommandError } from '../desktop/externalApi/executorTypes.js';
 import {
+  classifySessionFatalError,
+  isSessionFatalError,
+} from '../desktop/externalApi/sessionFatalError.js';
+import {
   BARE_COMMAND_FAILURE_GUIDANCE,
   isBareCommandFailure,
 } from '../desktop/wrappers/applyFailureClassifier.js';
@@ -82,15 +86,17 @@ export class DesktopCommandExecutionError extends McpToolError {
   readonly blockedByDesktopDialog: boolean;
 
   constructor(error: ExecuteCommandError, fix?: string) {
+    const sessionFatal = error.type === 'command-failed' && isSessionFatalError(error.error);
     const message = formatDesktopCommandExecutionError(error);
     super({
-      type: 'desktop-command-execution-error',
-      message: fix ? `${message}\n${fix}` : message,
+      type: sessionFatal ? 'desktop-session-fatal' : 'desktop-command-execution-error',
+      message: fix && !sessionFatal ? `${message}\n${fix}` : message,
       statusCode: 500,
     });
     this.blockedByDesktopDialog =
-      error.type === 'command-timed-out' ||
-      (error.type === 'command-failed' && error.error?.code === 'awaiting-user');
+      !sessionFatal &&
+      (error.type === 'command-timed-out' ||
+        (error.type === 'command-failed' && error.error?.code === 'awaiting-user'));
   }
 }
 
@@ -99,7 +105,7 @@ function formatDesktopCommandExecutionError(error: ExecuteCommandError): string 
     return JSON.stringify(error);
   }
 
-  const commandError = error.error;
+  const commandError = error.error ? classifySessionFatalError(error.error) : undefined;
   const message = commandError?.message;
   if (!message) {
     return JSON.stringify(error);
