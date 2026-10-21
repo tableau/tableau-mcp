@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import * as episodeEvents from '../../../../desktop/episode-events.js';
 import type {
   ApplyWorkbookDocumentOptions,
   ExternalApiToolExecutor,
@@ -15,12 +16,14 @@ import {
   TemplateArtifactStore,
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
+import * as applyFocus from '../../../../desktop/wrappers/applyFocus.js';
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import * as carryWorkbookActions from './carryWorkbookActions.js';
 import { getRunDashboardBatchTool } from './runDashboardBatch.js';
 
 vi.mock('../../../../desktop/session/sessionResolution.js');
@@ -791,6 +794,336 @@ describe('run-dashboard-batch transactional apply', () => {
       expect(harness.posts).toHaveLength(1);
       expect(harness.deletes).toHaveLength(0);
       expect(bodyOf(result).steps.at(-1)).toMatchObject({ state: 'applied', replaced: false });
+    });
+
+    describe('exact failure and warning text', () => {
+      const W1 = 'Desktop reported a warning while removing the old dashboard - w1: m';
+      const W2 = 'Desktop reported a warning while removing the old dashboard - w2: n';
+      const ONE_WARNING = [{ code: 'w1', message: 'm' }];
+      const NOT_APPLIED = `${REMOVED}, with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
+      const NOT_APPLIED_NONE = `${REMOVED} and the new one was not applied. Run undo-workbook to restore it.`;
+      const NOT_APPLIED_ONE = `${REMOVED}, with the 1 action tied to it, and the new one was not applied. Run undo-workbook to restore them.`;
+      const MAY_NOT = `${REMOVED} and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
+      const READ_TIMED_OUT = JSON.stringify({ type: 'command-timed-out', error: 'read timed out' });
+      const notSent = {
+        index: 0,
+        operation: 'worksheet',
+        artifactId: 'a1',
+        state: 'skipped',
+        retrySafe: false,
+        reason: 'Not applied: the batch stopped before the rebuild was sent.',
+      };
+      const maybeSent = {
+        index: 0,
+        operation: 'worksheet',
+        artifactId: 'a1',
+        state: 'unknown',
+        retrySafe: false,
+        title: 'New A',
+      };
+      const preflightSkipped = {
+        index: 0,
+        operation: 'worksheet',
+        artifactId: 'a1',
+        state: 'skipped',
+        retrySafe: true,
+        reason: 'Preflight failed before any writes.',
+      };
+      const unknownAt = (
+        stage: string,
+        error: string,
+        worksheet: Record<string, unknown> = notSent,
+      ): Record<string, unknown> => ({
+        applied: 'unknown',
+        retrySafe: false,
+        steps: [
+          worksheet,
+          {
+            index: 1,
+            operation: 'dashboard',
+            dashboardName: 'Executive Overview',
+            state: 'unknown',
+            retrySafe: false,
+            stage,
+            error,
+          },
+        ],
+      });
+      const refusedAt = (stage: string, error: string): Record<string, unknown> => ({
+        applied: false,
+        retrySafe: true,
+        steps: [
+          preflightSkipped,
+          {
+            index: 1,
+            operation: 'dashboard',
+            dashboardName: 'Executive Overview',
+            state: 'failed',
+            retrySafe: true,
+            stage,
+            error,
+          },
+        ],
+      });
+      const runWithFakeTimers = async (
+        harness: ReturnType<typeof statefulExecutor>,
+      ): Promise<CallToolResult> => {
+        vi.useFakeTimers();
+        const promise = callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+        await vi.runAllTimersAsync();
+        return await promise;
+      };
+      const outcomeOf = async (
+        harness: ReturnType<typeof statefulExecutor>,
+      ): Promise<{ body: Record<string, any>; outcome: unknown }> => {
+        const emit = vi.spyOn(episodeEvents, 'emitEpisodeEvent').mockResolvedValue();
+        try {
+          const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+          const event = emit.mock.calls
+            .map(([, value]) => value)
+            .find((value) => value.type === 'batch_apply');
+          return { body: bodyOf(result), outcome: event?.outcome };
+        } finally {
+          emit.mockRestore();
+        }
+      };
+
+      it('hidden window with delete warnings: its own text, no sent note, then the warnings', async () => {
+        const harness = statefulExecutor({
+          initialXml: WITH_STORY,
+          deleteMode: 'hide',
+          deleteWarnings: ONE_WARNING,
+        });
+
+        const result = await runWithFakeTimers(harness);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'removeExisting',
+            `Desktop did not remove "Executive Overview"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it. ${W1}`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('could not confirm the removal, with delete warnings: sent note, cause, then the warnings', async () => {
+        const harness = statefulExecutor({ readErrorAtCall: 3, deleteWarnings: ONE_WARNING });
+
+        const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'removeExisting',
+            `${SENT} Cause: Could not confirm the removal: ${READ_TIMED_OUT}. ${W1}`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('actionCarry: refuses retry-safe before any delete when the workbook actions do not parse', async () => {
+        const dup =
+          "<actions><action name='[A]' caption='a'/><action name='[A]' caption='b'/></actions>";
+        const harness = statefulExecutor({
+          initialXml: BASELINE.replace('<worksheets>', `${dup}<worksheets>`),
+        });
+
+        const { body, outcome } = await outcomeOf(harness);
+
+        expect(body).toEqual(
+          refusedAt(
+            'actionCarry',
+            'Could not read the workbook actions that must survive the rebuild: cannot inspect actions: malformed workbook or action identities',
+          ),
+        );
+        expect(outcome).toBe('refused');
+        expect(harness.deletes).toHaveLength(0);
+      });
+
+      it('rebuildCandidate: the re-read workbook cannot take the new dashboard; the action count is still unknown', async () => {
+        const harness = statefulExecutor({
+          afterDelete: () => '<?xml version="1.0"?><other/>',
+          deleteWarnings: ONE_WARNING,
+        });
+
+        const result = await callBatch(artifactStore([]), harness.executor, [], true);
+
+        expect(bodyOf(result)).toEqual({
+          applied: 'unknown',
+          retrySafe: false,
+          steps: [
+            {
+              index: 0,
+              operation: 'dashboard',
+              dashboardName: 'Executive Overview',
+              state: 'unknown',
+              retrySafe: false,
+              stage: 'rebuildCandidate',
+              error: `${NOT_APPLIED} Cause: Could not compose dashboard candidate: Workbook XML has no <workbook> root element ${W1}`,
+            },
+          ],
+        });
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('rebuildValidation: the re-read workbook lost a dashboard worksheet', async () => {
+        const harness = statefulExecutor({
+          afterDelete: (xml) => xml.replace(/<worksheet name="Existing">.*?<\/worksheet>/s, ''),
+        });
+
+        const result = await callBatch(artifactStore([]), harness.executor, [], true);
+
+        expect(bodyOf(result)).toEqual({
+          applied: 'unknown',
+          retrySafe: false,
+          steps: [
+            {
+              index: 0,
+              operation: 'dashboard',
+              dashboardName: 'Executive Overview',
+              state: 'unknown',
+              retrySafe: false,
+              stage: 'rebuildValidation',
+              error: `${NOT_APPLIED_NONE} Cause: dashboard-zones-reference-included-worksheets: Dashboard "Executive Overview" references worksheet "Existing" from a zone, but that worksheet is omitted from this whole-workbook document; include the worksheet in the document or remove the zone.; Worksheet "Existing" was not present in workbook readback.`,
+            },
+          ],
+        });
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('a throw mid-rebuild is unexpected-error with the not-applied count, worksheets unknown', async () => {
+        const restore = vi
+          .spyOn(carryWorkbookActions, 'restoreTabPosition')
+          .mockImplementation(() => {
+            throw new Error('tab move exploded');
+          });
+        try {
+          const harness = statefulExecutor({
+            initialXml: WITH_ACTION,
+            dropActionsOnRemoval: true,
+          });
+
+          const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+          expect(bodyOf(result)).toEqual(
+            unknownAt('unexpected-error', `${NOT_APPLIED_ONE} Cause: tab move exploded`, maybeSent),
+          );
+          expect(harness.posts).toHaveLength(0);
+        } finally {
+          restore.mockRestore();
+        }
+      });
+
+      it('rebuildApply: the apply fails before dispatch after a removal that carried 2 actions', async () => {
+        const second = ACTIONS.replace("name='[Action1]'", "name='[Action2]'")
+          .replace('<actions>', '')
+          .replace('</actions>', '');
+        const harness = statefulExecutor({
+          initialXml: WITH_ACTION.replace('</actions>', `${second}</actions>`),
+          dropActionsOnRemoval: true,
+          guardedReadXml: 'drift',
+          guardedReadCall: 4,
+        });
+
+        const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt(
+            'rebuildApply',
+            `${REMOVED}, with the 2 actions tied to it, and the new one was not applied. Run undo-workbook to restore them. Cause: The workbook changed before the authoring write.`,
+          ),
+        );
+        expect(harness.posts).toHaveLength(0);
+      });
+
+      it('postApplyRead after a replace: the may-not-have-been-applied note', async () => {
+        const harness = statefulExecutor({ readErrorAtCall: 5 });
+
+        const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+        expect(bodyOf(result)).toEqual(
+          unknownAt('postApplyRead', `${MAY_NOT} Cause: ${READ_TIMED_OUT}`, maybeSent),
+        );
+        expect(harness.posts).toHaveLength(1);
+      });
+
+      it('unexpected-error after the rebuild apply: the may-not-have-been-applied note, then the warnings', async () => {
+        const hide = vi.spyOn(applyFocus, 'hideStartPage').mockImplementation(() => {
+          throw new Error('start page exploded');
+        });
+        try {
+          const harness = statefulExecutor({ deleteWarnings: ONE_WARNING });
+
+          const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+          expect(bodyOf(result)).toEqual(
+            unknownAt('unexpected-error', `${MAY_NOT} Cause: start page exploded ${W1}`, maybeSent),
+          );
+          expect(harness.posts).toHaveLength(1);
+        } finally {
+          hide.mockRestore();
+        }
+      });
+
+      it('drift at the guarded delete: workbookDrift refusal text', async () => {
+        const harness = statefulExecutor({ guardedReadXml: BASELINE.replace('Existing', 'Drift') });
+
+        const { body, outcome } = await outcomeOf(harness);
+
+        expect(body).toEqual(
+          refusedAt('workbookDrift', 'The workbook changed before the authoring write.'),
+        );
+        expect(outcome).toBe('refused');
+      });
+
+      it('instance mismatch at the delete: preDispatchRemoval refusal text', async () => {
+        const harness = statefulExecutor({ instanceAtDelete: 'inst-other' });
+
+        const { body, outcome } = await outcomeOf(harness);
+
+        expect(body).toEqual(
+          refusedAt(
+            'preDispatchRemoval',
+            JSON.stringify({
+              type: 'instance-mismatch',
+              expected: 'inst-live',
+              actual: 'inst-other',
+            }),
+          ),
+        );
+        expect(outcome).toBe('refused');
+      });
+
+      it('deleteRouteMissing: retry-safe refusal text; the fake dispatched, so the outcome is failed', async () => {
+        const harness = statefulExecutor({ deleteRouteMissing: true });
+
+        const { body, outcome } = await outcomeOf(harness);
+
+        expect(body).toEqual(
+          refusedAt(
+            'deleteRouteMissing',
+            'This Desktop build cannot delete a dashboard natively, so the dashboard cannot be replaced. Nothing was changed.',
+          ),
+        );
+        expect(outcome).toBe('failed');
+      });
+
+      it('success warnings: delete warnings first, then the empty sheet, then lost actions', async () => {
+        const harness = statefulExecutor({
+          initialXml: WITH_ACTION,
+          dropActionsOnRemoval: true,
+          readbackTransform: (xml) => xml.replace(/<actions>.*?<\/actions>\s*/s, ''),
+          deleteWarnings: [...ONE_WARNING, { code: 'w2', message: 'n' }],
+        });
+
+        const result = await runWithFakeTimers(harness);
+
+        expect(bodyOf(result).steps.at(-1).warnings).toEqual([
+          W1,
+          W2,
+          'Worksheet "New A" is empty and will display as an empty tile on the dashboard.',
+          'Action "P3 Filter" ([Action1]) was carried over but is missing after the rebuild; recreate it with author-action.',
+        ]);
+      });
     });
   });
 });
