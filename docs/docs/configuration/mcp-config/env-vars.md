@@ -460,9 +460,10 @@ Enables product telemetry for tool usage tracking.
 Controls the read-only Tableau Prep flow tools. They are enabled by default.
 
 - Default: unset, which enables the read-only flow tools
-- Set to `false` to disable them. The mutating flow tools follow
-  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled) instead
 - Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The mutating flow tools are controlled separately by
+  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled)
 - When enabled, registers:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
@@ -484,9 +485,10 @@ change first and returns a single-use confirmation token. The tool makes the cha
 called again with that token, after the user approves the preview.
 
 - Default: unset, which enables the mutating flow tools
-- Set to `false` to disable them. The read-only flow tools follow
-  [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled) instead
 - Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The read-only flow tools are controlled separately by
+  [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled)
 - When enabled, registers:
   - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
   - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
