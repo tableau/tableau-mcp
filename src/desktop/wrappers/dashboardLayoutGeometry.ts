@@ -451,16 +451,37 @@ function primaryAllocationMatches(
     if (candidates.includes(null)) return false;
     if (candidates.reduce((sum, metric) => sum + (metric?.initial ?? 0), 0) > length)
       canGrow = false;
+    const hasCappedAutomatic = candidates.some(
+      (metric, index) => metric && !metric.manual && sizes[index] + 1 < metric.initial,
+    );
+    // A capped automatic tile fills its budget; only integer rounding can reach the last tile.
+    const tailAllowance = sizes.length + (hasCappedAutomatic ? 0 : manualShortfall);
+    let minimumExtra = 0;
+    let maximumExtra = maxInt;
+    let minimumCap = minimumShare;
+    let maximumCap = maxInt;
     for (const [index, metric] of candidates.entries()) {
+      if (!metric?.manual) {
+        const remainder = index === sizes.length - 1 ? tailAllowance : 0;
+        minimumCap = Math.max(minimumCap, sizes[index] - remainder - 1);
+        if (metric && metric.initial > sizes[index] + 1)
+          maximumCap = Math.min(maximumCap, sizes[index] + 1);
+      }
       if (!metric) continue;
       const grown = axis === 0 && sizes.length === 1 && !metric.unbounded ? length : metric.initial;
       if (sizes[index] + 1 < grown || (!metric.unbounded && Math.abs(sizes[index] - grown) > 1))
         canGrow = false;
+      if (metric.unbounded) {
+        minimumExtra = Math.max(minimumExtra, sizes[index] - metric.initial - 1);
+        maximumExtra = Math.min(maximumExtra, sizes[index] - metric.initial + 1);
+      }
       const shrunk = metric.manual ? Math.min(metric.fixed, fixed.cap) : metric.initial;
       const minimum = metric.manual ? shrunk : Math.min(shrunk, minimumShare);
-      const maximum = shrunk + (index === sizes.length - 1 ? sizes.length + manualShortfall : 1);
+      const maximum = shrunk + (index === sizes.length - 1 ? tailAllowance : 1);
       if (sizes[index] + 1 < minimum || sizes[index] > maximum) canShrink = false;
     }
+    if (minimumExtra > maximumExtra) canGrow = false;
+    if (minimumCap > maximumCap) canShrink = false;
   }
   if (!canGrow && !canShrink) return false;
   if (metrics.some((metric) => metric === undefined)) return;

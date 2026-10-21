@@ -591,33 +591,46 @@ describe('independent authored coordinate guards', () => {
   )(
     'requires the fixed $coordinate guard for $setting with compatible automatic siblings',
     ({ setting, coordinate }) => {
-      const axis = ['x', 'w'].includes(coordinate) ? 'horz' : 'vert';
+      const activeManual = setting === 'is-fixed="true"';
+      const crossChange = activeManual && ['w', 'h'].includes(coordinate);
+      const axis = crossChange
+        ? coordinate === 'w'
+          ? 'vert'
+          : 'horz'
+        : ['x', 'w'].includes(coordinate)
+          ? 'horz'
+          : 'vert';
       const movedOrigin = ['x', 'y'].includes(coordinate);
       const render = (changed: boolean): string => {
-        const delta = changed ? 100 : 0;
-        const first: Rect = [0, 0, 100000, 30000 + (movedOrigin ? delta : 0)];
+        const delta = changed && !crossChange ? 100 : 0;
+        const crossSize = crossChange && !changed ? 99900 : 100000;
+        const first: Rect = [0, 0, crossSize, 30000 + (movedOrigin ? delta : 0)];
         const fixed: Rect = [
           0,
           30000 + (movedOrigin ? delta : 0),
-          100000,
+          crossSize,
           40000 + (movedOrigin ? 0 : delta),
         ];
-        const last: Rect = [0, 70000 + delta, 100000, 30000 - delta];
-        return registerWorksheets(
-          workbook(
-            flow(
-              1,
-              full,
-              [
-                zone(2, transpose(first, axis), 'type-v2="visual" name="Before"'),
-                zone(3, transpose(fixed, axis), `type-v2="visual" name="Fixed" ${setting}`),
-                zone(4, transpose(last, axis), 'type-v2="visual" name="After"'),
-              ].join(''),
-              axis,
+        const last: Rect = [0, 70000 + delta, crossSize, 30000 - delta];
+        const content = flow(
+          2,
+          transpose([0, 0, crossSize, 100000], axis),
+          [
+            zone(3, transpose(first, axis), 'type-v2="visual" name="Before"'),
+            zone(
+              4,
+              transpose(fixed, axis),
+              `type-v2="visual" name="Fixed" ${setting}${activeManual ? ' fixed-size="400"' : ''}`,
             ),
-          ),
-          ['Before', 'Fixed', 'After'],
+            zone(5, transpose(last, axis), 'type-v2="visual" name="After"'),
+          ].join(''),
+          axis,
         );
+        return registerWorksheets(crossChange ? basic(content) : workbook(content), [
+          'Before',
+          'Fixed',
+          'After',
+        ]);
       };
       const expected = render(false);
       expect(verify(expected, expected)).toBe(true);
