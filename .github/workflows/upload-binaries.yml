@@ -42,7 +42,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24.x
+          node-version: 24.22.1
           cache: 'npm'
       - name: Generate SEA
         run: |
@@ -89,7 +89,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24.x
+          node-version: 24.22.1
           cache: 'npm'
       - name: Generate SEA
         shell: pwsh
@@ -157,7 +157,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24.x
+          node-version: 24.22.1
           cache: 'npm'
       - name: Generate SEA
         run: |
