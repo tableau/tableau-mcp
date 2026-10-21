@@ -9,8 +9,10 @@ import {
   episodeSessionIdFromArgs,
 } from '../../../../desktop/episode-events.js';
 import type { ExecuteCommandError } from '../../../../desktop/externalApi/executorTypes.js';
+import { isRouteMissing } from '../../../../desktop/externalApi/toolUtils.js';
 import {
   deleteDashboard,
+  listDashboardRefs,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
 import { findAllWorksheets, parseXML } from '../../../../desktop/metadata/parser.js';
@@ -40,6 +42,7 @@ import {
 import { targetDashboardInvariantIssues } from '../../../../desktop/validation/targetDashboardInvariant.js';
 import { activateSheetWithValidatedGoto } from '../../../../desktop/wrappers/activateSheet.js';
 import { hideStartPage } from '../../../../desktop/wrappers/applyFocus.js';
+import { deleteDashboardGuarded } from '../../../../desktop/wrappers/deleteDashboardGuarded.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import {
   describeLoadWorkbookXmlError,
@@ -48,7 +51,7 @@ import {
 } from '../../../../desktop/wrappers/loadWorkbookXml.js';
 import { resolveCanonicalWorksheetName } from '../../../../desktop/wrappers/loadWorksheetXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { xmlNamesEqual } from '../../../../desktop/xmlElement.js';
+import { decodeXmlEntities, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -60,6 +63,15 @@ import { templateArtifactUnavailableError } from '../../api/applyWorksheetArtifa
 import { sessionParam } from '../../params.js';
 import { jsonToolResult, type StructuredResult } from '../../structuredContent.js';
 import { DesktopTool, resolveEpisodeKey } from '../../tool.js';
+import { readWorkbookActions } from '../datasource/authorActionLifecycle.js';
+import {
+  type CarriedActions,
+  carriedFrom,
+  insertCarriedActions,
+  type ReadActions,
+  readVerbatimWorkbookActions,
+  restoreTabPosition,
+} from './carryWorkbookActions.js';
 import {
   buildDashboardCandidateXml,
   dashboardCandidateReadbackIssues,
@@ -139,7 +151,7 @@ type StepReceipt =
       index: number;
       operation: 'worksheet' | 'dashboard';
       state: 'aborted' | 'skipped';
-      retrySafe: true;
+      retrySafe: boolean;
       artifactId?: string;
       dashboardName?: string;
       reason: string;
@@ -246,6 +258,33 @@ export const getRunDashboardBatchTool = (
             for (const reservation of reservations) artifactStore.consume(reservation.lease);
           };
 
+          // sentNote is set when the delete dispatches; removedNote replaces it once removal is confirmed.
+          let sentNote: string | undefined;
+          let removedNote: string | undefined;
+          let removalWarnings: string[] = [];
+          const failBatch = (
+            stage: string,
+            cause: string,
+            options: {
+              verification?: BatchReadbackVerification;
+              applied?: boolean;
+              withoutNote?: boolean;
+            } = {},
+          ): ReturnType<typeof unknownBatch> => {
+            const note = options.withoutNote ? undefined : (removedNote ?? sentNote);
+            return unknownBatch({
+              artifactIds: orderedArtifactIds,
+              reservations,
+              dashboardName,
+              stage,
+              error: [
+                ...(note ? [note, `Cause: ${boundedText(cause)}`] : [boundedText(cause)]),
+                ...removalWarnings,
+              ].join(' '),
+              verification: options.verification,
+              unapplied: options.applied === false,
+            });
+          };
           try {
             const duplicateArtifactId = firstDuplicate(orderedArtifactIds);
             if (duplicateArtifactId) {
@@ -314,6 +353,17 @@ export const getRunDashboardBatchTool = (
             const existingDashboardName = listWorkbookDashboards(workbookXml).find((name) =>
               xmlNamesEqual(name, dashboardName),
             );
+            // Rebuild under the existing name's exact case so action sources and story points still match.
+            if (existingDashboardName) dashboardName = existingDashboardName;
+            if (existingDashboardName && isStoryboard(workbookXml, existingDashboardName)) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `"${dashboardName}" is a story, not a dashboard. Nothing was changed.`,
+                'storyboard',
+              );
+            }
             if (existingDashboardName && !replaceExisting) {
               return preflightInputFailure(
                 steps,
@@ -471,74 +521,129 @@ export const getRunDashboardBatchTool = (
               );
             }
 
-            let candidateXml = workbookXml;
-            for (const [index, reservation] of reservations.entries()) {
+            const assembleCandidate = (
+              baseXml: string,
+              dashboardToDelete: string | undefined,
+            ):
+              | { ok: true; xml: string }
+              | { ok: false; artifactIndex?: number; message: string } => {
+              let xml = baseXml;
+              for (const [index, reservation] of reservations.entries()) {
+                try {
+                  xml = upsertWorksheetAndWindowIntoWorkbook(
+                    xml,
+                    canonicalArtifactNames[index]!,
+                    reservation.artifact.worksheetXml,
+                    reservation.artifact.windowXml,
+                  );
+                } catch (error) {
+                  return {
+                    ok: false,
+                    artifactIndex: index,
+                    message: `Could not add the artifact to the workbook candidate: ${getExceptionMessage(error)}`,
+                  };
+                }
+              }
               try {
-                candidateXml = upsertWorksheetAndWindowIntoWorkbook(
-                  candidateXml,
-                  canonicalArtifactNames[index]!,
-                  reservation.artifact.worksheetXml,
-                  reservation.artifact.windowXml,
-                );
+                if (dashboardToDelete) xml = deleteDashboard(xml, dashboardToDelete);
+                xml = buildDashboardCandidateXml({
+                  baselineXml: xml,
+                  dashboardName,
+                  canonicalWorksheetNames: worksheetNames,
+                  title: dashboardTitle,
+                  layout: {
+                    layoutType: layoutType ?? 'auto-grid',
+                    ...(gridColumns ? { gridColumns } : {}),
+                    ...(canonicalKpiWorksheetNames
+                      ? { kpiWorksheetNames: canonicalKpiWorksheetNames }
+                      : {}),
+                  },
+                });
               } catch (error) {
+                return {
+                  ok: false,
+                  message: `Could not compose dashboard candidate: ${getExceptionMessage(error)}`,
+                };
+              }
+              return { ok: true, xml };
+            };
+            const candidateValidationError = (
+              baseXml: string,
+              candidate: string,
+            ): string | undefined => {
+              const blockingIssues = introducedBlockingValidationIssues(
+                runValidation(baseXml, 'workbook').issues,
+                runValidation(candidate, 'workbook').issues,
+              );
+              const dashboardIssues = targetDashboardInvariantIssues(
+                candidate,
+                dashboardName,
+                worksheetNames,
+              );
+              if (blockingIssues.length === 0 && dashboardIssues.length === 0) return undefined;
+              return [
+                ...blockingIssues.map((issue) => `${issue.ruleId}: ${issue.message}`),
+                ...dashboardIssues.map((issue) => issue.message),
+              ].join('; ');
+            };
+
+            const replaced = existingDashboardName !== undefined;
+            const assembled = assembleCandidate(workbookXml, existingDashboardName);
+            if (!assembled.ok) {
+              if (assembled.artifactIndex !== undefined) {
                 appendPreflightArtifactFailure(
                   steps,
                   orderedArtifactIds,
-                  index,
+                  assembled.artifactIndex,
                   dashboardName,
-                  `Could not add the artifact to the workbook candidate: ${getExceptionMessage(error)}`,
+                  assembled.message,
                 );
                 return incomplete({ applied: false, retrySafe: true, steps });
               }
-            }
-
-            const replaced = existingDashboardName !== undefined;
-            try {
-              if (existingDashboardName) {
-                candidateXml = deleteDashboard(candidateXml, existingDashboardName);
-              }
-              candidateXml = buildDashboardCandidateXml({
-                baselineXml: candidateXml,
-                dashboardName,
-                canonicalWorksheetNames: worksheetNames,
-                title: dashboardTitle,
-                layout: {
-                  layoutType: layoutType ?? 'auto-grid',
-                  ...(gridColumns ? { gridColumns } : {}),
-                  ...(canonicalKpiWorksheetNames
-                    ? { kpiWorksheetNames: canonicalKpiWorksheetNames }
-                    : {}),
-                },
-              });
-            } catch (error) {
               return preflightInputFailure(
                 steps,
                 orderedArtifactIds,
                 dashboardName,
-                `Could not compose dashboard candidate: ${getExceptionMessage(error)}`,
+                assembled.message,
                 'candidateBuild',
               );
             }
-
-            const candidateBlockingIssues = introducedBlockingValidationIssues(
-              runValidation(workbookXml, 'workbook').issues,
-              runValidation(candidateXml, 'workbook').issues,
-            );
-            const candidateDashboardIssues = targetDashboardInvariantIssues(
-              candidateXml,
-              dashboardName,
-              worksheetNames,
-            );
-            if (candidateBlockingIssues.length > 0 || candidateDashboardIssues.length > 0) {
+            let candidateXml = assembled.xml;
+            const preflightError = candidateValidationError(workbookXml, candidateXml);
+            if (preflightError) {
               return preflightInputFailure(
                 steps,
                 orderedArtifactIds,
                 dashboardName,
-                [
-                  ...candidateBlockingIssues.map((issue) => `${issue.ruleId}: ${issue.message}`),
-                  ...candidateDashboardIssues.map((issue) => issue.message),
-                ].join('; '),
+                preflightError,
                 'candidateValidation',
+              );
+            }
+            let originalActions: ReadActions | undefined;
+            if (existingDashboardName) {
+              const read = readVerbatimWorkbookActions(workbookXml);
+              if (read.isErr()) {
+                return preflightInputFailure(
+                  steps,
+                  orderedArtifactIds,
+                  dashboardName,
+                  `Could not read the workbook actions that must survive the rebuild: ${read.error}`,
+                  'actionCarry',
+                );
+              }
+              originalActions = read.value;
+            }
+            const existingDashboardId = existingDashboardName
+              ? listDashboardRefs(workbookXml).find((ref) => xmlNamesEqual(ref.name, dashboardName))
+                  ?.id
+              : undefined;
+            if (existingDashboardName && existingDashboardId === undefined) {
+              return preflightInputFailure(
+                steps,
+                orderedArtifactIds,
+                dashboardName,
+                `Dashboard "${dashboardName}" has no id in the workbook, so it cannot be removed safely. Nothing was changed.`,
+                'existingDashboardId',
               );
             }
 
@@ -547,11 +652,125 @@ export const getRunDashboardBatchTool = (
               return incomplete({ applied: false, retrySafe: true, steps });
             }
 
+            let baseXml = workbookXml;
+            let notAppliedNote: string | undefined;
+            let carried: CarriedActions | undefined;
+            if (existingDashboardName && originalActions && existingDashboardId) {
+              // A same-name apply edits zones in place and a story point survives a workbook removal, so delete natively.
+              const deleted = await deleteDashboardGuarded({
+                executor,
+                signal: extra.signal,
+                dashboardId: existingDashboardId,
+                expectedWorkbookXml: workbookXml,
+                expectedInstanceId: liveInstanceId,
+                onDispatch: () => {
+                  executionStarted = true;
+                  sentNote = `The delete of the old dashboard "${dashboardName}" was sent, but Desktop did not confirm it. It may be gone, with the actions tied to it. Check the workbook; undo-workbook restores them.`;
+                },
+              });
+              if (deleted.kind === 'drift') {
+                return preflightInputFailure(
+                  steps,
+                  orderedArtifactIds,
+                  dashboardName,
+                  describeLoadError({
+                    type: 'load-workbook-xml-error',
+                    error: { type: 'workbook-drift' },
+                  }),
+                  'workbookDrift',
+                );
+              }
+              if (deleted.kind === 'failed') {
+                // The real applyDocument dispatches before the HTTP call, so a 404 arrives dispatched.
+                const routeMissing = isRouteMissing(deleted.error);
+                if (deleted.dispatched && !routeMissing) {
+                  return failBatch('removeExisting', describeDesktopError(deleted.error), {
+                    applied: false,
+                  });
+                }
+                return preflightInputFailure(
+                  steps,
+                  orderedArtifactIds,
+                  dashboardName,
+                  routeMissing
+                    ? 'This Desktop build cannot delete a dashboard natively, so the dashboard cannot be replaced. Nothing was changed.'
+                    : describeDesktopError(deleted.error),
+                  routeMissing ? 'deleteRouteMissing' : 'preDispatchRemoval',
+                );
+              }
+              removalWarnings = [
+                ...deleted.warnings
+                  .slice(0, 3)
+                  .map(({ code, message }) =>
+                    boundedText(
+                      `Desktop reported a warning while removing the old dashboard - ${code}: ${message}`,
+                    ),
+                  ),
+                ...(deleted.warnings.length > 3
+                  ? [
+                      `Desktop reported ${deleted.warnings.length - 3} more warning${deleted.warnings.length === 4 ? '' : 's'} while removing the old dashboard.`,
+                    ]
+                  : []),
+              ];
+
+              const couldNotConfirm = (reason: string): ReturnType<typeof unknownBatch> =>
+                failBatch('removeExisting', `Could not confirm the removal: ${reason}.`, {
+                  applied: false,
+                });
+              let thrown: unknown;
+              const gone = await pollReadback({
+                read: () => getWorkbookXml({ executor, signal: extra.signal }),
+                settled: (xml) => !dashboardPresent(xml, dashboardName),
+                signal: extra.signal,
+              }).catch((error: unknown) => {
+                thrown = error;
+                return undefined;
+              });
+              if (gone === undefined) return couldNotConfirm(boundedUnexpectedError(thrown));
+              if (!gone.ok) return couldNotConfirm(describeDesktopError(gone.error));
+              if (!gone.settled) {
+                return failBatch(
+                  'removeExisting',
+                  `Desktop did not remove "${dashboardName}"; it may now be hidden. Nothing was rebuilt. Run undo-workbook to restore it.`,
+                  { applied: false, withoutNote: true },
+                );
+              }
+              const notApplied = (count: number | undefined): string =>
+                `The old dashboard "${dashboardName}" was removed${
+                  count === undefined
+                    ? ', with the actions tied to it, and the new one was not applied. Run undo-workbook to restore them.'
+                    : count > 0
+                      ? `, with the ${count} action${count === 1 ? '' : 's'} tied to it, and the new one was not applied. Run undo-workbook to restore them.`
+                      : ' and the new one was not applied. Run undo-workbook to restore it.'
+                }`;
+              removedNote = notApplied(undefined);
+              baseXml = gone.value;
+              const rebuilt = assembleCandidate(baseXml, undefined);
+              if (!rebuilt.ok)
+                return failBatch('rebuildCandidate', rebuilt.message, { applied: false });
+              const carriedResult = carriedFrom(originalActions, baseXml);
+              if (carriedResult.isErr()) {
+                return failBatch('rebuildRead', carriedResult.error, { applied: false });
+              }
+              carried = carriedResult.value;
+              removedNote = notApplied(carried.actions.length);
+              const withActions = insertCarriedActions(rebuilt.xml, carried);
+              if (withActions.isErr()) {
+                return failBatch('rebuildCandidate', withActions.error, { applied: false });
+              }
+              candidateXml = restoreTabPosition(workbookXml, withActions.value, dashboardName);
+              const rebuildError = candidateValidationError(baseXml, candidateXml);
+              if (rebuildError)
+                return failBatch('rebuildValidation', rebuildError, { applied: false });
+              removedNote = `The old dashboard "${dashboardName}" was removed and the new one may not have been applied. Check the workbook; undo-workbook restores the old dashboard and its actions.`;
+              notAppliedNote = notApplied(carried.actions.length);
+            }
+
             let dispatchAttempted = false;
             const applyResult = await loadWorkbookXml({
               xml: candidateXml,
-              baselineXml: workbookXml,
-              expectedWorkbookXml: workbookXml,
+              baselineXml: baseXml,
+              expectedWorkbookXml: baseXml,
               focus: { navigate: 'none', reason: 'intermediate-leg' },
               executor,
               signal: extra.signal,
@@ -565,20 +784,17 @@ export const getRunDashboardBatchTool = (
               },
             });
             if (applyResult.isErr()) {
-              if (dispatchAttempted) {
-                return unknownBatch({
-                  artifactIds: orderedArtifactIds,
-                  reservations,
-                  dashboardName,
-                  stage: 'apply',
-                  error: describeLoadError(applyResult.error),
-                });
+              const error = describeLoadError(applyResult.error);
+              if (dispatchAttempted) return failBatch('apply', error);
+              if (replaced) {
+                removedNote = notAppliedNote ?? removedNote;
+                return failBatch('rebuildApply', error, { applied: false });
               }
               return preflightInputFailure(
                 steps,
                 orderedArtifactIds,
                 dashboardName,
-                describeLoadError(applyResult.error),
+                error,
                 loadFailureStage(applyResult.error),
               );
             }
@@ -598,13 +814,10 @@ export const getRunDashboardBatchTool = (
               signal: extra.signal,
             });
             if (!polled.ok) {
-              return unknownBatch({
-                artifactIds: orderedArtifactIds,
-                reservations,
-                dashboardName,
-                stage: 'postApplyRead',
-                error: new DesktopCommandExecutionError(polled.error).getErrorText(),
-              });
+              return failBatch(
+                'postApplyRead',
+                new DesktopCommandExecutionError(polled.error).getErrorText(),
+              );
             }
 
             const verification = verifyBatchReadback(
@@ -615,25 +828,40 @@ export const getRunDashboardBatchTool = (
               worksheetNames,
             );
             if (!verification.ok) {
-              return unknownBatch({
-                artifactIds: orderedArtifactIds,
-                reservations,
-                dashboardName,
-                stage: 'readbackVerification',
-                error: boundedText(
-                  [...verification.worksheets]
-                    .filter(({ verification: item }) => !item.ok)
-                    .map(
-                      ({ title, verification: item }) => `${title}: ${item.message ?? 'mismatch'}`,
-                    )
-                    .concat(verification.dashboardIssues)
-                    .join('; ') || 'Post-apply verification did not settle.',
-                ),
-                verification,
-              });
+              return failBatch(
+                'readbackVerification',
+                [...verification.worksheets]
+                  .filter(({ verification: item }) => !item.ok)
+                  .map(({ title, verification: item }) => `${title}: ${item.message ?? 'mismatch'}`)
+                  .concat(verification.dashboardIssues)
+                  .join('; ') || 'Post-apply verification did not settle.',
+                { verification },
+              );
             }
 
             const emptyWorksheetNames = findBlankWorksheetNames(polled.value, worksheetNames);
+            const carriedActions = carried?.actions ?? [];
+            const survivingActions =
+              carriedActions.length > 0
+                ? new Set(
+                    readWorkbookActions(polled.value)
+                      .unwrapOr([])
+                      .map((action) => action.name),
+                  )
+                : new Set<string>();
+            const lostActions = carriedActions.filter(
+              (action) => !survivingActions.has(action.name),
+            );
+            const warnings = [
+              ...removalWarnings,
+              ...(emptyWorksheetNames.length > 0
+                ? [emptyWorksheetWarning(emptyWorksheetNames)]
+                : []),
+              ...lostActions.map(
+                (action) =>
+                  `Action "${action.caption || action.name}" (${action.name}) was carried over but is missing after the rebuild; recreate it with author-action.`,
+              ),
+            ];
 
             await hideStartPage({ executor, signal: extra.signal });
             await activateSheetWithValidatedGoto({
@@ -664,20 +892,12 @@ export const getRunDashboardBatchTool = (
               worksheets: worksheetNames,
               replaced,
               verification: { status: 'passed', issues: [] },
-              ...(emptyWorksheetNames.length > 0
-                ? { warnings: [emptyWorksheetWarning(emptyWorksheetNames)] }
-                : {}),
+              ...(warnings.length > 0 ? { warnings } : {}),
             });
             return Ok({ applied: true, retrySafe: false, steps: successSteps });
           } catch (error) {
             if (executionStarted) {
-              return unknownBatch({
-                artifactIds: orderedArtifactIds,
-                reservations,
-                dashboardName,
-                stage: 'unexpected-error',
-                error: boundedUnexpectedError(error),
-              });
+              return failBatch('unexpected-error', boundedUnexpectedError(error));
             }
             return preflightInputFailure(
               steps,
@@ -802,6 +1022,7 @@ function unknownBatch({
   stage,
   error,
   verification,
+  unapplied = false,
 }: {
   artifactIds: string[];
   reservations: Reservation[];
@@ -809,8 +1030,20 @@ function unknownBatch({
   stage: string;
   error: string;
   verification?: BatchReadbackVerification;
+  /** True while no worksheet was applied yet (the failure came before the rebuild dispatched). */
+  unapplied?: boolean;
 }): ReturnType<IncompleteOperationError<RunDashboardBatchPayload>['toErr']> {
   const steps: StepReceipt[] = artifactIds.map((artifactId, index) => {
+    if (unapplied) {
+      return {
+        index,
+        operation: 'worksheet',
+        artifactId,
+        state: 'skipped',
+        retrySafe: false,
+        reason: 'Not applied: the batch stopped before the rebuild was sent.',
+      };
+    }
     const item = verification?.worksheets[index];
     return {
       index,
@@ -829,7 +1062,7 @@ function unknownBatch({
     state: 'unknown',
     retrySafe: false,
     stage,
-    error: boundedText(error),
+    error,
   });
   return incomplete({ applied: 'unknown', retrySafe: false, steps });
 }
@@ -838,6 +1071,29 @@ function boundedVerification(verification: ReadbackVerificationResult): Readback
   return verification.message
     ? { ...verification, message: boundedText(verification.message) }
     : verification;
+}
+
+function describeDesktopError(error: ExecuteCommandError): string {
+  return new DesktopCommandExecutionError(error).getErrorText();
+}
+
+function isStoryboard(workbookXml: string, name: string): boolean {
+  return [...workbookXml.matchAll(/<dashboard\b[^>]*>/g)].some(
+    ([open]) =>
+      /\btype=(['"])storyboard\1/.test(open) &&
+      xmlNamesEqual(decodeXmlEntities(/\bname=(['"])(.*?)\1/.exec(open)?.[2] ?? ''), name),
+  );
+}
+
+function dashboardPresent(workbookXml: string, name: string): boolean {
+  return (
+    listWorkbookDashboards(workbookXml).some((existing) => xmlNamesEqual(existing, name)) ||
+    [...workbookXml.matchAll(/<window\b[^>]*>/g)].some(
+      ([open]) =>
+        /\bclass=(['"])dashboard\1/.test(open) &&
+        xmlNamesEqual(decodeXmlEntities(/\bname=(['"])(.*?)\1/.exec(open)?.[2] ?? ''), name),
+    )
+  );
 }
 
 function describeLoadError(error: LoadWorkbookXmlFailure): string {

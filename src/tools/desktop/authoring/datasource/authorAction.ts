@@ -2316,7 +2316,7 @@ function familySlotOffset(inner: string, familyIndex: number): number {
 // Splice a new action into the workbook-level <actions> block, creating the block between
 // </datasources> and <worksheets> if it does not yet exist. The action lands in its XSD
 // family slot (see ACTION_FAMILY_MARKERS) rather than at the end of the block.
-function spliceActionIntoWorkbook(
+export function spliceActionIntoWorkbook(
   xml: string,
   actionXml: string,
   deps?: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
