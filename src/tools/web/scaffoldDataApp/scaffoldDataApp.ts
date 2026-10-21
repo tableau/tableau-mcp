@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
@@ -55,7 +56,7 @@ export const getScaffoldDataAppTool = (
         productVersion,
         mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
       });
-      return !(flagOn && versionAllowed);
+      return !(flagOn && versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
