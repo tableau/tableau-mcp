@@ -996,7 +996,7 @@ function naivePlural(lower: string): string | null {
   return `${lower}s`;
 }
 
-function pluralEquivalent(a: string, b: string): boolean {
+export function pluralEquivalent(a: string, b: string): boolean {
   return a === b || naivePlural(a) === b || naivePlural(b) === a;
 }
 
@@ -1346,7 +1346,7 @@ export type LooseFieldReferenceResolution =
   | { kind: 'ambiguous'; candidates: SchemaField[] }
   | { kind: 'not_found'; candidates: SchemaField[] };
 
-function normalizeLooseFieldReferencePhrase(value: string): string {
+export function normalizeLooseFieldReferencePhrase(value: string): string {
   return value
     .toLowerCase()
     .split(/[^\p{L}\p{N}\p{M}]+/u)

@@ -721,50 +721,6 @@ async function getToolResult({
   const applyWorkbookDocument = vi.fn(async () => {
     return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
-  describe('parameter caption resolution (verse-3 empty-sheet fix)', () => {
-    it('resolves parameter captions to qualified [Parameters].[Parameter N] references', async () => {
-      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
-      const workbookXml = [
-        '<workbook><datasources>',
-        "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>",
-        "<column caption='Top or Bottom' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Top&quot;' />",
-        "<column caption='Number of Sub-Categories' datatype='integer' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='5' />",
-        '</datasource>',
-        "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>",
-        '</datasources></workbook>',
-      ].join('');
-      const targetXml =
-        "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>";
-      const resolved = resolveCaptionReferencesForTest(
-        'IF [Top or Bottom] = "Top" THEN RANK(SUM([Profit])) <= [Number of Sub-Categories] END',
-        targetXml,
-        workbookXml,
-      );
-      expect(resolved).toBe(
-        'IF [Parameters].[Parameter 1] = "Top" THEN RANK(SUM([Profit])) <= [Parameters].[Parameter 2] END',
-      );
-    });
-    it('does not re-qualify an already-qualified parameter reference', async () => {
-      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
-      const workbookXml =
-        "<workbook><datasources><datasource name='Parameters'><column caption='Top N' name='[Parameter 1]' /></datasource></datasources></workbook>";
-      const resolved = resolveCaptionReferencesForTest(
-        'INDEX() <= [Parameters].[Top N] AND [Top N] > 0',
-        "<datasource name='DS'></datasource>",
-        workbookXml,
-      );
-      expect(resolved).toBe('INDEX() <= [Parameters].[Top N] AND [Parameters].[Parameter 1] > 0');
-    });
-
-    it('uses a stored name containing ] verbatim instead of escaping it twice', async () => {
-      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
-      const resolved = resolveCaptionReferencesForTest(
-        'SUM([Revenue & $])',
-        "<datasource name='DS'><column caption='Revenue &amp; $' name='[Sales [USD]]]' /></datasource>",
-      );
-      expect(resolved).toBe('SUM([Sales [USD]]])');
-    });
-  });
 
   const extra = {
     ...getMockRequestHandlerExtra(),
@@ -790,6 +746,17 @@ async function getToolResult({
 
   return { result, applyWorkbookDocument, executeCommand };
 }
+
+describe('resolveCaptionReferencesForTest bracket escaping', () => {
+  it('uses a stored name containing ] verbatim instead of escaping it twice', async () => {
+    const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
+    const resolved = resolveCaptionReferencesForTest(
+      'SUM([Revenue & $])',
+      "<datasource name='DS'><column caption='Revenue &amp; $' name='[Sales [USD]]]' /></datasource>",
+    );
+    expect(resolved).toBe('SUM([Sales [USD]]])');
+  });
+});
 
 function withColumn(xml: string, column: string): string {
   return xml.replace('</datasource>', `${column}</datasource>`);
@@ -1319,5 +1286,554 @@ describe('calcErrorMessages (captured validator payloads)', () => {
     expect(
       calcErrorMessages({ items: [{ userCalculationDetails: { errorMsgs: ['boom'] } }] }),
     ).toEqual(['boom']);
+  });
+});
+
+describe('authorCalcTool parameter references by caption or internal name', () => {
+  const PARAMETER_COLUMN =
+    "<column caption='Target Sales' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='100' />";
+  const PUBLISHED_PARAMETERS_DATASOURCE = `<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>${PARAMETER_COLUMN}</datasource>`;
+  const withParameters = (xml: string, parameterColumns = PARAMETER_COLUMN): string =>
+    xml.replace(
+      '</datasources>',
+      `${PUBLISHED_PARAMETERS_DATASOURCE.replace(PARAMETER_COLUMN, parameterColumns)}</datasources>`,
+    );
+  const PARAMETER_XML = withParameters(BASE_XML);
+
+  const calcColumn = (caption: string, formula: string): string =>
+    `<column caption='${caption}' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='${formula}' /></column>`;
+
+  const validatedFormulas = (executeCommand: ReturnType<typeof vi.fn>): unknown[] =>
+    executeCommand.mock.calls
+      .filter(([arg]) => arg.command === 'get-calc-details-pres-model-for-formula')
+      .map(([arg]) => JSON.stringify(arg.args));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+  });
+
+  it.each([
+    ['caption', '[Sales] - [Target Sales]'],
+    ['internal name', '[Sales] - [Parameter 1]'],
+  ])(
+    'resolves a parameter referenced by %s to [Parameters].[Parameter 1]',
+    async (_label, formula) => {
+      const stored = '[Sales] - [Parameters].[Parameter 1]';
+      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
+        args: { caption: 'Gap', formula },
+        initialXml: PARAMETER_XML,
+        readbackXml: withColumn(PARAMETER_XML, calcColumn('Gap', stored)),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+      const validated = validatedFormulas(executeCommand);
+      expect(validated).toHaveLength(1);
+      expect(validated[0]).toContain('[Parameters].[Parameter 1]');
+      expect(validated[0]).not.toContain('[Target Sales]');
+    },
+  );
+
+  it('still rejects a reference that is neither a field nor a parameter', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Fabricated]' },
+      initialXml: PARAMETER_XML,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('field reference [Fabricated] was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('prefers a field over a parameter that shares its caption', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Target' datatype='real' name='[Target]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+      readbackXml: withColumn(xml, calcColumn('Gap', '[Sales] - [Target]')),
+    });
+
+    expect(result.isError).toBe(false);
+    const applied = appliedDocumentXml(applyWorkbookDocument);
+    expect(applied).toContain("formula='[Sales] - [Target]'");
+    expect(applied).not.toContain("formula='[Sales] - [Parameters].");
+  });
+
+  it('matches parameter captions case-insensitively across spaces and punctuation', async () => {
+    const xml = withParameters(
+      BASE_XML,
+      "<column caption='Q3 Goal (USD)' datatype='real' name='[Parameter 7]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const stored = '[Sales] / [Parameters].[Parameter 7]';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Pct', formula: '[Sales] / [q3 goal usd]' },
+      initialXml: xml,
+      readbackXml: withColumn(xml, calcColumn('Pct', stored)),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+  });
+
+  it('resolves a parameter caption that only shares a synonym with real fields', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' /><column caption='Profit Ratio' datatype='real' name='[Profit Ratio]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Profit Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const stored = '[Profit] - [Parameters].[Parameter 1]';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Profit] - [Profit Target]' },
+      initialXml: xml,
+      readbackXml: withColumn(xml, calcColumn('Gap', stored)),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+  });
+
+  it.each([
+    [
+      'a column without a caption',
+      "<column datatype='real' name='[Target]' role='measure' type='quantitative' />",
+    ],
+    [
+      'a metadata-only column',
+      "<connection class='sqlproxy'><metadata-records><metadata-record class='column'><remote-name>Target</remote-name><local-name>[Target]</local-name><local-type>real</local-type><aggregation>Sum</aggregation></metadata-record></metadata-records></connection>",
+    ],
+  ])('prefers a field over a parameter caption when the field is %s', async (_label, column) => {
+    const xml = withParameters(
+      BASE_XML.replace('</datasource>', `${column}</datasource>`),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+      readbackXml: withColumn(xml, calcColumn('Gap', '[Sales] - [Target]')),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).not.toContain('[Parameters].');
+  });
+
+  it('keeps real-name field ambiguity an error even when a parameter has the same caption', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Target' datatype='real' name='[Target]' role='measure' type='quantitative' /><column caption='target!' datatype='real' name='[Target2]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is ambiguous');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(validatedFormulas(executeCommand)).toHaveLength(0);
+  });
+
+  it('keeps plural-only field ambiguity an error even when a parameter has the exact caption', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Targets' datatype='real' name='[Targets]' role='measure' type='quantitative' /><column caption='Targets!' datatype='real' name='[Targets2]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+    });
+    expect(result.isError).toBe(true);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not bind a parameter when a hidden column owns the name', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Target' datatype='real' hidden='true' name='[Target]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not bind a parameter when a set owns the name', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<group caption='Target' name='[Target Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='member' level='[Region]' member='&quot;East&quot;' /></group></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: 'IF [Target] THEN [Sales] END' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not bind a parameter when two fields differ only in column name', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Goal A' datatype='real' name='[Target]' role='measure' type='quantitative' /><column caption='Goal B' datatype='real' name='[target_]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is ambiguous');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps ambiguity an error when fields match only through internal names', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Goal A' datatype='real' name='[Targets]' role='measure' type='quantitative' /><column caption='Goal B' datatype='real' name='[targets_]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is ambiguous');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('binds a parameter whose caption matches a logical-table object column', async () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Orders' datatype='table' hidden='true' name='[__tableau_internal_object_id__].[Orders_ECFCA1FB690A41FE803BC071773BA862]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Orders' datatype='integer' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const stored = '[Sales] - [Parameters].[Parameter 1]';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Orders]' },
+      initialXml: xml,
+      readbackXml: withColumn(xml, calcColumn('Gap', stored)),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+  });
+
+  it('refuses a hidden-column name on the bind-template calc path', () => {
+    const xml = withParameters(
+      BASE_XML.replace(
+        '</datasource>',
+        "<column caption='Target' datatype='real' hidden='true' name='[Target]' role='measure' type='quantitative' /></datasource>",
+      ),
+      "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+    );
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: xml,
+      calcs: [{ caption: 'Gap', formula: '[Sales] - [Target]' }],
+      resolveLooseReferences: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected refusal');
+    expect(result.error.message).toContain('was not found');
+  });
+
+  it('refuses a parameter fallback when a later calc in the batch owns the name', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withParameters(
+        BASE_XML,
+        "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+      ),
+      calcs: [
+        { caption: 'Gap', formula: '[Sales] - [Target]' },
+        { caption: 'Target', formula: 'SUM([Sales]) * 1.1' },
+      ],
+      resolveLooseReferences: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected refusal');
+    expect(result.error.message).toContain('was not found');
+  });
+
+  it('resolves a reference to an earlier calc in the batch, not the parameter', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: withParameters(
+        BASE_XML,
+        "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+      ),
+      calcs: [
+        { caption: 'Target', formula: 'SUM([Sales]) * 1.1' },
+        { caption: 'Gap', formula: '[Sales] - [Target]' },
+      ],
+      resolveLooseReferences: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error(result.error.message);
+    expect(result.value.workbookXml).toContain("formula='[Sales] - [Calculation_1700000000000]'");
+  });
+
+  it('reports parameters that match a reference equally', async () => {
+    const xml = withParameters(
+      BASE_XML,
+      "<column caption='Top N' datatype='integer' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' /><column caption='top-n' datatype='integer' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='2' />",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: '[Sales] - [Top N]' },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('[Parameters].[Parameter 1] (Top N)');
+    expect(result.content[0].text).toContain('[Parameters].[Parameter 2] (top-n)');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each(['[Target Sales]', '[Parameter 1]'])(
+    'treats an identical retry that references a parameter as %s as idempotent',
+    async (reference) => {
+      const xml = withColumn(
+        PARAMETER_XML,
+        calcColumn('Gap', '[Sales] - [Parameters].[Parameter 1]'),
+      );
+      const { result, applyWorkbookDocument, executeCommand } = await getToolResult({
+        args: { caption: 'Gap', formula: `[Sales] - ${reference}` },
+        initialXml: xml,
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).calcName).toBe('[Calculation_1700000000000]');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(validatedFormulas(executeCommand)).toHaveLength(0);
+    },
+  );
+
+  it('leaves an already qualified parameter reference unchanged', async () => {
+    const stored = '[Sales] - [Parameters].[Parameter 1]';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'Gap', formula: stored },
+      initialXml: PARAMETER_XML,
+      readbackXml: withColumn(PARAMETER_XML, calcColumn('Gap', stored)),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+  });
+
+  it('resolves parameter references on the bind-template calc path', () => {
+    const result = prepareCalculationsInWorkbook({
+      workbookXml: PARAMETER_XML,
+      calcs: [{ caption: 'Gap', formula: '[Sales] - [Target Sales] + [Parameter 1]' }],
+      resolveLooseReferences: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) throw new Error(result.error.message);
+    expect(result.value.workbookXml).toContain(
+      "formula='[Sales] - [Parameters].[Parameter 1] + [Parameters].[Parameter 1]'",
+    );
+  });
+
+  describe('with the datasource-dependencies copy Desktop keeps once a calc references a parameter', () => {
+    const DEPENDENCY_BLOCK =
+      "<datasource-dependencies datasource='Parameters'><column caption='Target Sales' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='100'><calculation class='tableau' formula='100' /></column></datasource-dependencies>";
+    const LIVE_XML = withParameters(
+      BASE_XML.replace('</datasource>', `${DEPENDENCY_BLOCK}</datasource>`),
+    );
+    const stored = '[Sales] - [Parameters].[Parameter 1]';
+
+    it.each(['[Parameter 1]', '[target sales]', '[Target Sales]'])(
+      'resolves %s to [Parameters].[Parameter 1]',
+      async (reference) => {
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: { caption: 'Gap', formula: `[Sales] - ${reference}` },
+          initialXml: LIVE_XML,
+          readbackXml: withColumn(LIVE_XML, calcColumn('Gap', stored)),
+        });
+
+        expect(result.isError).toBe(false);
+        expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+      },
+    );
+
+    it('treats an identical retry as idempotent', async () => {
+      const xml = withColumn(LIVE_XML, calcColumn('Gap', stored));
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { caption: 'Gap', formula: '[Sales] - [Target Sales]' },
+        initialXml: xml,
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).calcName).toBe('[Calculation_1700000000000]');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('still blocks when a hidden column of the real datasource owns the name', async () => {
+      const xml = LIVE_XML.replace(
+        '</datasource>',
+        "<column caption='Target Sales' datatype='real' hidden='true' name='[Target]' role='measure' type='quantitative' /></datasource>",
+      );
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { caption: 'Gap', formula: '[Sales] - [Target Sales]' },
+        initialXml: xml,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('was not found');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('resolves the parameter on the bind-template calc path', () => {
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: LIVE_XML,
+        calcs: [{ caption: 'Gap', formula: '[Sales] - [Target Sales] + [Parameter 1]' }],
+        resolveLooseReferences: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) throw new Error(result.error.message);
+      expect(result.value.workbookXml).toContain(
+        "formula='[Sales] - [Parameters].[Parameter 1] + [Parameters].[Parameter 1]'",
+      );
+    });
+
+    it('still blocks when a self-closing dependency block precedes a hidden column that owns the name', async () => {
+      const targetParameter =
+        "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1'><calculation class='tableau' formula='1' /></column>";
+      const xml = withParameters(
+        BASE_XML.replace(
+          '</datasource>',
+          `<datasource-dependencies datasource='Parameters' /><column caption='Target' datatype='real' hidden='true' name='[tgt]' role='measure' type='quantitative' /><datasource-dependencies datasource='Parameters'>${targetParameter}</datasource-dependencies></datasource>`,
+        ),
+        targetParameter,
+      );
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: { caption: 'Gap', formula: '[Sales] - [Target]' },
+        initialXml: xml,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('was not found');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    describe('when a referenced parameter shares a field caption (live 07-wb shape)', () => {
+      const REVENUE_PARAMETERS =
+        "<column caption='Target Revenue' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='5000000.0'><calculation class='tableau' formula='5000000.0' /></column><column caption='Revenue' datatype='real' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='1.0'><calculation class='tableau' formula='1.0' /></column>";
+      const REVENUE_XML = withParameters(
+        BASE_XML.replace(
+          '</datasource>',
+          `<column caption='Revenue' datatype='integer' name='[revenue]' role='measure' type='quantitative' /><datasource-dependencies datasource='Parameters'>${REVENUE_PARAMETERS}</datasource-dependencies></datasource>`,
+        ),
+        REVENUE_PARAMETERS,
+      );
+
+      it('resolves the field, not the parameter copy, for a new calc', async () => {
+        const stored = 'SUM([revenue]) * 3';
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: { caption: 'Triple Rev', formula: 'SUM([Revenue]) * 3' },
+          initialXml: REVENUE_XML,
+          readbackXml: withColumn(REVENUE_XML, calcColumn('Triple Rev', stored)),
+        });
+
+        expect(result.isError).toBe(false);
+        const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+        expect(appliedXml).toContain(`formula='${stored}'`);
+        expect(appliedXml).not.toContain('[Parameter 2]) * 3');
+      });
+
+      it('treats an identical retry of a field calc as idempotent', async () => {
+        const xml = withColumn(REVENUE_XML, calcColumn('Double Rev', 'SUM([revenue]) * 2'));
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: { caption: 'Double Rev', formula: 'SUM([Revenue]) * 2' },
+          initialXml: xml,
+        });
+
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        expect(JSON.parse(result.content[0].text).calcName).toBe('[Calculation_1700000000000]');
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      });
+
+      it('does not report a collision for a calc captioned like a referenced parameter', async () => {
+        const stored = 'SUM([revenue]) * 1.1';
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: { caption: 'Target Revenue', formula: 'SUM([Revenue]) * 1.1' },
+          initialXml: REVENUE_XML,
+          readbackXml: withColumn(REVENUE_XML, calcColumn('Target Revenue', stored)),
+        });
+
+        expect(result.isError).toBe(false);
+        expect(appliedDocumentXml(applyWorkbookDocument)).toContain(`formula='${stored}'`);
+      });
+
+      it('does not report a collision on the bind-template calc path either', () => {
+        const result = prepareCalculationsInWorkbook({
+          workbookXml: REVENUE_XML,
+          calcs: [{ caption: 'Target Revenue', formula: 'SUM([Revenue]) * 1.1' }],
+          resolveLooseReferences: true,
+        });
+
+        expect(result.isOk()).toBe(true);
+        if (result.isErr()) throw new Error(result.error.message);
+        expect(result.value.workbookXml).toContain("formula='SUM([revenue]) * 1.1'");
+      });
+
+      it('resolves the field on the bind-template calc path', () => {
+        const result = prepareCalculationsInWorkbook({
+          workbookXml: REVENUE_XML,
+          calcs: [{ caption: 'Triple Rev', formula: 'SUM([Revenue]) * 3' }],
+          resolveLooseReferences: true,
+        });
+
+        expect(result.isOk()).toBe(true);
+        if (result.isErr()) throw new Error(result.error.message);
+        expect(result.value.workbookXml).toContain("formula='SUM([revenue]) * 3'");
+      });
+    });
   });
 });
