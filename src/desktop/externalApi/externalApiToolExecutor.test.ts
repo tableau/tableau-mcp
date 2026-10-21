@@ -5,7 +5,10 @@ import { DesktopMcpServer } from '../../server.desktop.js';
 import { getFormatDashboardZonesTool } from '../../tools/desktop/authoring/style/formatDashboardZones.js';
 import { getMockRequestHandlerExtra } from '../../tools/desktop/toolContext.mock.js';
 import { Provider } from '../../utils/provider.js';
-import { INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE } from '../callDeadline.js';
+import {
+  INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
+  INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
+} from '../callDeadline.js';
 import { captureWindowScreenshot } from '../wrappers/captureWindowScreenshot.js';
 import type { ExternalApiHttp as ExternalApiClient } from './externalApiHttp.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
@@ -2108,6 +2111,46 @@ describe('ExternalApiToolExecutor', () => {
         expect(error.error?.recoverable).toBe(false);
         expect(error.error?.message).toContain('Dialog action failed internally.');
         expectIndeterminateDialogAction(error.error?.message ?? '');
+      }
+      expect(
+        server.requests.filter(
+          (request) => request.method === 'POST' && request.path === '/v0/app:invokeDialogAction',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('surfaces a session-fatal 5xx with replay-safety guidance but no dialog-inspection read', async () => {
+      server.setOverride('POST /v0/app:invokeDialogAction', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'problem',
+          title: 'Internal Error',
+          status: 500,
+          instance: '/v0/mock',
+          code: 'operation-failed',
+          tableauErrorCode: 'E71AE512',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.invokeDialogAction(invokeDialogActionRequest, signal);
+
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.recoverable).toBe(false);
+        // Session-fatal guidance leads: stop every command and read, restart Desktop.
+        expect(error.error?.message).toContain('restart Tableau Desktop');
+        expect(error.error?.message).toContain('including reads');
+        // Replay-safety core is kept: the first outcome is unknown, so the agent must not re-invoke
+        // the action (holds even after a restart in a new session).
+        expect(error.error?.message).toContain(INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE);
+        expect(error.error?.message).toContain('may already have been invoked');
+        // But the get-active-dialogs read clause is dropped: a dead session forbids every read.
+        expect(error.error?.message).not.toContain('get-active-dialogs once for fresh inspection');
+        expect(error.error?.message).not.toContain(INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE);
       }
       expect(
         server.requests.filter(

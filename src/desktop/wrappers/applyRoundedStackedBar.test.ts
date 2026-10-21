@@ -621,6 +621,35 @@ describe('applyRoundedStackedBar', () => {
     },
   );
 
+  it('fails before mutation when a filter action targets a dashboard holding the sheet', async () => {
+    const harness = successfulExecutor();
+    const actions =
+      "<actions><action name='a'><activation type='on-select' /><source type='sheet' worksheet='Other' dashboard='Dashboard' /><command command='tsc:tsl-filter'><param name='target' value='Dashboard' /></command></action></actions>";
+    vi.mocked(harness.executor.getWorkbookDocument)
+      .mockReset()
+      .mockResolvedValue(
+        Ok(document(workbook(sourceWorksheet()).replace('<worksheets>', `${actions}<worksheets>`))),
+      );
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: sourceWorksheet(),
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome).toMatchObject({
+      state: 'failed',
+      mutation: 'not-sent',
+      retrySafe: true,
+      stage: 'workbook-preflight',
+    });
+    expect(JSON.stringify(outcome)).toContain('Rounded bars disappear when other sheets on');
+    expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
   it('fails before mutation when the embedded target worksheet differs from the locked source', async () => {
     const harness = successfulExecutor();
     vi.mocked(harness.executor.getWorkbookDocument)

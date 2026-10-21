@@ -72,7 +72,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rounded?.action).toMatch(/grouped.*dual-axis.*specialty/i);
     expect(rounded?.action).toContain('separate dashboard rounded-corners route');
     expect(rounded?.action).toMatch(/dashboard object\/container/i);
-    expect(rounded?.action).toContain('V1 refuses any workbook with top-level actions');
+    expect(rounded?.action).toContain('Refuses actions that can filter the sheet');
     expect(rounded?.action).toContain('If refine refuses a workbook with actions, stop');
     expect(rounded?.action).toContain(
       'Do not fall back to shell commands or raw whole-workbook XML',
