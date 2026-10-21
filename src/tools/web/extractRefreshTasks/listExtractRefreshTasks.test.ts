@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -203,6 +204,57 @@ describe('listExtractRefreshTasksTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
     expect(parsed).toHaveLength(2);
+  });
+
+  describe('MAX_RESULT_LIMIT', () => {
+    const fiveTasks = Array.from({ length: 5 }, (_, i) => ({
+      ...mockExtractRefreshTask,
+      id: `task-${i}`,
+    }));
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      stubDefaultEnvVars();
+    });
+
+    async function getTaskIds(args: Record<string, unknown> = {}): Promise<Array<string>> {
+      mocks.mockListExtractRefreshTasks.mockResolvedValue(fiveTasks);
+      const result = await getToolResult(args);
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      return JSON.parse(result.content[0].text).map((task: { id: string }) => task.id);
+    }
+
+    it('caps results at the global MAX_RESULT_LIMIT', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      expect(await getTaskIds()).toEqual(['task-0', 'task-1']);
+    });
+
+    it('caps results at a tool-specific MAX_RESULT_LIMITS entry', async () => {
+      vi.stubEnv('MAX_RESULT_LIMITS', 'list-extract-refresh-tasks:3');
+      expect(await getTaskIds()).toEqual(['task-0', 'task-1', 'task-2']);
+    });
+
+    it('lets the cap win over a larger limit or pageSize', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      expect(await getTaskIds({ limit: 4, pageSize: 4 })).toHaveLength(2);
+    });
+
+    it('lets a smaller limit win over the cap', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '3');
+      expect(await getTaskIds({ limit: 1 })).toEqual(['task-0']);
+    });
+
+    it('applies the cap after the filter', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '1');
+      expect(await getTaskIds({ filter: 'id:in:task-3|task-4' })).toEqual(['task-3']);
+    });
+
+    it('returns every task when the tool-specific limit is unbounded', async () => {
+      vi.stubEnv('MAX_RESULT_LIMIT', '2');
+      vi.stubEnv('MAX_RESULT_LIMITS', 'list-extract-refresh-tasks:*');
+      expect(await getTaskIds()).toHaveLength(5);
+    });
   });
 });
 
