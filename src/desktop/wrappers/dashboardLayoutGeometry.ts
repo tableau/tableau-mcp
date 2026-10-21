@@ -392,6 +392,7 @@ function primaryAllocationMatches(
   sizes: number[],
   length: number,
   axis: number,
+  fillsClient: boolean,
 ): boolean | undefined {
   const metrics = expected.map((zone) => primaryMetric(zone, axis));
   if (metrics.includes(null)) return false;
@@ -446,16 +447,20 @@ function primaryAllocationMatches(
   const automaticCount = sizes.length - manual.length;
   const minimumShare = automaticCount > 0 ? Math.floor((length - fixed.used) / automaticCount) : 0;
   let canGrow = true;
-  let canShrink = true;
+  let canShrink = fillsClient;
   for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis, true))]) {
     if (candidates.includes(null)) return false;
+    if (
+      !fillsClient &&
+      (candidates.some((metric) => metric?.unbounded) || (axis === 0 && sizes.length === 1))
+    )
+      canGrow = false;
     if (candidates.reduce((sum, metric) => sum + (metric?.initial ?? 0), 0) > length)
       canGrow = false;
     const hasCappedAutomatic = candidates.some(
       (metric, index) => metric && !metric.manual && sizes[index] + 1 < metric.initial,
     );
-    // A capped automatic tile fills its budget; only integer rounding can reach the last tile.
-    const tailAllowance = sizes.length + (hasCappedAutomatic ? 0 : manualShortfall);
+    let tailAllowance = sizes.length + (hasCappedAutomatic ? 0 : manualShortfall);
     let minimumExtra = 0;
     let maximumExtra = maxInt;
     let minimumCap = minimumShare;
@@ -475,6 +480,18 @@ function primaryAllocationMatches(
         minimumExtra = Math.max(minimumExtra, sizes[index] - metric.initial - 1);
         maximumExtra = Math.min(maximumExtra, sizes[index] - metric.initial + 1);
       }
+    }
+    if (hasCappedAutomatic) {
+      // Only automatic tiles that can reach the shared cap contribute integer rounding.
+      const possibleCapped = candidates.filter(
+        (metric, index) => !metric?.manual && sizes[index] + 1 >= minimumCap,
+      ).length;
+      tailAllowance = Math.max(1, possibleCapped);
+      if (!candidates[sizes.length - 1]?.manual)
+        minimumCap = Math.max(minimumCap, sizes[sizes.length - 1] - tailAllowance);
+    }
+    for (const [index, metric] of candidates.entries()) {
+      if (!metric) continue;
       const shrunk = metric.manual ? Math.min(metric.fixed, fixed.cap) : metric.initial;
       const minimum = metric.manual ? shrunk : Math.min(shrunk, minimumShare);
       const maximum = shrunk + (index === sizes.length - 1 ? tailAllowance : 1);
@@ -594,6 +611,10 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
       Math.abs(old[axis + 2] - old[axis] - (current[axis + 2] - current[axis])) <= 1
     );
   });
+  const fillsClient =
+    visible.length === 0 ||
+    Math.abs(visible[visible.length - 1][axis + 2] - client[axis + 2]) <=
+      Math.max(1, visible.length - 1);
   const primaryAllocation =
     visible.length > 0
       ? primaryAllocationMatches(
@@ -602,18 +623,13 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
           visible.map((rect) => rect[axis + 2] - rect[axis]),
           client[axis + 2] - client[axis],
           axis,
+          fillsClient,
         )
       : undefined;
   if (primaryAllocation === false) return false;
   // With incomplete metrics, changed allocations must fill the client except for
   // integer remainders. Unchanged fixed-only flows may retain trailing space.
-  if (
-    visible.length > 0 &&
-    !primaryUnchanged &&
-    primaryAllocation !== true &&
-    Math.abs(visible[visible.length - 1][axis + 2] - client[axis + 2]) >
-      Math.max(1, visible.length - 1)
-  )
+  if (visible.length > 0 && !primaryUnchanged && primaryAllocation !== true && !fillsClient)
     return false;
   return visible.every(
     (rect, index) =>

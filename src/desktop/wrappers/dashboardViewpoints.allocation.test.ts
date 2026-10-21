@@ -283,4 +283,109 @@ describe.each(
       await verifyAppliedAllocation(expected, actual, accepted, ['Sheet 1', 'Sheet 2']);
     },
   );
+
+  const growingMetrics: (Metric | undefined)[] = [
+    { type: 'unbounded', initial: 100 },
+    { type: 'fixed', initial: 100 },
+    { type: 'fixed', initial: 100 },
+    undefined,
+  ];
+  const shrinkingMetrics: (Metric | undefined)[] = [
+    { type: 'fixed', initial: 1200, manual: 1200 },
+    undefined,
+    { type: 'fixed', initial: 10 },
+  ];
+  const retainedCases = [
+    {
+      name: 'unused Grow budget',
+      sizes: [200, 100, 100, 100],
+      metrics: growingMetrics,
+      accepted: false,
+    },
+    {
+      name: 'native Grow budget',
+      sizes: [700, 100, 100, 100],
+      metrics: growingMetrics,
+      accepted: true,
+    },
+    {
+      name: 'unused Shrink budget',
+      sizes: [936, 10, 10],
+      metrics: shrinkingMetrics,
+      accepted: false,
+    },
+    {
+      name: 'native Shrink budget',
+      sizes: [936, 10, 54],
+      metrics: shrinkingMetrics,
+      accepted: true,
+    },
+    {
+      name: 'readback-only Grow fill requirement',
+      sizes: [200, 100, 100, 100],
+      metrics: growingMetrics,
+      accepted: false,
+      omitFirstCache: true,
+    },
+    {
+      name: 'fixed-only trailing space',
+      sizes: [100, 100, 100],
+      metrics: [{ type: 'fixed', initial: 100 }, undefined, { type: 'fixed', initial: 100 }],
+      accepted: true,
+    },
+    {
+      name: 'bounded trailing space',
+      sizes: [100, 100],
+      metrics: [{ type: 'bounded', initial: 100 }, undefined],
+      accepted: true,
+    },
+    {
+      name: 'unknown singleton horizontal fill requirement',
+      sizes: [100],
+      metrics: [undefined],
+      accepted: axis === 'vert',
+    },
+    {
+      name: 'native rounding onto the last manual tile',
+      sizes: [5, pixels ? 45 : 45.5, pixels ? 45 : 45.5, pixels ? 905 : 904],
+      metrics: [
+        undefined,
+        { type: 'fixed', initial: 100 },
+        { type: 'fixed', initial: 100 },
+        { type: 'fixed', initial: 1200, manual: 1200 },
+      ],
+      accepted: true,
+    },
+    ...[0, 1, 2, 3].map((units) => ({
+      name: `${units}-unit final manual residual`,
+      sizes: [10, 54 - units / (pixels ? 1 : 100), 936 + units / (pixels ? 1 : 100)],
+      metrics: manualLastMetrics,
+      accepted: units <= 1,
+    })),
+  ] satisfies {
+    name: string;
+    sizes: number[];
+    metrics: (Metric | undefined)[];
+    accepted: boolean;
+    omitFirstCache?: boolean;
+  }[];
+
+  it.each(retainedCases)(
+    'checks $name during cross-only reflow',
+    async ({ sizes, metrics, accepted, ...options }) => {
+      let expected = render(sizes, metrics, { crossInset: 10 });
+      if ('omitFirstCache' in options && options.omitFirstCache)
+        expected = expected.replace(/<layout-cache[^>]*\/>/, '');
+      const actual = render(sizes, metrics);
+      const matches = createDashboardReadbackVerifier(expected, 'D');
+      expect(matches(expected)).toBe(true);
+      expect(matches(actual)).toBe(accepted);
+      await verifyAppliedAllocation(
+        expected,
+        actual,
+        accepted,
+        metrics.flatMap((metric, index) => (metric ? [`Sheet ${index}`] : [])),
+      );
+    },
+  );
 });
