@@ -7,6 +7,7 @@ import {
   getAuthorActionTool,
   parseAuthorActionArgs,
   resolveClearOption,
+  spliceActionIntoWorkbook,
 } from './authorAction.js';
 import {
   appliedDocumentXml,
@@ -2151,5 +2152,68 @@ describe('authorActionTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('caption collision');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('spliceActionIntoWorkbook fresh <actions> placement', () => {
+  const ACTION = "<action caption='A' name='[Action1]' />";
+  const placed = (xml: string): string => {
+    const result = spliceActionIntoWorkbook(xml, ACTION);
+    invariant(result.isOk());
+    return result.value;
+  };
+
+  it('lands after <mapsources> and <shared-views>, right before <worksheets>', () => {
+    const xml =
+      '<workbook><datasources><datasource name="a" /></datasources><mapsources><mapsource name="m" /></mapsources><shared-views><shared-view name="s" /></shared-views><worksheets><worksheet name="W" /></worksheets></workbook>';
+    expect(placed(xml)).toContain(`</shared-views><actions>${ACTION}</actions><worksheets>`);
+  });
+
+  it('lands after <datasource-relationships>, right before <worksheets>', () => {
+    const xml =
+      '<workbook><datasources><datasource name="a" /></datasources><datasource-relationships><r /></datasource-relationships><worksheets><worksheet name="W" /></worksheets></workbook>';
+    expect(placed(xml)).toContain(
+      `</datasource-relationships><actions>${ACTION}</actions><worksheets>`,
+    );
+  });
+
+  it('errors when there is no <worksheets> anchor', () => {
+    expect(
+      spliceActionIntoWorkbook(
+        '<workbook><datasources><datasource name="a" /></datasources></workbook>',
+        ACTION,
+      ).isErr(),
+    ).toBe(true);
+  });
+});
+
+describe('authorActionTool fresh <actions> placement', () => {
+  const args = {
+    caption: 'Set Period',
+    sourceWorksheet: 'Profit',
+    sourceField: '[Sample - Superstore].[:Measure Names]',
+    targetParameter: '[Parameters].[Parameter 1]',
+    activation: 'on-select',
+  } as const;
+  const action =
+    "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Sample - Superstore].[:Measure Names]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>";
+
+  it('puts a new <actions> block after </mapsources> and before <worksheets>', async () => {
+    const mapsources = "<mapsources><mapsource name='Tableau' /></mapsources>";
+    const initialXml = BASE_XML.replace('</datasources>', `</datasources>${mapsources}`);
+    const readbackXml = initialXml.replace(
+      '</mapsources>',
+      `</mapsources><actions>${action}</actions>`,
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args,
+      initialXml,
+      readbackXml,
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(`${mapsources}<actions>`);
+    expect(loaded).toContain('</actions><worksheets>');
   });
 });
