@@ -35,6 +35,59 @@ function verify(expected: string, actual: string): boolean {
   return createDashboardReadbackVerifier(expected, 'D')(actual);
 }
 
+describe.each<Axis>(['vert', 'horz'])('%s flow with unchanged primary geometry', (axis) => {
+  function pair(
+    kind: 'empty' | 'scalable' | 'fixed' | 'text',
+    sizes: [number, number],
+    crossInset: number,
+  ): string {
+    const visual = kind === 'scalable' || kind === 'fixed';
+    const cache =
+      kind === 'scalable'
+        ? '<layout-cache type-w="scalable" minwidth="100" has-max-size-w="false" type-h="scalable" minheight="100" has-max-size-h="false"/>'
+        : '<layout-cache type-w="fixed" fixed-size-w="100" type-h="fixed" fixed-size-h="100"/>';
+    const cells = sizes.map((size, index) => {
+      const rect = cell(index === 0 ? 0 : sizes[0], size, axis);
+      rect[axis === 'vert' ? 0 : 1] = crossInset;
+      rect[axis === 'vert' ? 2 : 3] = 100000 - 2 * crossInset;
+      return zone(
+        index + 2,
+        rect,
+        visual ? `type-v2="visual" name="${index === 0 ? 'A' : 'B'}"` : `type-v2="${kind}"`,
+        visual ? cache : kind === 'text' ? '<formatted-text><run>Title</run></formatted-text>' : '',
+      );
+    });
+    const xml = workbook(flow(cells.join(''), axis));
+    return visual
+      ? xml
+          .replace('<worksheets>', '<worksheets><worksheet name="B"/>')
+          .replace('<viewpoints>', '<viewpoints><viewpoint name="B"/>')
+      : xml;
+  }
+
+  it.each(['empty', 'scalable'] as const)(
+    'rejects retained unequal %s allocations when only the cross axis reflows',
+    (kind) => {
+      const expected = pair(kind, [99000, 1000], 1000);
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, pair(kind, [50000, 50000], 0))).toBe(true);
+      expect(verify(expected, pair(kind, [99000, 1000], 0))).toBe(false);
+    },
+  );
+
+  it('retains native fixed-cache trailing space during cross-axis reflow', () => {
+    const expected = pair('fixed', [10000, 10000], 1000);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, pair('fixed', [10000, 10000], 0))).toBe(true);
+  });
+
+  it('retains trailing space for unknown text metrics during cross-axis reflow', () => {
+    const expected = pair('text', [10000, 10000], 1000);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, pair('text', [10000, 10000], 0))).toBe(true);
+  });
+});
+
 describe('ordered Basic edge setters', () => {
   function basic(rects: Rect[]): string {
     return workbook(

@@ -565,7 +565,7 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
     );
   });
   const primaryAllocation =
-    visible.length > 0 && !primaryUnchanged
+    visible.length > 0
       ? primaryAllocationMatches(
           indices.map((index) => before[index]),
           indices.map((index) => after[index]),
