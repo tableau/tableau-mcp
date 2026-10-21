@@ -8,6 +8,7 @@ import {
 } from './activityLog/types.js';
 import {
   BlobStorageConfig,
+  blobStorageProviderSchema,
   isBlobStorageProviderType,
   providerConfigSchema as blobStorageProviderConfigSchema,
 } from './blobStorage/types.js';
@@ -107,7 +108,8 @@ export class Config extends BaseConfig {
   cspAllowedDomains: string[];
   // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
   flowWriteToolsEnabled: boolean;
-  blobStorage: BlobStorageConfig;
+  // undefined when BLOB_STORAGE_PROVIDER is unset (no blob storage)
+  blobStorage: BlobStorageConfig | undefined;
 
   constructor() {
     super();
@@ -398,25 +400,28 @@ export class Config extends BaseConfig {
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
     this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
-    // Blob storage provider configuration (same pattern as telemetry/feature gate).
-    // Bring-your-own-infra: when configured with a custom provider, tools that need
-    // to offload large payloads (rendered images, exported data) upload/download via
-    // BlobStorageProvider instead of inlining base64/text.
-    if (isBlobStorageProviderType(blobStorageProvider) && blobStorageProvider === 'custom') {
+    // Blob storage provider configuration. Bring-your-own-infra: when configured with a custom
+    // provider, tools that need to offload large payloads (rendered images, exported data)
+    // upload/download via BlobStorageProvider instead of inlining base64/text.
+    // Unlike the providers above, an invalid value throws: unset is a real mode (no storage), so
+    // silently falling back would hide the misconfig.
+    if (!blobStorageProvider) {
+      this.blobStorage = undefined;
+    } else if (!isBlobStorageProviderType(blobStorageProvider)) {
+      throw new Error(
+        `BLOB_STORAGE_PROVIDER must be one of: ${blobStorageProviderSchema.options.join(', ')}. Got: ${blobStorageProvider}`,
+      );
+    } else {
       if (!blobStorageProviderConfig) {
         throw new Error(
           'BLOB_STORAGE_PROVIDER_CONFIG is required when BLOB_STORAGE_PROVIDER is "custom"',
         );
       }
       this.blobStorage = {
-        provider: 'custom',
+        provider: blobStorageProvider,
         providerConfig: blobStorageProviderConfigSchema.parse(
           JSON.parse(blobStorageProviderConfig),
         ),
-      };
-    } else {
-      this.blobStorage = {
-        provider: 'noop',
       };
     }
 

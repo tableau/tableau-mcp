@@ -1,9 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Valid blob storage provider names
+ * Valid blob storage provider names. Unset means no blob storage; there is deliberately no
+ * `noop` provider because "no storage" changes tool behavior rather than no-op'ing calls.
  */
-export const blobStorageProviderSchema = z.enum(['noop', 'custom']);
+export const blobStorageProviderSchema = z.enum(['custom']);
 export type BlobStorageProviderType = z.infer<typeof blobStorageProviderSchema>;
 
 /**
@@ -12,13 +13,6 @@ export type BlobStorageProviderType = z.infer<typeof blobStorageProviderSchema>;
 export function isBlobStorageProviderType(provider: unknown): provider is BlobStorageProviderType {
   return blobStorageProviderSchema.safeParse(provider).success;
 }
-
-/**
- * Schema for noop blob storage config (no blob storage configured)
- */
-export const noopBlobStorageConfigSchema = z.object({
-  provider: z.literal('noop'),
-});
 
 /**
  * Schema for provider config (module path + optional provider-specific options)
@@ -47,12 +41,4 @@ export const customBlobStorageConfigSchema = z.object({
   providerConfig: providerConfigSchema,
 });
 
-/**
- * Combined blob storage config schema (discriminated union)
- */
-export const blobStorageConfigSchema = z.discriminatedUnion('provider', [
-  noopBlobStorageConfigSchema,
-  customBlobStorageConfigSchema,
-]);
-
-export type BlobStorageConfig = z.infer<typeof blobStorageConfigSchema>;
+export type BlobStorageConfig = z.infer<typeof customBlobStorageConfigSchema>;

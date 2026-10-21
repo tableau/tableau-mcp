@@ -5,9 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
-import { log } from '../logging/logger.js';
 import type { BlobStorageProvider } from './blobStorageProvider.js';
-import { NoopBlobStorageProvider } from './noopBlobStorageProvider.js';
 
 function isRecord(obj: unknown): obj is Record<string, unknown> {
   return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
@@ -33,98 +31,53 @@ function validateBlobStorageProvider(provider: unknown): asserts provider is Blo
   }
 }
 
-// Module singleton
+// Module singleton; null means blob storage is not configured (or not yet initialized).
 let globalBlobStorageProvider: BlobStorageProvider | null = null;
 
-// Bookkeeping local to this module: tracks whether the active provider is a
-// successfully-loaded custom provider, as opposed to noop or a fallback-after-error.
-// Not part of the BlobStorageProvider interface.
-let blobStorageEnabled = false;
-
 /**
- * Get the global blob storage provider instance.
- * If not initialized via initializeBlobStorageProvider(), lazily constructs a default
- * NoopBlobStorageProvider.
+ * Get the configured blob storage provider.
+ *
+ * Callers must check {@link isBlobStorageEnabled} first and use their no-storage fallback when it
+ * is false; calling this while storage is unset is a bug.
  *
  * @returns The blob storage provider
  */
 export function getBlobStorageProvider(): BlobStorageProvider {
   if (globalBlobStorageProvider === null) {
-    // Lazy initialization with default noop provider
-    globalBlobStorageProvider = new NoopBlobStorageProvider();
-    blobStorageEnabled = false;
+    throw new Error(
+      'Internal error: getBlobStorageProvider() called while blob storage is not configured. Check isBlobStorageEnabled() first.',
+    );
   }
   return globalBlobStorageProvider;
 }
 
 /**
- * Whether blob storage is backed by a successfully-loaded custom provider.
- * False when the provider is noop, or when a custom provider was configured but
- * failed to load (and initializeBlobStorageProvider() fell back to noop).
- *
- * @returns true only if the active provider is a successfully-loaded custom provider
+ * Whether a custom blob storage provider has been loaded by initializeBlobStorageProvider().
  */
 export function isBlobStorageEnabled(): boolean {
-  return blobStorageEnabled;
+  return globalBlobStorageProvider !== null;
 }
 
 /**
- * Initialize the blob storage provider based on configuration.
+ * Initialize the blob storage provider based on configuration. Call once at startup.
  *
- * This function should be called early in application startup to ensure
- * the blob storage provider is ready before tools register.
+ * Throws if BLOB_STORAGE_PROVIDER is "custom" but the provider cannot be loaded or fails
+ * validation, so a misconfigured provider fails startup instead of silently running with no
+ * storage (a real, behavior-changing mode).
  *
- * @returns A configured blob storage provider
- *
- * @example
- * function main() {
- *   // Initialize blob storage first
- *   const blobStorage = initializeBlobStorageProvider();
- *
- *   // Start application...
- * }
+ * @returns The configured provider, or undefined when blob storage is unset
  */
-export function initializeBlobStorageProvider(): BlobStorageProvider {
-  try {
-    const config = getConfig();
-    let provider: BlobStorageProvider;
+export function initializeBlobStorageProvider(): BlobStorageProvider | undefined {
+  const config = getConfig();
+  globalBlobStorageProvider = null;
 
-    // Select provider based on configuration
-    switch (config.blobStorage.provider) {
-      case 'custom':
-        // Load custom provider from user's filesystem
-        provider = loadCustomProvider(config.blobStorage.providerConfig);
-        blobStorageEnabled = true;
-        break;
-
-      case 'noop':
-      default:
-        provider = new NoopBlobStorageProvider();
-        blobStorageEnabled = false;
-        break;
-    }
-
-    globalBlobStorageProvider = provider;
-    return provider;
-  } catch (error) {
-    log({
-      message: 'Failed to initialize blob storage provider',
-      level: 'error',
-      logger: 'blobStorage',
-      data: error,
-    });
-    log({
-      message: 'Falling back to noop blob storage provider',
-      level: 'info',
-      logger: 'blobStorage',
-    });
-
-    // Fallback to noop provider on error
-    const fallbackProvider = new NoopBlobStorageProvider();
-    globalBlobStorageProvider = fallbackProvider;
-    blobStorageEnabled = false;
-    return fallbackProvider;
+  if (!config.blobStorage) {
+    return undefined;
   }
+
+  const provider = loadCustomProvider(config.blobStorage.providerConfig);
+  globalBlobStorageProvider = provider;
+  return provider;
 }
 
 /**
@@ -206,5 +159,4 @@ function loadCustomProvider(config?: Record<string, unknown>): BlobStorageProvid
  */
 export function resetBlobStorageProvider(): void {
   globalBlobStorageProvider = null;
-  blobStorageEnabled = false;
 }
