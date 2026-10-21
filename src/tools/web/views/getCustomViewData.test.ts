@@ -1,3 +1,5 @@
+import { buffer } from 'node:stream/consumers';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { WebMcpServer } from '../../../server.web.js';
@@ -169,10 +171,19 @@ describe('getCustomViewDataTool', () => {
       expect(result._meta).toBeUndefined();
 
       expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: `data/${mockCustomView.id}.csv`,
-        data: Buffer.from(mockCsv, 'utf-8'),
+        key: expect.stringMatching(new RegExp(`^data/${mockCustomView.id}/[0-9a-f-]{36}\\.csv$`)),
+        data: expect.anything(),
+        contentLength: Buffer.from(mockCsv, 'utf-8').byteLength,
         contentType: 'text/csv; charset=utf-8',
       });
+      await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(
+        Buffer.from(mockCsv, 'utf-8'),
+      );
+
+      // Keys are unique per call so concurrent/cross-user renders never share an object.
+      const firstKey = mocks.mockUpload.mock.calls.at(-1)?.[0].key;
+      await getToolResult({ customViewId: mockCustomView.id });
+      expect(mocks.mockUpload.mock.calls.at(-1)?.[0].key).not.toBe(firstKey);
     });
 
     it('should return inline CSV when blob storage is not enabled', async () => {

@@ -5,8 +5,7 @@
  * so external deployments can implement a custom blob storage provider against a stable type,
  * without importing the server's internal config schemas or zod. Keep it free of runtime dependencies.
  *
- * `Buffer` is the ambient Node global type (from `@types/node`, a devDependency-only, compile-time
- * type source -- no runtime dependency is introduced).
+ * Only built-in ES types (`AsyncIterable`, `Uint8Array`) are used, so no `@types/node` is needed.
  */
 
 /**
@@ -17,14 +16,21 @@ export interface BlobStorageProvider {
   /**
    * Upload data and return a URL the caller can use to retrieve it.
    *
+   * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) are never held in
+   * memory whole. It can only be assumed to be iterable once.
+   *
    * @param params.key - Storage key/path for the blob
-   * @param params.data - Raw bytes to store
+   * @param params.data - The bytes to store, as an async iterable (e.g. a Node `Readable`)
    * @param params.contentType - MIME type of the data
+   * @param params.contentLength - When present, the exact total byte count of `data`, so S3-style
+   *   providers can do a single PUT. When absent the length is unknown and providers must handle
+   *   that themselves (e.g. a multipart upload).
    */
   upload(params: {
     key: string;
-    data: Buffer;
+    data: AsyncIterable<Uint8Array>;
     contentType: string;
+    contentLength?: number;
   }): Promise<{ url: string; expiresAt?: string }>;
 
   /**
@@ -40,11 +46,20 @@ export interface BlobStorageProvider {
   }): Promise<{ uploadUrl: string; requiredHeaders: Record<string, string>; expiresAt?: string }>;
 
   /**
-   * Download a previously stored blob.
+   * Download a previously stored blob as a stream of byte pieces, so large blobs (e.g. multi-GB
+   * workbooks) never have to be held in memory whole.
+   *
+   * Providers MUST throw if the object is known to exceed `maxBytes` (e.g. from its content
+   * length), MUST NOT truncate, and should return the stream lazily (no bytes read until it is
+   * iterated). Core also enforces `maxBytes` while consuming the stream.
    *
    * @param params.key - Storage key/path for the blob
-   * @param params.maxBytes - Reject/truncate downloads larger than this size
-   * @returns The blob's bytes, or undefined if the key was not found
+   * @param params.maxBytes - Size limit for the blob
+   * @returns The blob's bytes as an async iterable (e.g. a Node `Readable` or S3 GetObject `Body`),
+   *   or undefined only if the key was not found
    */
-  download(params: { key: string; maxBytes: number }): Promise<Buffer | undefined>;
+  download(params: {
+    key: string;
+    maxBytes: number;
+  }): Promise<AsyncIterable<Uint8Array> | undefined>;
 }

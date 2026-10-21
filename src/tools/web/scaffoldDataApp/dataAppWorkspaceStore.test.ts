@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { buffer } from 'stream/consumers';
 
 import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -59,7 +60,7 @@ describe('createDataAppWorkspace', () => {
       invariant(value.filePath);
       expect(existsSync(value.filePath)).toBe(true);
       expect(statSync(value.filePath).size).toBeGreaterThan(0);
-      expect(value.s3URL).toBeUndefined();
+      expect(value.downloadUrl).toBeUndefined();
 
       // Local mode returns the exact same plan blob storage mode does - the client always unzips and
       // finalizes.
@@ -187,7 +188,7 @@ describe('createDataAppWorkspace', () => {
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
 
-      expect(value.s3URL).toBe('https://blob.example.com/signed-template-url');
+      expect(value.downloadUrl).toBe('https://blob.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
@@ -199,9 +200,11 @@ describe('createDataAppWorkspace', () => {
       expect(mocks.mockUpload).toHaveBeenCalledTimes(1);
       expect(mocks.mockUpload).toHaveBeenCalledWith({
         key: `data-app-templates/${TEMPLATE_ZIP_FILENAME}`,
-        data: expectedBytes,
+        data: expect.anything(),
+        contentLength: expectedBytes.byteLength,
         contentType: 'application/zip',
       });
+      await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(expectedBytes);
 
       invariant(value.postUnzip);
       expect(value.postUnzip.edits.length).toBeGreaterThan(0);

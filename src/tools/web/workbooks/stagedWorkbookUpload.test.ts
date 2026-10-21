@@ -20,6 +20,12 @@ vi.mock('../../../blobStorage/init.js', () => ({
 
 const uploadId = '123e4567-e89b-42d3-a456-426614174000';
 
+async function* streamOf(...pieces: string[]): AsyncGenerator<Uint8Array> {
+  for (const piece of pieces) {
+    yield Buffer.from(piece);
+  }
+}
+
 describe('requestStagedWorkbookUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,13 +106,15 @@ describe('requestStagedWorkbookUpload', () => {
 describe('resolveStagedWorkbookUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.download.mockResolvedValue(Buffer.from('<workbook />'));
   });
 
-  it('downloads the staged workbook bytes from the .twb key when it exists', async () => {
+  it('returns the staged workbook stream from the .twb key when it exists', async () => {
+    const content = streamOf('<workbook />');
+    mocks.download.mockResolvedValue(content);
+
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twb`,
-      bytes: Buffer.from('<workbook />'),
+      content,
     });
     expect(mocks.download).toHaveBeenCalledWith({
       key: `workbook-uploads/${uploadId}/workbook.twb`,
@@ -116,12 +124,13 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 
   it('falls back to the .twbx key when the .twb key does not exist', async () => {
+    const content = streamOf('PK\x03\x04');
     mocks.download.mockResolvedValueOnce(undefined);
-    mocks.download.mockResolvedValueOnce(Buffer.from('PK\x03\x04'));
+    mocks.download.mockResolvedValueOnce(content);
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
-      bytes: Buffer.from('PK\x03\x04'),
+      content,
     });
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${uploadId}/workbook.twb`,
@@ -144,14 +153,6 @@ describe('resolveStagedWorkbookUpload', () => {
   it('rejects invalid workbook upload ids', async () => {
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe' })).rejects.toThrow(
       'upload id is invalid',
-    );
-  });
-
-  it('rejects empty uploaded workbook bytes', async () => {
-    mocks.download.mockResolvedValue(Buffer.alloc(0));
-
-    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
-      'must not be empty',
     );
   });
 });

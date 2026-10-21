@@ -89,7 +89,7 @@ when the requested view is a dashboard. It returns one of two result shapes:
 ```json
 {
   "type": "resource_link",
-  "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "uri": "https://blob.example.com/...presigned...",
   "name": "view-data.csv",
   "mimeType": "text/csv",
   "description": "View data (CSV) stored in blob storage."

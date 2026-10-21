@@ -15,6 +15,12 @@ import {
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
+ * `validateWorkbookAndUpload` takes the whole TWB in one request, so it is held to Tableau's
+ * 64 MB single-request publish limit; larger workbooks must use the chunked fileUploads flow.
+ */
+export const MAX_TWB_VALIDATE_BYTES = 64 * 1024 * 1024;
+
+/**
  * Workbooks methods of the Tableau Server REST API
  *
  * @export
@@ -139,6 +145,8 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * @param workbookId - The ID of the workbook to delete.
    * @param siteId - The Tableau site ID
    * @param includeExtract - Whether to include the extract in the workbook.
+   * @returns The workbook bytes as a stream (never buffered whole) plus its headers. The caller
+   *   must consume or destroy `content`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
    */
   downloadWorkbook = async ({
@@ -150,17 +158,22 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
-    const response = await this._apiClient.axios.get<ArrayBuffer>(
+    const response = await this._apiClient.axios.get<AsyncIterable<Uint8Array>>(
       buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
       {
         params: { includeExtract },
-        ...this.authHeader,
-        responseType: 'arraybuffer',
+        // Axios decompresses but keeps the compressed Content-Length, so ask for identity encoding
+        // to keep `contentLength` the exact byte count of `content`.
+        headers: { ...this.authHeader.headers, 'Accept-Encoding': 'identity' },
+        responseType: 'stream',
       },
     );
 
+    const contentLength = getHeader(response.headers, 'content-length');
     return {
-      content: Buffer.from(response.data),
+      content: response.data,
+      contentLength:
+        contentLength && /^\d+$/.test(contentLength) ? Number(contentLength) : undefined,
       contentType: getHeader(response.headers, 'content-type'),
       filename: getFilenameFromContentDisposition(
         getHeader(response.headers, 'content-disposition'),
@@ -375,7 +388,8 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    *
    * @param siteId - The Tableau site ID
    * @param filename - The TWB filename presented to Tableau. Must end with `.twb`.
-   * @param workbook - The raw TWB XML bytes to validate and upload.
+   * @param workbook - The raw TWB XML bytes to validate and upload, at most
+   *   `MAX_TWB_VALIDATE_BYTES`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#validate_workbook_and_upload
    */
   validateWorkbookAndUpload = async ({

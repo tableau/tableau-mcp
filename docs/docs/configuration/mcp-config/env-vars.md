@@ -686,14 +686,21 @@ provider-hosted URLs. This follows the same "bring your own infra" pattern as
 tableau-mcp ships no cloud-vendor-specific storage implementation; on-prem/self-hosted deployments
 plug in their own.
 
-- Default: `noop`
+- Default: unset (no blob storage). Tools fall back to file paths and inline results: inline
+  base64/text for view images and data, local file paths for workbook downloads and the data app
+  template, and `workbookFilePath` for `publish-workbook`. Tools that require staged uploads (e.g.
+  `request-workbook-upload`) return a clear "not configured" error instead. When a provider is
+  configured, `workbookFilePath` is rejected in favor of `workbookUploadId`. Remote/hosted
+  deployments should configure a provider, since `workbookFilePath` reads from the MCP server's own
+  filesystem.
 - Possible values:
-  - `noop` - Blob storage disabled (default). Tools that support offload fall back to their
-    original behavior (inline base64/text, or a local temp-file path for workbook downloads); tools
-    that require staged uploads (e.g. `request-workbook-upload`) return a clear "not configured"
-    error instead.
   - `custom` - Use a custom blob storage provider (requires
-    [`BLOB_STORAGE_PROVIDER_CONFIG`](#blob_storage_provider_config))
+    [`BLOB_STORAGE_PROVIDER_CONFIG`](#blob_storage_provider_config)). If the provider module is
+    missing, fails to load, or doesn't implement the interface, server startup fails.
+- Any other value is a configuration error.
+
+Unlike `TELEMETRY_PROVIDER` and `FEATURE_GATE_PROVIDER`, there is no `noop` value: "no storage"
+changes tool behavior, so it is expressed by leaving the variable unset.
 
 :::tip[Custom Provider]
 
@@ -709,6 +716,25 @@ The custom provider module should export a default class (or named export `BlobS
 that implements the [`BlobStorageProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/blobStorage/blobStorageProvider.ts)
 interface. Bucket/region/key-prefix/URL-expiry concerns are entirely the custom provider's own
 concern — tableau-mcp only passes it a logical, unprefixed key.
+
+`upload` receives `data` as an `AsyncIterable<Uint8Array>` plus an optional `contentLength` (the
+exact byte count, when known). With S3:
+
+```ts
+await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: Readable.from(data), ContentLength: contentLength, ContentType: contentType }));
+```
+
+When `contentLength` is absent, use `@aws-sdk/lib-storage`'s `Upload` (multipart) instead.
+
+`download` returns a stream (`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found,
+so multi-GB staged workbooks are never held in memory whole. Throw (don't truncate) if the object is
+known to exceed `maxBytes`; tableau-mcp also enforces `maxBytes` while reading. In Node, S3's
+GetObject `Body` is already an async iterable (map `NoSuchKey` to `undefined` and check
+`ContentLength` against `maxBytes` first):
+
+```ts
+return (await s3.send(new GetObjectCommand({ Bucket, Key: key }))).Body as Readable; // Readable from node:stream
+```
 
 :::
 
@@ -729,5 +755,5 @@ The `module` field can be:
 **Example:**
 
 ```bash
-BLOB_STORAGE_PROVIDER_CONFIG='{"module": "./providers/s3-blob-storage-provider.js"}'
+BLOB_STORAGE_PROVIDER_CONFIG='{"module": "./providers/my-blob-storage-provider.js"}'
 ```

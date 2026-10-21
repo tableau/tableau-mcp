@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { toUploadData } from '../../../blobStorage/uploadData.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -26,7 +29,7 @@ export type DataToolResult = { kind: 'url'; url: string } | { kind: 'inline'; cs
  * custom provider's own concern.
  */
 function buildDataKey(resourceId: string): string {
-  return `data/${resourceId}.csv`;
+  return `data/${resourceId}/${randomUUID()}.csv`;
 }
 
 /**
@@ -39,9 +42,8 @@ function buildDataKey(resourceId: string): string {
  *
  * The `view-data-file-mode` feature gate governs the entire offload path, so
  * disabling the flag keeps the URL result behind the gate and preserves the
- * original inline behavior. The `isBlobStorageEnabled()` check still guards
- * against a noop/unconfigured provider so an enabled flag without a custom
- * provider doesn't attempt a doomed upload on every request.
+ * original inline behavior. The `isBlobStorageEnabled()` check keeps an enabled
+ * flag without a configured provider on the inline path.
  */
 export async function buildDataToolResult({
   csv,
@@ -62,7 +64,7 @@ export async function buildDataToolResult({
   try {
     const { url } = await getBlobStorageProvider().upload({
       key: buildDataKey(resourceId),
-      data: Buffer.from(csv, 'utf-8'),
+      ...toUploadData(csv),
       contentType: CSV_CONTENT_TYPE,
     });
     return { kind: 'url', url };

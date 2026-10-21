@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { toUploadData } from '../../../blobStorage/uploadData.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -36,7 +39,7 @@ function extensionFor(format: 'PNG' | 'SVG'): string {
  * custom provider's own concern.
  */
 function buildImageKey(resourceId: string, format: 'PNG' | 'SVG'): string {
-  return `images/${resourceId}.${extensionFor(format)}`;
+  return `images/${resourceId}/${randomUUID()}.${extensionFor(format)}`;
 }
 
 /**
@@ -51,9 +54,8 @@ function buildImageKey(resourceId: string, format: 'PNG' | 'SVG'): string {
  * result and the Slack `_meta` block it carries (emitted in
  * `convertViewImageUrlToToolResult`) only exist on the `kind: 'url'` branch, so
  * disabling the flag keeps both behind the gate and preserves the original
- * inline-base64 behavior. The `isBlobStorageEnabled()` check still guards
- * against a noop/unconfigured provider so an enabled flag without a custom
- * provider doesn't attempt a doomed upload on every request.
+ * inline-base64 behavior. The `isBlobStorageEnabled()` check keeps an enabled
+ * flag without a configured provider on the inline path.
  */
 export async function buildImageToolResult({
   imageData,
@@ -72,10 +74,9 @@ export async function buildImageToolResult({
 
   try {
     const resolvedFormat = format ?? 'PNG';
-    const buffer = Buffer.isBuffer(imageData) ? imageData : Buffer.from(imageData);
     const { url } = await getBlobStorageProvider().upload({
       key: buildImageKey(resourceId, resolvedFormat),
-      data: buffer,
+      ...toUploadData(imageData),
       contentType: contentTypeFor(resolvedFormat),
     });
     return { kind: 'url', url, format };

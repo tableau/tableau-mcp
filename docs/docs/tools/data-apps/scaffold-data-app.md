@@ -102,7 +102,7 @@ differ only in transport, never in when substitution happens (always client-side
   output serves — via the configured blob storage provider on every call and returns the URL the
   provider issues for exactly those bytes. There is no manual publish step and nothing persists in
   storage waiting to be trusted; the object is always what the server just wrote. The result's
-  `s3URL` points at the same un-substituted template — download it first, then unzip.
+  `downloadUrl` points at the same un-substituted template — download it first, then unzip.
 
 In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
 after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in
@@ -165,7 +165,7 @@ returns.
 ```json
 {
   "datappName": "Sales Demo",
-  "s3URL": "https://blob.example.com/...signed...",
+  "downloadUrl": "https://blob.example.com/...signed...",
   "allowedOrigins": [],
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",

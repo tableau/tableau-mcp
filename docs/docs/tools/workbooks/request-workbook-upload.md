@@ -52,7 +52,7 @@ until `publish-workbook` is called — this tool only stages the bytes.
 ```json
 {
   "workbookUploadId": "123e4567-e89b-42d3-a456-426614174000",
-  "uploadUrl": "https://s3.example.com/signed-put",
+  "uploadUrl": "https://blob.example.com/signed-put",
   "expiresAt": "2026-08-12T18:05:00.000Z",
   "maxSizeBytes": 5000000000,
   "requiredHeaders": {

@@ -36,7 +36,7 @@ describe('requestWorkbookUploadTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
@@ -118,7 +118,7 @@ describe('requestWorkbookUploadTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('returns a staged upload URL when S3 is configured', async () => {
+  it('returns a staged upload URL when blob storage is configured', async () => {
     const result = await getToolResult({
       fileName: 'BoltBikes Workbook.twb',
     });
@@ -127,7 +127,7 @@ describe('requestWorkbookUploadTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
@@ -140,7 +140,7 @@ describe('requestWorkbookUploadTool', () => {
   it('returns a staged upload URL for a .twbx filename', async () => {
     mocks.mockRequestStagedWorkbookUpload.mockResolvedValue({
       workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_WORKBOOK_BYTES,
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },

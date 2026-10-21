@@ -531,7 +531,7 @@ const toolScopeMap: Record<
     ]),
   },
   // Requires the site's external allowed-origins policy before returning the bundled template
-  // (or uploading it to S3 and presigning a GET URL).
+  // (or uploading it via the blob storage provider and returning its URL).
   // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
   'scaffold-data-app': {
     mcp: [],

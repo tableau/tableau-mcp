@@ -81,6 +81,7 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
           return new Ok(
             await buildWorkbookToolResult({
               content: workbook.content,
+              contentLength: workbook.contentLength,
               mimeType,
               filename,
               resourceId: workbookId,

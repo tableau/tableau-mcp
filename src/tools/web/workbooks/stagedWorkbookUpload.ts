@@ -13,7 +13,7 @@ const WORKBOOK_FILE_TYPES: ReadonlyArray<WorkbookFileType> = ['twb', 'twbx'];
 
 export type ResolvedWorkbook = {
   fileName: string;
-  bytes: Buffer;
+  content: AsyncIterable<Uint8Array>;
 };
 
 export type RequestWorkbookUploadResult = {
@@ -62,22 +62,19 @@ export async function resolveStagedWorkbookUpload({
   assertWorkbookUploadId(workbookUploadId);
 
   for (const fileType of WORKBOOK_FILE_TYPES) {
-    const bytes = await getBlobStorageProvider().download({
+    const content = await getBlobStorageProvider().download({
       key: buildWorkbookUploadKey(workbookUploadId, fileType),
       maxBytes,
     });
 
-    if (bytes === undefined) {
+    if (content === undefined) {
       continue;
     }
 
-    if (bytes.byteLength === 0) {
-      throw new Error('Workbook upload bytes must not be empty.');
-    }
-
+    // Emptiness and maxBytes are enforced while the publish path consumes the stream.
     return {
       fileName: `${workbookUploadId}.${fileType}`,
-      bytes,
+      content,
     };
   }
 

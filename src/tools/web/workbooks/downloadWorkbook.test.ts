@@ -1,5 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFile, rm } from 'fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { buffer } from 'stream/consumers';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -43,6 +46,19 @@ vi.mock('../../../logging/logger.js', async (importActual) => ({
   ...(await importActual<typeof import('../../../logging/logger.js')>()),
   log: mocks.mockLog,
 }));
+
+// Shrink the 5 GB cap so the over-cap cases stay tiny.
+const { TEST_MAX_BYTES } = vi.hoisted(() => ({ TEST_MAX_BYTES: 64 }));
+vi.mock('./stagedWorkbookUpload.js', async (importActual) => ({
+  ...(await importActual<typeof import('./stagedWorkbookUpload.js')>()),
+  MAX_STAGED_WORKBOOK_BYTES: TEST_MAX_BYTES,
+}));
+
+async function* streamOf(...pieces: string[]): AsyncGenerator<Uint8Array> {
+  for (const piece of pieces) {
+    yield Buffer.from(piece);
+  }
+}
 
 describe('downloadWorkbookTool', () => {
   const tempPathsToCleanup: string[] = [];
@@ -126,10 +142,10 @@ describe('downloadWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('should write workbook bytes to a temp path when blob storage is not configured', async () => {
+  it('should stream workbook bytes to a temp path when blob storage is not configured', async () => {
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: workbookBytes,
+      content: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -160,11 +176,16 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: workbookBytes,
+      content: streamOf('<work', 'book/>'),
+      contentLength: workbookBytes.byteLength,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
-    mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
+    let uploadedBytes: Buffer | undefined;
+    mocks.mockUpload.mockImplementation(async ({ data }) => {
+      uploadedBytes = await buffer(data);
+      return { url: 'https://blob.example.com/signed-url' };
+    });
 
     const result = await getToolResult({
       workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
@@ -179,16 +200,18 @@ describe('downloadWorkbookTool', () => {
     expect(result.content[0].mimeType).toBe('application/xml');
     expect(mocks.mockUpload).toHaveBeenCalledWith({
       key: expect.stringMatching(/^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/),
-      data: workbookBytes,
+      data: expect.anything(),
+      contentLength: workbookBytes.byteLength,
       contentType: 'application/xml',
     });
+    expect(uploadedBytes).toEqual(workbookBytes);
   });
 
   it('should fall back to temp path and log warning when blob storage upload fails', async () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: workbookBytes,
+      content: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -217,7 +240,7 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: workbookBytes,
+      content: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -233,6 +256,101 @@ describe('downloadWorkbookTool', () => {
     tempPathsToCleanup.push(payload.path);
     await expect(readFile(payload.path)).resolves.toEqual(workbookBytes);
     expect(mocks.mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('should fail without falling back once a failed upload has started reading the stream', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: streamOf('<work', 'book/>'),
+      contentType: 'application/xml',
+      filename: 'Superstore.twb',
+    });
+    mocks.mockUpload.mockImplementation(async ({ data }) => {
+      for await (const _piece of data) {
+        throw new Error('connection reset');
+      }
+    });
+
+    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('connection reset');
+    expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+
+  it('should reject a workbook whose Content-Length exceeds the cap before reading it', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    let read = false;
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: (async function* () {
+        read = true;
+        yield Buffer.from('x');
+      })(),
+      contentLength: TEST_MAX_BYTES + 1,
+      contentType: 'application/octet-stream',
+    });
+
+    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      `exceeds the maximum allowed size of ${TEST_MAX_BYTES} bytes`,
+    );
+    expect(read).toBe(false);
+    expect(mocks.mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('should fail the upload when the stream exceeds the cap mid-read', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
+      contentType: 'application/octet-stream',
+    });
+    mocks.mockUpload.mockImplementation(async ({ data }) => {
+      await buffer(data);
+      return { url: 'https://blob.example.com/signed-url' };
+    });
+
+    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      `exceeds the maximum allowed size of ${TEST_MAX_BYTES} bytes`,
+    );
+  });
+
+  it('should delete the partial temp file when the stream exceeds the cap or fails mid-read', async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'download-workbook-test-'));
+    vi.stubEnv('TMPDIR', tempRoot);
+    try {
+      mocks.mockDownloadWorkbook.mockResolvedValueOnce({
+        content: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
+        contentType: 'application/octet-stream',
+      });
+      const overCap = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+      expect(overCap.isError).toBe(true);
+      invariant(overCap.content[0].type === 'text');
+      expect(overCap.content[0].text).toContain('exceeds the maximum allowed size');
+
+      mocks.mockDownloadWorkbook.mockResolvedValueOnce({
+        content: (async function* () {
+          yield Buffer.from('partial');
+          throw new Error('socket hang up');
+        })(),
+        contentType: 'application/octet-stream',
+      });
+      const failed = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+      expect(failed.isError).toBe(true);
+      invariant(failed.content[0].type === 'text');
+      expect(failed.content[0].text).toContain('socket hang up');
+
+      await expect(readdir(join(tempRoot, 'tableau-mcp-workbooks'))).resolves.toEqual([]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {

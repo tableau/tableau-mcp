@@ -1,4 +1,5 @@
 import { AxiosError, AxiosInstance } from 'axios';
+import { Readable } from 'stream';
 import { describe, expect, it, vi } from 'vitest';
 
 import WorkbooksMethods from './workbooksMethods.js';
@@ -507,6 +508,70 @@ describe('WorkbooksMethods', () => {
         workbookType: 'twb',
         overwrite: true,
       });
+    });
+  });
+
+  describe('downloadWorkbook', () => {
+    const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
+
+    function setup(headers: Record<string, string>): {
+      workbooksMethods: WorkbooksMethods;
+      mockGet: ReturnType<typeof vi.fn>;
+      stream: Readable;
+    } {
+      const stream = Readable.from([Buffer.from('<workbook />')]);
+      const mockGet = vi.fn().mockResolvedValue({ data: stream, headers });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: { get: mockGet } as unknown as AxiosInstance,
+      };
+      return { workbooksMethods, mockGet, stream };
+    }
+
+    it('returns the response body as a stream with Content-Length, type, and filename', async () => {
+      const { workbooksMethods, mockGet, stream } = setup({
+        'content-length': '12',
+        'content-type': 'application/xml',
+        'content-disposition': 'attachment; filename="Superstore.twb"',
+      });
+
+      const result = await workbooksMethods.downloadWorkbook({
+        siteId: 'site-1',
+        workbookId,
+        includeExtract: true,
+      });
+
+      expect(result).toEqual({
+        content: stream,
+        contentLength: 12,
+        contentType: 'application/xml',
+        filename: 'Superstore.twb',
+      });
+      const [url, config] = mockGet.mock.calls[0];
+      expect(url).toBe(`/sites/site-1/workbooks/${workbookId}/content`);
+      expect(config).toEqual({
+        params: { includeExtract: true },
+        headers: { Authorization: 'Bearer test', 'Accept-Encoding': 'identity' },
+        responseType: 'stream',
+      });
+    });
+
+    it('leaves contentLength undefined when Content-Length is missing or malformed', async () => {
+      const cases: Array<Record<string, string>> = [
+        {},
+        { 'content-length': 'abc' },
+        { 'content-length': '' },
+      ];
+      for (const headers of cases) {
+        const { workbooksMethods } = setup(headers);
+        const result = await workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId });
+        expect(result.contentLength).toBeUndefined();
+      }
     });
   });
 

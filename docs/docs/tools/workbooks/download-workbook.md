@@ -43,7 +43,9 @@ Example: `true`
 The tool returns one of two result shapes:
 
 - **Blob storage mode enabled:** returns a `resource_link` with a URL to the workbook file in blob storage.
-- **Blob storage mode disabled or upload failure:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path.
+- **Blob storage mode disabled, or the upload fails before reading any bytes:** writes the workbook to a local temporary directory and returns a JSON object containing a local file path. An upload that fails mid-stream returns an error, since the download can't be replayed.
+
+The workbook is streamed end to end (never held in memory whole) and is capped at 5 GB; larger workbooks return an error.
 
 The tool preserves Tableau response metadata when present:
 
@@ -57,7 +59,7 @@ The tool preserves Tableau response metadata when present:
 ```json
 {
   "type": "resource_link",
-  "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
+  "uri": "https://blob.example.com/...presigned...",
   "name": "Superstore.twbx",
   "mimeType": "application/octet-stream",
   "description": "Downloaded Tableau workbook content stored in blob storage."

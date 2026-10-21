@@ -1,3 +1,5 @@
+import { buffer } from 'node:stream/consumers';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
@@ -326,10 +328,19 @@ describe('getCustomViewImageTool', () => {
       expect(result.content.some((c) => c.type === 'image')).toBe(false);
 
       expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: `images/${mockCustomView.id}.png`,
-        data: Buffer.from(mockPngData),
+        key: expect.stringMatching(new RegExp(`^images/${mockCustomView.id}/[0-9a-f-]{36}\\.png$`)),
+        data: expect.anything(),
+        contentLength: Buffer.from(mockPngData).byteLength,
         contentType: 'image/png',
       });
+      await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(
+        Buffer.from(mockPngData),
+      );
+
+      // Keys are unique per call so concurrent/cross-user renders never share an object.
+      const firstKey = mocks.mockUpload.mock.calls.at(-1)?.[0].key;
+      await getToolResult({ customViewId: mockCustomView.id });
+      expect(mocks.mockUpload.mock.calls.at(-1)?.[0].key).not.toBe(firstKey);
     });
 
     it('should return inline base64 when blob storage is not enabled', async () => {

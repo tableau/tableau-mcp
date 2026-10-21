@@ -105,34 +105,71 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
   };
 
   /**
-   * Uploads a file's full contents to a new Tableau file upload session, chunking as
-   * needed, and returns the resulting upload session id for use with `publishWorkbook`.
+   * Streams a file's contents to a new Tableau file upload session, regrouping the incoming
+   * pieces into chunks of at most `chunkBytes` and appending them in order. Holds at most about
+   * one chunk plus the current piece in memory. Returns the upload session id for use with
+   * `publishWorkbook`; no session is created if the content is empty or fails before the first
+   * chunk is full.
    *
    * @param siteId - The Tableau site ID
    * @param filename - The filename presented to Tableau for each chunk
-   * @param content - The full file contents to upload
+   * @param content - The file contents as a stream of byte pieces
+   * @param maxBytes - Maximum total size; throws as soon as the stream exceeds it
+   * @param chunkBytes - Chunk size; defaults to (and must not exceed) Tableau's 64 MB limit
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_publish.htm
    */
   uploadFileInChunks = async ({
     siteId,
     filename,
     content,
+    maxBytes,
+    chunkBytes = MAX_FILE_UPLOAD_CHUNK_BYTES,
   }: {
     siteId: string;
     filename: string;
-    content: Buffer;
+    content: AsyncIterable<Uint8Array>;
+    maxBytes: number;
+    chunkBytes?: number;
   }): Promise<string> => {
-    const { uploadSessionId } = await this.initiateFileUpload({ siteId });
+    let uploadSessionId: string | undefined;
+    const appendChunk = async (chunk: Buffer): Promise<void> => {
+      uploadSessionId ??= (await this.initiateFileUpload({ siteId })).uploadSessionId;
+      await this.appendToFileUpload({ siteId, uploadSessionId, filename, chunk });
+    };
 
-    for (let offset = 0; offset < content.byteLength; offset += MAX_FILE_UPLOAD_CHUNK_BYTES) {
-      await this.appendToFileUpload({
-        siteId,
-        uploadSessionId,
-        filename,
-        chunk: content.subarray(offset, offset + MAX_FILE_UPLOAD_CHUNK_BYTES),
-      });
+    // Pieces are buffered by reference and copied once, into the chunk that sends them.
+    let pending: Uint8Array[] = [];
+    let pendingBytes = 0;
+    let totalBytes = 0;
+    for await (const piece of content) {
+      totalBytes += piece.byteLength;
+      if (totalBytes > maxBytes) {
+        throw new Error(`File content exceeds the maximum allowed size of ${maxBytes} bytes.`);
+      }
+
+      let rest = piece;
+      while (pendingBytes + rest.byteLength >= chunkBytes) {
+        const take = chunkBytes - pendingBytes;
+        pending.push(rest.subarray(0, take));
+        rest = rest.subarray(take);
+        const chunk = Buffer.concat(pending, chunkBytes);
+        pending = [];
+        pendingBytes = 0;
+        await appendChunk(chunk);
+      }
+      if (rest.byteLength > 0) {
+        pending.push(rest);
+        pendingBytes += rest.byteLength;
+      }
     }
 
-    return uploadSessionId;
+    if (totalBytes === 0) {
+      throw new Error('File content must not be empty.');
+    }
+    if (pendingBytes > 0) {
+      await appendChunk(Buffer.concat(pending, pendingBytes));
+    }
+
+    return uploadSessionId!;
   };
 }

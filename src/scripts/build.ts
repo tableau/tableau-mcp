@@ -93,7 +93,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   );
   console.log('✅ features.json copied successfully');
 
-  // scaffold-data-app serves a static, un-substituted template zip (both local and S3 modes) from
+  // scaffold-data-app serves a static, un-substituted template zip (both local and blob storage modes) from
   // an asset bundled next to index.js (same idiom as features.json). Rebuild the zip fresh from the
   // committed template tree so it can't drift, then ship only that one file — the raw tree is no
   // longer read directly at runtime.

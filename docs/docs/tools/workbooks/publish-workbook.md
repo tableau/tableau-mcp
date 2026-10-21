@@ -84,8 +84,10 @@ Example: `123e4567-e89b-42d3-a456-426614174000`
 
 ### `workbookFilePath`
 
-Path to a local TWB or TWBX workbook file on the MCP server's filesystem. Only supported when staged
-uploads are not configured (i.e. no blob storage provider is configured).
+Path to a local TWB or TWBX workbook file on the MCP server's filesystem. Only supported when no
+blob storage provider is configured; otherwise it is rejected and you must use `workbookUploadId`.
+Because the path is read from the MCP server's own filesystem, remote/hosted deployments should
+configure a blob storage provider (staged uploads).
 
 Example: `/path/to/Superstore.twbx`
 
