@@ -36,6 +36,7 @@ const NON_TOOL_VOCABULARY = [
   'async-settle',
   'auto-apply',
   'auto-clear',
+  'auto-generated',
   'auto-grid',
   'auto-updates',
   'awaiting-user',
@@ -128,6 +129,7 @@ const NON_TOOL_VOCABULARY = [
   'kind-mismatch',
   'kpi-text',
   'layout-basic',
+  'layout-cache',
   'layout-flow',
   'level-members',
   // load-* entries are External Client API operation names (and their error codes), the

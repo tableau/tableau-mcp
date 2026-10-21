@@ -300,10 +300,6 @@ const DASHBOARD_SHAPE_ATTRIBUTES = [
   'type-v2',
   'param',
   'name',
-  'x',
-  'y',
-  'w',
-  'h',
   'sizing-mode',
   'minwidth',
   'minheight',
@@ -343,12 +339,16 @@ function dashboardShape(
   }
   if (!dashboard) return null;
 
-  return ['size', 'zone', 'run'].flatMap((tagName) => {
-    const found = dashboard!.getElementsByTagName(tagName);
-    const values: DashboardShapeElement[] = [];
-    for (let index = 0; index < found.length; index++) {
-      const element = found.item(index);
-      if (!element) continue;
+  // Default layout only: Desktop owns zone geometry and auto-generated device layouts.
+  const children = directChildren(dashboard);
+  const zonesRoots = children.filter(({ tagName }) => tagName === 'zones');
+  const found: Array<[string, XmlElement[]]> = [
+    ['size', children.filter(({ tagName }) => tagName === 'size')],
+    ['zone', zonesRoots.flatMap((root) => Array.from(root.getElementsByTagName('zone')))],
+    ['run', zonesRoots.flatMap((root) => Array.from(root.getElementsByTagName('run')))],
+  ];
+  return found.flatMap(([tagName, elements]) =>
+    elements.map((element): DashboardShapeElement => {
       const attributes: Record<string, string> = {};
       for (const attributeName of DASHBOARD_SHAPE_ATTRIBUTES) {
         if (element.hasAttribute(attributeName)) {
@@ -356,20 +356,21 @@ function dashboardShape(
         }
       }
       const parent = element.parentNode as XmlElement;
-      values.push({
+      return {
         tagName,
         attributes,
         ...(tagName === 'zone' && parent.tagName === 'zone'
           ? { parentZoneId: parent.getAttribute('id') ?? undefined }
           : {}),
         ...(tagName === 'run' ? { text: element.textContent ?? '' } : {}),
-      });
-    }
-    return values;
-  });
+      };
+    }),
+  );
 }
 
-const ZONE_GEOMETRY_ATTRIBUTES = new Set(['x', 'y', 'w', 'h']);
+function directChildren(element: XmlElement): XmlElement[] {
+  return Array.from(element.childNodes).filter((node): node is XmlElement => node.nodeType === 1);
+}
 
 function dashboardShapesEqual(
   expected: DashboardShapeElement[],
@@ -388,26 +389,14 @@ function dashboardShapesEqual(
     }
     const expectedAttributes = Object.keys(expectedElement.attributes);
     const actualAttributes = Object.keys(actualElement.attributes);
-    if (
-      expectedAttributes.length !== actualAttributes.length ||
-      expectedAttributes.some((attributeName) => !(attributeName in actualElement.attributes))
-    ) {
-      return false;
-    }
-    return expectedAttributes.every((attributeName) => {
-      const expectedValue = expectedElement.attributes[attributeName];
-      const actualValue = actualElement.attributes[attributeName];
-      if (expectedElement.tagName === 'zone' && ZONE_GEOMETRY_ATTRIBUTES.has(attributeName)) {
-        const expectedGeometry = Number(expectedValue);
-        const actualGeometry = Number(actualValue);
-        return (
-          Number.isInteger(expectedGeometry) &&
-          Number.isInteger(actualGeometry) &&
-          Math.abs(expectedGeometry - actualGeometry) <= 1
-        );
-      }
-      return expectedValue === actualValue;
-    });
+    return (
+      expectedAttributes.length === actualAttributes.length &&
+      expectedAttributes.every(
+        (attributeName) =>
+          attributeName in actualElement.attributes &&
+          expectedElement.attributes[attributeName] === actualElement.attributes[attributeName],
+      )
+    );
   });
 }
 

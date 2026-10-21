@@ -1,0 +1,60 @@
+    <dashboard enable-sort-zone-taborder='true' name='L4 Exec'>
+      <style />
+      <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
+      <zones>
+        <zone h='100000' id='9' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='100000' id='16' param='vert' type-v2='layout-flow' w='100000' x='0' y='0'>
+            <zone h='3700' id='10' type-v2='text' w='100000' x='0' y='0'>
+              <formatted-text>
+                <run bold='true' fontalignment='1' fontsize='16'>L4 Exec</run>
+              </formatted-text>
+              <zone-style>
+                <format attr='border-color' value='#000000' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='4' />
+              </zone-style>
+            </zone>
+            <zone h='13350' id='11' name='total revenue as a big number KPI' w='100000' x='0' y='3700'>
+              <layout-cache cell-count-h='1' non-cell-size-h='43' type-h='cell' type-w='fixed' />
+              <zone-style>
+                <format attr='border-color' value='#000000' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='4' />
+              </zone-style>
+            </zone>
+            <zone h='36950' id='12' name='bar chart of revenue by region' w='100000' x='0' y='17050'>
+              <layout-cache cell-count-h='3' non-cell-size-h='98' type-h='cell' type-w='fixed' />
+              <zone-style>
+                <format attr='border-color' value='#000000' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='4' />
+              </zone-style>
+            </zone>
+            <zone h='46000' id='15' param='horz' type-v2='layout-flow' w='100000' x='0' y='54000'>
+              <zone h='46000' id='13' name='bar chart of cogs by product_line' w='50000' x='0' y='54000'>
+                <layout-cache minwidth='200' type-h='cell' type-w='scalable' />
+                <zone-style>
+                  <format attr='border-color' value='#000000' />
+                  <format attr='border-style' value='none' />
+                  <format attr='border-width' value='0' />
+                  <format attr='margin' value='4' />
+                </zone-style>
+              </zone>
+              <zone h='46000' id='14' name='bar chart of revenue by product_line' w='50000' x='50000' y='54000'>
+                <layout-cache minwidth='200' type-h='cell' type-w='scalable' />
+                <zone-style>
+                  <format attr='border-color' value='#000000' />
+                  <format attr='border-style' value='none' />
+                  <format attr='border-width' value='0' />
+                  <format attr='margin' value='4' />
+                </zone-style>
+              </zone>
+            </zone>
+          </zone>
+        </zone>
+      </zones>
+      <simple-id uuid='{52571C33-F4B9-4AFC-8D0C-1048C7603E92}' />
+    </dashboard>

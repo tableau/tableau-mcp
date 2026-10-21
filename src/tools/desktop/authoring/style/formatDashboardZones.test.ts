@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { DOMParser } from '@xmldom/xmldom';
 import { Err, Ok } from 'ts-results-es';
 
 import {
@@ -363,12 +367,6 @@ describe('formatDashboardZonesDocument', () => {
       'more than one direct zone-style',
     ],
     [
-      'a self-closing target zone',
-      "<dashboard name='D'><zones><zone id='7' /></zones></dashboard>",
-      { scope: 'zone_ids' as const, zoneIds: ['7'], cornerRadius: 8 },
-      'self-closing',
-    ],
-    [
       'malformed nested zones',
       "<dashboard name='D'><zones><zone id='1'><zone id='2'></zone></zones></dashboard>",
       { scope: 'all' as const, cornerRadius: 8 },
@@ -386,6 +384,320 @@ describe('formatDashboardZonesDocument', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toContain(message);
+  });
+});
+
+describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
+  afterEach(() => vi.useRealTimers());
+  const fixture = (name: string): string =>
+    readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
+  const BLANK_WITH_PHONE = fixture('native-blank-with-phone.xml');
+  const SHEETS_WITH_PHONE = fixture('native-sheets-with-phone.xml');
+  const BLANK_ZONE = fixture('native-blank-zone-with-phone.xml');
+  const PROBE_BEFORE = fixture('probe-rows-before-all.xml');
+  const PROBE_READBACK = fixture('probe-rows-readback-after-all12.xml');
+  const NORMALIZED_RADIUS = (radius: number): string =>
+    `<zone-style><format attr='border-color' value='#444444' /><format attr='border-style' value='none' /><format attr='border-width' value='0' /><format attr='corner-radius' value='${radius}' /></zone-style>`;
+  const run = async (
+    args: Parameters<typeof callTool>[0],
+    options: Parameters<typeof callTool>[1],
+  ): ReturnType<typeof callTool> => {
+    vi.useFakeTimers();
+    const pending = callTool(args, options);
+    await vi.advanceTimersByTimeAsync(READBACK_POLL_INTERVAL_MS * READBACK_POLL_MAX_ATTEMPTS);
+    return await pending;
+  };
+
+  it('targets default-layout containers only, never the auto-generated Phone layout', () => {
+    const result = formatDashboardZonesDocument(SHEETS_WITH_PHONE, {
+      scope: 'containers',
+      cornerRadius: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.targetZoneIds).toEqual(['4', '7']);
+    expect(result.xml.slice(result.xml.indexOf('<devicelayouts>'))).toBe(
+      SHEETS_WITH_PHONE.slice(SHEETS_WITH_PHONE.indexOf('<devicelayouts>')),
+    );
+  });
+
+  it('finds no targets on a blank dashboard whose only zones are in the Phone layout', () => {
+    const result = formatDashboardZonesDocument(BLANK_WITH_PHONE, {
+      scope: 'containers',
+      cornerRadius: 10,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'No dashboard zones matched scope "containers".',
+    });
+  });
+
+  it('does not treat a Phone zone that shares a default-layout id as a duplicate or a target', () => {
+    const source = SHEETS_WITH_PHONE.replace("id='4'", "id='2'");
+    const result = formatDashboardZonesDocument(source, {
+      scope: 'zone_ids',
+      zoneIds: ['2'],
+      cornerRadius: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.targetZoneIds).toEqual(['2']);
+    expect(result.xml.slice(result.xml.indexOf('<devicelayouts>'))).toBe(
+      source.slice(source.indexOf('<devicelayouts>')),
+    );
+  });
+
+  it('still rejects duplicate ids within the default layout', () => {
+    const result = formatDashboardZonesDocument(SHEETS_WITH_PHONE.replace("id='5'", "id='3'"), {
+      scope: 'all',
+      cornerRadius: 10,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain('duplicate zone id "3"');
+  });
+
+  it('expands a self-closing blank zone into a well-formed zone with one zone-style', () => {
+    const result = formatDashboardZonesDocument(BLANK_ZONE, {
+      scope: 'zone_ids',
+      zoneIds: ['20'],
+      cornerRadius: 10,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    let malformed = false;
+    const doc = new DOMParser({ onError: () => (malformed = true) }).parseFromString(
+      result.xml,
+      'text/xml',
+    );
+    expect(malformed).toBe(false);
+    const zone = Array.from(doc.getElementsByTagName('zone')).find(
+      (candidate) => candidate.getAttribute('id') === '20',
+    )!;
+    const styles = Array.from(zone.getElementsByTagName('zone-style'));
+    expect(styles).toHaveLength(1);
+    const formats = Array.from(styles[0].getElementsByTagName('format'));
+    expect(
+      formats.map((format) => [format.getAttribute('attr'), format.getAttribute('value')]),
+    ).toEqual([['corner-radius', '10']]);
+  });
+
+  it('verifies a blank-zone format when Desktop adds border formats to the new style', async () => {
+    const formatted = formatDashboardZonesDocument(BLANK_ZONE, {
+      scope: 'zone_ids',
+      zoneIds: ['20'],
+      cornerRadius: 12,
+    });
+    expect(formatted.ok).toBe(true);
+    if (!formatted.ok) return;
+    const readbackXml = formatted.xml.replace(
+      "<zone-style><format attr='corner-radius' value='12' /></zone-style></zone>",
+      `${NORMALIZED_RADIUS(12)}</zone>`,
+    );
+    expect(readbackXml).not.toBe(formatted.xml);
+
+    const { result, applyDashboardDocument } = await run(
+      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'zone_ids', zoneIds: ['20'] },
+      { source: BLANK_ZONE, readbackXml },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('verifies scope all on Probe Rows when Desktop writes corner-radius before margin', async () => {
+    const { result } = await run(
+      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'all' },
+      { source: PROBE_BEFORE, readbackXml: PROBE_READBACK },
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('verifies a container format on a dashboard with a Phone layout and Desktop-moved geometry', async () => {
+    const formatted = formatDashboardZonesDocument(SHEETS_WITH_PHONE, {
+      scope: 'containers',
+      cornerRadius: 10,
+    });
+    expect(formatted.ok).toBe(true);
+    if (!formatted.ok) return;
+    const readbackXml = formatted.xml
+      .replaceAll(
+        "<zone-style><format attr='corner-radius' value='10' /></zone-style>",
+        NORMALIZED_RADIUS(10),
+      )
+      .replace("h='19750' id='3'", "h='19000' id='3'")
+      .replace("fixed-size-h='158'", "fixed-size-h='160'")
+      .replace("value='8'", "value='6'");
+
+    const { result } = await run(
+      { dashboardName: 'dashboard-1', cornerRadius: 10, scope: 'containers' },
+      { source: SHEETS_WITH_PHONE, readbackXml },
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('fails when the readback drops a target margin', async () => {
+    const { result } = await run(
+      { dashboardName: 'dashboard-1', cornerRadius: 12, scope: 'all' },
+      {
+        source: PROBE_BEFORE,
+        readbackXml: PROBE_READBACK.replace("<format attr='margin' value='4' />", ''),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+  });
+
+  it('fails when the readback changes a non-target zone style', async () => {
+    const targetOnly = {
+      dashboardName: 'dashboard-1',
+      cornerRadius: 12,
+      scope: 'zone_ids' as const,
+      zoneIds: ['13'],
+    };
+    const readback = PROBE_BEFORE.replace("value='8'", "value='12'");
+    expect(readback).not.toBe(PROBE_BEFORE);
+
+    const control = await run(targetOnly, { source: PROBE_BEFORE, readbackXml: readback });
+    const changed = await run(targetOnly, {
+      source: PROBE_BEFORE,
+      readbackXml: readback.replace(
+        "<format attr='margin' value='4' />",
+        "<format attr='margin' value='5' />",
+      ),
+    });
+
+    expect(control.result.isError).toBe(false);
+    expect(changed.result.isError).toBe(true);
+  });
+
+  describe('device layout blocks added or dropped by Desktop', () => {
+    const PHONE_BLOCK = /<devicelayouts>[\s\S]*<\/devicelayouts>\s*/.exec(SHEETS_WITH_PHONE)![0];
+    const WITHOUT_BLOCK = SHEETS_WITH_PHONE.replace(PHONE_BLOCK, '');
+    const request = {
+      dashboardName: 'dashboard-1',
+      cornerRadius: 10,
+      scope: 'containers' as const,
+    };
+    const normalized = (source: string): string => {
+      const formatted = formatDashboardZonesDocument(source, {
+        scope: 'containers',
+        cornerRadius: 10,
+      });
+      expect(formatted.ok).toBe(true);
+      return formatted.ok
+        ? formatted.xml.replaceAll(
+            "<zone-style><format attr='corner-radius' value='10' /></zone-style>",
+            NORMALIZED_RADIUS(10),
+          )
+        : '';
+    };
+
+    it('verifies when the readback gains a block of only auto-generated layouts', async () => {
+      const readbackXml = normalized(WITHOUT_BLOCK).replace(
+        '<simple-id',
+        `${PHONE_BLOCK}<simple-id`,
+      );
+      expect(readbackXml).toContain('<devicelayouts>');
+      const { result } = await run(request, { source: WITHOUT_BLOCK, readbackXml });
+      expect(result.isError).toBe(false);
+    });
+
+    it('verifies when the readback loses a block of only auto-generated layouts', async () => {
+      const { result } = await run(request, {
+        source: SHEETS_WITH_PHONE,
+        readbackXml: normalized(WITHOUT_BLOCK),
+      });
+      expect(result.isError).toBe(false);
+    });
+
+    it('fails when the readback gains a block with a non-auto-generated layout', async () => {
+      const custom = PHONE_BLOCK.replace(" auto-generated='true'", '');
+      expect(custom).not.toBe(PHONE_BLOCK);
+      const readbackXml = normalized(WITHOUT_BLOCK).replace('<simple-id', `${custom}<simple-id`);
+      const { result } = await run(request, { source: WITHOUT_BLOCK, readbackXml });
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  it('fails when a non-target zone-style has its formats swapped', async () => {
+    const targetOnly = {
+      dashboardName: 'dashboard-1',
+      cornerRadius: 12,
+      scope: 'zone_ids' as const,
+      zoneIds: ['13'],
+    };
+    const readback = PROBE_BEFORE.replace("value='8'", "value='12'");
+    const swapped = readback.replace(
+      "<format attr='border-color' value='#000000' />\n            <format attr='border-style' value='none' />",
+      "<format attr='border-style' value='none' />\n            <format attr='border-color' value='#000000' />",
+    );
+    expect(swapped).not.toBe(readback);
+
+    const { result } = await run(targetOnly, { source: PROBE_BEFORE, readbackXml: swapped });
+
+    expect(result.isError).toBe(true);
+  });
+
+  describe('custom device layouts', () => {
+    const CUSTOM =
+      "<dashboard name='D'><zones><zone id='2' type-v2='layout-basic'><zone id='3' name='Sales' /></zone></zones><devicelayouts><devicelayout name='Tablet'><size minheight='700' /><zones><zone id='2' type-v2='layout-basic'><zone-style><format attr='margin' value='8' /><format attr='padding' value='1' /></zone-style></zone></zones></devicelayout></devicelayouts></dashboard>";
+    const request = {
+      dashboardName: 'dashboard-1',
+      cornerRadius: 10,
+      scope: 'zone_ids' as const,
+      zoneIds: ['2'],
+    };
+    const formattedReadback = (): string => {
+      const formatted = formatDashboardZonesDocument(CUSTOM, {
+        scope: 'zone_ids',
+        zoneIds: ['2'],
+        cornerRadius: 10,
+      });
+      expect(formatted.ok).toBe(true);
+      return formatted.ok
+        ? formatted.xml.replace(
+            "<zone-style><format attr='corner-radius' value='10' /></zone-style>",
+            NORMALIZED_RADIUS(10),
+          )
+        : '';
+    };
+
+    it('verifies an unchanged custom layout', async () => {
+      const { result } = await run(request, { source: CUSTOM, readbackXml: formattedReadback() });
+      expect(result.isError).toBe(false);
+    });
+
+    it('finds the target in the default layout even when a device layout comes first', async () => {
+      const move = (xml: string): string => {
+        const layouts = /<devicelayouts>.*<\/devicelayouts>/.exec(xml)![0];
+        return xml.replace(layouts, '').replace('<zones>', `${layouts}<zones>`);
+      };
+      const { result } = await run(request, {
+        source: move(CUSTOM),
+        readbackXml: move(formattedReadback()),
+      });
+      expect(result.isError).toBe(false);
+    });
+
+    it('fails when the readback drops the custom layout', async () => {
+      const readback = formattedReadback().replace(/<devicelayouts>.*<\/devicelayouts>/, '');
+      const { result } = await run(request, { source: CUSTOM, readbackXml: readback });
+      expect(result.isError).toBe(true);
+    });
+
+    it('fails when a custom layout zone sharing a target id changes', async () => {
+      const readback = formattedReadback().replace("value='8'", "value='9'");
+      const { result } = await run(request, { source: CUSTOM, readbackXml: readback });
+      expect(result.isError).toBe(true);
+    });
   });
 });
 
@@ -787,13 +1099,6 @@ describe('format-dashboard-zones tool', () => {
         "          <format attr='background-color' value='#ffffff' />\n          <unexpected />\n        </zone-style>",
       ),
     ],
-    [
-      'unrelated format reordering',
-      HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
-        "          <format attr='border-style' value='solid' />\n          <format attr='border-width' value='4' />",
-        "          <format attr='border-width' value='4' />\n          <format attr='border-style' value='solid' />",
-      ),
-    ],
   ])('rejects %s during high-contrast Desktop normalization', async (_case, readbackXml) => {
     vi.useFakeTimers();
     const resultPromise = callTool(
@@ -809,6 +1114,20 @@ describe('format-dashboard-zones tool', () => {
 
     expect(result.isError).toBe(true);
     expect(applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts any order of formats inside a target zone-style', async () => {
+    const readbackXml = HIGH_CONTRAST_DASHBOARD_READBACK_XML.replace(
+      "          <format attr='border-style' value='solid' />\n          <format attr='border-width' value='4' />",
+      "          <format attr='border-width' value='4' />\n          <format attr='border-style' value='solid' />",
+    );
+    expect(readbackXml).not.toBe(HIGH_CONTRAST_DASHBOARD_READBACK_XML);
+    const { result } = await callTool(
+      { dashboardName: 'dashboard-1', cornerRadius: 36, scope: 'all' },
+      { source: HIGH_CONTRAST_DASHBOARD_XML, readbackXml },
+    );
+
+    expect(result.isError).toBe(false);
   });
 
   it('rejects sibling content loss alongside the live container-style normalization', async () => {
