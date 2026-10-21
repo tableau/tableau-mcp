@@ -27,7 +27,7 @@ import Fuse from 'fuse.js';
 import { DERIVATION_LONG_TO_SHORT } from '../derivations.js';
 import { listAvailableFields } from './field-builder.js';
 import { normalizeArray, parseXML } from './parser.js';
-import { AggregationType, type FieldReference } from './types.js';
+import { AggregationType, type FieldReference, type ParsedWorkbook } from './types.js';
 
 export type FieldResolutionKind = 'exact' | 'rewritten' | 'ambiguous' | 'not_found';
 
@@ -318,8 +318,7 @@ function disambiguateRanked(
   return null;
 }
 
-function datasourceCaptionMap(workbookXml: string): Map<string, Set<string>> {
-  const workbook = parseXML(workbookXml);
+function datasourceCaptionMap(workbook: ParsedWorkbook): Map<string, Set<string>> {
   const datasources = normalizeArray<any>(workbook.workbook?.datasources?.datasource);
   const captions = new Map<string, Set<string>>();
 
@@ -336,8 +335,7 @@ function datasourceCaptionMap(workbookXml: string): Map<string, Set<string>> {
   return captions;
 }
 
-function datasourceNames(workbookXml: string): Set<string> {
-  const workbook = parseXML(workbookXml);
+function datasourceNames(workbook: ParsedWorkbook): Set<string> {
   const datasources = normalizeArray<any>(workbook.workbook?.datasources?.datasource);
   return new Set(
     datasources
@@ -350,7 +348,18 @@ export function resolveUniqueDatasourceName(
   workbookXml: string,
   requestedDatasource: string,
 ): string | null {
-  const names = datasourceNames(workbookXml);
+  return resolveUniqueDatasourceNameFromWorkbook(parseXML(workbookXml), requestedDatasource);
+}
+
+/**
+ * Resolve a datasource from an already-parsed workbook while preserving the
+ * same name, NFC, bracket, and caption matching semantics as the XML helper.
+ */
+export function resolveUniqueDatasourceNameFromWorkbook(
+  workbook: ParsedWorkbook,
+  requestedDatasource: string,
+): string | null {
+  const names = datasourceNames(workbook);
   if (names.has(requestedDatasource)) return requestedDatasource;
 
   const normalizedRequested = requestedDatasource.normalize('NFC');
@@ -371,7 +380,7 @@ export function resolveUniqueDatasourceName(
   }
 
   const captionMatches = new Set<string>();
-  for (const [caption, captionNames] of datasourceCaptionMap(workbookXml)) {
+  for (const [caption, captionNames] of datasourceCaptionMap(workbook)) {
     if (caption.normalize('NFC') !== normalizedRequested) continue;
     for (const name of captionNames) captionMatches.add(name);
   }
@@ -399,7 +408,7 @@ function matchingFieldsForDatasource(
     };
   }
 
-  const captionNames = datasourceCaptionMap(workbookXml).get(datasource);
+  const captionNames = datasourceCaptionMap(parseXML(workbookXml)).get(datasource);
   if (!captionNames || captionNames.size === 0) return { kind: 'not_found', fields: [] };
   const captionFields = fields.filter((f) => captionNames.has(f.datasource));
   return { kind: 'ambiguous', fields: captionFields };

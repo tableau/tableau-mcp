@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import type { ShowMeOptionsQuery } from '../../../desktop/externalApi/types.js';
+import { resolveShowMeSelection } from '../../../desktop/metadata/showMeSelection.js';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -11,12 +12,12 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: sessionParam(),
   worksheet: z.string().min(1).describe('Worksheet name or stable id.'),
-  dataSource: z.string().optional().describe('Optional internal Tableau datasource name.'),
+  dataSource: z.string().optional().describe('Optional datasource name or caption.'),
   fieldsSelectedInSchemaViewer: z
     .array(z.string())
     .optional()
     .describe(
-      'Optional ordered qualified field names. Omit to use the current schema viewer selection; pass an empty array to explicitly select no fields.',
+      'Optional ordered fields. Captions and [datasource caption].[field] resolve to Tableau identities; omit for schema selection, [] selects none.',
     ),
 };
 const title = 'Get Show Me Options';
@@ -67,17 +68,34 @@ export const getShowMeOptionsTool = (
                 return worksheetResult.error.toErr();
               }
 
-              const query: ShowMeOptionsQuery = {
-                ...(dataSource !== undefined ? { dataSource } : {}),
-                ...(fieldsSelectedInSchemaViewer !== undefined
-                  ? { fieldsSelectedInSchemaViewer }
-                  : {}),
-              };
+              const needsMetadata =
+                dataSource !== undefined || fieldsSelectedInSchemaViewer !== undefined;
+              let query: ShowMeOptionsQuery = {};
+              let expectedInstanceId: string | undefined;
+              if (needsMetadata) {
+                const metadata = await read(
+                  'workbook document',
+                  async (executor, signal) => await executor.getWorkbookDocument(signal),
+                );
+                if (metadata.isErr()) return metadata;
+                const selection = resolveShowMeSelection(metadata.value.xml, {
+                  dataSource,
+                  fieldsSelectedInSchemaViewer,
+                });
+                if (selection.isErr()) return selection.error.toErr();
+                query = selection.value;
+                expectedInstanceId = metadata.value.instanceId;
+              }
 
               return await read(
                 'Show Me options',
                 async (executor, signal) =>
-                  await executor.getWorksheetShowMeOptions(worksheetResult.value.id, query, signal),
+                  await executor.getWorksheetShowMeOptions(
+                    worksheetResult.value.id,
+                    query,
+                    signal,
+                    expectedInstanceId,
+                  ),
               );
             },
           });
