@@ -9,7 +9,6 @@ import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
-const flowToolsEnabled = Boolean(features['flow-tools']);
 const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
 const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
 let flowReadExpected: boolean;
@@ -23,9 +22,8 @@ describe('server', () => {
   beforeAll(() => {
     setEnv();
     const config = new Config();
-    const flowBaseExpected = config.flowToolsEnabled ?? flowToolsEnabled;
-    flowReadExpected = flowBaseExpected && (config.flowReadToolsEnabled ?? flowReadToolsEnabled);
-    flowWriteExpected = flowBaseExpected && (config.flowWriteToolsEnabled ?? flowWriteToolsEnabled);
+    flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
+    flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
   });
   afterAll(resetEnv);
 
@@ -106,7 +104,7 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Read tools follow FLOW_TOOLS_ENABLED and FLOW_READ_TOOLS_ENABLED when set, otherwise their flags.
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowReadExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowReadTools.includes(name));
       }
@@ -130,7 +128,7 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Write tools follow FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flags.
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
@@ -306,7 +304,7 @@ describe('server', () => {
         );
       }
 
-      // Read tools follow FLOW_TOOLS_ENABLED and FLOW_READ_TOOLS_ENABLED when set, otherwise their flags.
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowReadExpected) {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowReadTools.includes(name));
       }
@@ -334,7 +332,7 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Write tools follow FLOW_TOOLS_ENABLED and FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flags.
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
       if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),

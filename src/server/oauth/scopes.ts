@@ -576,9 +576,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Each Flow tool group requires the base flow gate and its own gate. When disabled the tools are
-  // not registered, so their scopes must not be advertised or enforced either — otherwise a
-  // client could be asked to hold scopes for tools that don't exist.
+  // Disabled Flow tools are not registered, so their scopes must not be advertised or enforced
+  // either — otherwise a client could be asked to hold scopes for tools that don't exist.
   if (!flowReadToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');

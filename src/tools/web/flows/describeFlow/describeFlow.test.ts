@@ -53,7 +53,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
     productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -106,30 +105,21 @@ describe('describeFlowTool', () => {
   });
 
   it.each(
-    [undefined, false, true].flatMap((baseEnv) =>
-      [false, true].flatMap((baseFlag) =>
-        [undefined, false, true].flatMap((readEnv) =>
-          [false, true].map((readFlag) => ({ baseEnv, baseFlag, readEnv, readFlag })),
-        ),
-      ),
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
     ),
   )(
-    'resolves read availability for base env=$baseEnv, base FF=$baseFlag, read env=$readEnv, read FF=$readFlag',
-    async ({ baseEnv, baseFlag, readEnv, readFlag }) => {
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
       const { getConfig } = await import('../../../../config.js');
       vi.mocked(getConfig).mockReturnValueOnce({
-        flowToolsEnabled: baseEnv,
         flowReadToolsEnabled: readEnv,
       } as ReturnType<typeof getConfig>);
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) =>
-          (featureName === 'flow-tools' && baseFlag) ||
-          (featureName === 'flow-read-tools' && readFlag),
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
       );
       const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
-      expect(await Provider.from(tool.disabled)).toBe(
-        !((baseEnv ?? baseFlag) && (readEnv ?? readFlag)),
-      );
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
     },
   );
 

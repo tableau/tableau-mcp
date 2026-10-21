@@ -639,30 +639,21 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  FLOW_TOOLS_ENABLED: {
-    includeInUserConfig: false,
-    type: 'boolean',
-    title: 'Enable Tableau Prep flow MCP tools',
-    description:
-      'Tableau Prep flow tools are enabled by default. Set to "false" to disable all flow tools, both read-only and mutating. describe-flow also requires Tableau Server 2026.3 or later and the server feature flag features.getFlowDocumentRestApi.',
-    required: false,
-    sensitive: false,
-  },
   FLOW_READ_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Enable read-only flow MCP tools',
+    title: 'Enable read-only Tableau Prep flow MCP tools',
     description:
-      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default when flow tools are enabled. Set to "false" to disable them and keep the mutating flow tools.',
+      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default. Set to "false" to disable them. describe-flow also requires Tableau Server 2026.3 or later and the server feature flag features.getFlowDocumentRestApi.',
     required: false,
     sensitive: false,
   },
   FLOW_WRITE_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Enable content-mutating flow MCP tools',
+    title: 'Enable content-mutating Tableau Prep flow MCP tools',
     description:
-      'run-flow, run-flow-task, and cancel-flow-run are enabled by default when flow tools are enabled. Set to "false" to disable them and keep the read-only flow tools. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default. Set to "false" to disable them. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
     required: false,
     sensitive: false,
   },

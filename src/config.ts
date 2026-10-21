@@ -97,7 +97,6 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
-  flowToolsEnabled: boolean | undefined;
   flowReadToolsEnabled: boolean | undefined;
   flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
@@ -178,7 +177,6 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
-      FLOW_TOOLS_ENABLED: flowToolsEnabled,
       FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
@@ -392,7 +390,6 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    this.flowToolsEnabled = parseOptionalBoolean(flowToolsEnabled);
     this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
     this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while

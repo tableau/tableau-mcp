@@ -303,21 +303,6 @@ describe('Config', () => {
     { value: 'true', expected: true },
     { value: 'false', expected: false },
   ])(
-    'sets the flow environment override only when FLOW_TOOLS_ENABLED is true or false ($value)',
-    ({ value, expected }) => {
-      vi.stubEnv('FLOW_TOOLS_ENABLED', value);
-
-      expect(new Config().flowToolsEnabled).toBe(expected);
-    },
-  );
-
-  it.each([
-    { value: undefined, expected: undefined },
-    { value: '', expected: undefined },
-    { value: 'yes', expected: undefined },
-    { value: 'true', expected: true },
-    { value: 'false', expected: false },
-  ])(
     'sets the flow read environment override only when FLOW_READ_TOOLS_ENABLED is true or false ($value)',
     ({ value, expected }) => {
       vi.stubEnv('FLOW_READ_TOOLS_ENABLED', value);

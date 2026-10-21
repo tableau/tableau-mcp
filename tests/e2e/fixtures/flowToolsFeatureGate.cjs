@@ -2,11 +2,7 @@
 
 class FlowToolsFeatureGate {
   async isFeatureEnabled(featureName) {
-    return (
-      featureName === 'flow-tools' ||
-      featureName === 'flow-read-tools' ||
-      featureName === 'flow-write-tools'
-    );
+    return featureName === 'flow-read-tools' || featureName === 'flow-write-tools';
   }
 }
 

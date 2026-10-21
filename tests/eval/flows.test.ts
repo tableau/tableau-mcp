@@ -156,7 +156,6 @@ describe('flows tool descriptions (eval)', () => {
 
     const writeServer = await getMcpServer({
       ...getDefaultEnv(),
-      FLOW_TOOLS_ENABLED: 'true',
       FLOW_WRITE_TOOLS_ENABLED: process.env.FLOW_WRITE_TOOLS_ENABLED,
       FEATURE_GATE_PROVIDER: 'custom',
       FEATURE_GATE_PROVIDER_CONFIG: JSON.stringify({
