@@ -462,6 +462,24 @@ describe('Desktop tiled-layout reflow (W-24587662)', () => {
           zone.setAttribute(a, zone.getAttribute(b)!);
           zone.setAttribute(b, value);
         }
+        for (const cache of Array.from(zone.getElementsByTagName('layout-cache')).filter(
+          (element) => element.parentNode === zone,
+        )) {
+          for (const [a, b] of [
+            ['type-w', 'type-h'],
+            ['minwidth', 'minheight'],
+            ['maxwidth', 'maxheight'],
+            ['fixed-size-w', 'fixed-size-h'],
+            ['has-max-size-w', 'has-max-size-h'],
+          ]) {
+            const first = cache.getAttribute(a);
+            const second = cache.getAttribute(b);
+            if (second === null) cache.removeAttribute(a);
+            else cache.setAttribute(a, second);
+            if (first === null) cache.removeAttribute(b);
+            else cache.setAttribute(b, first);
+          }
+        }
         if (zone.getAttribute('id') === '5') zone.setAttribute('param', 'horz');
       }
       return new XMLSerializer().serializeToString(doc);

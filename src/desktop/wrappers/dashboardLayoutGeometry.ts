@@ -172,12 +172,23 @@ function owningLayout(zone: Element): { zones: Element; layout: Element } | unde
   return;
 }
 
+function layoutSize(layout: Element): Element | undefined {
+  const own = elements(layout).find((child) => child.tagName === 'size');
+  if (own || layout.tagName !== 'devicelayout') return own;
+  for (let parent = layout.parentNode; parent?.nodeType === 1; parent = parent.parentNode) {
+    if ((parent as Element).tagName === 'dashboard')
+      return elements(parent as Element).find((child) => child.tagName === 'size');
+  }
+  return;
+}
+
 function pixelUnits(zone: Element, amount: number, axis: number): number | undefined {
   const owner = owningLayout(zone);
   if (!owner) return;
   if (owner.zones.getAttribute('is-pixels') === 'true') return integer(String(amount));
   if (amount === 0) return 0;
-  const size = elements(owner.layout).find((child) => child.tagName === 'size');
+  const size = layoutSize(owner.layout);
+  if (size?.getAttribute('sizing-mode') === 'automatic') return;
   const dimension = axis === 0 ? 'width' : 'height';
   const min = size && integer(size.getAttribute(`min${dimension}`));
   const max = size && integer(size.getAttribute(`max${dimension}`));
@@ -226,6 +237,12 @@ function extent(rects: Bounds[]): Bounds {
   ];
 }
 
+function setEdge(rect: Bounds, edge: number, value: number): void {
+  const opposite = (edge + 2) % 4;
+  // Native Zone setters move the opposite edge when the requested edge crosses it.
+  rect[(edge < 2 ? value <= rect[opposite] : value >= rect[opposite]) ? edge : opposite] = value;
+}
+
 function normalizeBasic(before: Bounds[], target: Bounds): Bounds[] | undefined {
   const source = extent(before);
   if (equalBounds(source, target)) return before;
@@ -261,10 +278,10 @@ function normalizeBasic(before: Bounds[], target: Bounds): Bounds[] | undefined 
   }
   for (const rect of rects) {
     for (const axis of [0, 1]) {
-      if (rect[axis] === outer[axis]) rect[axis] = target[axis];
-      if (rect[axis + 2] === outer[axis + 2]) rect[axis + 2] = target[axis + 2];
-      rect[axis] = Math.max(rect[axis], target[axis]);
-      rect[axis + 2] = Math.min(rect[axis + 2], target[axis + 2]);
+      if (rect[axis] === outer[axis]) setEdge(rect, axis, target[axis]);
+      if (rect[axis + 2] === outer[axis + 2]) setEdge(rect, axis + 2, target[axis + 2]);
+      if (rect[axis] < target[axis]) setEdge(rect, axis, target[axis]);
+      if (rect[axis + 2] > target[axis + 2]) setEdge(rect, axis + 2, target[axis + 2]);
     }
   }
   for (let i = 0; i < rects.length; i++) {
@@ -277,8 +294,8 @@ function normalizeBasic(before: Bounds[], target: Bounds): Bounds[] | undefined 
         const larger = (): boolean =>
           rects[i][cross + 2] - rects[i][cross] > rects[j][cross + 2] - rects[j][cross];
         if (a[axis] <= b[axis] && b[axis] <= a[axis + 2] && b[axis + 2] > a[axis + 2]) {
-          if (larger()) rects[j][axis] = a[axis + 2];
-          else rects[i][axis + 2] = b[axis];
+          if (larger()) setEdge(rects[j], axis, a[axis + 2]);
+          else setEdge(rects[i], axis + 2, b[axis]);
         }
       }
       for (const axis of [0, 1]) {
@@ -286,8 +303,8 @@ function normalizeBasic(before: Bounds[], target: Bounds): Bounds[] | undefined 
         const larger = (): boolean =>
           rects[i][cross + 2] - rects[i][cross] > rects[j][cross + 2] - rects[j][cross];
         if (a[axis] <= b[axis + 2] && b[axis + 2] <= a[axis + 2] && b[axis] < a[axis]) {
-          if (larger()) rects[j][axis + 2] = a[axis];
-          else rects[i][axis] = b[axis + 2];
+          if (larger()) setEdge(rects[j], axis + 2, a[axis]);
+          else setEdge(rects[i], axis, b[axis + 2]);
         }
       }
     }
@@ -401,7 +418,12 @@ function primaryAllocationMatches(
     if (
       candidates.some(
         (metric, index) =>
-          metric && !metric.manual && sizes[index] + 1 < Math.min(metric.initial, minimumShare),
+          metric &&
+          ((!metric.manual && sizes[index] + 1 < Math.min(metric.initial, minimumShare)) ||
+            (!metric.unbounded &&
+              !(axis === 0 && sizes.length === 1) &&
+              (index !== sizes.length - 1 || !hasManual) &&
+              sizes[index] > metric.initial + (index === sizes.length - 1 ? sizes.length : 1))),
       )
     )
       return false;
@@ -457,20 +479,15 @@ function singleHorizontalHeight(expected: Element, client: Bounds): number | und
   if (!isVisual(expected)) return;
   const cache = elements(expected).find((child) => child.tagName === 'layout-cache');
   if (!cache || cache.getAttribute('type-h') !== 'fixed') return;
-  if (cache.getAttribute('type-w') !== 'fixed' || isTrue(expected.getAttribute('is-fixed'))) return;
-  const fixedWidth = integer(cache.getAttribute('fixed-size-w'));
-  const fixed = integer(cache.getAttribute('fixed-size-h'));
+  if (isTrue(expected.getAttribute('is-fixed'))) return;
+  const primary = primaryMetric(expected, 0);
+  const fixed = cache.hasAttribute('fixed-size-h')
+    ? integer(cache.getAttribute('fixed-size-h'))
+    : 300;
   const insets = spacing(expected);
-  if (fixed === undefined || fixed < 0 || fixedWidth === undefined || fixedWidth < 0 || !insets)
-    return;
-  const fixedPrimary = pixelUnits(expected, fixedWidth, 0);
-  const primaryMargins = pixelUnits(expected, insets[0][0] + insets[0][2], 0);
-  const primarySize =
-    fixedPrimary === undefined || primaryMargins === undefined
-      ? undefined
-      : fixedPrimary + primaryMargins;
+  if (fixed === undefined || fixed < 0 || !primary || primary.unbounded || !insets) return;
   // Only GrowZones invokes SetSingleHorizontal; ShrinkZones keeps full height.
-  if (primarySize === undefined || primarySize > client[2] - client[0]) return;
+  if (primary.initial > client[2] - client[0]) return;
   const height = pixelUnits(expected, fixed + insets[0][1] + insets[0][3], 1);
   if (height === undefined || height < 0) return;
   // FlowMetrics::SetSingleHorizontal fits one fixed-height child and gives it
