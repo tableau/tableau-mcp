@@ -8,6 +8,7 @@ import {
   BLOCKING_DIALOG_GUIDANCE,
   desktopCallTimeoutMessage,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
+  INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
   isDesktopCallTimeout,
 } from '../callDeadline.js';
 import {
@@ -1504,16 +1505,18 @@ function mapInvokeDialogActionError(
   ) {
     const mapped = mapClientError(error, pinnedPid);
     if (mapped.type === 'command-failed' && mapped.error !== undefined) {
-      // A session-fatal 5xx already instructs the agent to stop every command and read; the
-      // dialog-inspection guidance (which permits a get-active-dialogs read) would contradict it.
-      if (isSessionFatalError(mapped.error)) {
-        return mapped;
-      }
+      // A session-fatal 5xx must not carry the full indeterminate guidance: its get-active-dialogs
+      // read clause contradicts the stop-all-commands-and-reads contract. But the replay-safety core
+      // (the action may already have run; do not re-invoke it; ask the user about any consequential
+      // choice) still holds — the first outcome is unknown even after a restart — so append only that.
+      const guidance = isSessionFatalError(mapped.error)
+        ? INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE
+        : INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE;
       return {
         type: 'command-failed',
         error: {
           ...mapped.error,
-          message: appendInvokeDialogActionIndeterminateGuidance(mapped.error.message),
+          message: `${mapped.error.message} ${guidance}`,
         },
       };
     }
