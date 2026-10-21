@@ -27,7 +27,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import { registerSkills } from './index.js';
-import { SkillsListRequestSchema } from './types.js';
+import { SkillsGetRequestSchema, SkillsListRequestSchema } from './types.js';
 
 type SkillFile = { uri: string; path: string; mimeType: string };
 type ServerArg = Parameters<typeof registerSkills>[0];
@@ -84,20 +84,26 @@ describe('registerSkills', () => {
     await registerSkills(server);
 
     expect(mocks.mockFeatureGate.isFeatureEnabled).toHaveBeenCalledWith('skills-over-mcp');
-    // Returns before ever touching the registry, registering resources, or the skills/list handler.
+    // Returns before ever touching the registry, registering resources, or the skills handlers.
     expect(mocks.mockGetSkillRegistry).not.toHaveBeenCalled();
     expect(registerResource).not.toHaveBeenCalled();
     expect(setRequestHandler).not.toHaveBeenCalled();
   });
 
-  it('registers the skills/list handler when enabled', async () => {
+  it('registers the skills/list and skills/get handlers when enabled', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockResolvedValue(true);
     const { server, setRequestHandler } = makeServer();
 
     await registerSkills(server);
 
-    expect(setRequestHandler).toHaveBeenCalledTimes(1);
+    expect(setRequestHandler).toHaveBeenCalledTimes(2);
     expect(setRequestHandler).toHaveBeenCalledWith(SkillsListRequestSchema, expect.any(Function));
+    expect(setRequestHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shape: expect.objectContaining({ method: SkillsGetRequestSchema.shape.method }),
+      }),
+      expect.any(Function),
+    );
   });
 
   it('registers one resource per skill file when enabled', async () => {
@@ -154,7 +160,7 @@ describe('registerSkills', () => {
     await registerSkills(server);
 
     expect(registerResource).toHaveBeenCalledTimes(1);
-    expect(setRequestHandler).toHaveBeenCalledTimes(1);
+    expect(setRequestHandler).toHaveBeenCalledTimes(2);
   });
 
   it('registers again for a different server instance', async () => {
@@ -170,7 +176,7 @@ describe('registerSkills', () => {
     expect(second.registerResource).toHaveBeenCalledTimes(1);
   });
 
-  it('logs and registers nothing when there are no skill files', async () => {
+  it('registers skills handlers without resources when there are no skill files', async () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockResolvedValue(true);
     setRegistryFiles([]);
     const { server, registerResource, setRequestHandler } = makeServer();
@@ -178,8 +184,8 @@ describe('registerSkills', () => {
     await registerSkills(server);
 
     expect(registerResource).not.toHaveBeenCalled();
-    // An empty catalog is still a valid skills/list response.
-    expect(setRequestHandler).toHaveBeenCalledTimes(1);
+    // Both skills methods remain available for an empty catalog.
+    expect(setRequestHandler).toHaveBeenCalledTimes(2);
     expect(mocks.mockLog).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('No skills to register') }),
     );

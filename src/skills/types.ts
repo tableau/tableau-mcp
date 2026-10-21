@@ -18,22 +18,25 @@ export type SkillFrontmatter = z.infer<typeof SkillFrontmatterSchema>;
  * `digest` is a lowercase hex SHA-256 prefixed with `sha256:`; `size` is the raw byte
  * length of the file.
  */
-export type SkillResource = {
-  uri: string;
-  digest: string;
-  size: number;
-};
+export const SkillResourceSchema = z.object({
+  uri: z.string(),
+  digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  size: z.number().int().nonnegative(),
+});
+
+export type SkillResource = z.infer<typeof SkillResourceSchema>;
 
 /**
- * A skill manifest entry returned by `skills/list` and `skills/get`
- * (TODO: W-24166658). `uri` is `skill://<name>/SKILL.md`; `frontmatter` is the flat
+ * A skill manifest entry returned by `skills/list` and `skills/get`. `uri` is `skill://<name>/SKILL.md`; `frontmatter` is the flat
  * key/value block parsed from the manifest; `resources` lists every file in the skill directory.
  */
-export type SkillEntry = {
-  uri: string; // skill://<name>/SKILL.md
-  frontmatter: SkillFrontmatter;
-  resources: SkillResource[];
-};
+export const SkillEntrySchema = z.object({
+  uri: z.string(), // skill://<name>/SKILL.md
+  frontmatter: SkillFrontmatterSchema,
+  resources: z.array(SkillResourceSchema),
+});
+
+export type SkillEntry = z.infer<typeof SkillEntrySchema>;
 
 /**
  * `skills/list` request. The `method` literal is what the SDK routes on.
@@ -48,3 +51,16 @@ export type SkillsListResult = {
   resultType: 'complete';
   skills: SkillEntry[];
 };
+
+/** `skills/get` looks up a skill by its catalog SKILL.md URI. */
+export const SkillsGetRequestSchema = z.object({
+  method: z.literal('skills/get'),
+  params: z.object({ uri: z.string() }).passthrough(),
+});
+
+export const SkillsGetResultSchema = z.object({
+  resultType: z.literal('complete'),
+  skill: SkillEntrySchema,
+});
+
+export type SkillsGetResult = z.infer<typeof SkillsGetResultSchema>;
