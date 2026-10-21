@@ -1,3 +1,6 @@
+// VDS's rowLimit width is unverified, so tools keep the limit + 1 probe within int32.
+export const MAX_INT32 = 2147483647;
+
 /**
  * Why a tool result was cut short. Only set when `truncated` is `true`.
  *
@@ -9,6 +12,7 @@
  *   ask for an equal-or-smaller `limit` itself. The `limit` argument cannot
  *   exceed this cap, so the matching set must be narrowed (filter) or the cap
  *   raised by an administrator.
+ *   On paged tools it means the cap hides items from the whole set, whatever the page or `limit`.
  */
 export type TruncationReason = 'requested-limit' | 'admin-cap';
 

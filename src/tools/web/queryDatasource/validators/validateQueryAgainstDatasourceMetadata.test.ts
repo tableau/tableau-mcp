@@ -301,6 +301,18 @@ const sampleMetadataResponse: MetadataResponse = {
         members: [1, 2, 3],
       },
       {
+        parameterType: 'LIST',
+        parameterName: 'Parameter 8',
+        parameterCaption: 'Test Aliased',
+        dataType: 'STRING',
+        value: 'north',
+        members: [
+          { value: 'north', alias: 'North Region' },
+          { value: 'south', alias: 'South Region' },
+          { value: 'west' },
+        ],
+      },
+      {
         parameterType: 'QUANTITATIVE_RANGE',
         parameterName: 'Parameter 1',
         parameterCaption: 'Top Customers',
@@ -793,6 +805,37 @@ describe('validateParametersAgainstDatasourceMetadata', () => {
         parameter: 'Test Int',
         message:
           "Parameter 'Test Int' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [1, 2, 3].",
+      });
+    });
+
+    it('should allow value that matches an object member value', () => {
+      const parameters: QueryParameter[] = [{ parameterCaption: 'Test Aliased', value: 'south' }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateParametersAgainstDatasourceMetadata(
+        parameters,
+        sampleMetadataResponse,
+        validationErrors,
+      );
+
+      expect(validationErrors).toHaveLength(0);
+    });
+
+    it('should add error for value not matching any object member value', () => {
+      const parameters: QueryParameter[] = [{ parameterCaption: 'Test Aliased', value: 'east' }];
+      const validationErrors: QueryValidationError[] = [];
+
+      validateParametersAgainstDatasourceMetadata(
+        parameters,
+        sampleMetadataResponse,
+        validationErrors,
+      );
+
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0]).toEqual({
+        parameter: 'Test Aliased',
+        message:
+          "Parameter 'Test Aliased' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [north, south, west].",
       });
     });
   });

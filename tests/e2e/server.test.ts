@@ -1,5 +1,6 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
+import { Config } from '../../src/config.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
@@ -8,14 +9,22 @@ import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
-const flowToolsEnabled = Boolean(features['flow-tools']);
+const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
+const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
+let flowReadExpected: boolean;
+let flowWriteExpected: boolean;
 const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
 const tableauDataAppsEnabled = Boolean(features['data-apps']);
 const adminToolsFlagEnabled = Boolean(features['admin-tools']);
 const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
-  beforeAll(setEnv);
+  beforeAll(() => {
+    setEnv();
+    const config = new Config();
+    flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
+    flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
+  });
   afterAll(resetEnv);
 
   describe('default variant', () => {
@@ -59,15 +68,13 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -99,9 +106,9 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
-        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -123,8 +130,8 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Filter out content-mutating flow tools unless explicitly enabled.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
         expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
@@ -259,15 +266,13 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag.
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
         'describe-flow',
         'get-flow-task',
-        ...flowWriteTools,
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -303,9 +308,9 @@ describe('server', () => {
         );
       }
 
-      // Filter out flow tools unless both the env switch and the feature flag are on
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true' || !flowToolsEnabled) {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -331,8 +336,8 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
       }
 
-      // Filter out content-mutating flow tools unless explicitly enabled.
-      if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !flowWriteTools.includes(name),
         );

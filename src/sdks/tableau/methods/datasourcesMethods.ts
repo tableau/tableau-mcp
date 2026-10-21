@@ -10,7 +10,6 @@ import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import {
   DataSource,
-  PublishedDataSource,
   PublishedDataSourceResponse,
   publishedDataSourceResponseSchema,
 } from '../types/dataSource.js';
@@ -50,7 +49,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     filter: string;
     pageSize?: number;
     pageNumber?: number;
-  }): Promise<{ pagination: Pagination; datasources: PublishedDataSource[] }> => {
+  }): Promise<{ pagination: Pagination; datasources: DataSource[] }> => {
     const response = await this._apiClient.listDatasources({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },

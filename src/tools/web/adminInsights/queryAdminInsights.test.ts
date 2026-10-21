@@ -349,7 +349,7 @@ describe('query-admin-insights tool', () => {
     });
 
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
-      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 10 }) }),
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 11 }) }),
     );
   });
 
@@ -359,7 +359,7 @@ describe('query-admin-insights tool', () => {
     await getToolResult({ kind: 'site-content', query: validQuery, limit: 50 });
 
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
-      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 50 }) }),
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 51 }) }),
     );
   });
 
@@ -374,8 +374,206 @@ describe('query-admin-insights tool', () => {
     });
 
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
-      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 20 }) }),
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 21 }) }),
     );
+  });
+
+  describe('row limit truncation', () => {
+    const rows = (n: number): { data: Array<Record<string, unknown>> } => ({
+      data: Array.from({ length: n }, (_, i) => ({ 'Item ID': `wb-${i}` })),
+    });
+
+    async function getParsed(params: Parameters<typeof getToolResult>[0]): Promise<any> {
+      const result = await getToolResult(params);
+      expect(result.isError).toBeFalsy();
+      if (result.content[0].type !== 'text') {
+        throw new Error('expected text content');
+      }
+      return JSON.parse(result.content[0].text);
+    }
+
+    const sentRowLimits = (): unknown[] =>
+      mocks.mockQueryDatasource.mock.calls.map((call) => call[0].options.rowLimit);
+
+    it('reports admin-cap truncation and trims to the tool cap', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({
+        kind: 'ts-events',
+        query: validQuery,
+        maxResultLimits: 'query-admin-insights:2',
+      });
+
+      expect(sentRowLimits()).toEqual([3]);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('reports admin-cap from the global MAX_RESULT_LIMIT fallback', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({
+        kind: 'ts-users',
+        query: validQuery,
+        limit: 10000,
+        maxResultLimit: '2',
+      });
+
+      expect(sentRowLimits()).toEqual([3]);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'admin-cap' },
+      });
+    });
+
+    it('does not report truncation when exactly the limit rows match', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({
+        kind: 'site-content',
+        query: validQuery,
+        maxResultLimits: 'query-admin-insights:3',
+      });
+
+      expect(parsed.data).toHaveLength(3);
+      expect(parsed.mcp).toEqual({ resultInfo: { returnedCount: 3, truncated: false } });
+    });
+
+    it('reports requested-limit when the caller limit binds under a larger cap', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({
+        kind: 'job-performance',
+        query: validQuery,
+        limit: 2,
+        maxResultLimits: 'query-admin-insights:10',
+      });
+
+      expect(sentRowLimits()).toEqual([3]);
+      expect(parsed.data).toHaveLength(2);
+      expect(parsed.mcp).toEqual({
+        resultInfo: { returnedCount: 2, truncated: true, truncationReason: 'requested-limit' },
+      });
+    });
+
+    it('sends no rowLimit and adds no mcp key when no limit or cap applies', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ kind: 'ts-events', query: validQuery });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parsed).toEqual(rows(3));
+    });
+
+    it('keeps the requested rowLimit within int32 for a maximal cap', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({
+        kind: 'ts-events',
+        query: validQuery,
+        maxResultLimits: 'query-admin-insights:2147483647',
+      });
+
+      expect(sentRowLimits()).toEqual([2147483647]);
+      expect(parsed.mcp).toEqual({ resultInfo: { returnedCount: 3, truncated: false } });
+    });
+
+    it('clamps a caller limit above int32 instead of rejecting it', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(3)));
+
+      const parsed = await getParsed({ kind: 'ts-events', query: validQuery, limit: 5000000000 });
+
+      expect(sentRowLimits()).toEqual([2147483647]);
+      expect(parsed.mcp).toEqual({ resultInfo: { returnedCount: 3, truncated: false } });
+    });
+
+    describe('with duplicate Site Content datasources', () => {
+      beforeEach(() => {
+        mocks.mockListDatasources.mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 2 },
+          datasources: [
+            {
+              id: 'luid-canonical',
+              name: 'Site Content',
+              contentUrl: 'SiteContent',
+              isCertified: true,
+              project: { id: 'proj-top', name: 'Admin Insights' },
+            },
+            {
+              id: 'luid-clone',
+              name: 'Site Content',
+              contentUrl: 'SiteContent_16639515632470',
+              isCertified: false,
+              project: { id: 'proj-top', name: 'Admin Insights' },
+            },
+          ],
+        });
+        mocks.mockQueryProjects.mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+          projects: [{ id: 'proj-top', name: 'Admin Insights', topLevelProject: true }],
+        });
+      });
+
+      it('returns resolver warnings and resultInfo together', async () => {
+        mocks.mockQueryDatasource.mockResolvedValue(new Ok(rows(1)));
+
+        const parsed = await getParsed({ kind: 'site-content', query: validQuery, limit: 5 });
+
+        expect(parsed.mcp.warnings.map((w: { type: string }) => w.type)).toEqual([
+          'ADMIN_INSIGHTS_AMBIGUOUS_DATASOURCE',
+        ]);
+        expect(parsed.mcp.resultInfo).toEqual({ returnedCount: 1, truncated: false });
+      });
+
+      it('sends the extra row on the Hyper-fallback retry and still trims', async () => {
+        mocks.mockQueryDatasource
+          .mockResolvedValueOnce(
+            new Err({
+              type: 'api-error',
+              message: '[Extract][SQLSTATE:08001] could not connect to the Hyper server',
+              httpStatus: 500,
+              errorCode: undefined,
+            }),
+          )
+          .mockResolvedValueOnce(new Ok(rows(3)));
+
+        const parsed = await getParsed({
+          kind: 'site-content',
+          query: validQuery,
+          maxResultLimits: 'query-admin-insights:2',
+        });
+
+        expect(mocks.mockQueryDatasource.mock.calls.map((c) => c[0].datasource)).toEqual([
+          { datasourceLuid: 'luid-canonical' },
+          { datasourceLuid: 'luid-clone' },
+        ]);
+        expect(sentRowLimits()).toEqual([3, 3]);
+        expect(parsed.data).toHaveLength(2);
+        expect(parsed.mcp.warnings.map((w: { type: string }) => w.type)).toContain(
+          'ADMIN_INSIGHTS_DATASOURCE_UNHEALTHY',
+        );
+        expect(parsed.mcp.resultInfo).toEqual({
+          returnedCount: 2,
+          truncated: true,
+          truncationReason: 'admin-cap',
+        });
+      });
+    });
+
+    it('leaves stale-content without a rowLimit or resultInfo under a cap', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: makeStaleRows(1) }));
+
+      const result = await getToolResult({
+        kind: 'stale-content',
+        limit: 1,
+        maxResultLimits: 'query-admin-insights:1',
+      });
+
+      expect(mocks.mockQueryDatasource.mock.calls[0][0].options).not.toHaveProperty('rowLimit');
+      expect(parseStalePayload(result).mcp).toBeUndefined();
+    });
   });
 });
 
@@ -420,14 +618,22 @@ async function getToolResult(params: {
   minAgeDays?: number;
   projectIds?: string[];
   itemTypes?: Array<'Workbook' | 'Datasource'>;
+  maxResultLimit?: string;
   maxResultLimits?: string;
   staleContentMaxRows?: string;
 }): Promise<CallToolResult> {
   const tool = getQueryAdminInsightsTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   const extra = getMockRequestHandlerExtra();
-  if (params.maxResultLimits !== undefined || params.staleContentMaxRows !== undefined) {
+  if (
+    params.maxResultLimit !== undefined ||
+    params.maxResultLimits !== undefined ||
+    params.staleContentMaxRows !== undefined
+  ) {
     const siteOverrides: Record<string, string> = {};
+    if (params.maxResultLimit !== undefined) {
+      siteOverrides.MAX_RESULT_LIMIT = params.maxResultLimit;
+    }
     if (params.maxResultLimits !== undefined) {
       siteOverrides.MAX_RESULT_LIMITS = params.maxResultLimits;
     }
