@@ -698,6 +698,73 @@ describe('Desktop-owned dashboard state (captured from live Desktop)', () => {
       const { result } = await run(request, { source: CUSTOM, readbackXml: readback });
       expect(result.isError).toBe(true);
     });
+
+    describe('with geometry and layout-cache', () => {
+      const GEO =
+        "<dashboard name='D'><zones><zone id='2' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'><zone id='3' name='Sales' x='0' y='0' w='50000' h='100000' /><layout-cache cache='a' /></zone></zones><devicelayouts><devicelayout name='Tablet'><size minheight='700' /><zones><zone id='2' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'><zone id='20' name='Sales' x='1000' y='2000' w='100000' h='100000' /><layout-cache cache='b' /></zone></zones></devicelayout></devicelayouts></dashboard>";
+      const geoReadback = (): string => {
+        const formatted = formatDashboardZonesDocument(GEO, {
+          scope: 'zone_ids',
+          zoneIds: ['2'],
+          cornerRadius: 10,
+        });
+        expect(formatted.ok).toBe(true);
+        return formatted.ok
+          ? formatted.xml.replace(
+              "<zone-style><format attr='corner-radius' value='10' /></zone-style>",
+              NORMALIZED_RADIUS(10),
+            )
+          : '';
+      };
+      const change = (xml: string, from: string, to: string): string => {
+        expect(xml).toContain(from);
+        return xml.replace(from, to);
+      };
+
+      it('verifies an unchanged readback', async () => {
+        const { result } = await run(request, { source: GEO, readbackXml: geoReadback() });
+        expect(result.isError).toBe(false);
+      });
+
+      it('fails when only a custom layout zone width changes', async () => {
+        const readback = change(
+          geoReadback(),
+          "id='20' name='Sales' x='1000' y='2000' w='100000'",
+          "id='20' name='Sales' x='1000' y='2000' w='0'",
+        );
+        const { result } = await run(request, { source: GEO, readbackXml: readback });
+        expect(result.isError).toBe(true);
+      });
+
+      it('fails when a custom layout zone x changes', async () => {
+        const readback = change(geoReadback(), "x='1000'", "x='1500'");
+        const { result } = await run(request, { source: GEO, readbackXml: readback });
+        expect(result.isError).toBe(true);
+      });
+
+      it('fails when a custom layout zone y changes', async () => {
+        const readback = change(geoReadback(), "y='2000'", "y='2500'");
+        const { result } = await run(request, { source: GEO, readbackXml: readback });
+        expect(result.isError).toBe(true);
+      });
+
+      it('fails when a custom layout layout-cache changes', async () => {
+        const readback = change(geoReadback(), "cache='b'", "cache='c'");
+        const { result } = await run(request, { source: GEO, readbackXml: readback });
+        expect(result.isError).toBe(true);
+      });
+
+      it('still ignores default layout geometry and layout-cache changes', async () => {
+        let readback = change(
+          geoReadback(),
+          "id='3' name='Sales' x='0' y='0' w='50000' h='100000'",
+          "id='3' name='Sales' x='10' y='20' w='30' h='40'",
+        );
+        readback = change(readback, "cache='a'", "cache='z'");
+        const { result } = await run(request, { source: GEO, readbackXml: readback });
+        expect(result.isError).toBe(false);
+      });
+    });
   });
 });
 

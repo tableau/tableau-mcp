@@ -488,8 +488,8 @@ function hasSameDashboardContent(
   }
 
   return (
-    JSON.stringify(canonicalElement(readback, targetZoneStyleIds, radiusOnlyZoneStyleIds)) ===
-    JSON.stringify(canonicalElement(intended, targetZoneStyleIds, radiusOnlyZoneStyleIds))
+    JSON.stringify(canonicalElement(readback, targetZoneStyleIds, radiusOnlyZoneStyleIds, true)) ===
+    JSON.stringify(canonicalElement(intended, targetZoneStyleIds, radiusOnlyZoneStyleIds, true))
   );
 }
 
@@ -516,12 +516,15 @@ function canonicalElement(
   element: XmlElement,
   targetZoneStyleIds: Set<string>,
   radiusOnlyZoneStyleIds: Set<string>,
+  ignoreDesktopLayout: boolean,
 ): CanonicalElement {
   const attributes: [string, string][] = [];
   for (let index = 0; index < element.attributes.length; index += 1) {
     const attribute = element.attributes.item(index);
     const isZoneGeometry =
-      element.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute?.name ?? '');
+      ignoreDesktopLayout &&
+      element.tagName === 'zone' &&
+      ['x', 'y', 'w', 'h'].includes(attribute?.name ?? '');
     if (attribute !== null && !isZoneGeometry) {
       attributes.push([
         attribute.name,
@@ -537,13 +540,13 @@ function canonicalElement(
   for (let child: XmlNode | null = element.firstChild; child !== null; child = child.nextSibling) {
     if (child.nodeType === 1) {
       const childElement = child as XmlElement;
-      if (childElement.tagName === 'layout-cache') continue;
+      if (ignoreDesktopLayout && childElement.tagName === 'layout-cache') continue;
       if (childElement.tagName === 'devicelayouts') {
-        const layouts = canonicalElement(childElement, new Set(), new Set());
+        const layouts = canonicalElement(childElement, new Set(), new Set(), ignoreDesktopLayout);
         if (layouts.children.length > 0) children.push(layouts);
       } else if (childElement.tagName === 'devicelayout') {
         if (childElement.getAttribute('auto-generated') !== 'true') {
-          children.push(canonicalElement(childElement, new Set(), new Set()));
+          children.push(canonicalElement(childElement, new Set(), new Set(), false));
         }
       } else if (radiusOnlyZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
         directStyle = canonicalRadiusOnlyStyle(
@@ -552,10 +555,22 @@ function canonicalElement(
           radiusOnlyZoneStyleIds,
         );
       } else if (targetZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
-        const style = canonicalElement(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds);
+        const style = canonicalElement(
+          childElement,
+          targetZoneStyleIds,
+          radiusOnlyZoneStyleIds,
+          ignoreDesktopLayout,
+        );
         children.push({ ...style, children: style.children.map((c) => JSON.stringify(c)).sort() });
       } else {
-        children.push(canonicalElement(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds));
+        children.push(
+          canonicalElement(
+            childElement,
+            targetZoneStyleIds,
+            radiusOnlyZoneStyleIds,
+            ignoreDesktopLayout,
+          ),
+        );
       }
     } else if ((child.nodeType === 3 || child.nodeType === 4) && child.nodeValue?.trim()) {
       children.push({ text: child.nodeValue });
@@ -581,7 +596,7 @@ function canonicalRadiusOnlyStyle(
     children:
       cornerFormat === undefined
         ? []
-        : [canonicalElement(cornerFormat, targetZoneStyleIds, radiusOnlyZoneStyleIds)],
+        : [canonicalElement(cornerFormat, targetZoneStyleIds, radiusOnlyZoneStyleIds, true)],
   };
 }
 
