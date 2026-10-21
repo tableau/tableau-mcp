@@ -371,6 +371,21 @@ function primaryMetric(
       };
 }
 
+function waterFill(values: number[], capacity: number): { cap: number; used: number } {
+  const sorted = [...values].sort((a, b) => a - b);
+  let used = 0;
+  let cap = 0;
+  for (let index = 0; index < sorted.length; index++) {
+    cap = Math.floor((capacity - used) / (sorted.length - index));
+    if (sorted[index] > cap) {
+      used += (sorted.length - index) * cap;
+      break;
+    }
+    used += sorted[index];
+  }
+  return { cap, used };
+}
+
 function primaryAllocationMatches(
   expected: Element[],
   actual: Element[],
@@ -381,11 +396,12 @@ function primaryAllocationMatches(
   const metrics = expected.map((zone) => primaryMetric(zone, axis));
   if (metrics.includes(null)) return false;
   const hasManual = expected.some((zone) => zone.getAttribute('is-fixed') === 'true');
-  const manualShortfall = expected.reduce<number | undefined>((shortfall, zone, index) => {
-    if (shortfall === undefined || zone.getAttribute('is-fixed') !== 'true') return shortfall;
-    const metric = metrics[index];
-    return metric ? shortfall + Math.max(0, metric.initial - sizes[index]) : undefined;
-  }, 0);
+  if (
+    expected.some(
+      (zone, index) => zone.getAttribute('is-fixed') === 'true' && metrics[index] === undefined,
+    )
+  )
+    return false;
   const emptyIndices = expected.flatMap((zone, index) =>
     zone.getAttribute('type-v2') === 'empty' && zone.getAttribute('is-fixed') !== 'true'
       ? [index]
@@ -412,31 +428,41 @@ function primaryAllocationMatches(
       ),
     );
   }
-  // Nonmanual ShrinkZones water-fills at a cap >= floor(client / childCount).
-  // Readback metrics may reject an impossible allocation, never authorize one.
   const smallest = pixelUnits(expected[0], 32, axis);
-  const minimumShare = hasManual
-    ? Math.min(smallest ?? 0, Math.floor(length / sizes.length))
-    : Math.floor(length / sizes.length);
+  if (hasManual && smallest === undefined) return false;
+  const manual = metrics.flatMap((metric) => (metric?.manual ? [metric] : []));
+  const budget = Math.max(
+    length - (sizes.length - manual.length) * (smallest ?? 0),
+    Math.floor(length / sizes.length) * manual.length,
+  );
+  const fixed = waterFill(
+    manual.map((metric) => metric.fixed),
+    budget,
+  );
+  const manualShortfall = manual.reduce(
+    (sum, metric) => sum + Math.max(0, metric.initial - Math.min(metric.fixed, fixed.cap)),
+    0,
+  );
+  const automaticCount = sizes.length - manual.length;
+  const minimumShare = automaticCount > 0 ? Math.floor((length - fixed.used) / automaticCount) : 0;
+  let canGrow = true;
+  let canShrink = true;
   for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis, true))]) {
     if (candidates.includes(null)) return false;
-    if (
-      candidates.some(
-        (metric, index) =>
-          metric &&
-          ((!metric.manual && sizes[index] + 1 < Math.min(metric.initial, minimumShare)) ||
-            (!metric.unbounded &&
-              !(axis === 0 && sizes.length === 1) &&
-              (index !== sizes.length - 1 ||
-                !hasManual ||
-                (!metric.manual && manualShortfall !== undefined)) &&
-              sizes[index] >
-                metric.initial +
-                  (index === sizes.length - 1 ? sizes.length + (manualShortfall ?? 0) : 1))),
-      )
-    )
-      return false;
+    if (candidates.reduce((sum, metric) => sum + (metric?.initial ?? 0), 0) > length)
+      canGrow = false;
+    for (const [index, metric] of candidates.entries()) {
+      if (!metric) continue;
+      const grown = axis === 0 && sizes.length === 1 && !metric.unbounded ? length : metric.initial;
+      if (sizes[index] + 1 < grown || (!metric.unbounded && Math.abs(sizes[index] - grown) > 1))
+        canGrow = false;
+      const shrunk = metric.manual ? Math.min(metric.fixed, fixed.cap) : metric.initial;
+      const minimum = metric.manual ? shrunk : Math.min(shrunk, minimumShare);
+      const maximum = shrunk + (index === sizes.length - 1 ? sizes.length + manualShortfall : 1);
+      if (sizes[index] + 1 < minimum || sizes[index] > maximum) canShrink = false;
+    }
   }
+  if (!canGrow && !canShrink) return false;
   if (metrics.some((metric) => metric === undefined)) return;
   const known = metrics as PrimaryMetric[];
   const total = known.reduce((sum, metric) => sum + metric.initial, 0);
@@ -448,30 +474,6 @@ function primaryAllocationMatches(
     allocated = known.map((metric) => metric.initial + (metric.unbounded ? extra : 0));
     if (axis === 0 && known.length === 1 && !known[0].unbounded) allocated[0] = length;
   } else {
-    const manual = known.filter((metric) => metric.manual);
-    if (manual.length > 0 && smallest === undefined) return false;
-    const budget = Math.max(
-      length - (known.length - manual.length) * (smallest ?? 0),
-      Math.floor(length / known.length) * manual.length,
-    );
-    const waterFill = (values: number[], capacity: number): { cap: number; used: number } => {
-      const sorted = [...values].sort((a, b) => a - b);
-      let used = 0;
-      let cap = 0;
-      for (let index = 0; index < sorted.length; index++) {
-        cap = Math.floor((capacity - used) / (sorted.length - index));
-        if (sorted[index] > cap) {
-          used += (sorted.length - index) * cap;
-          break;
-        }
-        used += sorted[index];
-      }
-      return { cap, used };
-    };
-    const fixed = waterFill(
-      manual.map((metric) => metric.fixed),
-      budget,
-    );
     const automatic = waterFill(
       known.filter((metric) => !metric.manual).map((metric) => metric.initial),
       length - fixed.used,

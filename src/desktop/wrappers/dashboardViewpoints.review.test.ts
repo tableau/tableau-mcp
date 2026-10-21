@@ -1,4 +1,12 @@
-import { createDashboardReadbackVerifier } from './dashboardViewpoints.js';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
+import { Ok } from 'ts-results-es';
+
+import { makeExecutorMock } from '../externalApi/executor.mock.js';
+import {
+  composeDashboardWorkbook,
+  createDashboardReadbackVerifier,
+} from './dashboardViewpoints.js';
+import { loadDashboardXml } from './loadDashboardXml.js';
 
 type Rect = [x: number, y: number, width: number, height: number];
 type Axis = 'vert' | 'horz';
@@ -211,7 +219,9 @@ describe.each<Axis>(['vert', 'horz'])('partial %s non-growing metrics', (axis) =
   });
 });
 
-describe.each<Axis>(['vert', 'horz'])('partial %s metrics with a manual sibling', (axis) => {
+describe.each(
+  (['vert', 'horz'] as const).flatMap((axis) => [false, true].map((pixels) => ({ axis, pixels }))),
+)('partial $axis metrics with a manual sibling (pixels=$pixels)', ({ axis, pixels }) => {
   const fixedCache = (pixels: number): string =>
     `<layout-cache type-w="fixed" fixed-size-w="${pixels}" type-h="fixed" fixed-size-h="${pixels}"/>`;
 
@@ -220,41 +230,252 @@ describe.each<Axis>(['vert', 'horz'])('partial %s metrics with a manual sibling'
     request: number,
     lastCache: string,
     manualCache = fixedCache(request),
+    options: { manualLast?: boolean; crossInset?: number; extraUnit?: boolean } = {},
   ): string {
+    const scale = pixels ? 1 : 100;
+    const manualIndex = options.manualLast ? 2 : 0;
+    const textIndex = options.manualLast ? 0 : 1;
     let offset = 0;
     const cells = sizes.map((size, index) => {
-      const rect = cell(offset * 100, size * 100, axis);
+      const inset = index === manualIndex ? 0 : (options.crossInset ?? 0) * scale;
+      const primarySize = size * scale + (index === 2 && options.extraUnit ? 1 : 0);
+      const rect: Rect =
+        axis === 'vert'
+          ? [inset, offset * scale, 1000 * scale - 2 * inset, primarySize]
+          : [offset * scale, inset, primarySize, 1000 * scale - 2 * inset];
       offset += size;
       return zone(
         index + 2,
         rect,
-        index === 1
+        index === textIndex
           ? 'type-v2="text"'
-          : `type-v2="visual" name="${index === 0 ? 'A' : 'B'}"${index === 0 ? ` is-fixed="true" fixed-size="${request}"` : ''}`,
-        index === 0
+          : `type-v2="visual" name="${index === manualIndex ? 'A' : 'B'}"${index === manualIndex ? ` is-fixed="true" fixed-size="${request}"` : ''}`,
+        index === manualIndex
           ? manualCache
-          : index === 1
+          : index === textIndex
             ? '<formatted-text><run>Title</run></formatted-text>'
             : lastCache,
       );
     });
-    return workbook(flow(cells.join(''), axis))
+    const rect: Rect = [0, 0, 1000 * scale, 1000 * scale];
+    if (options.extraUnit) rect[axis === 'vert' ? 3 : 2]++;
+    return workbook(flow(cells.join(''), axis, rect))
+      .replace('<zones>', pixels ? '<zones is-pixels="true">' : '<zones>')
       .replace('<worksheets>', '<worksheets><worksheet name="B"/>')
       .replace('<viewpoints>', '<viewpoints><viewpoint name="B"/>');
   }
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it.each([
+    {
+      scenario: 'manufactured shortfall',
+      accepted: false,
+      expected: triplet([100, 200, 100], 1200, fixedCache(100)),
+      actual: triplet([100, 100, 800], 1200, fixedCache(100)),
+    },
+    {
+      scenario: 'unknown manual metrics',
+      accepted: false,
+      expected: triplet([100, 200, 100], 0, fixedCache(100), ''),
+      actual: triplet([100, 100, 800], 0, fixedCache(100), ''),
+    },
+    {
+      scenario: 'manual last cross-only reflow',
+      accepted: false,
+      expected: triplet([100, 100, 800], 100, fixedCache(100), fixedCache(100), {
+        manualLast: true,
+        crossInset: 10,
+      }),
+      actual: triplet([100, 100, 800], 100, fixedCache(100), fixedCache(100), {
+        manualLast: true,
+      }),
+    },
+    {
+      scenario: 'capped manual request',
+      accepted: true,
+      expected: triplet([936, 10, 10], 1200, fixedCache(10)),
+      actual: triplet([936, 10, 54], 1200, fixedCache(10)),
+    },
+    {
+      scenario: 'zero-request fixed fallback',
+      accepted: true,
+      expected: triplet([100, 200, 100], 0, fixedCache(100), fixedCache(100)),
+      actual: triplet([100, 800, 100], 0, fixedCache(100), fixedCache(100)),
+    },
+    {
+      scenario: 'manual last integer remainder',
+      accepted: true,
+      expected: triplet([450, 450, 100], 100, fixedCache(600), fixedCache(100), {
+        manualLast: true,
+        crossInset: 10,
+        extraUnit: true,
+      }),
+      actual: triplet([450, 450, 100], 100, fixedCache(600), fixedCache(100), {
+        manualLast: true,
+        extraUnit: true,
+      }),
+    },
+  ])(
+    'verifies composed expectations and dashboard POSTs for $scenario',
+    async ({ expected, actual, accepted }) => {
+      vi.useFakeTimers();
+      const dashboardXml = new XMLSerializer().serializeToString(
+        new DOMParser().parseFromString(expected, 'text/xml').getElementsByTagName('dashboard')[0],
+      );
+      const composed = composeDashboardWorkbook(expected, 'D', dashboardXml).unwrap().xml;
+      expect(verify(composed, actual)).toBe(accepted);
+      let live = expected;
+      const instanceId = 'manual-allocation-instance';
+      const executor = makeExecutorMock({
+        desktopApiVersion: '0.2.24',
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: dashboardXml })),
+        getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),
+        applyDashboardDocument: vi.fn().mockImplementation(async () => {
+          live = actual;
+          return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+        }),
+      });
+      const signal = new AbortController().signal;
+      const pending = loadDashboardXml({
+        dashboardName: 'D',
+        xml: dashboardXml,
+        requireExistingSheet: true,
+        verifyReadback: true,
+        focus: { navigate: 'none', reason: 'intermediate-leg' },
+        executor,
+        signal,
+      });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      if (accepted) {
+        expect(result.unwrap().verifiedWorksheetNames).toEqual(expect.arrayContaining(['A', 'B']));
+      } else {
+        expect(result).toMatchObject({ error: { error: { type: 'verification-failed' } } });
+      }
+      expect(executor.applyDashboardDocument).toHaveBeenCalledExactlyOnceWith(
+        'dash-1',
+        expect.any(String),
+        signal,
+        { expectedInstanceId: instanceId },
+      );
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  const finalCaches = [
     { kind: 'fixed', cache: fixedCache(100) },
     {
       kind: 'bounded scalable',
       cache:
         '<layout-cache type-w="scalable" minwidth="100" has-max-size-w="true" maxwidth="200" type-h="scalable" minheight="100" has-max-size-h="true" maxheight="200"/>',
     },
-  ])('does not grow the last $kind tile beside a positive manual request', ({ cache }) => {
-    const expected = triplet([100, 200, 100], 100, cache);
+  ];
+
+  it.each(finalCaches)(
+    'does not grow the last $kind tile beside a positive manual request',
+    ({ cache }) => {
+      const expected = triplet([100, 200, 100], 100, cache);
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, triplet([100, 800, 100], 100, cache))).toBe(true);
+      expect(verify(expected, triplet([100, 100, 800], 100, cache))).toBe(false);
+    },
+  );
+
+  it.each(finalCaches)(
+    'rejects manufactured shortfall from an impossible retained manual size ($kind)',
+    ({ cache }) => {
+      const expected = triplet([100, 200, 100], 1200, cache);
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, triplet([100, 100, 800], 1200, cache))).toBe(false);
+    },
+  );
+
+  it.each(finalCaches)(
+    'leaves growth of the final $kind tile unverified with unknown manual metrics',
+    ({ cache }) => {
+      const expected = triplet([100, 200, 100], 0, cache, '');
+      expect(verify(expected, expected)).toBe(true);
+      expect(verify(expected, triplet([100, 100, 800], 0, cache, ''))).toBe(false);
+    },
+  );
+
+  it('rejects an impossible manual last tile when only automatic cross bounds reflow', () => {
+    const expected = triplet([100, 100, 800], 100, fixedCache(100), fixedCache(100), {
+      manualLast: true,
+      crossInset: 10,
+    });
     expect(verify(expected, expected)).toBe(true);
-    expect(verify(expected, triplet([100, 800, 100], 100, cache))).toBe(true);
-    expect(verify(expected, triplet([100, 100, 800], 100, cache))).toBe(false);
+    expect(
+      verify(
+        expected,
+        triplet([100, 100, 800], 100, fixedCache(100), fixedCache(100), {
+          manualLast: true,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('retains a growing flow with a correctly sized manual last tile', () => {
+    const expected = triplet([100, 100, 100], 100, fixedCache(100), fixedCache(100), {
+      manualLast: true,
+      crossInset: 10,
+    });
+    expect(
+      verify(
+        expected,
+        triplet([100, 100, 100], 100, fixedCache(100), fixedCache(100), {
+          manualLast: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('retains the native integer remainder on a manual last tile', () => {
+    const expected = triplet([450, 450, 100], 100, fixedCache(600), fixedCache(100), {
+      manualLast: true,
+      crossInset: 10,
+      extraUnit: true,
+    });
+    expect(
+      verify(
+        expected,
+        triplet([450, 450, 100], 100, fixedCache(600), fixedCache(100), {
+          manualLast: true,
+          extraUnit: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('retains native fixed fallback for a zero manual request', () => {
+    const expected = triplet([100, 200, 100], 0, fixedCache(100), fixedCache(100));
+    expect(verify(expected, triplet([100, 800, 100], 0, fixedCache(100), fixedCache(100)))).toBe(
+      true,
+    );
+  });
+
+  it('retains a manual last-tile residual from zero-request scalable fallback', () => {
+    const manualCache =
+      '<layout-cache type-w="scalable" minwidth="800" has-max-size-w="false" type-h="scalable" minheight="800" has-max-size-h="false"/>';
+    const expected = triplet([500, 100, 400], 0, fixedCache(100), manualCache, {
+      manualLast: true,
+      crossInset: 10,
+    });
+    expect(
+      verify(
+        expected,
+        triplet([500, 100, 400], 0, fixedCache(100), manualCache, {
+          manualLast: true,
+        }),
+      ),
+    ).toBe(true);
   });
 
   it('bounds the last-tile residual by the retained manual shortfall', () => {
