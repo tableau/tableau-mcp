@@ -381,6 +381,11 @@ function primaryAllocationMatches(
   const metrics = expected.map((zone) => primaryMetric(zone, axis));
   if (metrics.includes(null)) return false;
   const hasManual = expected.some((zone) => zone.getAttribute('is-fixed') === 'true');
+  const manualShortfall = expected.reduce<number | undefined>((shortfall, zone, index) => {
+    if (shortfall === undefined || zone.getAttribute('is-fixed') !== 'true') return shortfall;
+    const metric = metrics[index];
+    return metric ? shortfall + Math.max(0, metric.initial - sizes[index]) : undefined;
+  }, 0);
   const emptyIndices = expected.flatMap((zone, index) =>
     zone.getAttribute('type-v2') === 'empty' && zone.getAttribute('is-fixed') !== 'true'
       ? [index]
@@ -422,8 +427,12 @@ function primaryAllocationMatches(
           ((!metric.manual && sizes[index] + 1 < Math.min(metric.initial, minimumShare)) ||
             (!metric.unbounded &&
               !(axis === 0 && sizes.length === 1) &&
-              (index !== sizes.length - 1 || !hasManual) &&
-              sizes[index] > metric.initial + (index === sizes.length - 1 ? sizes.length : 1))),
+              (index !== sizes.length - 1 ||
+                !hasManual ||
+                (!metric.manual && manualShortfall !== undefined)) &&
+              sizes[index] >
+                metric.initial +
+                  (index === sizes.length - 1 ? sizes.length + (manualShortfall ?? 0) : 1))),
       )
     )
       return false;

@@ -211,6 +211,74 @@ describe.each<Axis>(['vert', 'horz'])('partial %s non-growing metrics', (axis) =
   });
 });
 
+describe.each<Axis>(['vert', 'horz'])('partial %s metrics with a manual sibling', (axis) => {
+  const fixedCache = (pixels: number): string =>
+    `<layout-cache type-w="fixed" fixed-size-w="${pixels}" type-h="fixed" fixed-size-h="${pixels}"/>`;
+
+  function triplet(
+    sizes: [number, number, number],
+    request: number,
+    lastCache: string,
+    manualCache = fixedCache(request),
+  ): string {
+    let offset = 0;
+    const cells = sizes.map((size, index) => {
+      const rect = cell(offset * 100, size * 100, axis);
+      offset += size;
+      return zone(
+        index + 2,
+        rect,
+        index === 1
+          ? 'type-v2="text"'
+          : `type-v2="visual" name="${index === 0 ? 'A' : 'B'}"${index === 0 ? ` is-fixed="true" fixed-size="${request}"` : ''}`,
+        index === 0
+          ? manualCache
+          : index === 1
+            ? '<formatted-text><run>Title</run></formatted-text>'
+            : lastCache,
+      );
+    });
+    return workbook(flow(cells.join(''), axis))
+      .replace('<worksheets>', '<worksheets><worksheet name="B"/>')
+      .replace('<viewpoints>', '<viewpoints><viewpoint name="B"/>');
+  }
+
+  it.each([
+    { kind: 'fixed', cache: fixedCache(100) },
+    {
+      kind: 'bounded scalable',
+      cache:
+        '<layout-cache type-w="scalable" minwidth="100" has-max-size-w="true" maxwidth="200" type-h="scalable" minheight="100" has-max-size-h="true" maxheight="200"/>',
+    },
+  ])('does not grow the last $kind tile beside a positive manual request', ({ cache }) => {
+    const expected = triplet([100, 200, 100], 100, cache);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, triplet([100, 800, 100], 100, cache))).toBe(true);
+    expect(verify(expected, triplet([100, 100, 800], 100, cache))).toBe(false);
+  });
+
+  it('bounds the last-tile residual by the retained manual shortfall', () => {
+    const expected = triplet([936, 10, 10], 937, fixedCache(10));
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, triplet([936, 54, 10], 937, fixedCache(10)))).toBe(true);
+    expect(verify(expected, triplet([936, 10, 54], 937, fixedCache(10)))).toBe(false);
+  });
+
+  it('retains the last-tile residual when an oversized manual request is capped', () => {
+    const expected = triplet([936, 10, 10], 1200, fixedCache(10));
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, triplet([936, 10, 54], 1200, fixedCache(10)))).toBe(true);
+  });
+
+  it('retains the last-tile residual from zero-request scalable manual fallback', () => {
+    const manualCache =
+      '<layout-cache type-w="scalable" minwidth="800" has-max-size-w="false" type-h="scalable" minheight="800" has-max-size-h="false"/>';
+    const expected = triplet([0, 500, 100], 0, fixedCache(100), manualCache);
+    expect(verify(expected, expected)).toBe(true);
+    expect(verify(expected, triplet([0, 500, 500], 0, fixedCache(100), manualCache))).toBe(true);
+  });
+});
+
 describe('horizontal singleton width types and native cache defaults', () => {
   function single(cache: string, rect: Rect): string {
     return workbook(
