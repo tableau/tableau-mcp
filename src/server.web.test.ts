@@ -7,6 +7,7 @@ import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
@@ -338,6 +339,50 @@ describe('server', () => {
         expect.anything(),
       );
     }
+  });
+
+  describe('publishing tool discovery', () => {
+    const publishingNames = [
+      'request-workbook-upload',
+      'request-datasource-upload',
+      'publish-workbook',
+      'publish-datasource',
+    ];
+    const caller = {
+      username: 'publisher@example.com',
+      userId: 'test-user-id',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-id',
+      siteName: 'test-site',
+    };
+    const authModes: Array<{ label: string; auth: TableauAuthInfo | undefined }> = [
+      { label: 'server credentials', auth: undefined },
+      { label: 'embedded OAuth', auth: { type: 'X-Tableau-Auth', ...caller } },
+      { label: 'Tableau OAuth', auth: { type: 'Bearer', ...caller, raw: 'test-token' } },
+      { label: 'Passthrough', auth: { type: 'Passthrough', ...caller, raw: 'test-token' } },
+    ];
+
+    it.each(
+      authModes.flatMap((mode) => [
+        { ...mode, s3: false },
+        { ...mode, s3: true },
+      ]),
+    )(
+      'registers datasource and workbook publishing tools alike for $label with S3=$s3',
+      async ({ auth, s3 }) => {
+        vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
+        vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
+        mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+          (featureName: string) => featureName === 'authoring-tools',
+        );
+        const server = getServer();
+        await server.registerTools(auth);
+        const registered = vi
+          .mocked(server.mcpServer.registerTool)
+          .mock.calls.map((call) => call[0]);
+        expect(registered.sort()).toEqual([...publishingNames].sort());
+      },
+    );
   });
 
   const readFlowToolNames = [
