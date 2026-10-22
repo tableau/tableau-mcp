@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { Err, Ok } from 'ts-results-es';
 
@@ -188,48 +191,143 @@ describe('dashboardCandidateReadbackIssues', () => {
     ]);
   });
 
-  it('accepts Desktop rounding each zone geometry attribute by one unit', () => {
-    const candidateXml = buildDashboardCandidateXml({
-      baselineXml: PRISTINE,
-      dashboardName: 'Sales Dashboard',
-      canonicalWorksheetNames: ['Sales', 'Profit'],
-      layout: { layoutType: 'columns' },
+  describe('Desktop-owned readback (captured from live Desktop)', () => {
+    const readFixture = (name: string): string =>
+      readFileSync(join(__dirname, '__fixtures__', 'dashboard-readback', name), 'utf8');
+    const REVENUE = 'bar chart of revenue by region';
+    const COGS = 'bar chart of cogs by product_line';
+    const REV_PL = 'bar chart of revenue by product_line';
+    const COGS_REGION = 'bar chart of cogs by region';
+    const KPI = 'total revenue as a big number KPI';
+    const workbookWith = (dashboardXml: string, names: string[], dashboardName: string): string =>
+      `<workbook><worksheets>${names
+        .map((name) => `<worksheet name="${name}"><table><rows>${name}</rows></table></worksheet>`)
+        .join('')}</worksheets><dashboards>${dashboardXml}</dashboards><windows>${names
+        .map((name) => `<window class="worksheet" name="${name}"/>`)
+        .join('')}<window class="dashboard" name="${dashboardName}"><viewpoints>${names
+        .map((name) => `<viewpoint name="${name}"/>`)
+        .join('')}</viewpoints></window></windows></workbook>`;
+    const cases = [
+      {
+        file: 'columns.xml',
+        name: 'L1 Columns',
+        names: [REVENUE, COGS],
+        layout: { layoutType: 'columns' as const },
+        title: 'L1 Columns',
+      },
+      {
+        file: 'grid3.xml',
+        name: 'L2 Grid3',
+        names: [REVENUE, COGS, REV_PL],
+        layout: { layoutType: 'auto-grid' as const },
+        title: 'L2 Grid3',
+      },
+      {
+        file: 'grid4.xml',
+        name: 'L3 Grid4',
+        names: [REVENUE, COGS, REV_PL, COGS_REGION],
+        layout: { layoutType: 'auto-grid' as const, gridColumns: 2 },
+        title: undefined,
+      },
+      {
+        file: 'exec.xml',
+        name: 'L4 Exec',
+        names: [KPI, REVENUE, COGS, REV_PL],
+        layout: { layoutType: 'executive-summary' as const, kpiWorksheetNames: [KPI] },
+        title: 'L4 Exec',
+      },
+      {
+        file: 'single.xml',
+        name: 'L5 Single',
+        names: [REVENUE],
+        layout: { layoutType: 'rows' as const },
+        title: undefined,
+      },
+      {
+        file: 'rows-title.xml',
+        name: 'Probe Rows',
+        names: [REVENUE, COGS],
+        layout: { layoutType: 'rows' as const },
+        title: 'Probe Rows',
+      },
+    ];
+    const baselineFor = (c: (typeof cases)[number]): string =>
+      `<workbook><worksheets>${c.names
+        .map((name) => `<worksheet name="${name}"><table><rows>${name}</rows></table></worksheet>`)
+        .join('')}</worksheets><dashboards/><windows>${c.names
+        .map((name) => `<window class="worksheet" name="${name}"/>`)
+        .join('')}</windows></workbook>`;
+    const issuesFor = (c: (typeof cases)[number], dashboardXml: string): string[] =>
+      dashboardCandidateReadbackIssues(
+        workbookWith(dashboardXml, c.names, c.name),
+        buildDashboardCandidateXml({
+          baselineXml: baselineFor(c),
+          dashboardName: c.name,
+          canonicalWorksheetNames: c.names,
+          title: c.title,
+          layout: c.layout,
+        }),
+        c.name,
+        c.names,
+      );
+
+    it.each(cases)('accepts Desktop geometry and layout-cache for $name', (c) => {
+      expect(issuesFor(c, readFixture(c.file))).toEqual([]);
     });
-    const readbackXml = candidateXml.replace(
-      'h="100000" id="10" name="Sales" w="50000" x="0" y="0"',
-      'h="99999" id="10" name="Sales" w="50001" x="1" y="1"',
-    );
-    expect(readbackXml).not.toBe(candidateXml);
 
-    expect(
-      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
-        'Sales',
-        'Profit',
-      ]),
-    ).toEqual([]);
-  });
-
-  it('rejects a zone geometry difference of two units', () => {
-    const candidateXml = buildDashboardCandidateXml({
-      baselineXml: PRISTINE,
-      dashboardName: 'Sales Dashboard',
-      canonicalWorksheetNames: ['Sales', 'Profit'],
-      layout: { layoutType: 'columns' },
+    it('accepts an auto-generated Phone device layout added by Desktop', () => {
+      const c = cases[0];
+      const withPhone = readFixture(c.file).replace(
+        '<simple-id',
+        `${readFixture('phone-layout-windows.xml')}<simple-id`,
+      );
+      expect(withPhone).toContain('<devicelayouts>');
+      expect(issuesFor(c, withPhone)).toEqual([]);
     });
-    const readbackXml = candidateXml.replace(
-      'h="100000" id="10" name="Sales" w="50000" x="0" y="0"',
-      'h="100000" id="10" name="Sales" w="50002" x="0" y="0"',
-    );
-    expect(readbackXml).not.toBe(candidateXml);
 
-    expect(
-      dashboardCandidateReadbackIssues(readbackXml, candidateXml, 'Sales Dashboard', [
-        'Sales',
-        'Profit',
-      ]),
-    ).toEqual([
-      'Dashboard "Sales Dashboard" readback did not match the requested title and layout.',
-    ]);
+    const mismatch = [
+      'Dashboard "L1 Columns" readback did not match the requested title and layout.',
+    ];
+    it.each([
+      ['flow param flipped', (x: string) => x.replace("param='horz'", "param='vert'")],
+      ['title bold changed', (x: string) => x.replace("bold='true'", "bold='false'")],
+      ['title text changed', (x: string) => x.replace('>L1 Columns</run>', '>Other</run>')],
+      ['zone id changed', (x: string) => x.replace("id='11'", "id='99'")],
+      [
+        'zone added',
+        (x: string) =>
+          x.replace(
+            "<zone h='96300' id='13'",
+            "<zone id='77' type-v2='empty'/><zone h='96300' id='13'",
+          ),
+      ],
+      [
+        'worksheet moved to another parent',
+        (x: string) => {
+          const cogs = /<zone [^>]*id='12'[^]*?<\/zone>\s*/.exec(x)![0];
+          return x
+            .replace(cogs, '')
+            .replace("<zone h='96300' id='13'", `${cogs}<zone h='96300' id='13'`);
+        },
+      ],
+    ])('still rejects %s', (_label, mutate) => {
+      const c = cases[0];
+      const mutated = mutate(readFixture(c.file));
+      expect(mutated).not.toBe(readFixture(c.file));
+      expect(issuesFor(c, mutated)).toEqual(mismatch);
+    });
+
+    it('still rejects a dropped worksheet zone', () => {
+      const c = cases[0];
+      const dropped = readFixture(c.file).replace(/<zone [^>]*id='12'[^]*?<\/zone>\s*/, '');
+      expect(issuesFor(c, dropped).length).toBeGreaterThan(0);
+    });
+
+    it('still rejects a changed zone sizing attribute', () => {
+      const c = cases[0];
+      const changed = readFixture(c.file).replace("minwidth='1400'", "minwidth='1300'");
+      expect(issuesFor(c, changed)).toEqual(mismatch);
+    });
   });
 
   it('still rejects non-geometry structural differences', () => {
