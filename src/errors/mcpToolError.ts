@@ -52,6 +52,38 @@ export class ArgsValidationError extends McpToolError {
   }
 }
 
+export class ExchangeInputError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'exchange-input', message, statusCode: 400 });
+  }
+}
+
+export class ExchangeNotFoundError extends McpToolError {
+  constructor() {
+    super({
+      type: 'exchange-not-found',
+      message: 'The Exchange asset was not found in the public catalog.',
+      statusCode: 404,
+    });
+  }
+}
+
+export class ExchangeDownloadError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'exchange-download', message, statusCode: 422 });
+  }
+}
+
+export class ExchangeUnavailableError extends McpToolError {
+  constructor() {
+    super({
+      type: 'exchange-unavailable',
+      message: 'The Exchange catalog is temporarily unavailable. Retry later.',
+      statusCode: 503,
+    });
+  }
+}
+
 // Thrown by paginated list tools when the requested `pageNumber` is beyond the
 // reach of the tool's configured MAX_RESULT_LIMIT offset ceiling. Without this
 // up-front guard the page would be fetched and then trimmed to zero items,

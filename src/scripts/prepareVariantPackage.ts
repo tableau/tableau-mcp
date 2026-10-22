@@ -45,6 +45,16 @@ const variantPackageJsonOverrides = {
       '.': './build/index.combined.js',
     },
   },
+  exchange: {
+    name: '@tableau/exchange-mcp-server',
+    description: 'MCP server for discovering published Tableau Exchange assets',
+    bin: {
+      'tableau-exchange-mcp-server': './build/index.exchange.js',
+    },
+    exports: {
+      '.': './build/index.exchange.js',
+    },
+  },
 } satisfies Record<PackageVariant, Partial<PackageJson>>;
 
 const packageJsonSchema = z

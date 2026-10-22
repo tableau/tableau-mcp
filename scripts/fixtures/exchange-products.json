@@ -1,0 +1,394 @@
+{
+  "source": "declared-fixture",
+  "products": [
+    {
+      "id": 1000,
+      "product_type": "skill",
+      "name": "Data and Model Skill",
+      "short_description": "An AI Skill for data and model in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 100,
+          "name": "Data and Model",
+          "canonicalName": "Data and Model",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 20,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1000:download"
+    },
+    {
+      "id": 1001,
+      "product_type": "skill",
+      "name": "Analysis Support Skill",
+      "short_description": "An AI Skill for analysis support in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 101,
+          "name": "Analysis Support",
+          "canonicalName": "Analysis Support",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 21,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1001:download"
+    },
+    {
+      "id": 1002,
+      "product_type": "skill",
+      "name": "Calc Family Skill",
+      "short_description": "An AI Skill for calc family in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 102,
+          "name": "Calc Family",
+          "canonicalName": "Calc Family",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 22,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1002:download"
+    },
+    {
+      "id": 1003,
+      "product_type": "skill",
+      "name": "Workbook Design Skill",
+      "short_description": "An AI Skill for build and design in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 103,
+          "name": "Build and Design",
+          "canonicalName": "Build and Design",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 23,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1003:download"
+    },
+    {
+      "id": 1004,
+      "product_type": "skill",
+      "name": "Content Quality Skill",
+      "short_description": "An AI Skill for content quality in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 104,
+          "name": "Content Quality",
+          "canonicalName": "Content Quality",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 24,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1004:download"
+    },
+    {
+      "id": 1005,
+      "product_type": "skill",
+      "name": "Publish and Deploy Skill",
+      "short_description": "An AI Skill for publish and deploy in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 105,
+          "name": "Publish and Deploy",
+          "canonicalName": "Publish and Deploy",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 25,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1005:download"
+    },
+    {
+      "id": 1006,
+      "product_type": "skill",
+      "name": "Meta Skill",
+      "short_description": "An AI Skill for meta in Tableau workbooks.",
+      "detailed_description": "Fixture listing metadata only. Package tools, permissions, version, compatibility and evaluations are not supplied.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 106,
+          "name": "Meta",
+          "canonicalName": "Meta",
+          "type": "category",
+          "applicableProductType": "skill"
+        }
+      ],
+      "community_contribution": true,
+      "downloads": 26,
+      "details": {
+        "placeholder_details": "placeholder",
+        "manifest_url": "https://private.invalid/skill?X-Amz-Signature=fixture"
+      },
+      "manifest_file_name": "fixture.tskill",
+      "product_download_url": "/products/1006:download"
+    },
+    {
+      "id": 2000,
+      "product_type": "extension",
+      "name": "Excel Export",
+      "short_description": "Export dashboard data to Excel.",
+      "detailed_description": "Export dashboard data to Excel. This is declared fixture data.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 200,
+          "name": "Free",
+          "canonicalName": "Free",
+          "type": "pricing",
+          "applicableProductType": "extension"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 100,
+      "minimum_tableau_version": "2023.1",
+      "support_url": "https://fixture.exchange.invalid/support",
+      "details": {
+        "extension_url": "https://fixture.exchange.invalid/extension",
+        "public_examples": [
+          {
+            "name": "Example dashboard",
+            "url": "https://fixture.exchange.invalid/example"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2001,
+      "product_type": "extension",
+      "name": "Dashboard Export",
+      "short_description": "Export dashboard tables with public listing metadata.",
+      "detailed_description": "Export dashboard tables with public listing metadata. This is declared fixture data.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 200,
+          "name": "Free",
+          "canonicalName": "Free",
+          "type": "pricing",
+          "applicableProductType": "extension"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 100,
+      "minimum_tableau_version": "2023.1",
+      "support_url": "https://fixture.exchange.invalid/support",
+      "details": {
+        "extension_url": "https://fixture.exchange.invalid/extension",
+        "public_examples": [
+          {
+            "name": "Example dashboard",
+            "url": "https://fixture.exchange.invalid/example"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3000,
+      "product_type": "viz",
+      "name": "Export Viz",
+      "short_description": "Export visualizations from dashboards.",
+      "detailed_description": "Export visualizations from dashboards. This is declared fixture data.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [
+        {
+          "id": 201,
+          "name": "Free",
+          "canonicalName": "Viz Free",
+          "type": "pricing",
+          "applicableProductType": "viz"
+        }
+      ],
+      "community_contribution": false,
+      "downloads": 100,
+      "minimum_tableau_version": "2023.1",
+      "support_url": "https://fixture.exchange.invalid/support",
+      "details": {
+        "extension_url": "https://fixture.exchange.invalid/extension",
+        "public_examples": [
+          {
+            "name": "Example dashboard",
+            "url": "https://fixture.exchange.invalid/example"
+          }
+        ]
+      }
+    },
+    {
+      "id": 4000,
+      "product_type": "connector",
+      "name": "PostgreSQL Connector",
+      "short_description": "Connect Tableau to PostgreSQL databases.",
+      "detailed_description": "Connect Tableau to PostgreSQL databases. This is declared fixture data.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [],
+      "community_contribution": false,
+      "downloads": 100,
+      "minimum_tableau_version": "2023.1",
+      "support_url": "https://fixture.exchange.invalid/support",
+      "details": {
+        "version_number": "1.2",
+        "data_source_class": "postgres",
+        "installation_instructions": "See the public connector documentation.",
+        "driver_download_url": "https://private.invalid/driver.zip"
+      }
+    },
+    {
+      "id": 5000,
+      "product_type": "accelerator",
+      "name": "Sales Starter",
+      "short_description": "Analyze sales with a ready-made dashboard.",
+      "detailed_description": "Analyze sales with a ready-made dashboard. This is declared fixture data.",
+      "publisher_id": 1,
+      "publisher_name": "Fixture Tableau Publisher",
+      "publish_date": "2026-01-01T00:00:00.000Z",
+      "typed_tags": [],
+      "community_contribution": false,
+      "downloads": 100,
+      "minimum_tableau_version": "2023.1",
+      "support_url": "https://fixture.exchange.invalid/support",
+      "details": {
+        "connection_type_display_name": "Sample data"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "id": 100,
+      "name": "Data and Model",
+      "canonicalName": "Data and Model",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 101,
+      "name": "Analysis Support",
+      "canonicalName": "Analysis Support",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 102,
+      "name": "Calc Family",
+      "canonicalName": "Calc Family",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 103,
+      "name": "Build and Design",
+      "canonicalName": "Build and Design",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 104,
+      "name": "Content Quality",
+      "canonicalName": "Content Quality",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 105,
+      "name": "Publish and Deploy",
+      "canonicalName": "Publish and Deploy",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 106,
+      "name": "Meta",
+      "canonicalName": "Meta",
+      "type": "category",
+      "applicableProductType": "skill"
+    },
+    {
+      "id": 200,
+      "name": "Free",
+      "canonicalName": "Free",
+      "type": "pricing",
+      "applicableProductType": "extension"
+    },
+    {
+      "id": 201,
+      "name": "Free",
+      "canonicalName": "Viz Free",
+      "type": "pricing",
+      "applicableProductType": "viz"
+    }
+  ]
+}
