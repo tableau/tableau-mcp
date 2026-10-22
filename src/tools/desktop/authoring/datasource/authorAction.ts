@@ -1117,6 +1117,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           }
           if (input.mode === 'filter') {
+            const sourceWarning =
+              hasSourceWorksheet &&
+              !hasSourceDashboard &&
+              worksheetNames.has(target) &&
+              target !== effectiveSourceSheet
+                ? standaloneSourceWarning(liveXml, effectiveSourceSheet, target)
+                : '';
             const hint = `readback verified the tsl-filter action targeting '${target}'; source scoped to ${[
               hasSourceWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
               hasSourceDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
@@ -1124,7 +1131,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               .filter(Boolean)
               .join(
                 ' on ',
-              )}; Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter`;
+              )}; Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter${sourceWarning}`;
             return new Ok({
               actionName,
               caption,
@@ -1163,6 +1170,34 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
   return tool;
 };
+
+// Live-verified: a worksheet-only source does not fire when the user clicks that sheet on a dashboard.
+function standaloneSourceWarning(xml: string, sourceSheet: string, targetSheet: string): string {
+  const dashboardsStart = xml.indexOf('<dashboards>');
+  if (dashboardsStart === -1) return '';
+  const dashboardsEnd = xml.indexOf('</dashboards>', dashboardsStart);
+  const dashboardsBlock = xml.slice(
+    dashboardsStart,
+    dashboardsEnd === -1 ? xml.length : dashboardsEnd,
+  );
+  const shared: string[] = [];
+  for (const match of dashboardsBlock.matchAll(/<dashboard(?=\s)[^>]*>/g)) {
+    if (getAttr(match[0], 'type') === 'storyboard') continue;
+    const name = unescapeXml(getAttr(match[0], 'name') ?? '');
+    const zoneNames = findDashboardZoneNames(xml, name);
+    if (zoneNames?.has(sourceSheet) && zoneNames.has(targetSheet)) shared.push(name);
+  }
+  if (shared.length === 0) return '';
+  const listed =
+    shared
+      .slice(0, 3)
+      .map((name) => `'${name}'`)
+      .join(', ') + (shared.length > 3 ? ` and ${shared.length - 3} more` : '');
+  const reason = `won't run this action because its source is the standalone sheet '${sourceSheet}'`;
+  return shared.length === 1
+    ? `. Clicks on dashboard ${listed} ${reason}. To run it from ${listed}, resend the full action with sourceDashboard ${listed}.`
+    : `. Clicks on dashboards ${listed} ${reason}. To run it from one, resend the full action with that dashboard as sourceDashboard.`;
+}
 
 function validateExcludedSheets(
   liveXml: string,
