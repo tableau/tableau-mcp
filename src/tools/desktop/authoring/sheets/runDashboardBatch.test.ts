@@ -7,7 +7,7 @@ import type {
   ApplyWorkbookDocumentOptions,
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
-import { listDashboardRefs } from '../../../../desktop/metadata/dashboards.js';
+import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -783,8 +783,8 @@ function statefulExecutor({
       Ok({
         title: 'Workbook',
         unsavedChanges: false,
-        dashboards: listDashboardRefs(current).map(({ id, name }) => ({
-          id,
+        dashboards: listWorkbookDashboards(current).map((name) => ({
+          id: `id-${name}`,
           name,
           hidden: false,
         })),

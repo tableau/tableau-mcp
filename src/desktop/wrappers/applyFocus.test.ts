@@ -23,20 +23,19 @@ describe('dispatchApplyFocus Start Page hide', () => {
     );
   }
 
-  // Desktop lands on Sheet 1 after the POST; a navigation moves the live active sheet.
+  // Desktop lands on Sheet 1 after the POST; a goto moves the live document.
   function recordingExecutor(
     options: {
       desktopApiVersion?: string | undefined;
       setStartPageVisibility?: ExternalApiToolExecutor['setStartPageVisibility'];
-      gotoLands?: boolean;
     } = {},
   ): { executor: ExternalApiToolExecutor; calls: string[] } {
-    const { setStartPageVisibility, gotoLands = true } = options;
+    const { setStartPageVisibility } = options;
     const desktopApiVersion = Object.hasOwn(options, 'desktopApiVersion')
       ? options.desktopApiVersion
       : '0.2.11';
     const calls: string[] = [];
-    let active = 'Sheet 1';
+    let maximized = 'Sheet 1';
     const executor = makeExecutorMock({
       desktopApiVersion,
       setStartPageVisibility: vi.fn(async (isStartPageVisible: boolean, s: AbortSignal) => {
@@ -45,25 +44,28 @@ describe('dispatchApplyFocus Start Page hide', () => {
           ? await setStartPageVisibility(isStartPageVisible, s)
           : Ok({ isStartPageVisible });
       }),
-      getWorkbook: vi.fn(async () => {
+      getWorkbookDocument: vi.fn(async () => {
         calls.push('read');
         return Ok({
+          xml: workbookDoc(maximized),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        });
+      }),
+      getWorkbook: vi.fn(async () =>
+        Ok({
           title: 'Book',
           unsavedChanges: false,
           worksheets: ['Sheet 1', 'Sheet 2'].map((name) => ({
             id: `id-${name}`,
             name,
             hidden: false,
-            isActiveSheet: name === active,
           })),
-        });
-      }),
+        }),
+      ),
       goToSheet: vi.fn(async (sheetId: string) => {
-        const name = sheetId.replace('id-', '');
-        calls.push(`goto:${name}`);
-        if (gotoLands) {
-          active = name;
-        }
+        maximized = sheetId.replace('id-', '');
+        calls.push(`goto:${maximized}`);
         return Ok({ command_id: 'goto', status: 'completed' as const, submitted_at: '' });
       }),
     });
@@ -92,87 +94,7 @@ describe('dispatchApplyFocus Start Page hide', () => {
     await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
 
     expect(executor.setStartPageVisibility).toHaveBeenCalledExactlyOnceWith(false, signal);
-    expect(calls).toEqual(['start-page:false', 'read', 'read', 'goto:Sheet 2', 'read']);
-  });
-
-  it('navigates by the sheet id the inventory reports for the target name', async () => {
-    const { executor } = recordingExecutor();
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
-
-    expect(executor.goToSheet).toHaveBeenCalledExactlyOnceWith('id-Sheet 2', signal);
-  });
-
-  it('dispatches nothing when the target is already the active sheet', async () => {
-    const { executor, calls } = recordingExecutor();
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 1' });
-
-    expect(executor.goToSheet).not.toHaveBeenCalled();
-    expect(calls).toEqual(['start-page:false', 'read', 'read']);
-  });
-
-  it('reissues once when the first navigation does not land', async () => {
-    const { executor, calls } = recordingExecutor({ gotoLands: false });
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
-
-    expect(calls).toEqual([
-      'start-page:false',
-      'read',
-      'read',
-      'goto:Sheet 2',
-      'read',
-      'goto:Sheet 2',
-    ]);
-  });
-
-  it('skips navigation when the target is absent from the inventory', async () => {
-    const { executor, calls } = recordingExecutor();
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Missing' });
-
-    expect(executor.goToSheet).not.toHaveBeenCalled();
-    expect(calls).toEqual(['start-page:false', 'read']);
-    expect(loggerModule.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warning',
-        message: 'Focus skipped; target is absent from the post-apply workbook read',
-        data: expect.objectContaining({ availableSheets: ['Sheet 1', 'Sheet 2'] }),
-      }),
-    );
-  });
-
-  it('logs and skips navigation when the workbook read fails', async () => {
-    const error = { type: 'command-timed-out' as const, error: 'read timed out' };
-    const { executor } = recordingExecutor();
-    vi.mocked(executor.getWorkbook).mockResolvedValue(Err(error));
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
-
-    expect(executor.goToSheet).not.toHaveBeenCalled();
-    expect(loggerModule.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Focus skipped; could not re-read the applied workbook',
-        data: expect.objectContaining({ error }),
-      }),
-    );
-  });
-
-  it('logs and does not reissue when goToSheet fails', async () => {
-    const error = { type: 'command-timed-out' as const, error: 'goto timed out' };
-    const { executor } = recordingExecutor();
-    vi.mocked(executor.goToSheet).mockResolvedValue(Err(error));
-
-    await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
-
-    expect(executor.goToSheet).toHaveBeenCalledTimes(1);
-    expect(loggerModule.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'goToSheet failed; the apply itself remains successful',
-        data: expect.objectContaining({ error }),
-      }),
-    );
+    expect(calls).toEqual(['start-page:false', 'read', 'goto:Sheet 2', 'read']);
   });
 
   it('hides the Start Page before restoring the pre-apply sheet', async () => {
@@ -181,7 +103,7 @@ describe('dispatchApplyFocus Start Page hide', () => {
     await dispatch(executor, { navigate: 'restore' });
 
     expect(executor.setStartPageVisibility).toHaveBeenCalledExactlyOnceWith(false, signal);
-    expect(calls).toEqual(['start-page:false', 'read', 'read', 'goto:Sheet 2', 'read']);
+    expect(calls).toEqual(['start-page:false', 'read', 'goto:Sheet 2', 'read']);
   });
 
   it('hides the Start Page on a restore whose posted document names no active window', async () => {
@@ -217,7 +139,7 @@ describe('dispatchApplyFocus Start Page hide', () => {
       await dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' });
 
       expect(executor.setStartPageVisibility).not.toHaveBeenCalled();
-      expect(calls).toEqual(['read', 'read', 'goto:Sheet 2', 'read']);
+      expect(calls).toEqual(['read', 'goto:Sheet 2', 'read']);
     },
   );
 
@@ -231,7 +153,7 @@ describe('dispatchApplyFocus Start Page hide', () => {
       dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' }),
     ).resolves.toBeUndefined();
 
-    expect(calls).toEqual(['start-page:false', 'read', 'read', 'goto:Sheet 2', 'read']);
+    expect(calls).toEqual(['start-page:false', 'read', 'goto:Sheet 2', 'read']);
     expect(loggerModule.log).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'warning',
@@ -251,7 +173,7 @@ describe('dispatchApplyFocus Start Page hide', () => {
 
     await expect(dispatch(executor, { navigate: 'restore' })).resolves.toBeUndefined();
 
-    expect(calls).toEqual(['start-page:false', 'read', 'read', 'goto:Sheet 2', 'read']);
+    expect(calls).toEqual(['start-page:false', 'read', 'goto:Sheet 2', 'read']);
     expect(loggerModule.log).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'warning',
@@ -264,11 +186,11 @@ describe('dispatchApplyFocus Start Page hide', () => {
   it('uses the default executor mock without awaiting undefined', async () => {
     const executor = makeExecutorMock({
       desktopApiVersion: '0.2.16',
-      getWorkbook: vi.fn(async () =>
+      getWorkbookDocument: vi.fn(async () =>
         Ok({
-          title: 'Book',
-          unsavedChanges: false,
-          worksheets: [{ id: 'id-Sheet 2', name: 'Sheet 2', hidden: false, isActiveSheet: true }],
+          xml: workbookDoc('Sheet 2'),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     });

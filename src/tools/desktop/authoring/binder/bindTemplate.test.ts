@@ -3916,7 +3916,6 @@ function setupAutoApplyMocks({
   validationValid = true,
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
   activationDispatch,
-  gotoLands = true,
   workbookReads = [XML],
   structuralReadback = false,
 }: {
@@ -3926,7 +3925,6 @@ function setupAutoApplyMocks({
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
-  gotoLands?: boolean;
   workbookReads?: string[];
   structuralReadback?: boolean;
 } = {}): {
@@ -3977,14 +3975,7 @@ function setupAutoApplyMocks({
       : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
   );
 
-  let activeSheetId = sheetIdFor('Old Sheet');
-  const goToSheet = vi.fn(async (sheetId: string) => {
-    const result = activationDispatch ?? dispatch;
-    if (gotoLands && result.isOk()) {
-      activeSheetId = sheetId;
-    }
-    return result;
-  });
+  const goToSheet = vi.fn().mockResolvedValue(activationDispatch ?? dispatch);
   const applyWorkbookDocument = vi.fn(async (xml: string) => {
     if (dispatch.isOk()) {
       liveXml = xml;
@@ -4006,7 +3997,6 @@ function setupAutoApplyMocks({
         id: sheetIdFor(name),
         name,
         hidden: false,
-        isActiveSheet: sheetIdFor(name) === activeSheetId,
       })),
     }),
   );
@@ -4428,14 +4418,12 @@ describe('bindTemplateTool auto_apply gate', () => {
       '@_active': 'true',
       '@_maximized': 'true',
     });
-    expect(goToSheet).toHaveBeenCalledTimes(1);
     expect(goToSheet).toHaveBeenCalledWith(sheetIdFor('Sales by Region'), expect.any(AbortSignal));
   });
 
   it('auto_apply=true validates the brand-new worksheet and reissues focus when the first goto does not land', async () => {
-    const { goToSheet, applyWorkbookDocument, getWorkbook, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
-      gotoLands: false,
     });
 
     const result = await getToolResult({
@@ -4446,10 +4434,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    // One read resolves the id, then one per validated navigation pass: the first dispatches,
-    // the second reads back, sees the goto did not land in this fixture, and reissues once.
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(1);
-    expect(getWorkbook).toHaveBeenCalledTimes(3);
+    // One bind read, then one read per validated navigation pass: the first dispatches, the
+    // second reads back, sees the goto did not land in this fixture, and reissues once.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(goToSheet).toHaveBeenCalledTimes(2);
     expect(goToSheet).toHaveBeenCalledWith(sheetIdFor('Sales by Region'), expect.any(AbortSignal));

@@ -619,7 +619,7 @@ describe('loadWorkbookXml (External Client API transport)', () => {
 // A whole-document POST always moves the view: Tableau picks the destination itself and
 // ignores the window flags we post (live probe 2026-07-25 — three content-only applies
 // from three different sheets all landed on the same dashboard). These executors model
-// that: the active sheet after the apply is NOT the one we posted.
+// that: the document read back after the apply is NOT the document we posted.
 describe('loadWorkbookXml focus dispositions', () => {
   const mockSignal = new AbortController().signal;
 
@@ -641,7 +641,7 @@ describe('loadWorkbookXml focus dispositions', () => {
   }
 
   // Desktop's own post-apply pick, taken from the probe: the dashboard, whatever we posted.
-  // Navigating moves the live active sheet, which is what the verify pass reads back —
+  // Navigating moves the live document, which is what the verify pass reads back —
   // unless `gotoLands` is false, which models a dispatch Desktop dropped.
   function dispatchingExecutor({
     postApplyMaximized = 'Dashboard 1',
@@ -649,19 +649,26 @@ describe('loadWorkbookXml focus dispositions', () => {
   }: { postApplyMaximized?: string; gotoLands?: boolean } = {}): {
     executor: ExternalApiToolExecutor;
     gotoSheets: string[];
+    reads: () => number;
   } {
     const gotoSheets: string[] = [];
-    let activeSheet = postApplyMaximized;
+    let maximized = postApplyMaximized;
+    let reads = 0;
     const applyWorkbookDocument = vi.fn(async () =>
       Ok({ command_id: 'cmd', status: 'completed' as const, submitted_at: '' }),
     );
-    const sheetItem = (
-      name: string,
-    ): { id: string; name: string; hidden: boolean; isActiveSheet: boolean } => ({
+    const getWorkbookDocument = vi.fn(async () => {
+      reads++;
+      return Ok({
+        xml: workbookDoc(maximized),
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      });
+    });
+    const sheetItem = (name: string): { id: string; name: string; hidden: boolean } => ({
       id: `id-${name}`,
       name,
       hidden: false,
-      isActiveSheet: name === activeSheet,
     });
     const getWorkbook = vi.fn(async () =>
       Ok({
@@ -674,12 +681,18 @@ describe('loadWorkbookXml focus dispositions', () => {
     const goToSheet = vi.fn(async (sheetId: string) => {
       const sheetName = sheetId.replace(/^id-/, '');
       gotoSheets.push(sheetName);
-      if (gotoLands) activeSheet = sheetName;
+      if (gotoLands) maximized = sheetName;
       return Ok({ command_id: 'goto', status: 'completed' as const, submitted_at: '' });
     });
     return {
-      executor: makeExecutorMock({ applyWorkbookDocument, getWorkbook, goToSheet }),
+      executor: makeExecutorMock({
+        applyWorkbookDocument,
+        getWorkbookDocument,
+        getWorkbook,
+        goToSheet,
+      }),
       gotoSheets,
+      reads: () => reads,
     };
   }
 

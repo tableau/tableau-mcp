@@ -864,16 +864,11 @@ export const getRunDashboardBatchTool = (
             ];
 
             await hideStartPage({ executor, signal: extra.signal });
-            const builtDashboardId = listDashboardRefs(polled.value).find((ref) =>
-              xmlNamesEqual(ref.name, dashboardName),
-            )?.id;
-            if (builtDashboardId !== undefined) {
-              await activateSheetWithValidatedGoto({
-                sheetId: builtDashboardId,
-                executor,
-                signal: extra.signal,
-              });
-            }
+            await activateSheetWithValidatedGoto({
+              sheetName: dashboardName,
+              executor,
+              signal: extra.signal,
+            });
             const successSteps: StepReceipt[] = verification.worksheets.map(
               (
                 { artifactId, title: worksheetTitle, verification: worksheetVerification },
