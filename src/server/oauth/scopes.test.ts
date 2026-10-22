@@ -174,30 +174,28 @@ describe('scopes', () => {
       expect(scopes).toContain('tableau:mcp:content:delete');
     });
 
-    it('should include tableau:mcp:flow:read when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:mcp:flow:read when the flow-read-tools flag is on and FLOW_READ_TOOLS_ENABLED is unset', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) => featureName === 'flow-read-tools',
       );
+      mockGetConfig.mockReturnValue({} as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:flow:read');
+    });
+
+    it('should include tableau:mcp:flow:read when flowReadToolsEnabled is true but the flag is disabled', async () => {
       mockGetConfig.mockReturnValue({
-        flowToolsEnabled: true,
+        flowReadToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedMcpScopes();
       expect(scopes).toContain('tableau:mcp:flow:read');
     });
 
-    it('should exclude tableau:mcp:flow:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+    it('should exclude tableau:mcp:flow:read when flowReadToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
-        flowToolsEnabled: true,
-      } as any);
-
-      const scopes = await getSupportedMcpScopes();
-      expect(scopes).not.toContain('tableau:mcp:flow:read');
-    });
-
-    it('should exclude tableau:mcp:flow:read when flowToolsEnabled is false', async () => {
-      mockGetConfig.mockReturnValue({
-        flowToolsEnabled: false,
+        flowReadToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedMcpScopes();
@@ -546,51 +544,47 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:users:read');
     });
 
-    it('should include tableau:flows:read when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:flows:read when the flow-read-tools flag is on and FLOW_READ_TOOLS_ENABLED is unset', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) => featureName === 'flow-read-tools',
       );
+      mockGetConfig.mockReturnValue({} as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:flows:read');
+    });
+
+    it('should include tableau:flows:read when flowReadToolsEnabled is true but the flag is disabled', async () => {
       mockGetConfig.mockReturnValue({
-        flowToolsEnabled: true,
+        flowReadToolsEnabled: true,
       } as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:flows:read');
     });
 
-    it('should exclude tableau:flows:read when flowToolsEnabled is true but flow-tools is disabled', async () => {
+    it('should exclude tableau:flows:read when flowReadToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
-        flowToolsEnabled: true,
+        flowReadToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
-    it('should exclude tableau:flows:read when flowToolsEnabled is false', async () => {
-      mockGetConfig.mockReturnValue({
-        flowToolsEnabled: false,
-      } as any);
-
-      const scopes = await getSupportedApiScopes();
-      expect(scopes).not.toContain('tableau:flows:read');
-    });
-
-    it('should include tableau:flows:download when flowToolsEnabled and flow-tools are both on', async () => {
+    it('should include tableau:flows:download when the flow-read-tools flag is on and FLOW_READ_TOOLS_ENABLED is unset', async () => {
       mocks.mockIsFeatureEnabled.mockImplementation(
-        async (featureName: string) => featureName === 'flow-tools',
+        async (featureName: string) => featureName === 'flow-read-tools',
       );
-      mockGetConfig.mockReturnValue({
-        flowToolsEnabled: true,
-      } as any);
+      mockGetConfig.mockReturnValue({} as any);
 
       const scopes = await getSupportedApiScopes();
       expect(scopes).toContain('tableau:flows:download');
     });
 
-    it('should exclude tableau:flows:download when flowToolsEnabled is false', async () => {
+    it('should exclude tableau:flows:download when flowReadToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
-        flowToolsEnabled: false,
+        flowReadToolsEnabled: false,
       } as any);
 
       const scopes = await getSupportedApiScopes();
@@ -841,13 +835,73 @@ describe('scopes', () => {
     ]);
   });
 
+  describe('flowReadToolsEnabled gating', () => {
+    it.each(
+      [undefined, false, true].flatMap((readEnv) =>
+        [false, true].map((readFlag) => ({ readEnv, readFlag })),
+      ),
+    )(
+      'advertises matching scopes for read env=$readEnv, read FF=$readFlag',
+      async ({ readEnv, readFlag }) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          flowReadToolsEnabled: readEnv,
+        } as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            (featureName === 'flow-read-tools' && readFlag) || featureName === 'flow-write-tools',
+        );
+
+        const mcp = await getSupportedMcpScopes();
+        const api = await getSupportedApiScopes();
+        const readEnabled = readEnv ?? readFlag;
+        expect(mcp.includes('tableau:mcp:flow:read')).toBe(readEnabled);
+        expect(api.includes('tableau:flows:download')).toBe(readEnabled);
+        // Write tools do not depend on the read gate.
+        expect(mcp.includes('tableau:mcp:flow:run')).toBe(true);
+      },
+    );
+  });
+
   describe('flowWriteToolsEnabled gating', () => {
-    it('includes the flow run mcp + api scopes when flowWriteToolsEnabled and flow-tools are enabled', async () => {
+    it.each(
+      [undefined, false, true].flatMap((writeEnv) =>
+        [false, true].map((writeFlag) => ({ writeEnv, writeFlag })),
+      ),
+    )(
+      'advertises matching scopes for write env=$writeEnv, write FF=$writeFlag',
+      async ({ writeEnv, writeFlag }) => {
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          flowWriteToolsEnabled: writeEnv,
+        } as ReturnType<typeof configModule.getConfig>);
+        mocks.mockIsFeatureEnabled.mockImplementation(
+          async (featureName: string) =>
+            featureName === 'flow-read-tools' || (featureName === 'flow-write-tools' && writeFlag),
+        );
+
+        const mcp = await getSupportedMcpScopes();
+        const api = await getSupportedApiScopes();
+        const writeEnabled = writeEnv ?? writeFlag;
+        // Read tools do not depend on the write gate.
+        expect(mcp.includes('tableau:mcp:flow:read')).toBe(true);
+        for (const scope of ['tableau:mcp:flow:run', 'tableau:mcp:flow:cancel'] as const) {
+          expect(mcp.includes(scope)).toBe(writeEnabled);
+        }
+        for (const scope of [
+          'tableau:flows:run',
+          'tableau:flow_tasks:run',
+          'tableau:flow_runs:update',
+        ] as const) {
+          expect(api.includes(scope)).toBe(writeEnabled);
+        }
+      },
+    );
+
+    it('includes the flow run mcp + api scopes when the flow-write-tools flag is on and FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
-        flowToolsEnabled: true,
-        flowWriteToolsEnabled: true,
       } as any);
 
       const mcp = await getSupportedMcpScopes();
@@ -860,28 +914,13 @@ describe('scopes', () => {
       expect(api).toContain('tableau:flow_runs:update');
     });
 
-    it('does not advertise flow run scopes when FLOW_TOOLS_ENABLED is false even if flowWriteToolsEnabled is true', async () => {
+    it('excludes flow run scopes when flowWriteToolsEnabled is false', async () => {
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) =>
+          featureName === 'flow-read-tools' || featureName === 'flow-write-tools',
+      );
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
-        flowToolsEnabled: false,
-        flowWriteToolsEnabled: true,
-      } as any);
-
-      const mcp = await getSupportedMcpScopes();
-      expect(mcp).not.toContain('tableau:mcp:flow:run');
-      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
-
-      const api = await getSupportedApiScopes();
-      expect(api).not.toContain('tableau:flows:run');
-      expect(api).not.toContain('tableau:flow_tasks:run');
-      expect(api).not.toContain('tableau:flow_runs:update');
-    });
-
-    it('excludes (does not advertise) the flow run scopes when flowWriteToolsEnabled is false', async () => {
-      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
-      mockGetConfig.mockReturnValue({
-        adminToolsEnabled: false,
-        flowToolsEnabled: true,
         flowWriteToolsEnabled: false,
       } as any);
 
@@ -897,21 +936,20 @@ describe('scopes', () => {
       expect(api).not.toContain('tableau:flow_runs:update');
     });
 
-    it('excludes flow run scopes when the flow-tools feature flag is disabled', async () => {
+    it('includes flow run scopes when flowWriteToolsEnabled is true and the flag is disabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
-        flowToolsEnabled: true,
         flowWriteToolsEnabled: true,
       } as any);
 
       const mcp = await getSupportedMcpScopes();
-      expect(mcp).not.toContain('tableau:mcp:flow:run');
-      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+      expect(mcp).toContain('tableau:mcp:flow:run');
+      expect(mcp).toContain('tableau:mcp:flow:cancel');
 
       const api = await getSupportedApiScopes();
-      expect(api).not.toContain('tableau:flows:run');
-      expect(api).not.toContain('tableau:flow_tasks:run');
-      expect(api).not.toContain('tableau:flow_runs:update');
+      expect(api).toContain('tableau:flows:run');
+      expect(api).toContain('tableau:flow_tasks:run');
+      expect(api).toContain('tableau:flow_runs:update');
     });
 
     it('treats the flow run scope as invalid when flowWriteToolsEnabled is false', async () => {

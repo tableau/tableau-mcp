@@ -97,11 +97,10 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
-  flowToolsEnabled: boolean;
+  flowReadToolsEnabled: boolean | undefined;
+  flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
-  flowWriteToolsEnabled: boolean;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -178,10 +177,10 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
-      FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -391,15 +390,12 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
-    // while flow rollouts are staged into production. Registering them requires both
-    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
-    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
+    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
@@ -550,6 +546,16 @@ export class Config extends BaseConfig {
     this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
+}
+
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return undefined;
 }
 
 function validateServer(server: string): void {
