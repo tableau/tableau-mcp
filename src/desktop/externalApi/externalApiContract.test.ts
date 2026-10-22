@@ -26,7 +26,6 @@ import {
   invokeDialogActionResultSchema,
   logicalTableItemSchema,
   logicalTableListSchema,
-  openApiDocumentSchema,
   operationEnvelopeSchema,
   operationErrorSchema,
   operationListSchema,
@@ -776,12 +775,6 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(validateCalculatedFieldResponseSchema.safeParse({ isValid: true }).success).toBe(
         false,
       );
-    });
-
-    it('parses the captured OpenAPI document itself', () => {
-      const parsed = openApiDocumentSchema.safeParse(spec);
-
-      expect(parsed.success).toBe(true);
     });
 
     it('documents the individual datasource operation contracts', () => {

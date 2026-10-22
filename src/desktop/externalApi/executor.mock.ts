@@ -28,8 +28,6 @@ export function makeExecutorMock(
     getRoot: vi.fn(),
     getApp: vi.fn(),
     getCapabilities: vi.fn(),
-    getOAuthProtectedResource: vi.fn(),
-    getOpenApi: vi.fn(),
     listOperations: vi.fn(),
     getOperation: vi.fn(),
     getActiveDialogs: vi

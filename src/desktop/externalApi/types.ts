@@ -563,16 +563,6 @@ export const protectedResourceMetadataSchema = z
   .passthrough();
 export type ProtectedResourceMetadata = z.infer<typeof protectedResourceMetadataSchema>;
 
-/** The producer's OpenAPI document returned by `GET /openapi.json`. */
-export const openApiDocumentSchema = z
-  .object({
-    openapi: z.string(),
-    info: z.record(z.unknown()),
-    paths: z.record(z.record(z.unknown())),
-  })
-  .passthrough();
-export type OpenApiDocument = z.infer<typeof openApiDocumentSchema>;
-
 /** A live, reachable External Client API instance selected from discovery. */
 export type ExternalApiInstance = {
   baseUrl: string;

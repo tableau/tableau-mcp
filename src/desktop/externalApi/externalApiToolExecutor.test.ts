@@ -2011,29 +2011,6 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)).toMatchObject({ method: 'GET', path: '/v0/capabilities' });
     });
 
-    it('gets the OAuth protected-resource metadata', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.getOAuthProtectedResource(signal);
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().bearer_methods_supported).toEqual(['header']);
-      expect(server.requests.at(-1)?.path).toBe('/.well-known/oauth-protected-resource');
-    });
-
-    it('gets the OpenAPI document', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.getOpenApi(signal);
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().info['version']).toBe('0.2.25');
-      expect(Object.keys(result.unwrap().paths)).toContain('/v0/health');
-      expect(server.requests.at(-1)?.path).toBe('/openapi.json');
-    });
-
     it('lists and gets operations without touching the internal poll path', async () => {
       server.setOperation('op-list-1', {
         poll: [

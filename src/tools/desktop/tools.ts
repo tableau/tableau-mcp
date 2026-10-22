@@ -14,8 +14,6 @@ import { exportDashboardImageTool } from './api/exportDashboardImage.js';
 import { exportStoryboardImageTool } from './api/exportStoryboardImage.js';
 import { exportWorksheetImageTool } from './api/exportWorksheetImage.js';
 import { getActiveDialogsTool } from './api/getActiveDialogs.js';
-import { getApiHealthTool } from './api/getApiHealth.js';
-import { getApiRootTool } from './api/getApiRoot.js';
 import { getAppInfoTool } from './api/getAppInfo.js';
 import { getCapabilitiesTool } from './api/getCapabilities.js';
 import { getGetDashboardXmlTool } from './api/getDashboardXml.js';
@@ -23,8 +21,6 @@ import { getDatasourceInfoTool } from './api/getDatasourceInfo.js';
 import { getGetDatasourceXmlTool } from './api/getDatasourceXml.js';
 import { getDesktopStateTool } from './api/getDesktopState.js';
 import { getDiagnosticsTool } from './api/getDiagnostics.js';
-import { getOAuthProtectedResourceTool } from './api/getOAuthProtectedResource.js';
-import { getOpenApiDocumentTool } from './api/getOpenApiDocument.js';
 import { getOperationTool } from './api/getOperation.js';
 import { getGetSheetInfoTool } from './api/getSheetInfo.js';
 import { getShowMeOptionsTool } from './api/getShowMeOptions.js';
@@ -97,12 +93,8 @@ export const desktopToolFactories = [
   getDesktopStateTool,
   getAppInfoTool,
   getCapabilitiesTool,
-  getApiHealthTool,
-  getApiRootTool,
-  getOpenApiDocumentTool,
   getListOperationsTool,
   getOperationTool,
-  getOAuthProtectedResourceTool,
   getDiagnosticsTool,
   getActiveDialogsTool,
   getInvokeDialogActionTool,

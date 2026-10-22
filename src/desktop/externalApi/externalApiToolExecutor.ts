@@ -71,8 +71,6 @@ import {
   invokeDialogActionResultSchema,
   LogicalTableList,
   logicalTableListSchema,
-  OpenApiDocument,
-  openApiDocumentSchema,
   OperationEnvelope,
   operationEnvelopeSchema,
   OperationError,
@@ -80,8 +78,6 @@ import {
   operationListSchema,
   operationRoute,
   OperationWarning,
-  ProtectedResourceMetadata,
-  protectedResourceMetadataSchema,
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
@@ -385,24 +381,6 @@ export class ExternalApiToolExecutor {
   ): Promise<Result<CapabilityMatrix, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.capabilities, capabilityMatrixSchema, signal),
-    );
-  }
-
-  async getOAuthProtectedResource(
-    signal: AbortSignal,
-  ): Promise<Result<ProtectedResourceMetadata, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(
-        EXTERNAL_API_ROUTES.oauthProtectedResource,
-        protectedResourceMetadataSchema,
-        signal,
-      ),
-    );
-  }
-
-  async getOpenApi(signal: AbortSignal): Promise<Result<OpenApiDocument, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(EXTERNAL_API_ROUTES.openapi, openApiDocumentSchema, signal),
     );
   }
 

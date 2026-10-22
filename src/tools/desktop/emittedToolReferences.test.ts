@@ -177,7 +177,6 @@ const NON_TOOL_VOCABULARY = [
   'pre-dispatch-workbook-drift',
   'preflight-invariant',
   'prior-version',
-  'protected-resource',
   'quantitative-or-categorical',
   're-call',
   're-enables',
