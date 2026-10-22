@@ -134,8 +134,9 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(harness.posts[0]!.indexOf('class="dashboard" name="Executive Overview"')).toBeLessThan(
       harness.posts[0]!.indexOf('class="dashboard" name="Keep"'),
     );
-    expect(harness.executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Executive Overview' } }),
+    expect(harness.executor.goToSheet).toHaveBeenCalledWith(
+      'id-Executive Overview',
+      expect.any(AbortSignal),
     );
     expect(consume).toHaveBeenCalledTimes(2);
     expect(release).not.toHaveBeenCalled();
@@ -158,13 +159,10 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(result.isError).toBe(false);
     expect(bodyOf(result)).toMatchObject({ applied: true });
     const hide = vi.mocked(harness.executor.setStartPageVisibility);
-    const goto = vi.mocked(harness.executor.executeCommand);
+    const goto = vi.mocked(harness.executor.goToSheet);
     expect(hide).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal));
-    const gotoIndex = goto.mock.calls.findIndex(
-      ([params]) => params.command === 'goto-sheet' && params.args?.Sheet === 'Executive Overview',
-    );
-    expect(gotoIndex).toBeGreaterThanOrEqual(0);
-    expect(hide.mock.invocationCallOrder[0]).toBeLessThan(goto.mock.invocationCallOrder[gotoIndex]);
+    expect(goto).toHaveBeenCalledExactlyOnceWith('id-Executive Overview', expect.any(AbortSignal));
+    expect(hide.mock.invocationCallOrder[0]).toBeLessThan(goto.mock.invocationCallOrder[0]);
   });
 
   it('waits past a stale same-name dashboard before accepting a compose-only replacement', async () => {
@@ -208,8 +206,7 @@ describe('run-dashboard-batch transactional apply', () => {
     const resultPromise = callBatch(store, harness.executor, ['a1'], true);
     await concurrentApplyStarted;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    const activatedWhileApplyWasInFlight = vi.mocked(harness.executor.executeCommand).mock.calls
-      .length;
+    const activatedWhileApplyWasInFlight = vi.mocked(harness.executor.goToSheet).mock.calls.length;
 
     releaseConcurrentApply();
     await concurrentApply;
@@ -217,8 +214,9 @@ describe('run-dashboard-batch transactional apply', () => {
 
     expect(activatedWhileApplyWasInFlight).toBe(0);
     expect(result.isError).toBe(false);
-    expect(harness.executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Executive Overview' } }),
+    expect(harness.executor.goToSheet).toHaveBeenCalledWith(
+      'id-Executive Overview',
+      expect.any(AbortSignal),
     );
   });
 
@@ -1452,7 +1450,18 @@ function statefulExecutor({
         });
       },
     ),
-    executeCommand: vi.fn(async () =>
+    getWorkbook: vi.fn(async () =>
+      Ok({
+        title: 'Workbook',
+        unsavedChanges: false,
+        dashboards: listWorkbookDashboards(current).map((name) => ({
+          id: `id-${name}`,
+          name,
+          hidden: false,
+        })),
+      }),
+    ),
+    goToSheet: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
     desktopApiVersion,

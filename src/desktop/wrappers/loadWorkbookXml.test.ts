@@ -641,7 +641,7 @@ describe('loadWorkbookXml focus dispositions', () => {
   }
 
   // Desktop's own post-apply pick, taken from the probe: the dashboard, whatever we posted.
-  // A goto-sheet moves the live document, which is what the verify pass reads back —
+  // Navigating moves the live document, which is what the verify pass reads back —
   // unless `gotoLands` is false, which models a dispatch Desktop dropped.
   function dispatchingExecutor({
     postApplyMaximized = 'Dashboard 1',
@@ -665,18 +665,31 @@ describe('loadWorkbookXml focus dispositions', () => {
         xsdPayloadVersion: undefined,
       });
     });
-    const executeCommand = vi.fn(async (params: any) => {
-      if (params.command === 'goto-sheet') {
-        gotoSheets.push(params.args.Sheet);
-        if (gotoLands) maximized = params.args.Sheet;
-      }
+    const sheetItem = (name: string): { id: string; name: string; hidden: boolean } => ({
+      id: `id-${name}`,
+      name,
+      hidden: false,
+    });
+    const getWorkbook = vi.fn(async () =>
+      Ok({
+        title: 'Workbook',
+        unsavedChanges: false,
+        worksheets: ['Sheet 1', 'Sheet 2'].map(sheetItem),
+        dashboards: ['Dashboard 1'].map(sheetItem),
+      }),
+    );
+    const goToSheet = vi.fn(async (sheetId: string) => {
+      const sheetName = sheetId.replace(/^id-/, '');
+      gotoSheets.push(sheetName);
+      if (gotoLands) maximized = sheetName;
       return Ok({ command_id: 'goto', status: 'completed' as const, submitted_at: '' });
     });
     return {
       executor: makeExecutorMock({
         applyWorkbookDocument,
         getWorkbookDocument,
-        executeCommand,
+        getWorkbook,
+        goToSheet,
       }),
       gotoSheets,
       reads: () => reads,
@@ -785,7 +798,7 @@ describe('loadWorkbookXml focus dispositions', () => {
 
   it('keeps the apply successful when the navigation command fails', async () => {
     const { executor, gotoSheets } = dispatchingExecutor();
-    vi.mocked(executor.executeCommand).mockResolvedValue(
+    vi.mocked(executor.goToSheet).mockResolvedValue(
       Err({ type: 'command-timed-out' as const, error: 'goto timeout' }),
     );
 

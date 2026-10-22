@@ -1,11 +1,9 @@
-import type { Result } from 'ts-results-es';
-
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import type {
   ExecuteCommandError,
-  ExecuteCommandResult,
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
+import type { WorkbookInventory } from '../externalApi/types.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type {
   ParsedDashboard,
@@ -77,29 +75,18 @@ function inspectWorkbookForActivation(
   return { status: 'activated', previousSheet, availableSheets };
 }
 
-async function executeGotoSheet({
-  sheetName,
-  executor,
-  signal,
-}: {
-  sheetName: string;
-} & WithExecutorAndAbortSignal): Promise<
-  Result<ExecuteCommandResult<undefined>, ExecuteCommandError>
-> {
-  return await executor.executeCommand({
-    namespace: 'tabdoc',
-    command: 'goto-sheet',
-    args: { Sheet: sheetName },
-    signal,
-  });
+function inventorySheets(inventory: WorkbookInventory): { id: string; name: string }[] {
+  return [
+    ...(inventory.worksheets ?? []),
+    ...(inventory.dashboards ?? []),
+    ...(inventory.storyboards ?? []),
+  ];
 }
 
 /**
  * Internal navigation path sanctioned only after a fresh workbook read and exact-name
- * validation. The public execute-tableau-command tool applies guardCommand before it
- * resolves an executor; ExternalApiToolExecutor itself has no guard or agent-facing schema. Calling
- * it here cannot be selected or parameterized by agent input beyond this helper's validated
- * sheetName.
+ * validation. Navigation goes through the goToSheet API route by the id the live inventory
+ * reports for that name, so a stale or unknown name can never reach Desktop.
  *
  * Lock-free: the post-apply focus dispatch already holds the apply lock, and withApplyLock
  * is a promise chain rather than a reentrant mutex, so taking it again from in there would
@@ -122,7 +109,18 @@ export async function activateSheetValidated({
     return inspection;
   }
 
-  const commandResult = await executeGotoSheet({ sheetName, executor, signal });
+  const inventoryResult = await executor.getWorkbook(signal);
+  if (inventoryResult.isErr()) {
+    return { status: 'read-failed', error: inventoryResult.error };
+  }
+
+  const sheets = inventorySheets(inventoryResult.value);
+  const sheet = sheets.find((candidate) => candidate.name === sheetName);
+  if (!sheet) {
+    return { status: 'not-found', availableSheets: unique(sheets.map(({ name }) => name)) };
+  }
+
+  const commandResult = await executor.goToSheet(sheet.id, signal);
   if (commandResult.isErr()) {
     return { status: 'command-failed', error: commandResult.error };
   }

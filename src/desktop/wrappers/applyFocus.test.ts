@@ -52,13 +52,22 @@ describe('dispatchApplyFocus Start Page hide', () => {
           xsdPayloadVersion: undefined,
         });
       }),
-      executeCommand: vi.fn(async (params: any) => {
-        if (params.command === 'goto-sheet') {
-          calls.push(`goto:${params.args.Sheet}`);
-          maximized = params.args.Sheet;
-        }
+      getWorkbook: vi.fn(async () =>
+        Ok({
+          title: 'Book',
+          unsavedChanges: false,
+          worksheets: ['Sheet 1', 'Sheet 2'].map((name) => ({
+            id: `id-${name}`,
+            name,
+            hidden: false,
+          })),
+        }),
+      ),
+      goToSheet: vi.fn(async (sheetId: string) => {
+        maximized = sheetId.replace('id-', '');
+        calls.push(`goto:${maximized}`);
         return Ok({ command_id: 'goto', status: 'completed' as const, submitted_at: '' });
-      }) as unknown as ExternalApiToolExecutor['executeCommand'],
+      }),
     });
     return { executor, calls };
   }
