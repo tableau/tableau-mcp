@@ -58,8 +58,8 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets>${dashboardsBlock}<windows>${windows}</windows></workbook>`;
   }
 
-  // Navigating moves the live document, so the readback the verify pass reads must
-  // reflect it — otherwise the double reports a navigation that never landed.
+  // Navigating moves the live active sheet, which the workbook inventory reports —
+  // otherwise the double reports a navigation that never landed.
   function withMaximizedWindow(workbookXml: string, sheetName: string): string {
     return workbookXml
       .replace(/ maximized='true'/g, '')
@@ -100,14 +100,20 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
     });
     let liveXml = workbookXml;
-    const sheetItems = (tagName: string): { id: string; name: string; hidden: boolean }[] =>
-      Array.from(
-        new DOMParser().parseFromString(liveXml, 'text/xml').getElementsByTagName(tagName),
-      ).map((node) => ({
+    const sheetItems = (
+      tagName: string,
+    ): { id: string; name: string; hidden: boolean; isActiveSheet: boolean }[] => {
+      const doc = new DOMParser().parseFromString(liveXml, 'text/xml');
+      const maximizedNames = Array.from(doc.getElementsByTagName('window'))
+        .filter((window) => window.getAttribute('maximized') === 'true')
+        .map((window) => window.getAttribute('name'));
+      return Array.from(doc.getElementsByTagName(tagName)).map((node) => ({
         id: `id-${node.getAttribute('name')}`,
         name: node.getAttribute('name')!,
         hidden: false,
+        isActiveSheet: maximizedNames.includes(node.getAttribute('name')),
       }));
+    };
     const getWorkbook = vi.fn(async () =>
       Ok({
         title: 'Workbook',

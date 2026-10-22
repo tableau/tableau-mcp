@@ -3,7 +3,11 @@ import { apiVersionAtLeast, START_PAGE_MIN_API_VERSION } from '../externalApi/ap
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow, ParsedWorkbook } from '../metadata/types.js';
-import { activateSheetValidated } from './activateSheet.js';
+import {
+  type ActivateSheetResult,
+  activateSheetValidated,
+  resolveSheetId,
+} from './activateSheet.js';
 
 /**
  * Where the view belongs once this write lands.
@@ -65,6 +69,35 @@ function logFocusEvent(
   }
 }
 
+function logSkippedFocus(
+  sheetName: string,
+  result: Exclude<ActivateSheetResult, { status: 'activated' }>,
+): void {
+  switch (result.status) {
+    case 'already-active':
+      return;
+    case 'not-found':
+      logFocusEvent(
+        sheetName,
+        'Focus skipped; target is absent from the post-apply workbook read',
+        {
+          availableSheets: result.availableSheets,
+        },
+      );
+      return;
+    case 'read-failed':
+      logFocusEvent(sheetName, 'Focus skipped; could not re-read the applied workbook', {
+        error: result.error,
+      });
+      return;
+    case 'command-failed':
+      logFocusEvent(sheetName, 'goToSheet failed; the apply itself remains successful', {
+        error: result.error,
+      });
+      return;
+  }
+}
+
 export async function hideStartPage({
   executor,
   signal,
@@ -113,38 +146,24 @@ export async function dispatchApplyFocus({
   }
 
   try {
-    const activation = await activateSheetValidated({ sheetName: target, executor, signal });
-    switch (activation.status) {
-      case 'activated':
-        // Verify and reissue once. A second validated pass reads the document back: if the
-        // goto landed, the already-active check skips and this costs one read; if it did not,
-        // the same pass reissues. No sleep — 12 of 12 zero-sleep apply/goto/readback trials
-        // came back settled, so Desktop serialises this for us.
-        await activateSheetValidated({ sheetName: target, executor, signal });
-        return;
-      case 'already-active':
-        return;
-      case 'not-found':
-        logFocusEvent(target, 'Focus skipped; target is absent from the post-apply workbook read', {
-          availableSheets: activation.availableSheets,
-        });
-        return;
-      case 'parse-failed':
-        logFocusEvent(target, 'Focus skipped; could not parse the post-apply workbook read', {
-          message: activation.message,
-        });
-        return;
-      case 'read-failed':
-        logFocusEvent(target, 'Focus skipped; could not re-read the applied workbook', {
-          error: activation.error,
-        });
-        return;
-      case 'command-failed':
-        logFocusEvent(target, 'goToSheet failed; the apply itself remains successful', {
-          error: activation.error,
-        });
-        return;
+    const resolved = await resolveSheetId({ sheetName: target, executor, signal });
+    if (resolved.status !== 'resolved') {
+      logSkippedFocus(target, resolved);
+      return;
     }
+
+    const { sheetId } = resolved;
+    const activation = await activateSheetValidated({ sheetId, executor, signal });
+    if (activation.status === 'activated') {
+      // Verify and reissue once. A second validated pass reads the workbook back: if the
+      // navigation landed, the already-active check skips and this costs one read; if it did
+      // not, the same pass reissues. No sleep — 12 of 12 zero-sleep apply/goto/readback trials
+      // came back settled, so Desktop serialises this for us.
+      await activateSheetValidated({ sheetId, executor, signal });
+      return;
+    }
+
+    logSkippedFocus(target, activation);
   } catch (error) {
     logFocusEvent(target, 'Focus threw; the apply itself remains successful', { error });
   }

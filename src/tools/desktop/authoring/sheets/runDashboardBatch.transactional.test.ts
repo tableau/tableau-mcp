@@ -8,6 +8,7 @@ import type {
 } from '../../../../desktop/externalApi/executorTypes.js';
 import {
   deleteDashboard,
+  listDashboardRefs,
   listWorkbookDashboards,
 } from '../../../../desktop/metadata/dashboards.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
@@ -118,8 +119,8 @@ describe('run-dashboard-batch transactional apply', () => {
 
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
-    // baseline, drift check, absence read, guard, shared readback, validated focus read
-    expect(harness.getCalls()).toBe(6);
+    // baseline, drift check, absence read, guard, shared readback
+    expect(harness.getCalls()).toBe(5);
     expect(harness.deletes).toEqual([
       {
         ref: { kind: 'dashboard', id: '{11111111-1111-1111-1111-111111111111}' },
@@ -135,7 +136,7 @@ describe('run-dashboard-batch transactional apply', () => {
       harness.posts[0]!.indexOf('class="dashboard" name="Keep"'),
     );
     expect(harness.executor.goToSheet).toHaveBeenCalledWith(
-      'id-Executive Overview',
+      dashboardId(harness.posts[0]!),
       expect.any(AbortSignal),
     );
     expect(consume).toHaveBeenCalledTimes(2);
@@ -161,8 +162,23 @@ describe('run-dashboard-batch transactional apply', () => {
     const hide = vi.mocked(harness.executor.setStartPageVisibility);
     const goto = vi.mocked(harness.executor.goToSheet);
     expect(hide).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal));
-    expect(goto).toHaveBeenCalledExactlyOnceWith('id-Executive Overview', expect.any(AbortSignal));
+    expect(goto).toHaveBeenCalledExactlyOnceWith(
+      dashboardId(harness.posts[0]!),
+      expect.any(AbortSignal),
+    );
     expect(hide.mock.invocationCallOrder[0]).toBeLessThan(goto.mock.invocationCallOrder[0]);
+  });
+
+  it('still succeeds without navigating when the readback gives the dashboard no id', async () => {
+    const harness = statefulExecutor({
+      readbackTransform: (xml) => xml.replace(/<simple-id uuid="[^"]*"\s*\/>/g, ''),
+    });
+
+    const result = await callBatch(artifactStore(['a1']), harness.executor, ['a1'], true);
+
+    expect(result.isError).toBe(false);
+    expect(bodyOf(result)).toMatchObject({ applied: true });
+    expect(harness.executor.goToSheet).not.toHaveBeenCalled();
   });
 
   it('waits past a stale same-name dashboard before accepting a compose-only replacement', async () => {
@@ -176,7 +192,7 @@ describe('run-dashboard-batch transactional apply', () => {
 
     expect(result.isError).toBe(false);
     expect(harness.posts).toHaveLength(1);
-    expect(harness.getCalls()).toBe(7); // + stale readback before the settled one
+    expect(harness.getCalls()).toBe(6); // + stale readback before the settled one
     expect(bodyOf(result)).toMatchObject({
       applied: true,
       steps: [{ operation: 'dashboard', state: 'applied', replaced: true }],
@@ -215,7 +231,7 @@ describe('run-dashboard-batch transactional apply', () => {
     expect(activatedWhileApplyWasInFlight).toBe(0);
     expect(result.isError).toBe(false);
     expect(harness.executor.goToSheet).toHaveBeenCalledWith(
-      'id-Executive Overview',
+      dashboardId(harness.posts[0]!),
       expect.any(AbortSignal),
     );
   });
@@ -1454,8 +1470,8 @@ function statefulExecutor({
       Ok({
         title: 'Workbook',
         unsavedChanges: false,
-        dashboards: listWorkbookDashboards(current).map((name) => ({
-          id: `id-${name}`,
+        dashboards: listDashboardRefs(current).map(({ id, name }) => ({
+          id,
           name,
           hidden: false,
         })),
@@ -1517,4 +1533,8 @@ function worksheetNames(xml: string): string[] {
 
 function hasDashboard(xml: string): boolean {
   return listWorkbookDashboards(xml).includes('Executive Overview');
+}
+
+function dashboardId(xml: string): string | undefined {
+  return listDashboardRefs(xml).find(({ name }) => name === 'Executive Overview')?.id;
 }

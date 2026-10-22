@@ -4,52 +4,12 @@ import { z } from 'zod';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { activateSheetValidated } from '../../../desktop/wrappers/activateSheet.js';
+import { activateSheetValidated, resolveSheetId } from '../../../desktop/wrappers/activateSheet.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getActivateSheetTool } from './activateSheet.js';
-
-function worksheetXml(name: string): string {
-  return `<worksheet name='${name}'><table><view/><style/><panes><pane><view/></pane></panes></table></worksheet>`;
-}
-
-function dashboardXml(name: string): string {
-  return `<dashboard name='${name}'><style/><zones/></dashboard>`;
-}
-
-function windowXml(name: string, windowClass: 'worksheet' | 'dashboard', attributes = ''): string {
-  return `<window class='${windowClass}' name='${name}'${attributes}><cards/></window>`;
-}
-
-function buildWorkbook({
-  worksheetNames = ['Alpha', 'Beta'],
-  dashboardNames = [],
-  activeSheetName,
-}: {
-  worksheetNames?: string[];
-  dashboardNames?: string[];
-  activeSheetName?: string;
-} = {}): string {
-  const firstSheet = activeSheetName ?? worksheetNames[0] ?? dashboardNames[0];
-  return [
-    "<?xml version='1.0' encoding='utf-8'?>",
-    "<workbook version='18.1'>",
-    "<datasources><datasource name='Superstore'/></datasources>",
-    `<worksheets>${worksheetNames.map(worksheetXml).join('')}</worksheets>`,
-    `<dashboards>${dashboardNames.map(dashboardXml).join('')}</dashboards>`,
-    '<windows>',
-    ...worksheetNames.map((name) =>
-      windowXml(name, 'worksheet', name === firstSheet ? " active='true' maximized='true'" : ''),
-    ),
-    ...dashboardNames.map((name) =>
-      windowXml(name, 'dashboard', name === firstSheet ? " active='true' maximized='true'" : ''),
-    ),
-    '</windows>',
-    '</workbook>',
-  ].join('');
-}
 
 const successSchema = z.object({
   focus_requested: z.boolean(),
@@ -61,60 +21,58 @@ const successSchema = z.object({
 describe('activateSheetValidated', () => {
   const signal = new AbortController().signal;
 
-  it('fresh-reads the workbook, then resolves the exact target name to its id for goToSheet', async () => {
-    const { executor, getWorkbookDocument, goToSheet } = makeXmlExecutor();
+  it('reads the inventory once and navigates by the sheet id', async () => {
+    const { executor, getWorkbook, getWorkbookDocument, goToSheet } = makeInventoryExecutor();
 
-    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+    const result = await activateSheetValidated({ sheetId: 'id-Beta', executor, signal });
 
     expect(result).toEqual({
       status: 'activated',
       previousSheet: 'Alpha',
       availableSheets: ['Alpha', 'Beta'],
     });
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(getWorkbook).toHaveBeenCalledExactlyOnceWith(signal);
+    expect(getWorkbookDocument).not.toHaveBeenCalled();
     expect(goToSheet).toHaveBeenCalledExactlyOnceWith('id-Beta', signal);
   });
 
-  it('refuses a missing sheet without navigating', async () => {
-    const { executor, goToSheet } = makeXmlExecutor();
+  it('refuses an unknown id without navigating', async () => {
+    const { executor, goToSheet } = makeInventoryExecutor();
 
-    const result = await activateSheetValidated({ sheetName: 'Missing', executor, signal });
+    const result = await activateSheetValidated({ sheetId: 'id-Missing', executor, signal });
 
     expect(result).toEqual({ status: 'not-found', availableSheets: ['Alpha', 'Beta'] });
     expect(goToSheet).not.toHaveBeenCalled();
   });
 
-  it('dispatches nothing when the target window is already the maximized one', async () => {
-    const { executor, getWorkbook, goToSheet } = makeXmlExecutor({
-      xml: buildWorkbook({ activeSheetName: 'Beta' }),
-    });
+  it('does not treat a sheet name as an id', async () => {
+    const { executor, goToSheet } = makeInventoryExecutor();
 
-    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+    const result = await activateSheetValidated({ sheetId: 'Beta', executor, signal });
+
+    expect(result.status).toBe('not-found');
+    expect(goToSheet).not.toHaveBeenCalled();
+  });
+
+  it('dispatches nothing when the sheet is already the active one', async () => {
+    const { executor, goToSheet } = makeInventoryExecutor({ activeName: 'Beta' });
+
+    const result = await activateSheetValidated({ sheetId: 'id-Beta', executor, signal });
 
     expect(result).toEqual({
       status: 'already-active',
       previousSheet: 'Beta',
       availableSheets: ['Alpha', 'Beta'],
     });
-    expect(getWorkbook).not.toHaveBeenCalled();
-    expect(goToSheet).not.toHaveBeenCalled();
-  });
-
-  it('returns not-found when the name is in the XML but absent from the inventory', async () => {
-    const { executor, goToSheet } = makeXmlExecutor({ inventoryNames: ['Alpha'] });
-
-    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
-
-    expect(result).toEqual({ status: 'not-found', availableSheets: ['Alpha'] });
     expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('returns read-failed when the inventory read fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'inventory timeout' };
-    const { executor, getWorkbook, goToSheet } = makeXmlExecutor();
+    const { executor, getWorkbook, goToSheet } = makeInventoryExecutor();
     getWorkbook.mockResolvedValue(Err(error));
 
-    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+    const result = await activateSheetValidated({ sheetId: 'id-Beta', executor, signal });
 
     expect(result).toEqual({ status: 'read-failed', error });
     expect(goToSheet).not.toHaveBeenCalled();
@@ -122,12 +80,58 @@ describe('activateSheetValidated', () => {
 
   it('returns command-failed when goToSheet fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'goto timeout' };
-    const { executor, goToSheet } = makeXmlExecutor();
+    const { executor, goToSheet } = makeInventoryExecutor();
     goToSheet.mockResolvedValue(Err(error));
 
-    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+    const result = await activateSheetValidated({ sheetId: 'id-Beta', executor, signal });
 
     expect(result).toEqual({ status: 'command-failed', error });
+  });
+});
+
+describe('resolveSheetId', () => {
+  const signal = new AbortController().signal;
+  const mixedInventory = {
+    worksheets: [
+      { id: 'sheet-sales', name: 'Sales by Region', hidden: false },
+      { id: 'sheet-profit', name: 'Profit', hidden: false },
+    ],
+    dashboards: [{ id: 'dash-exec', name: 'Executive Dashboard', hidden: false }],
+    storyboards: [{ id: 'story-qbr', name: 'QBR Story', hidden: false }],
+  };
+
+  it.each([
+    { sheetName: 'Sales by Region', sheetId: 'sheet-sales' },
+    { sheetName: 'Executive Dashboard', sheetId: 'dash-exec' },
+    { sheetName: 'QBR Story', sheetId: 'story-qbr' },
+  ])('resolves $sheetName to its id', async ({ sheetName, sheetId }) => {
+    const { executor, getWorkbook } = makeInventoryExecutor({ inventory: mixedInventory });
+
+    const result = await resolveSheetId({ sheetName, executor, signal });
+
+    expect(result).toEqual({ status: 'resolved', sheetId });
+    expect(getWorkbook).toHaveBeenCalledExactlyOnceWith(signal);
+  });
+
+  it('returns not-found with the available sheets for an unknown name', async () => {
+    const { executor } = makeInventoryExecutor({ inventory: mixedInventory });
+
+    const result = await resolveSheetId({ sheetName: 'Missing', executor, signal });
+
+    expect(result).toEqual({
+      status: 'not-found',
+      availableSheets: ['Sales by Region', 'Profit', 'Executive Dashboard', 'QBR Story'],
+    });
+  });
+
+  it('returns read-failed when the inventory read fails', async () => {
+    const error = { type: 'command-timed-out' as const, error: 'inventory timeout' };
+    const { executor, getWorkbook } = makeInventoryExecutor();
+    getWorkbook.mockResolvedValue(Err(error));
+
+    const result = await resolveSheetId({ sheetName: 'Profit', executor, signal });
+
+    expect(result).toEqual({ status: 'read-failed', error });
   });
 });
 
@@ -236,29 +240,26 @@ function makeApiExecutor(): {
   };
 }
 
-function makeXmlExecutor({
-  xml = buildWorkbook(),
-  inventoryNames = ['Alpha', 'Beta'],
-}: { xml?: string; inventoryNames?: string[] } = {}): {
+function makeInventoryExecutor({
+  activeName = 'Alpha',
+  inventory = {
+    worksheets: ['Alpha', 'Beta'].map((name) => ({
+      id: `id-${name}`,
+      name,
+      hidden: false,
+      isActiveSheet: name === activeName,
+    })),
+  },
+}: { activeName?: string; inventory?: object } = {}): {
   executor: ExternalApiToolExecutor;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorkbook: ReturnType<typeof vi.fn>;
   goToSheet: ReturnType<typeof vi.fn>;
 } {
-  const getWorkbookDocument = vi.fn().mockResolvedValue(
-    Ok({
-      xml,
-      applicationVersion: undefined,
-      xsdPayloadVersion: undefined,
-    }),
-  );
-  const getWorkbook = vi.fn().mockResolvedValue(
-    Ok({
-      title: 'Book',
-      unsavedChanges: false,
-      worksheets: inventoryNames.map((name) => ({ id: `id-${name}`, name, hidden: false })),
-    }),
-  );
+  const getWorkbookDocument = vi.fn();
+  const getWorkbook = vi
+    .fn()
+    .mockResolvedValue(Ok({ title: 'Book', unsavedChanges: false, ...inventory }));
   const goToSheet = vi
     .fn()
     .mockResolvedValue(Ok({ command_id: 'goto-1', status: 'completed', submitted_at: '' }));
