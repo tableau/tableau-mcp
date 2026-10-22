@@ -12,10 +12,15 @@ import {
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
+  mockGetTableauServerInfo: vi.fn(),
 }));
 
 vi.mock('../../config.js', () => ({
   getConfig: vi.fn(),
+}));
+
+vi.mock('../../getTableauServerInfo.js', () => ({
+  getTableauServerInfo: mocks.mockGetTableauServerInfo,
 }));
 
 vi.mock('../../features/init.js', () => ({
@@ -808,18 +813,40 @@ describe('scopes', () => {
     });
 
     it.each([
-      { clientId: claudeClientId, authoringWithSlack: false, expected: true },
-      { clientId: undefined, authoringWithSlack: false, expected: true },
-      { clientId: slackClientId, authoringWithSlack: false, expected: false },
-      { clientId: slackClientId, authoringWithSlack: true, expected: true },
+      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.3.0', expected: true },
+      { clientId: undefined, flags: ['data-apps'], version: '2026.3.0', expected: true },
+      { clientId: slackClientId, flags: ['data-apps'], version: '2026.3.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-with-slack'],
+        version: '2026.3.0',
+        expected: true,
+      },
+      { clientId: claudeClientId, flags: [], version: '2026.3.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-tools'],
+        version: '2026.3.0',
+        expected: false,
+      },
+      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.2.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-with-slack'],
+        version: '2026.2.0',
+        expected: false,
+      },
     ])(
-      'advertises scaffold-data-app scope when data-apps is on: $clientId, authoring-with-slack=$authoringWithSlack',
-      async ({ clientId, authoringWithSlack, expected }) => {
-        mocks.mockIsFeatureEnabled.mockImplementation(
-          async (flag: string) =>
-            flag === 'data-apps' || (flag === 'authoring-with-slack' && authoringWithSlack),
-        );
-        mockGetConfig.mockReturnValue({ adminToolsEnabled: false } as any);
+      'advertises scaffold-data-app scope: $clientId, flags=$flags, version=$version',
+      async ({ clientId, flags, version, expected }) => {
+        mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flags.includes(flag));
+        mocks.mockGetTableauServerInfo.mockResolvedValue({
+          productVersion: { value: version, build: '' },
+        });
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          server: 'https://my-tableau-server.com',
+        } as any);
 
         const scopes = await getSupportedApiScopes(clientId);
         expect(scopes.includes('tableau:packages:read')).toBe(expected);

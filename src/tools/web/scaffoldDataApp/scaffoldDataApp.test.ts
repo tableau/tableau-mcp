@@ -33,7 +33,7 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-// Floor is 2026.3.0 (see scaffoldDataApp.ts).
+// Floor is 2026.3.0 (see dataAppVersion.ts).
 const VERSION_AT_FLOOR: ProductVersion = { value: '2026.3.0', build: '' };
 const VERSION_BELOW: ProductVersion = { value: '2026.2.0', build: '' };
 const VERSION_ABOVE: ProductVersion = { value: '2027.1.0', build: '' };
@@ -131,6 +131,14 @@ describe('getScaffoldDataAppTool', () => {
       );
       expect(await Provider.from(tool.disabled)).toBe(false);
       expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
+    });
+
+    it('is disabled for Slack when all flags are on but the version is below the floor', async () => {
+      const tool = getScaffoldDataAppTool(
+        new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
+        VERSION_BELOW,
+      );
+      expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
     it('is enabled for a non-Slack client when authoring-with-slack is off', async () => {

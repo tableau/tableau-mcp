@@ -10,7 +10,9 @@ import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
 import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
+import { getTableauServerInfo } from '../../getTableauServerInfo.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
+import { isDataAppVersionSupported } from '../../tools/web/scaffoldDataApp/dataAppVersion.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -627,6 +629,14 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
 
   if (!authoringAllowedForClient) {
     enabledTools.delete('scaffold-data-app');
+  }
+
+  // Without SERVER the OAuth target is Tableau Cloud, which is always above the floor.
+  if (enabledTools.has('scaffold-data-app') && config.server) {
+    const { productVersion } = await getTableauServerInfo(config.server);
+    if (!isDataAppVersionSupported(productVersion)) {
+      enabledTools.delete('scaffold-data-app');
+    }
   }
 
   return enabledTools;
