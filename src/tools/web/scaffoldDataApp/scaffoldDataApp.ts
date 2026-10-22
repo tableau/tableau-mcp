@@ -8,14 +8,10 @@ import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { SCAFFOLD_DATA_APP_API_SCOPES } from '../../../server/oauth/scopes.js';
-import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
+import { isDataAppVersionSupported } from './dataAppVersion.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
-
-// Data apps are hosted extension packages, which Tableau can only host on 2026.3.0+.
-// Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.0';
 
 const paramsSchema = {
   datappName: z
@@ -52,10 +48,7 @@ export const getScaffoldDataAppTool = (
     },
     disabled: new Provider(async () => {
       const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      const versionAllowed = getResultForTableauVersion({
-        productVersion,
-        mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-      });
+      const versionAllowed = isDataAppVersionSupported(productVersion);
       return !(flagOn && versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
