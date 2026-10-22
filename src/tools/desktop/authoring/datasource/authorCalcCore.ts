@@ -293,6 +293,7 @@ export async function authorCalculationsWithValidation({
         '',
         findWorkbookParameters(workbookXml),
         targetResult.value.xml,
+        specs.map((spec) => spec.caption),
       );
       // An unresolvable loose reference can't be an identical retry; fall through to collision.
       if (loose.isOk()) {
@@ -390,6 +391,7 @@ export async function authorCalculationsWithValidation({
           '',
           findWorkbookParameters(liveXml),
           liveTarget.value.xml,
+          specs.map((spec) => spec.caption),
         );
         if (loose.isErr()) {
           outcomes[index] = {
@@ -834,8 +836,8 @@ function resolveLooseFormulaReferences(
             pluralEquivalent(normalizeLooseFieldReferencePhrase(name), normalized),
         ),
       );
-    const ownedByBatchCalc = batchCaptions.some(
-      (caption) => normalizeLooseFieldReferencePhrase(bareName(caption.trim())) === normalized,
+    const ownedByBatchCalc = batchCaptions.some((caption) =>
+      pluralEquivalent(normalizeLooseFieldReferencePhrase(bareName(caption.trim())), normalized),
     );
     if (
       !realNameAmbiguity &&
@@ -877,7 +879,7 @@ function withoutDatasourceDependencies(datasourceXml: string): string {
   );
 }
 
-// Hidden columns and sets (<group>) are not in the field schema but still own their name.
+// Hidden columns and sets (<group>) are not in the field schema but still own their name, singular or plural.
 function datasourceNamesToken(datasourceXml: string, normalizedToken: string): boolean {
   const ownXml = withoutDatasourceDependencies(datasourceXml);
   return [...ownXml.matchAll(/<(?:column|group)\b[^>]*>/g)].some(
@@ -887,7 +889,10 @@ function datasourceNamesToken(datasourceXml: string, normalizedToken: string): b
         const value = getAttr(match[0], attr);
         return (
           value !== undefined &&
-          normalizeLooseFieldReferencePhrase(bareName(unescapeXml(value))) === normalizedToken
+          pluralEquivalent(
+            normalizeLooseFieldReferencePhrase(bareName(unescapeXml(value))),
+            normalizedToken,
+          )
         );
       }),
   );

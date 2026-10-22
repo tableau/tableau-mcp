@@ -1612,6 +1612,105 @@ describe('authorCalcTool parameter references by caption or internal name', () =
     expect(result.value.workbookXml).toContain("formula='[Sales] - [Calculation_1700000000000]'");
   });
 
+  describe('plural-equivalent batch and hidden-column names block parameter fallback', () => {
+    const targetsParameter =
+      "<column caption='Targets' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />";
+
+    it('refuses [Targets] when a later batch calc is named Target', () => {
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withParameters(BASE_XML, targetsParameter),
+        calcs: [
+          { caption: 'Gap', formula: '[Targets] * 2' },
+          { caption: 'Target', formula: 'SUM([Sales])' },
+        ],
+        resolveLooseReferences: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('expected refusal');
+      expect(result.error.message).toContain('field reference [Targets] was not found');
+    });
+
+    it('binds [Targets] to the earlier Target calc, and an identical retry reuses both', () => {
+      const calcs = [
+        { caption: 'Target', formula: 'SUM([Sales])' },
+        { caption: 'Gap', formula: '[Targets] * 2' },
+      ];
+      const first = prepareCalculationsInWorkbook({
+        workbookXml: withParameters(BASE_XML, targetsParameter),
+        calcs,
+        resolveLooseReferences: true,
+      });
+
+      expect(first.isOk()).toBe(true);
+      if (first.isErr()) throw new Error(first.error.message);
+      expect(first.value.workbookXml).toContain("formula='[Calculation_1700000000000] * 2'");
+      expect(first.value.workbookXml).not.toContain('[Parameters].[Parameter 1] * 2');
+
+      const retry = prepareCalculationsInWorkbook({
+        workbookXml: first.value.workbookXml,
+        calcs,
+        resolveLooseReferences: true,
+      });
+      expect(retry.isOk()).toBe(true);
+      if (retry.isErr()) throw new Error(retry.error.message);
+      expect(retry.value.authoredCalcs).toEqual([]);
+      expect(retry.value.workbookXml).toBe(first.value.workbookXml);
+    });
+
+    it('refuses a calc that references a parameter named like its own plural-equivalent caption', () => {
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withParameters(
+          BASE_XML,
+          "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+        ),
+        calcs: [{ caption: 'Targets', formula: '[Target] * 2' }],
+        resolveLooseReferences: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('expected refusal');
+      expect(result.error.message).toContain('field reference [Target] was not found');
+    });
+
+    it('refuses [Targets] when a hidden datasource column is named Target', () => {
+      const result = prepareCalculationsInWorkbook({
+        workbookXml: withParameters(
+          BASE_XML.replace(
+            '</datasource>',
+            "<column caption='Target' datatype='real' hidden='true' name='[Target]' role='measure' type='quantitative' /></datasource>",
+          ),
+          targetsParameter,
+        ),
+        calcs: [{ caption: 'Gap', formula: '[Sales] - [Targets]' }],
+        resolveLooseReferences: true,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('expected refusal');
+      expect(result.error.message).toContain('field reference [Targets] was not found');
+    });
+
+    it.each(['Target', 'Targets'])(
+      'author-calc refuses a parameter fallback for a calc captioned %s',
+      async (caption) => {
+        const { result, applyWorkbookDocument } = await getToolResult({
+          args: { caption, formula: '[Target] * 2' },
+          initialXml: withParameters(
+            BASE_XML,
+            "<column caption='Target' datatype='real' name='[Parameter 1]' param-domain-type='any' role='measure' type='quantitative' value='1' />",
+          ),
+          readbackXml: BASE_XML,
+        });
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('field reference [Target] was not found');
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   it('reports parameters that match a reference equally', async () => {
     const xml = withParameters(
       BASE_XML,
