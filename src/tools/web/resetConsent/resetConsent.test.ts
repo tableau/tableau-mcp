@@ -28,7 +28,7 @@ describe('resetConsentTool', () => {
     expect(tool.name).toBe('reset-consent');
     expect(tool.paramsSchema).toEqual({});
     expect(annotations?.readOnlyHint).toBe(false);
-    expect(annotations?.destructiveHint).toBe(false);
+    expect(annotations?.destructiveHint).toBe(true);
     expect(annotations?.idempotentHint).toBe(true);
     expect(annotations?.openWorldHint).toBe(false);
   });
