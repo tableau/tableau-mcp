@@ -379,8 +379,6 @@ function resolvedPrimaryMetric(
   const metric = primaryMetric(zone, axis);
   const cache = elements(zone).find((child) => child.tagName === 'layout-cache');
   const suffix = axis === 0 ? 'w' : 'h';
-  // Resolve omitted scalable minima, including zero-request manual fallback, from readback.
-  // Explicit minima and nonzero manual allocations retain their submitted interpretation.
   return metric &&
     metric.fixed === 0 &&
     cache?.getAttribute(`type-${suffix}`) === 'scalable' &&
@@ -561,7 +559,6 @@ function singleHorizontalHeight(
     : 300;
   const insets = spacing(expected);
   if (fixed === undefined || fixed < 0 || !primary || primary.unbounded || !insets) return;
-  // The submitted fixed-height cache authorizes fitting only on the native Grow branch.
   if (primary.initial > client[2] - client[0]) return;
   const height = pixelUnits(expected, fixed + insets[0][1] + insets[0][3], 1);
   if (height === undefined || height < 0) return;
