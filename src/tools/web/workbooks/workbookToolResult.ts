@@ -18,20 +18,7 @@ export type WorkbookToolResult =
   | { kind: 'url'; url: string; mimeType: string; filename: string }
   | { kind: 'path'; path: string; mimeType: string; filename: string };
 
-/**
- * Streams workbook content to blob storage, or to a temp file when storage is off, without ever
- * holding it in memory whole. Throws once the content exceeds `maxBytes`.
- */
-export async function buildWorkbookToolResult({
-  content,
-  contentLength,
-  mimeType,
-  filename,
-  resourceId,
-  toolName,
-  keyPrefixSegment,
-  maxBytes = MAX_STAGED_WORKBOOK_BYTES,
-}: {
+type BuildWorkbookToolResultParams = {
   content: AsyncIterable<Uint8Array>;
   contentLength?: number;
   mimeType: string;
@@ -40,9 +27,35 @@ export async function buildWorkbookToolResult({
   toolName: string;
   keyPrefixSegment: string;
   maxBytes?: number;
-}): Promise<WorkbookToolResult> {
+};
+
+/**
+ * Streams workbook content to blob storage, or to a temp file when storage is off, without ever
+ * holding it in memory whole. Throws once the content exceeds `maxBytes`.
+ */
+export async function buildWorkbookToolResult(
+  params: BuildWorkbookToolResultParams,
+): Promise<WorkbookToolResult> {
+  try {
+    return await buildWorkbookToolResultInner(params);
+  } catch (error) {
+    // Release the source on every failure path; a no-op if it was already consumed or destroyed.
+    discard(params.content);
+    throw error;
+  }
+}
+
+async function buildWorkbookToolResultInner({
+  content,
+  contentLength,
+  mimeType,
+  filename,
+  resourceId,
+  toolName,
+  keyPrefixSegment,
+  maxBytes = MAX_STAGED_WORKBOOK_BYTES,
+}: BuildWorkbookToolResultParams): Promise<WorkbookToolResult> {
   if (contentLength !== undefined && contentLength > maxBytes) {
-    discard(content);
     throw tooLargeError(maxBytes);
   }
 
@@ -66,7 +79,6 @@ export async function buildWorkbookToolResult({
   } catch (error) {
     // Once the provider has started reading, the stream can't be replayed into a temp file.
     if (started) {
-      discard(content);
       throw error;
     }
     log({
@@ -86,7 +98,6 @@ export async function buildWorkbookToolResult({
 
   // `started` flips on the first pull, so a provider that drained an empty stream still counts.
   if (!started) {
-    discard(content);
     throw new Error('Blob storage provider returned without reading the upload data.');
   }
   return { kind: 'url', url, mimeType, filename };

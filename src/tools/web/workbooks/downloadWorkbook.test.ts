@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Readable } from 'stream';
@@ -303,6 +303,52 @@ describe('downloadWorkbookTool', () => {
       await vi.waitFor(() => expect(content.destroyed).toBe(true));
       expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
       await expect(readdir(tempRoot)).resolves.toEqual([]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('should destroy the source stream when the feature gate check rejects', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockImplementation(async (flag) => {
+      if (flag === 'workbook-file-mode') {
+        throw new Error('gate unavailable');
+      }
+      return flag !== 'authoring-with-slack';
+    });
+    const content = Readable.from([Buffer.from('<workbook/>')]);
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content,
+      contentType: 'application/xml',
+      filename: 'Superstore.twb',
+    });
+
+    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('gate unavailable');
+    await vi.waitFor(() => expect(content.destroyed).toBe(true));
+    expect(mocks.mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('should destroy the source stream when the temp directory cannot be created', async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'download-workbook-test-'));
+    vi.stubEnv('TMPDIR', tempRoot);
+    try {
+      // A file where the temp directory should be makes `mkdir` reject.
+      await writeFile(join(tempRoot, 'tableau-mcp-workbooks'), '');
+      const content = Readable.from([Buffer.from('<workbook/>')]);
+      mocks.mockDownloadWorkbook.mockResolvedValue({
+        content,
+        contentType: 'application/xml',
+        filename: 'Superstore.twb',
+      });
+
+      const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+      expect(result.isError).toBe(true);
+      await vi.waitFor(() => expect(content.destroyed).toBe(true));
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

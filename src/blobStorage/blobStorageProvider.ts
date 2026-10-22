@@ -17,7 +17,8 @@ export interface BlobStorageProvider {
    * Upload data and return a URL the caller can use to retrieve it.
    *
    * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) are never held in
-   * memory whole. It can only be assumed to be iterable once.
+   * memory whole. It can only be assumed to be iterable once. Providers must consume `data` to
+   * completion before resolving; core treats an upload that resolves without reading it as an error.
    *
    * @param params.key - Storage key/path for the blob
    * @param params.data - The bytes to store, as an async iterable (e.g. a Node `Readable`)
