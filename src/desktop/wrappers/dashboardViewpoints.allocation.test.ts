@@ -388,4 +388,250 @@ describe.each(
       );
     },
   );
+
+  const nativeDefaultSizes = axis === 'vert' ? [550, 350, 100] : [466, 266, 268];
+  const parsedZeroSizes = [400, 500, 100];
+  const defaultMinimumCases = [
+    {
+      name: 'omitted native default',
+      submitted: null,
+      readback: null,
+      sizes: nativeDefaultSizes,
+      accepted: true,
+    },
+    {
+      name: 'explicit readback default',
+      submitted: null,
+      readback: 300,
+      sizes: nativeDefaultSizes,
+      accepted: true,
+    },
+    {
+      name: 'explicit native default',
+      submitted: 300,
+      readback: 300,
+      sizes: nativeDefaultSizes,
+      accepted: true,
+    },
+    {
+      name: 'explicit zero is not a native default',
+      submitted: 0,
+      readback: 0,
+      sizes: nativeDefaultSizes,
+      accepted: false,
+    },
+    {
+      name: 'readback zero is not a native default',
+      submitted: null,
+      readback: 0,
+      sizes: nativeDefaultSizes,
+      accepted: false,
+    },
+    {
+      name: 'omitted readback default excludes parsed zero',
+      submitted: null,
+      readback: null,
+      sizes: parsedZeroSizes,
+      accepted: false,
+    },
+    {
+      name: 'explicit readback default excludes parsed zero',
+      submitted: null,
+      readback: 300,
+      sizes: parsedZeroSizes,
+      accepted: false,
+    },
+    {
+      name: 'readback preserves parsed zero',
+      submitted: null,
+      readback: 0,
+      sizes: parsedZeroSizes,
+      accepted: true,
+    },
+    {
+      name: 'explicit zero remains supported',
+      submitted: 0,
+      readback: 0,
+      sizes: parsedZeroSizes,
+      accepted: true,
+    },
+    {
+      name: 'corrupted shared growth with an omitted default',
+      submitted: null,
+      readback: null,
+      sizes: [nativeDefaultSizes[0] - 50, nativeDefaultSizes[1] + 50, nativeDefaultSizes[2]],
+      accepted: false,
+    },
+  ];
+  it.each(
+    defaultMinimumCases.flatMap((testCase) =>
+      [undefined, 0].map((manual) => ({ ...testCase, manual })),
+    ),
+  )(
+    'checks $name during native reflow (manual=$manual)',
+    async ({ submitted, readback, sizes, accepted, manual }) => {
+      const metrics: (Metric | undefined)[] = [
+        { type: 'unbounded', initial: 300, ...(manual === undefined ? {} : { manual }) },
+        { type: 'unbounded', initial: 100 },
+        undefined,
+      ];
+      const setFirstMinimum = (xml: string, value: number | null): string => {
+        const doc = new DOMParser().parseFromString(xml, 'text/xml');
+        const cache = doc.getElementsByTagName('layout-cache')[0];
+        for (const attribute of ['minwidth', 'minheight']) {
+          if (value === null) cache.removeAttribute(attribute);
+          else cache.setAttribute(attribute, String(value));
+        }
+        return new XMLSerializer().serializeToString(doc);
+      };
+      const expected = setFirstMinimum(render(sizes, metrics, { crossInset: 10 }), submitted);
+      const actual = setFirstMinimum(render(sizes, metrics), readback);
+      const matches = createDashboardReadbackVerifier(expected, 'D');
+      expect(matches(expected)).toBe(true);
+      expect(matches(actual)).toBe(accepted);
+      await verifyAppliedAllocation(expected, actual, accepted, ['Sheet 0', 'Sheet 1']);
+    },
+  );
+
+  const refreshedMinimumCases = [
+    { name: 'mixed omitted and refreshed minima', first: 300, second: 301, bounded: false },
+    { name: 'two refreshed minima', first: 301, second: 401, bounded: false },
+    { name: 'refreshed zero and default minima', first: 0, second: 300, bounded: false },
+    { name: 'omitted minimum and bound defaults', first: 300, second: 100, bounded: true },
+    { name: 'refreshed minimum and bound defaults', first: 301, second: 100, bounded: true },
+  ];
+  it.each(
+    refreshedMinimumCases.flatMap((testCase) =>
+      [undefined, 0].map((manual) => ({ ...testCase, manual })),
+    ),
+  )(
+    'uses consistent cache defaults for $name (manual=$manual)',
+    async ({ first, second, bounded, manual }) => {
+      const metrics: (Metric | undefined)[] = [
+        {
+          type: bounded ? 'bounded' : 'unbounded',
+          initial: first,
+          ...(manual === undefined ? {} : { manual }),
+        },
+        { type: 'unbounded', initial: second },
+        undefined,
+      ];
+      const scale = pixels ? 1 : 100;
+      const extra = Math.floor(((900 - first - second) * scale) / (bounded ? 1 : 2)) / scale;
+      const sizes = [first + (bounded ? 0 : extra), second + extra, 100];
+      const configure = (xml: string, submitted: boolean): string => {
+        const doc = new DOMParser().parseFromString(xml, 'text/xml');
+        Array.from(doc.getElementsByTagName('layout-cache')).forEach((cache, index) => {
+          for (const dimension of ['width', 'height']) {
+            if (submitted || metrics[index]?.initial === 300)
+              cache.removeAttribute(`min${dimension}`);
+          }
+          if (submitted && index === 0 && bounded) {
+            cache.removeAttribute('has-max-size-w');
+            cache.removeAttribute('has-max-size-h');
+          }
+        });
+        return new XMLSerializer().serializeToString(doc);
+      };
+      const expected = configure(render(sizes, metrics, { crossInset: 10 }), true);
+      const actual = configure(render(sizes, metrics), false);
+      expect(createDashboardReadbackVerifier(expected, 'D')(actual)).toBe(true);
+      await verifyAppliedAllocation(expected, actual, true, ['Sheet 0', 'Sheet 1']);
+      const corrupted = configure(render([sizes[0] - 20, sizes[1] + 20, sizes[2]], metrics), false);
+      expect(createDashboardReadbackVerifier(expected, 'D')(corrupted)).toBe(false);
+    },
+  );
+
+  it.each(['minwidth', 'minheight', 'has-max-size-w', 'has-max-size-h', 'type-w', 'type-h'])(
+    'preserves an authored %s while resolving omitted minima',
+    async (attribute) => {
+      const metrics: (Metric | undefined)[] = [
+        { type: 'unbounded', initial: 300 },
+        { type: 'unbounded', initial: 100 },
+        undefined,
+      ];
+      const expected = render([550, 350, 100], metrics, { crossInset: 10 }).replace(
+        / min(?:width|height)="300"/g,
+        '',
+      );
+      const doc = new DOMParser().parseFromString(render([550, 350, 100], metrics), 'text/xml');
+      const cache = doc.getElementsByTagName('layout-cache')[1];
+      cache.setAttribute(
+        attribute,
+        attribute.startsWith('min') ? '101' : attribute.startsWith('has-') ? 'true' : 'fixed',
+      );
+      const actual = new XMLSerializer().serializeToString(doc);
+      expect(createDashboardReadbackVerifier(expected, 'D')(actual)).toBe(false);
+      await verifyAppliedAllocation(expected, actual, false, ['Sheet 0', 'Sheet 1']);
+    },
+  );
+
+  it('preserves an explicit bound flag when native geometry otherwise matches', async () => {
+    const metrics: (Metric | undefined)[] = [
+      { type: 'bounded', initial: 300 },
+      { type: 'unbounded', initial: 100 },
+      undefined,
+    ];
+    const flag = axis === 'horz' ? 'has-max-size-w' : 'has-max-size-h';
+    const omitMinimum = (xml: string): string => xml.replace(/ min(?:width|height)="300"/g, '');
+    const expected = omitMinimum(render([300, 600, 100], metrics, { crossInset: 10 })).replace(
+      `${flag}="true"`,
+      `${flag}="false"`,
+    );
+    const actual = omitMinimum(render([300, 600, 100], metrics));
+    const implicitBound = expected.replace(` ${flag}="false"`, '');
+    expect(createDashboardReadbackVerifier(implicitBound, 'D')(actual)).toBe(true);
+    expect(createDashboardReadbackVerifier(expected, 'D')(actual)).toBe(false);
+    await verifyAppliedAllocation(expected, actual, false, ['Sheet 0', 'Sheet 1']);
+  });
+
+  if (axis === 'horz') {
+    it.each([
+      { viewport: 200, submitted: null, minimum: 300, bounded: true, implicitBound: false },
+      { viewport: 1000, submitted: null, minimum: 300, bounded: true, implicitBound: false },
+      { viewport: 200, submitted: null, minimum: 301, bounded: true, implicitBound: false },
+      { viewport: 200, submitted: 0, minimum: 0, bounded: true, implicitBound: false },
+      { viewport: 200, submitted: null, minimum: 300, bounded: false, implicitBound: true },
+      { viewport: 1000, submitted: null, minimum: 300, bounded: true, implicitBound: true },
+    ])(
+      'fits singleton height using the same minimum as primary allocation: %j',
+      async ({ viewport, submitted, minimum, bounded, implicitBound }) => {
+        const scale = pixels ? 1 : 100;
+        const available = pixels ? viewport : 1000;
+        const metrics = [{ type: bounded ? 'bounded' : 'unbounded', initial: minimum }] as Metric[];
+        const configure = (xml: string, expected: boolean, height?: number): string => {
+          const doc = new DOMParser().parseFromString(xml, 'text/xml');
+          const size = doc.getElementsByTagName('size')[0];
+          size.setAttribute('minwidth', String(viewport));
+          size.setAttribute('maxwidth', String(viewport));
+          const cache = doc.getElementsByTagName('layout-cache')[0];
+          const value = expected ? submitted : minimum === 300 ? null : minimum;
+          if (value === null) cache.removeAttribute('minwidth');
+          else cache.setAttribute('minwidth', String(value));
+          if (expected && implicitBound) cache.removeAttribute('has-max-size-w');
+          cache.setAttribute('type-h', 'fixed');
+          cache.setAttribute('fixed-size-h', '100');
+          if (height !== undefined)
+            doc.getElementsByTagName('zone')[1].setAttribute('h', String(height * scale));
+          return new XMLSerializer().serializeToString(doc);
+        };
+        const options = { extraUnits: (available - 1000) * scale };
+        const expected = configure(
+          render([available / 2], metrics, { ...options, crossInset: 10 }),
+          true,
+        );
+        const nativeHeight = !bounded || minimum > viewport ? 1000 : 100;
+        const actual = configure(render([available], metrics, options), false, nativeHeight);
+        expect(createDashboardReadbackVerifier(expected, 'D')(actual)).toBe(true);
+        await verifyAppliedAllocation(expected, actual, true, ['Sheet 0']);
+        const corrupted = configure(
+          render([available], metrics, options),
+          false,
+          nativeHeight === 1000 ? 100 : 1000,
+        );
+        expect(createDashboardReadbackVerifier(expected, 'D')(corrupted)).toBe(false);
+        await verifyAppliedAllocation(expected, corrupted, false, ['Sheet 0']);
+      },
+    );
+  }
 });

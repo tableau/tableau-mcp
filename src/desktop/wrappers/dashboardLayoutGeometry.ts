@@ -371,6 +371,27 @@ function primaryMetric(
       };
 }
 
+function resolvedPrimaryMetric(
+  zone: Element,
+  axis: number,
+  readback: PrimaryMetric | null | undefined,
+): PrimaryMetric | null | undefined {
+  const metric = primaryMetric(zone, axis);
+  const cache = elements(zone).find((child) => child.tagName === 'layout-cache');
+  const suffix = axis === 0 ? 'w' : 'h';
+  // Resolve omitted scalable minima, including zero-request manual fallback, from readback.
+  // Explicit minima and nonzero manual allocations retain their submitted interpretation.
+  return metric &&
+    metric.fixed === 0 &&
+    cache?.getAttribute(`type-${suffix}`) === 'scalable' &&
+    !cache.hasAttribute(axis === 0 ? 'minwidth' : 'minheight') &&
+    readback &&
+    readback.fixed === 0 &&
+    readback.manual === metric.manual
+    ? readback
+    : metric;
+}
+
 function waterFill(values: number[], capacity: number): { cap: number; used: number } {
   const sorted = [...values].sort((a, b) => a - b);
   let used = 0;
@@ -394,7 +415,8 @@ function primaryAllocationMatches(
   axis: number,
   fillsClient: boolean,
 ): boolean | undefined {
-  const metrics = expected.map((zone) => primaryMetric(zone, axis));
+  const readback = actual.map((zone) => primaryMetric(zone, axis, true));
+  const metrics = expected.map((zone, index) => resolvedPrimaryMetric(zone, axis, readback[index]));
   if (metrics.includes(null)) return false;
   const hasManual = expected.some((zone) => zone.getAttribute('is-fixed') === 'true');
   if (
@@ -448,7 +470,7 @@ function primaryAllocationMatches(
   const minimumShare = automaticCount > 0 ? Math.floor((length - fixed.used) / automaticCount) : 0;
   let canGrow = true;
   let canShrink = fillsClient;
-  for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis, true))]) {
+  for (const candidates of [metrics, readback]) {
     if (candidates.includes(null)) return false;
     if (
       !fillsClient &&
@@ -524,19 +546,22 @@ function primaryAllocationMatches(
   return allocated.every((size, index) => Math.abs(size - sizes[index]) <= 1);
 }
 
-function singleHorizontalHeight(expected: Element, client: Bounds): number | undefined {
+function singleHorizontalHeight(
+  expected: Element,
+  actual: Element,
+  client: Bounds,
+): number | undefined {
   if (!isVisual(expected)) return;
   const cache = elements(expected).find((child) => child.tagName === 'layout-cache');
   if (!cache || cache.getAttribute('type-h') !== 'fixed') return;
   if (isTrue(expected.getAttribute('is-fixed'))) return;
-  const primary = primaryMetric(expected, 0);
+  const primary = resolvedPrimaryMetric(expected, 0, primaryMetric(actual, 0, true));
   const fixed = cache.hasAttribute('fixed-size-h')
     ? integer(cache.getAttribute('fixed-size-h'))
     : 300;
   const insets = spacing(expected);
   if (fixed === undefined || fixed < 0 || !primary || primary.unbounded || !insets) return;
-  // Native GrowZones fits a singleton's fixed height only when its submitted width fits.
-  // Readback-only cache metrics cannot authorize this exception.
+  // The submitted fixed-height cache authorizes fitting only on the native Grow branch.
   if (primary.initial > client[2] - client[0]) return;
   const height = pixelUnits(expected, fixed + insets[0][1] + insets[0][3], 1);
   if (height === undefined || height < 0) return;
@@ -600,7 +625,7 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
   const cross = axis === 0 ? 1 : 0;
   const fittedHeight =
     axis === 0 && visible.length === 1
-      ? singleHorizontalHeight(before[indices[0]], client)
+      ? singleHorizontalHeight(before[indices[0]], after[indices[0]], client)
       : undefined;
   const crossSize = fittedHeight ?? client[cross + 2] - client[cross];
   const primaryUnchanged = indices.every((index) => {
