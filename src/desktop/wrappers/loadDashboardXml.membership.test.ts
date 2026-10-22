@@ -4,6 +4,14 @@ import { Err, Ok } from 'ts-results-es';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import * as validationRegistry from '../validation/registry.js';
 import { sourceSha256 } from './cacheFingerprint.js';
+import {
+  readbackReflowDashboard,
+  REFLOW_DASHBOARD_ID,
+  REFLOW_DASHBOARD_NAME,
+  REFLOW_WORKSHEET_NAME,
+  reflowWorkbook,
+  submittedReflowDashboard,
+} from './dashboardReflowFixtures.js';
 import { dashboardMembershipMatches } from './dashboardViewpoints.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
@@ -70,6 +78,45 @@ describe('dashboard membership apply', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('verifies native registration and tiled reflow on the original Desktop instance', async () => {
+    const empty = `<dashboard name="${REFLOW_DASHBOARD_NAME}"><zones/><simple-id uuid="${REFLOW_DASHBOARD_ID}"/></dashboard>`;
+    let live = reflowWorkbook(empty, false);
+    const instanceId = 'reflow-desktop-instance';
+    const executor = makeExecutorMock({
+      desktopApiVersion: '0.2.22',
+      listDashboards: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ dashboards: [{ id: REFLOW_DASHBOARD_ID, name: REFLOW_DASHBOARD_NAME }] }),
+        ),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: empty })),
+      getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: live, instanceId })),
+      applyDashboardDocument: vi.fn().mockImplementation(async () => {
+        live = reflowWorkbook(readbackReflowDashboard);
+        return Ok({ command_id: 'reflow-apply', status: 'completed', submitted_at: '' });
+      }),
+    });
+
+    const result = await loadDashboardXml({
+      dashboardName: REFLOW_DASHBOARD_NAME,
+      xml: submittedReflowDashboard,
+      requireExistingSheet: true,
+      verifyReadback: true,
+      focus,
+      executor,
+      signal,
+    });
+
+    expect(result.unwrap().verifiedWorksheetNames).toEqual([REFLOW_WORKSHEET_NAME]);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledExactlyOnceWith(
+      REFLOW_DASHBOARD_ID,
+      expect.any(String),
+      signal,
+      { expectedInstanceId: instanceId },
+    );
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it.each([undefined, '0.2.21'])(

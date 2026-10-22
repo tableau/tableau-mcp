@@ -3,6 +3,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import type { ValidationIssue } from '../validation/types.js';
 import { normalizeParsedXmlName, parsedXmlNamesEqual } from '../xmlElement.js';
+import {
+  canOmitDefaultStrategy,
+  hasDesktopManagedGeometry,
+  layoutGeometryMatches,
+} from './dashboardLayoutGeometry.js';
 
 function parse(xml: string): Document {
   return new DOMParser({
@@ -313,8 +318,8 @@ function expandedName(element: Element): string {
 }
 
 /**
- * Compare every submitted attribute, ordered layout node, style and text value. Allow
- * Desktop to add defaults/metadata that were not authored (for example a new simple-id).
+ * Compare authored attributes, ordered layout nodes, styles and text. Allow Desktop
+ * to reflow automatic tiled geometry and add defaults/metadata that were not authored.
  * Never allow added/removed/reordered zones or device layouts inside authored collections.
  */
 function containsAuthoredContent(expected: Element, actual: Element): boolean {
@@ -325,6 +330,12 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     const present = attribute.namespaceURI
       ? actual.hasAttributeNS(attribute.namespaceURI, localName)
       : actual.hasAttribute(attribute.name);
+    if (
+      !present &&
+      attribute.name === 'layout-strategy-id' &&
+      canOmitDefaultStrategy(expected, actual)
+    )
+      continue;
     if (!present) return false;
     const actualValue = attribute.namespaceURI
       ? actual.getAttributeNS(attribute.namespaceURI, localName)
@@ -333,15 +344,21 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
     if (attribute.name === 'name') {
       if (!parsedXmlNamesEqual(attribute.value, actualValue)) return false;
     } else if (expected.tagName === 'zone' && ['x', 'y', 'w', 'h'].includes(attribute.name)) {
-      // Desktop rounds zone coordinates during serialization.
       if (
         !attribute.value.trim() ||
         !actualValue.trim() ||
         !Number.isInteger(Number(attribute.value)) ||
-        !Number.isInteger(Number(actualValue)) ||
-        Math.abs(Number(attribute.value) - Number(actualValue)) > 1
+        !Number.isInteger(Number(actualValue))
       )
         return false;
+      if (hasDesktopManagedGeometry(expected)) {
+        if (
+          ['w', 'h'].includes(attribute.name) &&
+          Number(attribute.value) > 0 &&
+          Number(actualValue) <= 0
+        )
+          return false;
+      } else if (Math.abs(Number(attribute.value) - Number(actualValue)) > 1) return false;
     } else if (attribute.value !== actualValue) return false;
   }
   const text = (element: Element): string => {
@@ -362,6 +379,7 @@ function containsAuthoredContent(expected: Element, actual: Element): boolean {
   );
   return (
     expectedChildren.length === actualChildren.length &&
+    layoutGeometryMatches(expected, actual) &&
     expectedChildren.every((child, index) => containsAuthoredContent(child, actualChildren[index]))
   );
 }

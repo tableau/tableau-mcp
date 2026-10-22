@@ -1,5 +1,11 @@
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
+import {
+  readbackReflowDashboard,
+  REFLOW_DASHBOARD_NAME,
+  reflowWorkbook,
+  submittedReflowDashboard,
+} from './dashboardReflowFixtures.js';
 import {
   composeDashboardWorkbook,
   createDashboardReadbackVerifier,
@@ -266,5 +272,267 @@ describe('dashboard content readback', () => {
 
   it('rejects malformed readback', () => {
     expect(matches('<workbook><dashboard')).toBe(false);
+  });
+});
+
+describe('Desktop tiled-layout reflow', () => {
+  const submitted = reflowWorkbook(submittedReflowDashboard);
+  const readback = reflowWorkbook(readbackReflowDashboard);
+  const matches = createDashboardReadbackVerifier(submitted, REFLOW_DASHBOARD_NAME);
+
+  function zoneAttribute(xml: string, id: string, attribute: string, value: string): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const zone = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === id,
+    )!;
+    zone.setAttribute(attribute, value);
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  function floatFlowContainer(xml: string): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const flow = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === '5',
+    )!;
+    // Native floating containers are siblings of the tiled layout-basic root.
+    doc.getElementsByTagName('zones')[0].appendChild(flow);
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  function moveCoordinate(xml: string, id: string, attribute: string): string {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const zone = Array.from(doc.getElementsByTagName('zone')).find(
+      (element) => element.getAttribute('id') === id,
+    )!;
+    return zoneAttribute(xml, id, attribute, String(Number(zone.getAttribute(attribute)) + 100));
+  }
+
+  function siblingFlows(start: number, split: number, end: number, horizontal = true): string {
+    const rect = (left: number, right: number): string =>
+      horizontal
+        ? `x="${left}" y="${start}" w="${right - left}" h="${end - start}"`
+        : `x="${start}" y="${left}" w="${end - start}" h="${right - left}"`;
+    return reflowWorkbook(`<dashboard name="${REFLOW_DASHBOARD_NAME}">
+      <size minwidth="1000" maxwidth="1000" minheight="800" maxheight="800"/>
+      <zones><zone id="4" type-v2="layout-basic" x="0" y="0" w="100000" h="100000">
+        <zone id="5" type-v2="layout-flow" param="vert" ${rect(start, split)}>
+          <zone id="6" type-v2="empty" ${rect(start, split)}/>
+        </zone>
+        <zone id="8" type-v2="layout-flow" param="vert" ${rect(split, end)}>
+          <zone id="9" type-v2="empty" ${rect(split, end)}/>
+        </zone>
+      </zone></zones></dashboard>`);
+  }
+
+  it('accepts the captured tiled reflow with native metadata and matching viewpoint state', () => {
+    expect(matches(submitted)).toBe(true);
+    expect(matches(readback)).toBe(true);
+  });
+
+  it.each([
+    { name: 'empty coordinate', attribute: 'x', value: '' },
+    { name: 'noninteger coordinate', attribute: 'y', value: '0.5' },
+    { name: 'zero-width worksheet', attribute: 'w', value: '0' },
+    { name: 'negative-height worksheet', attribute: 'h', value: '-1' },
+  ])('still rejects a $name after reflow', ({ attribute, value }) => {
+    expect(matches(zoneAttribute(readback, '7', attribute, value))).toBe(false);
+  });
+
+  it.each([
+    { zoneId: '5', attribute: 'is-fixed', value: 'true' },
+    { zoneId: '7', attribute: 'is-fixed', value: '1' },
+    { zoneId: '7', attribute: 'is-fixed', value: 'true' },
+    { zoneId: '7', attribute: 'fixed-size', value: '600' },
+  ])('preserves authored geometry for zone $zoneId with $attribute=$value', (setting) => {
+    const expected = zoneAttribute(submitted, setting.zoneId, setting.attribute, setting.value);
+    const actual = zoneAttribute(readback, setting.zoneId, setting.attribute, setting.value);
+    expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(false);
+    const unchanged = zoneAttribute(readback, setting.zoneId, setting.attribute, setting.value);
+    const matchesFixed = createDashboardReadbackVerifier(unchanged, REFLOW_DASHBOARD_NAME);
+    expect(matchesFixed(unchanged)).toBe(true);
+    for (const coordinate of ['x', 'y', 'w', 'h']) {
+      expect(matchesFixed(moveCoordinate(unchanged, setting.zoneId, coordinate))).toBe(false);
+    }
+  });
+
+  it('still rejects changed bounds of a floating flow container', () => {
+    const expected = floatFlowContainer(submitted);
+    const actual = floatFlowContainer(readback);
+    const matchesFloating = createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME);
+    expect(matchesFloating(expected)).toBe(true);
+    expect(matchesFloating(actual)).toBe(false);
+    const unchanged = floatFlowContainer(readback);
+    const matchesUnchanged = createDashboardReadbackVerifier(unchanged, REFLOW_DASHBOARD_NAME);
+    expect(matchesUnchanged(unchanged)).toBe(true);
+    for (const coordinate of ['x', 'y', 'w', 'h']) {
+      expect(matchesUnchanged(moveCoordinate(unchanged, '5', coordinate))).toBe(false);
+    }
+  });
+
+  it.each([true, false])(
+    'preserves sibling proportions and positions (horizontal=%s)',
+    (horizontal) => {
+      const expected = siblingFlows(0, 50000, 100000, horizontal);
+      const verify = createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME);
+      expect(verify(expected)).toBe(true);
+      expect(verify(siblingFlows(0, 10000, 100000, horizontal))).toBe(false);
+      let swapped = expected;
+      for (const id of ['5', '6', '8', '9']) {
+        swapped = zoneAttribute(
+          swapped,
+          id,
+          horizontal ? 'x' : 'y',
+          Number(id) < 8 ? '50000' : '0',
+        );
+      }
+      expect(verify(swapped)).toBe(false);
+    },
+  );
+
+  it.each([true, false])(
+    'accepts common basic-child normalization (horizontal=%s)',
+    (horizontal) => {
+      const expected = siblingFlows(1000, 25500, 99000, horizontal);
+      const actual = siblingFlows(0, 25000, 100000, horizontal);
+      expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(true);
+    },
+  );
+
+  it('accepts integer rounding during common basic-child scaling', () => {
+    const expected = siblingFlows(1000, 25001, 99000);
+    const actual = siblingFlows(0, 24490, 100000);
+    expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(true);
+  });
+
+  it('requires authored spacing for an inset flow client rectangle', () => {
+    // At 1024 x 768, native conversion rounds each 8px inset to 781 x 1042.
+    let actual = zoneAttribute(readback, '6', 'x', '781');
+    actual = zoneAttribute(actual, '6', 'y', '1042');
+    actual = zoneAttribute(actual, '6', 'w', '98438');
+    actual = zoneAttribute(actual, '7', 'x', '781');
+    actual = zoneAttribute(actual, '7', 'y', '7422');
+    actual = zoneAttribute(actual, '7', 'w', '98438');
+    actual = zoneAttribute(actual, '7', 'h', '91536');
+    expect(matches(actual)).toBe(false);
+    const withMargin = (xml: string): string => {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      const flow = Array.from(doc.getElementsByTagName('zone')).find(
+        (zone) => zone.getAttribute('id') === '5',
+      )!;
+      const style = doc.createElement('zone-style');
+      const format = doc.createElement('format');
+      format.setAttribute('attr', 'margin');
+      format.setAttribute('value', '8');
+      style.appendChild(format);
+      flow.appendChild(style);
+      return new XMLSerializer().serializeToString(doc);
+    };
+    expect(
+      createDashboardReadbackVerifier(
+        withMargin(submitted),
+        REFLOW_DASHBOARD_NAME,
+      )(withMargin(actual)),
+    ).toBe(true);
+  });
+
+  it('accepts reflow inside a floating container outside the dashboard', () => {
+    const place = (xml: string): string => {
+      let moved = floatFlowContainer(xml);
+      for (const id of ['5', '6', '7']) {
+        moved = zoneAttribute(moved, id, 'x', '200000');
+        moved = zoneAttribute(moved, id, 'w', '100000');
+      }
+      moved = zoneAttribute(moved, '5', 'y', '0');
+      return zoneAttribute(moved, '5', 'h', '100000');
+    };
+    const expected = place(submitted);
+    const actual = place(readback);
+    expect(createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME)(actual)).toBe(true);
+  });
+
+  it('checks the corresponding axes of horizontal flow reflow', () => {
+    const transpose = (xml: string): string => {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      for (const zone of Array.from(doc.getElementsByTagName('zone'))) {
+        for (const [a, b] of [
+          ['x', 'y'],
+          ['w', 'h'],
+        ]) {
+          const value = zone.getAttribute(a)!;
+          zone.setAttribute(a, zone.getAttribute(b)!);
+          zone.setAttribute(b, value);
+        }
+        for (const cache of Array.from(zone.getElementsByTagName('layout-cache')).filter(
+          (element) => element.parentNode === zone,
+        )) {
+          for (const [a, b] of [
+            ['type-w', 'type-h'],
+            ['minwidth', 'minheight'],
+            ['maxwidth', 'maxheight'],
+            ['fixed-size-w', 'fixed-size-h'],
+            ['has-max-size-w', 'has-max-size-h'],
+          ]) {
+            const first = cache.getAttribute(a);
+            const second = cache.getAttribute(b);
+            if (second === null) cache.removeAttribute(a);
+            else cache.setAttribute(a, second);
+            if (first === null) cache.removeAttribute(b);
+            else cache.setAttribute(b, first);
+          }
+        }
+        if (zone.getAttribute('id') === '5') zone.setAttribute('param', 'horz');
+      }
+      return new XMLSerializer().serializeToString(doc);
+    };
+    const expected = transpose(submitted);
+    const actual = transpose(readback);
+    const verify = createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME);
+    expect(verify(actual)).toBe(true);
+    expect(verify(zoneAttribute(actual, '7', 'y', '200000'))).toBe(false);
+    expect(verify(zoneAttribute(actual, '7', 'x', '0'))).toBe(false);
+  });
+
+  it.each([
+    { attribute: 'x', value: '200000' },
+    { attribute: 'x', value: '-200000' },
+    { attribute: 'y', value: '200000' },
+    { attribute: 'y', value: '0' },
+    { attribute: 'w', value: '50000' },
+  ])('rejects an invalid flow relationship ($attribute=$value)', ({ attribute, value }) => {
+    const verify = createDashboardReadbackVerifier(readback, REFLOW_DASHBOARD_NAME);
+    expect(verify(zoneAttribute(readback, '7', attribute, value))).toBe(false);
+  });
+
+  it.each([
+    { zoneId: '7', value: 'true' },
+    { zoneId: '7', value: '1' },
+    { zoneId: '5', value: 'true' },
+    { zoneId: '4', value: 'true' },
+  ])('preserves effectively hidden worksheet bounds (zone $zoneId)', ({ zoneId, value }) => {
+    const expected = zoneAttribute(readback, zoneId, 'hidden-by-user', value);
+    const verify = createDashboardReadbackVerifier(expected, REFLOW_DASHBOARD_NAME);
+    expect(verify(expected)).toBe(true);
+    expect(verify(zoneAttribute(expected, '7', 'w', '50000'))).toBe(false);
+    for (const coordinate of ['x', 'y', 'w', 'h']) {
+      expect(verify(moveCoordinate(expected, '7', coordinate))).toBe(false);
+    }
+  });
+
+  it('still requires the native worksheet registration after reflow', () => {
+    expect(matches(reflowWorkbook(readbackReflowDashboard, false))).toBe(false);
+  });
+
+  it('still rejects a changed flow direction, worksheet, title, style, or dashboard size', () => {
+    const changed = [
+      zoneAttribute(readback, '5', 'param', 'horz'),
+      zoneAttribute(readback, '7', 'name', 'Another worksheet'),
+      readback.replace('Coachella Artists per Day: 2022 vs 2026', 'Changed title'),
+      readback.replace("fontsize='20'", "fontsize='10'"),
+      readback.replace("maxwidth='1024'", "maxwidth='900'"),
+    ];
+    for (const xml of changed) {
+      expect(xml).not.toBe(readback);
+      expect(matches(xml)).toBe(false);
+    }
   });
 });
