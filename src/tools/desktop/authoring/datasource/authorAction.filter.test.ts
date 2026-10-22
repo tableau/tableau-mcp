@@ -276,6 +276,45 @@ describe('authorActionTool (filter mode)', () => {
     },
   );
 
+  it('reads specific-field dependencies from the workbook block when a datasource-level <actions> block precedes it', async () => {
+    const datasourceActions =
+      "<actions><action caption='Go' expression='https://example.com/ds' name='ds-link' /></actions>";
+    const workbook = WORKSHEETS_WITH_FILTER_FIELDS.replace(
+      '</datasource></datasources>',
+      `${datasourceActions}</datasource></datasources>`,
+    );
+    const expectedAction =
+      "<action caption='Filter Selected' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Filter Selected',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const expectedBlocks = filterDependencyBlocks(['Category', 'Sub-Category']);
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter Selected',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category', 'Sub-Category'],
+      },
+      initialXml: workbook,
+      readbackXml: withActions(workbook, expectedAction + expectedBlocks),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(
+      `</datasources><actions>${expectedAction}${expectedBlocks}</actions><worksheets>`,
+    );
+    expect(loaded).toContain(`${datasourceActions}</datasource></datasources>`);
+  });
+
   it('fails readback when the specific-field datasource-dependencies are dropped', async () => {
     const survivingAction =
       "<action caption='Filter Selected' name='[Action1]'>" +

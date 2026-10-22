@@ -644,7 +644,15 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           const effectiveExcludedTargetSheets =
             input.mode === 'filter' || input.mode === 'highlight' ? input.excludeTargetSheets : [];
 
-          if (hasActionCaption(xmlWithoutSelectedAction, caption)) {
+          const actionsBlock = workbookActionsBlock(xmlWithoutSelectedAction);
+          if (actionsBlock.isErr()) return actionsBlock.error.toErr();
+          if (actionsBlock.value === null && baselineActions.value.length > 0) {
+            return new XmlModificationError(
+              "cannot add the action: the workbook's <actions> block is not where the schema puts it, right before <worksheets>",
+            ).toErr();
+          }
+          const workbookActionsXml = actionsBlock.value?.body ?? '';
+          if (hasActionCaption(workbookActionsXml, caption)) {
             return new ArgsValidationError(
               'caption collision — pick a new caption or edit the existing action',
             ).toErr();
@@ -835,7 +843,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                     : 'all'
                   : undefined,
             };
-            if (hasHighlightAction(xmlWithoutSelectedAction, highlightAction)) {
+            if (hasHighlightAction(workbookActionsXml, highlightAction)) {
               return new ArgsValidationError(
                 'an identical highlight action (same source, target, fields, and behavior) already exists',
               ).toErr();
@@ -898,7 +906,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           if (
             input.mode === 'filter' &&
-            hasFilterActionDuplicate(xmlWithoutSelectedAction, filterAction!)
+            hasFilterActionDuplicate(workbookActionsXml, filterAction!)
           ) {
             return new ArgsValidationError(
               'an identical filter action (same source, target, fields, and behavior) already exists',
@@ -2237,10 +2245,11 @@ function hasFilterDependencies(
   if (deps === undefined || deps.columnsXml.length === 0) {
     return true;
   }
-  const actionsBlock = xml.match(/<actions\b[^>]*>[\s\S]*?<\/actions>/)?.[0];
-  if (actionsBlock === undefined) {
+  const block = workbookActionsBlock(xml);
+  if (block.isErr() || block.value === null) {
     return false;
   }
+  const actionsBlock = block.value.body;
   // The datasource must still be listed in the action-scoped <datasources> block.
   const datasourcesBlock = actionsBlock.match(/<datasources>[\s\S]*?<\/datasources>/)?.[0];
   const datasourceListed =
@@ -2287,22 +2296,82 @@ type ActionsSite =
   | { kind: 'empty'; start: number; end: number; opening: string }
   | { kind: 'fresh'; insertAt: number };
 
-function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
-  const opening = /<actions\b[^>]*>/.exec(xml);
-  if (opening !== null) {
-    if (/\/\s*>$/.test(opening[0])) {
+type WorkbookActionsBlock = {
+  start: number;
+  opening: string;
+  selfClosing: boolean;
+  innerStart: number;
+  close: number;
+  end: number;
+  body: string;
+};
+
+// Workbook actions sit right before <worksheets> (XSD WorkbookFile-CT); a <datasource> can hold its own <actions>.
+export function workbookActionsBlock(
+  xml: string,
+): Result<WorkbookActionsBlock | null, XmlModificationError> {
+  const worksheets = /<worksheets[\s>/]/.exec(xml);
+  if (worksheets === null) {
+    return /<actions[\s/>]/.test(xml)
+      ? new XmlModificationError(
+          'cannot locate the workbook <actions> block: no <worksheets> anchor in document',
+        ).toErr()
+      : new Ok(null);
+  }
+  const before = xml.slice(0, worksheets.index).trimEnd();
+  const opener = [...before.matchAll(/<actions(?=[\s/>])[^>]*>/g)].at(-1);
+  const closeTag = /<\/actions\s*>$/.exec(before);
+  if (opener !== undefined) {
+    const opening = opener[0];
+    const start = opener.index;
+    const innerStart = start + opening.length;
+    const selfClosing = /\/\s*>$/.test(opening);
+    if (selfClosing && innerStart === before.length) {
       return new Ok({
-        kind: 'empty',
-        start: opening.index,
-        end: opening.index + opening[0].length,
-        opening: opening[0].replace(/\/\s*>$/, '>'),
+        start,
+        opening,
+        selfClosing,
+        innerStart,
+        close: innerStart,
+        end: innerStart,
+        body: '',
       });
     }
-    const close = xml.indexOf('</actions>', opening.index + opening[0].length);
-    if (close === -1) {
-      return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
+    if (
+      !selfClosing &&
+      closeTag !== null &&
+      !before.slice(innerStart, closeTag.index).includes('</actions')
+    ) {
+      return new Ok({
+        start,
+        opening,
+        selfClosing,
+        innerStart,
+        close: closeTag.index,
+        end: before.length,
+        body: before.slice(innerStart, closeTag.index),
+      });
     }
-    return new Ok({ kind: 'existing', innerStart: opening.index + opening[0].length, close });
+  }
+  if (closeTag !== null || !/<\/?[\w:-]+[^<>]*>$/.test(before)) {
+    return new XmlModificationError(
+      'cannot locate the workbook <actions> block: unexpected markup right before <worksheets>',
+    ).toErr();
+  }
+  return new Ok(null);
+}
+
+function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
+  const block = workbookActionsBlock(xml);
+  if (block.isErr()) {
+    return block.error.toErr();
+  }
+  if (block.value !== null) {
+    const { start, end, opening, innerStart, close, selfClosing } = block.value;
+    if (selfClosing) {
+      return new Ok({ kind: 'empty', start, end, opening: opening.replace(/\s*\/\s*>$/, '>') });
+    }
+    return new Ok({ kind: 'existing', innerStart, close });
   }
 
   const worksheets = /<worksheets[\s>/]/.exec(xml);
