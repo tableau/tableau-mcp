@@ -49,7 +49,7 @@ export const getRefreshDashboardAutoUpdatesTool = (
     minApiVersion: '0.2.19',
     title,
     description:
-      "Run pending automatic updates for every worksheet in one dashboard's current device layout now, without changing the active sheet. Worksheets that refresh stay refreshed when another fails; the call then returns an error whose result reports a PARTIAL or FAILED outcome with per-worksheet results.",
+      "Run pending automatic updates for every worksheet in one dashboard's current device layout now, without changing the active sheet. If a worksheet fails, the error result reports a PARTIAL or FAILED outcome per worksheet.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

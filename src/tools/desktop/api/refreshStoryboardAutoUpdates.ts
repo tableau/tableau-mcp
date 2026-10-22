@@ -47,7 +47,7 @@ export const getRefreshStoryboardAutoUpdatesTool = (
     minApiVersion: '0.2.20',
     title,
     description:
-      'Run pending automatic updates for the current point of one storyboard now, without changing the active sheet or current story point. Worksheets that refresh stay refreshed when another fails; the call then returns an error whose result reports a PARTIAL or FAILED outcome with per-worksheet results.',
+      'Run pending automatic updates for the current point of one storyboard now, without changing the active sheet or current story point. If a worksheet fails, the error result reports a PARTIAL or FAILED outcome per worksheet.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

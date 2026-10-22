@@ -37,8 +37,7 @@ export const getRefreshDatasourceExtractTool = (
     description:
       'Refresh the extract for a datasource in the open workbook. By default the refresh is incremental ' +
       'when the extract is configured for incremental refresh; pass isFullRefresh to force a full refresh. ' +
-      'A datasource with no refreshable extract does nothing and still succeeds. An id that matches no ' +
-      'datasource fails.',
+      'A datasource with no refreshable extract does nothing and still succeeds.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

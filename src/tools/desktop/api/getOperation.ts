@@ -20,7 +20,7 @@ export const getOperationTool = (server: DesktopMcpServer): DesktopTool<typeof p
     name: 'get-operation',
     title,
     description:
-      'Get one Tableau Desktop operation by id. Returns its kind, state, result or error, warnings, and timestamps. Dialogs in blockingWindows and progress in progressWindows appear only while the operation is not in a terminal state.',
+      'Get one Tableau Desktop operation by id: kind, state, result or error, warnings, and timestamps. blockingWindows and progressWindows appear only while it is not in a terminal state.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

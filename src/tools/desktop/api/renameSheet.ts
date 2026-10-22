@@ -24,8 +24,7 @@ export const getRenameSheetTool = (server: DesktopMcpServer): DesktopTool<typeof
     server,
     name: 'rename-sheet',
     title,
-    description:
-      'Rename a worksheet, dashboard, or storyboard by name or id. A name that matches the current name changes nothing.',
+    description: 'Rename a worksheet, dashboard, or storyboard by name or id.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

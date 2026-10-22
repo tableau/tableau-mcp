@@ -18,7 +18,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'Absolute .twb/.twbx path to Save As; the open workbook then points at this path. Omit to save in place at the current path.',
+      'Absolute .twb/.twbx path to Save As; the open workbook then points at it. Omit to save in place.',
     ),
 };
 const title = 'Save Workbook';
@@ -31,7 +31,7 @@ export const getSaveWorkbookTool = (server: DesktopMcpServer): DesktopTool<typeo
     title,
     description:
       'Save the open workbook in place, or pass an absolute .twb/.twbx path to Save As: the workbook is ' +
-      'written there and becomes the open document, so later saves go to that path (use workbook-export-as for a copy). ' +
+      'written there and becomes the open document (use workbook-export-as for a copy). ' +
       'A workbook that has never been saved has no path, so omitting filePath then opens the ' +
       'Save As dialog and blocks until a person responds — pass filePath to save it headlessly.',
     annotations: {

@@ -19,7 +19,7 @@ export const getListStoryboardsTool = (
     name: 'list-storyboards',
     title,
     description:
-      "Lists the workbook's storyboards, each with its stable id, name, hidden and active-sheet flags, story point count, and index. The index is the 0-based tab position across all sheet types (worksheets, dashboards and storyboards interleaved), not the position in this list; it is null for a hidden sheet and -1 for a sheet with no window.",
+      "Lists the workbook's storyboards, each with its stable id, name, hidden and active-sheet flags, story point count, and index (the 0-based tab position across all sheet types, not the position in this list).",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

@@ -28,9 +28,8 @@ export const getSetDataSourcePageActiveTool = (
     minApiVersion: '0.2.25',
     title,
     description:
-      'Switch Tableau Desktop to the Data Source page or back to a sheet, then read back and ' +
-      'return whether the Data Source page is actually active. The request can succeed without ' +
-      'changing the page, for example when a published datasource cannot connect.',
+      'Switch Tableau Desktop to the Data Source page or back to a sheet, and return the page state read back. ' +
+      'The request can succeed without changing the page, for example when a published datasource cannot connect.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

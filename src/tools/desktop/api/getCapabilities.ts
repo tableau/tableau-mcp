@@ -19,7 +19,7 @@ export const getCapabilitiesTool = (server: DesktopMcpServer): DesktopTool<typeo
     minApiVersion: '0.2.25',
     title,
     description:
-      'Return the External Client API capability matrix for the connected Tableau Desktop instance. The result maps each API operation id to whether it requires a Tableau Server connection (requiresServer).',
+      'Return the External Client API capability matrix: for each operation id, whether it requires a Tableau Server connection (requiresServer).',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

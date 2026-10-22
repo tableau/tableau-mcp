@@ -19,7 +19,7 @@ export const getListWorksheetsTool = (
     name: 'list-worksheets',
     title,
     description:
-      "Lists the workbook's worksheets, each with its stable id, name, and state (hidden, index, active sheet, auto-updates, datasources). index is the 0-based tab position across all sheet types, not the position in this list; it is null for a hidden sheet and -1 for a sheet with no window.",
+      "Lists the workbook's worksheets, each with its stable id, name, and state (hidden, index, active sheet, auto-updates, datasources). index is the 0-based tab position across all sheet types, not the position in this list.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

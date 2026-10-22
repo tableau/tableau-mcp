@@ -48,7 +48,6 @@ const NON_TOOL_VOCABULARY = [
   'border-color',
   'border-style',
   'border-width',
-  'built-in',
   'byte-order',
   'calc-dependency-unmet',
   'calculation-caption',
@@ -167,7 +166,6 @@ const NON_TOOL_VOCABULARY = [
   'param-domain-type',
   // Field resolver transformation marker, not a callable tool.
   'part-to-whole-waterfall',
-  'per-worksheet',
   'percent-encoded',
   'post-apply',
   'post-apply-read',
@@ -180,7 +178,6 @@ const NON_TOOL_VOCABULARY = [
   'quantitative-or-categorical',
   're-call',
   're-enables',
-  're-encoded',
   're-read',
   're-reading',
   're-run',

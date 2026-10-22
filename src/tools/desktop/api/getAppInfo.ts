@@ -18,7 +18,7 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
     name: 'get-app-info',
     title,
     description:
-      'Return application information for the running Tableau Desktop instance: application version, edition, build, operating system, locale, repository and log locations, and UI mode flags (isStartPageVisible, isDataSourcePageActive, isPresentationMode, isFocusMode). Every field the instance reports is returned. This describes the application and its current view mode; to check whether Desktop is idle or blocked by a dialog or activity, use get-desktop-state.',
+      "Return the running Tableau Desktop instance's version, edition, build, operating system, locale, repository and log locations, and UI mode flags (isStartPageVisible, isDataSourcePageActive, isPresentationMode, isFocusMode). To check whether Desktop is idle or blocked by a dialog, use get-desktop-state.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

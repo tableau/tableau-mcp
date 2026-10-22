@@ -22,7 +22,7 @@ export const getValidateCalculatedFieldTool = (
     minApiVersion: '0.2.16',
     title: 'Validate Calculated Field',
     description:
-      'Check a calculated field formula against a worksheet without changing the workbook. Returns isValid and an errors list; each error has position, length, and message.',
+      'Check a calculated field formula against a worksheet without changing the workbook. Returns isValid and errors (position, length, message).',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

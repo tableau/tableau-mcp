@@ -26,7 +26,7 @@ export const getGetSheetInfoTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'get-sheet-info',
     title,
     description:
-      'Reads one worksheet, dashboard, or storyboard by name or id. Returns its id, name, kind, hidden and active state, and index, plus the datasources used for a worksheet, the contained sheets for a dashboard, or the story point count for a storyboard.',
+      'Read one worksheet, dashboard, or storyboard by name or id: its state and index, plus the datasources of a worksheet, the sheets in a dashboard, or the story point count of a storyboard.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

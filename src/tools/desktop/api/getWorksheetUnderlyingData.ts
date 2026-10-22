@@ -19,17 +19,15 @@ const paramsSchema = {
   logicalTable: z
     .string()
     .describe("A logical table caption or id from the worksheet's logical tables."),
-  maxRows: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Default 200; max 1000; no truncation flag.'),
+  maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   includeAllColumns: z
     .boolean()
     .optional()
-    .describe('Include columns the view does not reference.'),
-  columns: z.array(z.string()).optional().describe('Field names to keep (e.g. "Region").'),
+    .describe('Include every column, not only the ones the view references.'),
+  columns: z
+    .array(z.string())
+    .optional()
+    .describe('Field names to restrict the columns (e.g. "Region").'),
 };
 const title = 'Get Worksheet Underlying Data';
 

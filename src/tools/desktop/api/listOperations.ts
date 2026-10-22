@@ -20,7 +20,7 @@ export const getListOperationsTool = (
     name: 'list-operations',
     title,
     description:
-      'List the in-flight and recent operations known to Tableau Desktop. Each operation includes its id, kind, state, timestamps, and, when it failed, the error with its code and tableauErrorCode. Also returns any blocking or progress windows. Use get-operation to read one operation by id.',
+      'List in-flight and recent Tableau Desktop operations (id, kind, state, timestamps, and the error with its code and tableauErrorCode when failed), plus any blocking or progress windows. Use get-operation to read one by id.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,
