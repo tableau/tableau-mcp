@@ -30,7 +30,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
     productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
@@ -65,21 +64,24 @@ describe('listFlowTasksTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = getListFlowTasksTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('should be disabled when the flow-tools feature flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getListFlowTasksTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getListFlowTasksTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('successfully lists flow run tasks with a resultInfo signal', async () => {
     mocks.mockGetFlowRunTasks.mockResolvedValue(mockFlowRunTasks);
