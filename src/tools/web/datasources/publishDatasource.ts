@@ -8,6 +8,7 @@ import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { PublishedDataSourceResponse } from '../../../sdks/tableau/types/dataSource.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -38,12 +39,9 @@ const paramsSchema = {
       'Path to a local TDS or TDSX data source file on the MCP server filesystem. Only supported when the MCP server runs over stdio and staged S3 uploads are not configured. On HTTP servers, use datasourceUploadId.',
     ),
   name: z.string().min(1).describe('The name to give the published data source.'),
-  projectId: z
-    .string()
-    .min(1)
-    .describe(
-      'The Tableau project LUID to publish the data source into. Use list-projects to discover available project IDs.',
-    ),
+  projectId: luidSchema.describe(
+    'The Tableau project LUID to publish the data source into. Use list-projects to discover available project IDs.',
+  ),
   overwrite: z
     .boolean()
     .default(false)

@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { useRestApi } from '../../../restApiInstance.js';
@@ -52,6 +54,8 @@ const mockPublishedDatasource = {
   tags: {},
 };
 
+const validLuid = '7c1d2f3a-4b5e-4f60-8a7b-9c0d1e2f3a4b';
+
 const validArgs = {
   datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Datasource',
@@ -104,7 +108,55 @@ describe('publishDatasourceTool', () => {
     });
     expect(annotations.destructiveHint).toBe(true);
     expect(paramsSchema.name.safeParse('').success).toBe(false);
+    expect(paramsSchema.projectId.safeParse('target-project-id').success).toBe(false);
+    expect(paramsSchema.projectId.safeParse(validLuid).success).toBe(true);
     expect(tool.description).toContain('specified Tableau project');
+  });
+
+  it('rejects a malformed projectId at the MCP schema layer before any file or API access', async () => {
+    const { McpServer } = await vi.importActual<
+      typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+    >('@modelcontextprotocol/sdk/server/mcp.js');
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    const tool = getPublishDatasourceTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    server.registerTool(
+      tool.name,
+      { inputSchema: await Provider.from(tool.paramsSchema) },
+      async (args) => callback(args, getMockExtra()),
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+      const badProjectId = 'not-a-luid-../x';
+      const rejected = (await client.callTool({
+        name: 'publish-datasource',
+        arguments: { ...validArgs, projectId: badProjectId },
+      })) as CallToolResult;
+      invariant(rejected.content[0].type === 'text');
+      expect(rejected.isError).toBe(true);
+      expect(rejected.content[0].text).toContain('Input validation error');
+      expect(rejected.content[0].text).toContain('must be a Tableau LUID (UUID format)');
+      expect(rejected.content[0].text).not.toContain(badProjectId);
+      expect(mocks.mockReadFile).not.toHaveBeenCalled();
+      expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+      expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+
+      const accepted = (await client.callTool({
+        name: 'publish-datasource',
+        arguments: { ...validArgs, projectId: validLuid },
+      })) as CallToolResult;
+      expect(accepted.isError).toBe(false);
+      expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: validLuid }),
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
