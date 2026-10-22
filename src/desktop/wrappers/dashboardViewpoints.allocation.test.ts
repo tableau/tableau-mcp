@@ -13,6 +13,7 @@ type Metric = {
   type: 'fixed' | 'bounded' | 'unbounded';
   initial: number;
   manual?: number;
+  cacheSize?: number | null;
 };
 
 const spacing =
@@ -103,10 +104,14 @@ describe.each(
         attributes = `type-v2="visual" name="${name}"`;
         if (metric.manual !== undefined)
           attributes += ` is-fixed="true" fixed-size="${metric.manual}"`;
+        const [width, height] =
+          metric.type === 'fixed' ? ['fixed-size-w', 'fixed-size-h'] : ['minwidth', 'minheight'];
+        const pixels = metric.cacheSize ?? metric.initial;
+        const size = metric.cacheSize === null ? '' : ` ${width}="${pixels}" ${height}="${pixels}"`;
         content =
           metric.type === 'fixed'
-            ? `<layout-cache type-w="fixed" type-h="fixed" fixed-size-w="${metric.initial}" fixed-size-h="${metric.initial}"/>`
-            : `<layout-cache type-w="scalable" type-h="scalable" minwidth="${metric.initial}" minheight="${metric.initial}" has-max-size-w="${metric.type === 'bounded'}" has-max-size-h="${metric.type === 'bounded'}" maxwidth="${metric.initial + 1000}" maxheight="${metric.initial + 1000}"/>`;
+            ? `<layout-cache type-w="fixed" type-h="fixed"${size}/>`
+            : `<layout-cache type-w="scalable" type-h="scalable"${size} has-max-size-w="${metric.type === 'bounded'}" has-max-size-h="${metric.type === 'bounded'}" maxwidth="${metric.initial + 1000}" maxheight="${metric.initial + 1000}"/>`;
       }
       return `<zone id="${index + 2}" x="${x}" y="${y}" w="${w}" h="${h}" ${attributes}>${content}${spacing}</zone>`;
     });
@@ -295,7 +300,84 @@ describe.each(
     undefined,
     { type: 'fixed', initial: 10 },
   ];
+  const minimumMetrics = (first: Metric): (Metric | undefined)[] => [
+    first,
+    { type: 'unbounded', initial: 100 },
+    undefined,
+  ];
+  const omittedMinimum: Metric = { type: 'unbounded', initial: 300, cacheSize: null };
+  const zeroMinimum: Metric = { type: 'unbounded', initial: 0 };
+  const readbackMinimum = (cacheSize: number): Metric => ({ ...omittedMinimum, cacheSize });
+  // Native Grow from a 300px, zero or 384px first minimum; horizontal text grows from 102px.
+  const fromDefault = axis === 'vert' ? [550, 350, 100] : [466, 266, 268];
+  const fromZero = axis === 'vert' ? [400, 500, 100] : [266, 366, 368];
+  const fromComputed = axis === 'vert' ? [592, 308, 100] : [522, 238, 240];
   const retainedCases = [
+    {
+      name: 'omitted minimum, Grow from 300px',
+      sizes: fromDefault,
+      metrics: minimumMetrics(omittedMinimum),
+      accepted: true,
+    },
+    {
+      name: 'omitted minimum, unshared Grow',
+      sizes: axis === 'vert' ? [600, 300, 100] : [516, 216, 268],
+      metrics: minimumMetrics(omittedMinimum),
+      accepted: false,
+    },
+    {
+      name: 'omitted minimum, Grow from zero',
+      sizes: fromZero,
+      metrics: minimumMetrics(omittedMinimum),
+      accepted: false,
+    },
+    {
+      name: 'explicit zero minimum, Grow from zero',
+      sizes: fromZero,
+      metrics: minimumMetrics(zeroMinimum),
+      accepted: true,
+    },
+    {
+      name: 'explicit zero minimum, Grow from 300px',
+      sizes: fromDefault,
+      metrics: minimumMetrics(zeroMinimum),
+      accepted: false,
+    },
+    {
+      name: 'readback minimum 0, Grow from zero',
+      sizes: fromZero,
+      metrics: minimumMetrics(omittedMinimum),
+      readback: minimumMetrics(readbackMinimum(0)),
+      accepted: true,
+    },
+    {
+      name: 'readback minimum 384, Grow from 384px',
+      sizes: fromComputed,
+      metrics: minimumMetrics(omittedMinimum),
+      readback: minimumMetrics(readbackMinimum(384)),
+      accepted: true,
+    },
+    {
+      name: 'readback minimum 384, Grow from 300px',
+      sizes: fromDefault,
+      metrics: minimumMetrics(omittedMinimum),
+      readback: minimumMetrics(readbackMinimum(384)),
+      accepted: false,
+    },
+    {
+      name: 'readback minimum 0, Grow from 300px',
+      sizes: fromDefault,
+      metrics: minimumMetrics(omittedMinimum),
+      readback: minimumMetrics(readbackMinimum(0)),
+      accepted: false,
+    },
+    {
+      name: 'omitted fixed size, readback 500px',
+      sizes: axis === 'vert' ? [500, 400, 100] : [500, 249, 251],
+      metrics: minimumMetrics({ type: 'fixed', initial: 300, cacheSize: null }),
+      readback: minimumMetrics({ type: 'fixed', initial: 500 }),
+      accepted: false,
+    },
     {
       name: 'unused Grow budget',
       sizes: [200, 100, 100, 100],
@@ -368,6 +450,7 @@ describe.each(
     metrics: (Metric | undefined)[];
     accepted: boolean;
     omitFirstCache?: boolean;
+    readback?: (Metric | undefined)[];
   }[];
 
   it.each(retainedCases)(
@@ -376,7 +459,10 @@ describe.each(
       let expected = render(sizes, metrics, { crossInset: 10 });
       if ('omitFirstCache' in options && options.omitFirstCache)
         expected = expected.replace(/<layout-cache[^>]*\/>/, '');
-      const actual = render(sizes, metrics);
+      const actual = render(
+        sizes,
+        'readback' in options && options.readback ? options.readback : metrics,
+      );
       const matches = createDashboardReadbackVerifier(expected, 'D');
       expect(matches(expected)).toBe(true);
       expect(matches(actual)).toBe(accepted);

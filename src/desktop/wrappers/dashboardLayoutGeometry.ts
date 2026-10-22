@@ -321,10 +321,14 @@ function isVisual(zone: Element): boolean {
 
 type PrimaryMetric = { initial: number; unbounded: boolean; manual: boolean; fixed: number };
 
+function layoutCache(zone: Element): Element | undefined {
+  return elements(zone).find((child) => child.tagName === 'layout-cache');
+}
+
 function primaryMetric(
   zone: Element,
   axis: number,
-  readback = false,
+  readback?: Element,
 ): PrimaryMetric | null | undefined {
   const manual = zone.getAttribute('is-fixed') === 'true';
   const fixedMetric = (pixels: number): number | undefined => {
@@ -349,15 +353,17 @@ function primaryMetric(
     return initial === undefined ? undefined : { initial, unbounded: !manual, manual, fixed: 0 };
   }
   if (!isVisual(zone)) return;
-  const cache = elements(zone).find((child) => child.tagName === 'layout-cache');
+  const cache = layoutCache(zone);
   if (!cache) return;
   const dimension = axis === 0 ? 'width' : 'height';
   const suffix = axis === 0 ? 'w' : 'h';
   const type = cache.getAttribute(`type-${suffix}`);
   if (type !== 'fixed' && type !== 'scalable') return null;
-  const raw = cache.getAttribute(type === 'fixed' ? `fixed-size-${suffix}` : `min${dimension}`);
-  // Parser-default scalable minima are zero; the formatter omits 300px cache values.
-  const pixels = raw === null ? (readback || type === 'fixed' ? 300 : 0) : integer(raw);
+  const name = type === 'fixed' ? `fixed-size-${suffix}` : `min${dimension}`;
+  const paired = readback && type === 'scalable' ? layoutCache(readback) : undefined;
+  // The formatter omits only 300px sizes, so readback holds the minimum Desktop used.
+  const raw = cache.getAttribute(name) ?? paired?.getAttribute(name) ?? null;
+  const pixels = raw === null ? 300 : integer(raw);
   if (pixels === undefined || pixels < 0) return null;
   const initial = type === 'fixed' ? fixedMetric(pixels) : pixelUnits(zone, pixels, axis);
   if (initial === undefined) return null;
@@ -394,7 +400,7 @@ function primaryAllocationMatches(
   axis: number,
   fillsClient: boolean,
 ): boolean | undefined {
-  const metrics = expected.map((zone) => primaryMetric(zone, axis));
+  const metrics = expected.map((zone, index) => primaryMetric(zone, axis, actual[index]));
   if (metrics.includes(null)) return false;
   const hasManual = expected.some((zone) => zone.getAttribute('is-fixed') === 'true');
   if (
@@ -448,7 +454,7 @@ function primaryAllocationMatches(
   const minimumShare = automaticCount > 0 ? Math.floor((length - fixed.used) / automaticCount) : 0;
   let canGrow = true;
   let canShrink = fillsClient;
-  for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis, true))]) {
+  for (const candidates of [metrics, actual.map((zone) => primaryMetric(zone, axis))]) {
     if (candidates.includes(null)) return false;
     if (
       !fillsClient &&
@@ -524,12 +530,16 @@ function primaryAllocationMatches(
   return allocated.every((size, index) => Math.abs(size - sizes[index]) <= 1);
 }
 
-function singleHorizontalHeight(expected: Element, client: Bounds): number | undefined {
+function singleHorizontalHeight(
+  expected: Element,
+  actual: Element,
+  client: Bounds,
+): number | undefined {
   if (!isVisual(expected)) return;
-  const cache = elements(expected).find((child) => child.tagName === 'layout-cache');
+  const cache = layoutCache(expected);
   if (!cache || cache.getAttribute('type-h') !== 'fixed') return;
   if (isTrue(expected.getAttribute('is-fixed'))) return;
-  const primary = primaryMetric(expected, 0);
+  const primary = primaryMetric(expected, 0, actual);
   const fixed = cache.hasAttribute('fixed-size-h')
     ? integer(cache.getAttribute('fixed-size-h'))
     : 300;
@@ -600,7 +610,7 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
   const cross = axis === 0 ? 1 : 0;
   const fittedHeight =
     axis === 0 && visible.length === 1
-      ? singleHorizontalHeight(before[indices[0]], client)
+      ? singleHorizontalHeight(before[indices[0]], after[indices[0]], client)
       : undefined;
   const crossSize = fittedHeight ?? client[cross + 2] - client[cross];
   const primaryUnchanged = indices.every((index) => {

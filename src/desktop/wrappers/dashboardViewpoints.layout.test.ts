@@ -925,6 +925,16 @@ describe('native single-horizontal fixed-height fitting', () => {
     );
   });
 
+  it('fits an omitted submitted minimum width from the readback minimum', () => {
+    const cache = (minimum: string): string =>
+      `<layout-cache type-w="scalable"${minimum} has-max-size-w="true" maxwidth="3000" type-h="fixed" fixed-size-h="100"/>`;
+    const expected = render([0, 0, 50000, 100000], cache(''));
+    expect(verify(expected, render([0, 0, 100000, 12500], cache('')))).toBe(true);
+    // A 2000px readback minimum cannot fit the 1000px client, so GrowZones does not run.
+    expect(verify(expected, render([0, 0, 100000, 12500], cache(' minwidth="2000"')))).toBe(false);
+    expect(verify(expected, render([0, 0, 100000, 100000], cache(' minwidth="2000"')))).toBe(true);
+  });
+
   it('retains the full cross axis when the fixed primary metric requires native shrinking', () => {
     // A 2000px requested width cannot fit a 1000px client. ShrinkZones runs;
     // the SetSingleHorizontal height exception exists only in GrowZones.
