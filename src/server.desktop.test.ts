@@ -486,16 +486,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 79-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 86-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(79);
+      expect(selected).toHaveLength(86);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
       for (const verb of [
         'author-calc',
+        'validate-calculated-field',
         'author-set',
         'author-parameter',
         'author-action',
@@ -531,6 +532,9 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'list-instances',
         'get-desktop-state',
         'get-app-info',
+        'get-capabilities',
+        'list-operations',
+        'get-operation',
         'get-diagnostics',
         'get-active-dialogs',
         'invoke-dialog-action',
@@ -539,6 +543,8 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'list-worksheets',
         'get-show-me-options',
         'list-dashboards',
+        'list-storyboards',
+        'get-sheet-info',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
         'capture-window-screenshot',
@@ -553,6 +559,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'refresh-auto-updates',
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
+        'reload-extensions',
         'refresh-datasource-data',
         'refresh-datasource-extract',
         'get-workbook-xml',

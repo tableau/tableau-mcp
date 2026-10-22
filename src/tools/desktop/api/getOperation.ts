@@ -9,7 +9,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  operationId: z.string().min(1).describe('The operation id, as returned by list-operations.'),
+  operationId: z.string().min(1).describe('The operation id, from the operations list.'),
 };
 
 const title = 'Get Operation';
