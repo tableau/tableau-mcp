@@ -259,26 +259,52 @@ describe('downloadWorkbookTool', () => {
     expect(mocks.mockUpload).not.toHaveBeenCalled();
   });
 
-  it('should fail without falling back once a failed upload has started reading the stream', async () => {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
-    mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('<work', 'book/>'),
-      contentType: 'application/xml',
-      filename: 'Superstore.twb',
-    });
-    mocks.mockUpload.mockImplementation(async ({ data }) => {
-      for await (const _piece of data) {
-        throw new Error('connection reset');
-      }
-    });
+  it.each([
+    { name: 'a plain error', error: new Error('connection reset'), reason: 'connection reset' },
+    {
+      // Node's happy-eyeballs connect failure: empty message, details on `code`.
+      name: 'an AggregateError with an empty message',
+      error: Object.assign(new AggregateError([new Error('connect ECONNREFUSED ::1:8333')], ''), {
+        code: 'ECONNREFUSED',
+      }),
+      reason: 'ECONNREFUSED',
+    },
+    {
+      name: 'an AggregateError with only inner errors',
+      error: new AggregateError(
+        [
+          new Error('connect ECONNREFUSED ::1:8333'),
+          new Error('connect ECONNREFUSED 127.0.0.1:8333'),
+        ],
+        '',
+      ),
+      reason: 'connect ECONNREFUSED ::1:8333; connect ECONNREFUSED 127.0.0.1:8333',
+    },
+  ])(
+    'should fail with a contextual message without falling back once a failed upload has started reading the stream ($name)',
+    async ({ error, reason }) => {
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+      mocks.mockDownloadWorkbook.mockResolvedValue({
+        content: streamOf('<work', 'book/>'),
+        contentType: 'application/xml',
+        filename: 'Superstore.twb',
+      });
+      mocks.mockUpload.mockImplementation(async ({ data }) => {
+        for await (const _piece of data) {
+          throw error;
+        }
+      });
 
-    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+      const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
 
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('connection reset');
-    expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
-  });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        `Failed to store workbook in blob storage: ${reason}`,
+      );
+      expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+    },
+  );
 
   it('should fail without falling back when the provider returns without reading the stream', async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), 'download-workbook-test-'));

@@ -79,7 +79,9 @@ async function buildWorkbookToolResultInner({
   } catch (error) {
     // Once the provider has started reading, the stream can't be replayed into a temp file.
     if (started) {
-      throw error;
+      throw new Error(`Failed to store workbook in blob storage: ${describeUploadError(error)}`, {
+        cause: error,
+      });
     }
     log({
       message: `${toolName}: blob storage workbook upload failed, falling back to temp-file output: ${getExceptionMessage(
@@ -176,6 +178,28 @@ async function* capBytes(
     }
     yield piece;
   }
+}
+
+// Node connect failures can be an AggregateError with an empty message; the reason is on
+// `code` or the inner errors.
+function describeUploadError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return getExceptionMessage(error) || 'unknown error';
+  }
+  if (error.message) {
+    return error.message;
+  }
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && code) {
+    return code;
+  }
+  if (error instanceof AggregateError) {
+    const inner = error.errors.map(getExceptionMessage).filter(Boolean).join('; ');
+    if (inner) {
+      return inner;
+    }
+  }
+  return 'unknown error';
 }
 
 function tooLargeError(maxBytes: number): Error {
