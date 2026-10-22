@@ -165,12 +165,10 @@ export const openIdConfigurationSchema = z
   .object({
     issuer: z.string(),
     jwks_uri: z.string(),
-    id_token_signing_alg_values_supported: z.array(z.string()).optional(),
   })
-  .transform(({ issuer, jwks_uri, id_token_signing_alg_values_supported }) => ({
+  .transform(({ issuer, jwks_uri }) => ({
     issuer,
     jwksUri: jwks_uri,
-    idTokenSigningAlgValuesSupported: id_token_signing_alg_values_supported,
   }));
 
 export type ExternalTokenClaims = z.infer<typeof externalTokenClaimsSchema>;

@@ -333,8 +333,6 @@ const EXTERNAL_JWT_ALGORITHMS = [
 ];
 const EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS = 5;
 
-type JwtVerification = { getKey: JWTVerifyGetKey; algorithms: string[] };
-
 function usernameFromClaim(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value.trim() && !/\p{Cc}/u.test(value) ? value : undefined;
@@ -354,7 +352,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private readonly external: NonNullable<Config['oauth']['external']>;
   private readonly fetch: typeof fetch;
   private readonly getKey: JWTVerifyGetKey | undefined;
-  private discovery: Promise<JwtVerification> | undefined;
+  private discovery: Promise<JWTVerifyGetKey> | undefined;
 
   constructor({
     fetch = globalThis.fetch,
@@ -390,16 +388,14 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private async verifyJwt(token: string): Promise<Result<ExternalTokenClaims, string>> {
     // Reject a non-JWT bearer before it can trigger a discovery fetch.
     decodeProtectedHeader(token);
-    // jose checks the alg allowlist before it calls getKey, so discovery must finish first.
-    const verification = await this.jwtVerification();
-    if (verification.isErr()) {
-      return verification;
+    const getKey = await this.resolveGetKey();
+    if (getKey.isErr()) {
+      return getKey;
     }
 
-    const { getKey, algorithms } = verification.value;
-    const { payload } = await jwtVerify(token, getKey, {
+    const { payload } = await jwtVerify(token, getKey.value, {
       issuer: this.config.oauth.issuer,
-      algorithms,
+      algorithms: EXTERNAL_JWT_ALGORITHMS,
       clockTolerance: EXTERNAL_JWT_CLOCK_TOLERANCE_SECONDS,
       requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat'],
     });
@@ -410,9 +406,9 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
       : Err(`invalid claims: ${fromError(claims.error).toString()}`);
   }
 
-  private async jwtVerification(): Promise<Result<JwtVerification, string>> {
+  private async resolveGetKey(): Promise<Result<JWTVerifyGetKey, string>> {
     if (this.getKey) {
-      return Ok({ getKey: this.getKey, algorithms: EXTERNAL_JWT_ALGORITHMS });
+      return Ok(this.getKey);
     }
 
     invariant(this.external.discovery, 'OAUTH_EXTERNAL_DISCOVERY is not enabled');
@@ -429,7 +425,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     }
   }
 
-  private async discover(): Promise<JwtVerification> {
+  private async discover(): Promise<JWTVerifyGetKey> {
     const { issuer } = this.config.oauth;
     const response = await this.fetch(
       `${issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
@@ -456,7 +452,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
       throw new Error(`invalid openid-configuration: ${fromError(parsed.error).toString()}`);
     }
 
-    const { issuer: documentIssuer, jwksUri, idTokenSigningAlgValuesSupported } = parsed.data;
+    const { issuer: documentIssuer, jwksUri } = parsed.data;
     if (documentIssuer !== issuer) {
       throw new Error(`issuer mismatch: got '${truncateForLog(documentIssuer)}'`);
     }
@@ -477,16 +473,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
       );
     }
 
-    const algorithms = idTokenSigningAlgValuesSupported
-      ? EXTERNAL_JWT_ALGORITHMS.filter((alg) => idTokenSigningAlgValuesSupported.includes(alg))
-      : EXTERNAL_JWT_ALGORITHMS;
-    if (algorithms.length === 0) {
-      throw new Error(
-        `id_token_signing_alg_values_supported lists no supported asymmetric algorithm: [${truncateForLog(idTokenSigningAlgValuesSupported?.join(', ') ?? '')}]`,
-      );
-    }
-
-    return { getKey: createRemoteJWKSet(jwksUrl, { [customFetch]: this.fetch }), algorithms };
+    return createRemoteJWKSet(jwksUrl, { [customFetch]: this.fetch });
   }
 
   private async introspect(token: string): Promise<Result<ExternalTokenClaims, string>> {

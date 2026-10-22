@@ -1250,11 +1250,6 @@ describe('ExternalAccessTokenValidator', () => {
         openIdConfiguration({ jwks_uri: undefined }),
         'Validation error: Required at "jwks_uri"',
       ],
-      [
-        'id_token_signing_alg_values_supported is not an array',
-        openIdConfiguration({ id_token_signing_alg_values_supported: 'RS256' }),
-        'Validation error: Expected array, received string at "id_token_signing_alg_values_supported"',
-      ],
     ])('rejects the token when the document %s', async (_, document, validationError) => {
       const validator = new ExternalAccessTokenValidator({ fetch: discoveryFetch(document) });
 
@@ -1289,33 +1284,30 @@ describe('ExternalAccessTokenValidator', () => {
       },
     );
 
-    it('narrows the algorithms to those the document lists', async () => {
-      const token = await signIdToken({ alg: 'PS256' });
-      const rs256Only = new ExternalAccessTokenValidator({ fetch: discoveryFetch() });
-      const unlisted = new ExternalAccessTokenValidator({
+    it('accepts access and ID tokens signed with an algorithm the document does not list', async () => {
+      const fetch = discoveryFetch(
+        openIdConfiguration({ id_token_signing_alg_values_supported: ['RS256'] }),
+      );
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      // RFC 9068 access token: the document's id_token_* field does not govern it.
+      const accessToken = await new SignJWT(
+        idTokenClaims({ client_id: 'some-client', jti: 'a-1', scope: 'openid' }),
+      )
+        .setProtectedHeader({ alg: 'PS256', typ: 'at+jwt', kid: 'disc-key-1' })
+        .sign(privateKey);
+
+      expect((await validator.validate(accessToken)).isOk()).toBe(true);
+      expect((await validator.validate(await signIdToken({ alg: 'PS256' }))).isOk()).toBe(true);
+    });
+
+    it('accepts an RS256 token when the document lists only symmetric algorithms', async () => {
+      const validator = new ExternalAccessTokenValidator({
         fetch: discoveryFetch(
-          openIdConfiguration({ id_token_signing_alg_values_supported: undefined }),
+          openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256'] }),
         ),
       });
 
-      expect((await unlisted.validate(token)).isOk()).toBe(true);
-      expect(await rejectionReasons(rs256Only, token)).toEqual([
-        expect.stringContaining('"alg" (Algorithm) Header Parameter value not allowed'),
-      ]);
-    });
-
-    it('rejects every token when the document lists only symmetric algorithms', async () => {
-      const fetch = discoveryFetch(
-        openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256'] }),
-      );
-      const validator = new ExternalAccessTokenValidator({ fetch });
-
-      const reasons = await rejectionReasons(validator, await signIdToken());
-
-      expect(reasons).toEqual([
-        'discovery failed: id_token_signing_alg_values_supported lists no supported asymmetric algorithm: [HS256]',
-      ]);
-      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+      expect((await validator.validate(await signIdToken())).isOk()).toBe(true);
     });
 
     it('rejects an HS256 token even when the document lists HS256', async () => {

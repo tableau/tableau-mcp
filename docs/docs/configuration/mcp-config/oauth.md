@@ -121,9 +121,7 @@ the audience is the only check that ties a token to this server.
 
 On each request, the MCP server checks that:
 
-- The token is signed with an asymmetric algorithm by a key from the JWKS. With discovery, if the
-  document lists `id_token_signing_alg_values_supported`, the algorithm must be one it lists. This
-  applies to access tokens too.
+- The token is signed with an asymmetric algorithm by a key from the JWKS.
 - `iss` equals `OAUTH_ISSUER` exactly and `aud` is an accepted value.
 - The token has not expired (`exp`) and is already valid (`nbf`, if present), allowing 5 seconds of
   clock skew.
@@ -448,9 +446,6 @@ one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with 
 - The document's `issuer` must equal `OAUTH_ISSUER` exactly, including any trailing slash.
 - `jwks_uri` must use `https` unless both its host and the `OAUTH_ISSUER` host are loopback. It can
   be on another host than the issuer.
-- If the document lists `id_token_signing_alg_values_supported`, a token's algorithm must be one it
-  lists. This applies to access tokens too. Only RS, PS, ES, and EdDSA algorithms are accepted, so
-  if the list has none of them, every token is rejected.
 - If your provider doesn't serve the document at that path, set
   [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) instead.
 
