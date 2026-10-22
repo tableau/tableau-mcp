@@ -213,8 +213,8 @@ describe('recovery text names only tools the caller actually has', () => {
   });
 
   it('keeps scanning after an apostrophe inside a string', () => {
-    expect(toolNamesNamedIn("const a = \"it's\"; const b = 'lookup-workbook-schema';")).toContain(
-      'lookup-workbook-schema',
+    expect(toolNamesNamedIn("const a = \"it's\"; const b = 'list-templates';")).toContain(
+      'list-templates',
     );
   });
 

@@ -818,6 +818,208 @@ describe('verifyRoundStackedBarSourceWorkbook', () => {
       expectRefused(actionsXml, dashboardsXml);
     });
 
+    const ACTIVATION = "<activation type='on-select' auto-clear='true' />";
+    const SOURCE =
+      "<source type='sheet' worksheet='Other Worksheet' dashboard='Other Dashboard' />";
+    const COMMAND_OPEN = "<command command='tsc:tsl-filter'>";
+    const SPECIAL_FIELDS = "<param name='special-fields' value='all' />";
+    const TARGET = "<param name='target' value='Other Dashboard' />";
+    const COMMAND = `${COMMAND_OPEN}${TARGET}</command>`;
+
+    it.each([
+      ['an unknown source type', FILTER_ACTIONS.replace("type='sheet'", "type='bogus'")],
+      ['a missing source type', FILTER_ACTIONS.replace("<source type='sheet' ", '<source ')],
+      ['a datasource source type', FILTER_ACTIONS.replace("type='sheet'", "type='datasource'")],
+      ['an all source type', FILTER_ACTIONS.replace("type='sheet'", "type='all'")],
+      [
+        'an unknown source attribute',
+        FILTER_ACTIONS.replace('<source ', "<source datasource='Sales' "),
+      ],
+      [
+        'an unknown child of the action',
+        FILTER_ACTIONS.replace('<activation', '<note /><activation'),
+      ],
+      ['an unknown action attribute', FILTER_ACTIONS.replace('<action ', "<action extra='x' ")],
+      ['an unknown activation type', FILTER_ACTIONS.replace("type='on-select'", "type='on-drag'")],
+      [
+        'an unknown activation attribute',
+        FILTER_ACTIONS.replace(ACTIVATION, "<activation type='on-select' delay='1' />"),
+      ],
+      [
+        'a child inside the activation',
+        FILTER_ACTIONS.replace(
+          ACTIVATION,
+          "<activation type='on-select' auto-clear='true'><note /></activation>",
+        ),
+      ],
+      [
+        'an unknown source child',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-field name='Category' /></source>",
+        ),
+      ],
+      [
+        'an exclude-sheet with an extra attribute',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-sheet name='Other Worksheet' scope='x' /></source>",
+        ),
+      ],
+      [
+        'an exclude-sheet with a child',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-sheet name='Other Worksheet'><note /></exclude-sheet></source>",
+        ),
+      ],
+      [
+        'an unknown command attribute',
+        FILTER_ACTIONS.replace(COMMAND_OPEN, "<command command='tsc:tsl-filter' scope='x'>"),
+      ],
+      [
+        'an unknown param name',
+        actionsOf(filterAction({ extra: "<param name='include' value='Other Worksheet' />" })),
+      ],
+      ['a duplicate param', actionsOf(filterAction({ extra: SPECIAL_FIELDS }))],
+      [
+        'text inside a param',
+        FILTER_ACTIONS.replace(
+          SPECIAL_FIELDS,
+          "<param name='special-fields' value='all'>x</param>",
+        ),
+      ],
+      [
+        'a param without a value',
+        FILTER_ACTIONS.replace(SPECIAL_FIELDS, "<param name='special-fields' />"),
+      ],
+      [
+        'a param with an extra attribute',
+        FILTER_ACTIONS.replace(SPECIAL_FIELDS, "<param name='special-fields' value='all' x='y' />"),
+      ],
+      [
+        'a param inside a param',
+        actionsOf(
+          filterAction({ extra: `<param name='on-empty' value='none'>${SPECIAL_FIELDS}</param>` }),
+        ),
+      ],
+      ['two activations', FILTER_ACTIONS.replace(ACTIVATION, `${ACTIVATION}${ACTIVATION}`)],
+      [
+        'a comment inside the action',
+        FILTER_ACTIONS.replace(ACTIVATION, `<!-- c -->${ACTIVATION}`),
+      ],
+      ['CDATA inside the command', actionsOf(filterAction({ extra: '<![CDATA[x]]>' }))],
+      [
+        'stray text inside the source',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'>x</source>",
+        ),
+      ],
+      ['zero sources', actionsOf(`<action name='a'>${ACTIVATION}${COMMAND}</action>`)],
+      [
+        'two sources',
+        actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}${SOURCE}${COMMAND}</action>`),
+      ],
+      ['zero commands', actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}</action>`)],
+      [
+        'two commands',
+        actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}${COMMAND}${COMMAND}</action>`),
+      ],
+    ])('refuses a filter action outside the Desktop grammar: %s', (_label, actionsXml) => {
+      expect(actionsXml).not.toEqual(FILTER_ACTIONS);
+      expectRefused(actionsXml);
+    });
+
+    const DESKTOP_DASHBOARD_ACTION =
+      "<action caption='Click to filter (D)' name='[Action2]'><activation auto-clear='true' type='on-select' /><source dashboard='D' type='sheet' /><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='D' /></command></action>";
+    const D_DASHBOARDS = `${dashboardXml('D', `${OTHER_ZONES}<zone id='8' name='Sales KPI' />`)}${WITH_R}`;
+    const LIVE_SOURCE_SHEET_ACTION =
+      "<action caption='Filter map by Sales by Region' name='[Action3]'> <activation auto-clear='true' type='on-select' /> <source dashboard='Sales &amp; Profit Overview' type='sheet' worksheet='Sales by Region (Ranked)' /> <command command='tsc:tsl-filter'> <param name='exclude' value='Sales by Region (Ranked),Profit by Segment (Ranked)' /> <param name='special-fields' value='all' /> <param name='target' value='Sales &amp; Profit Overview' /> </command> </action>";
+    const LIVE_ZONES =
+      "<zone id='1' name='Sales by Region (Ranked)' /><zone id='2' name='Profit by Segment (Ranked)' />";
+
+    it.each([
+      ['the exact Desktop-written dashboard-source shape', DESKTOP_DASHBOARD_ACTION, D_DASHBOARDS],
+      [
+        'the Desktop-written shape with exclude-sheet children',
+        DESKTOP_DASHBOARD_ACTION.replace(
+          "<source dashboard='D' type='sheet' />",
+          "<source dashboard='D' type='sheet'><exclude-sheet name='Sales KPI' /></source>",
+        ),
+        D_DASHBOARDS,
+      ],
+      [
+        'the click-to-filter shape author-action writes with KPI exclude-sheet children',
+        "<action caption='Click to filter (D)' name='[Action1_0123456789ABCDEF0123456789ABCDEF]'><activation auto-clear='true' type='on-select' /><source type='sheet' dashboard='D'><exclude-sheet name='Sales KPI' /><exclude-sheet name='Profit KPI' /></source><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='D' /></command></action>",
+        `${dashboardXml('D', `${OTHER_ZONES}<zone id='8' name='Sales KPI' /><zone id='9' name='Profit KPI' />`)}${WITH_R}`,
+      ],
+      [
+        'no activation type',
+        DESKTOP_DASHBOARD_ACTION.replace(" type='on-select'", ''),
+        D_DASHBOARDS,
+      ],
+      [
+        'no activation',
+        DESKTOP_DASHBOARD_ACTION.replace("<activation auto-clear='true' type='on-select' />", ''),
+        D_DASHBOARDS,
+      ],
+      ['on-hover', DESKTOP_DASHBOARD_ACTION.replace('on-select', 'on-hover'), D_DASHBOARDS],
+      ['explicit', DESKTOP_DASHBOARD_ACTION.replace('on-select', 'explicit'), D_DASHBOARDS],
+      [
+        "enabled='false'",
+        DESKTOP_DASHBOARD_ACTION.replace('<action ', "<action enabled='false' "),
+        D_DASHBOARDS,
+      ],
+      [
+        'single-select and on-empty params',
+        DESKTOP_DASHBOARD_ACTION.replace(
+          "<param name='special-fields'",
+          "<param name='on-empty' value='none' /><param name='single-select' value='' /><param name='special-fields'",
+        ),
+        D_DASHBOARDS,
+      ],
+      [
+        'live pretty-printed source-sheet output',
+        LIVE_SOURCE_SHEET_ACTION,
+        `${dashboardXml('Sales &amp; Profit Overview', LIVE_ZONES)}${WITH_R}`,
+      ],
+    ])('accepts %s on a dashboard without the sheet', (_label, action, dashboardsXml) => {
+      expectAccepted(actionsOf(action), dashboardsXml);
+    });
+
+    it.each([
+      ['its exclude param leaves the sheet out', LIVE_SOURCE_SHEET_ACTION],
+      [
+        'its exclude param lists the sheet',
+        LIVE_SOURCE_SHEET_ACTION.replace(
+          "value='Sales by Region (Ranked),Profit by Segment (Ranked)'",
+          "value='Sales by Region (Ranked),Orders'",
+        ),
+      ],
+    ])(
+      'refuses live source-sheet output on a dashboard holding the sheet when %s',
+      (_label, action) => {
+        expectRefused(
+          actionsOf(action),
+          dashboardXml('Sales &amp; Profit Overview', `${LIVE_ZONES}<zone id='4' name='Orders' />`),
+          `${R_ON_D_PREFIX}'Sales & Profit Overview'${R_ON_D_SUFFIX}`,
+        );
+      },
+    );
+
+    it.each([
+      ['reaching first', (reaching: string, brush: string) => actionsOf(reaching, brush)],
+      ['highlight first', (reaching: string, brush: string) => actionsOf(brush, reaching)],
+    ])(
+      'prefers the generic refusal when a reaching filter mixes with a highlight action, %s',
+      (_label, order) => {
+        const reaching = filterAction({ dashboard: 'Dashboard', name: 'reach' });
+        const brush = filterAction({ name: 'brush' }).replace('tsc:tsl-filter', 'tsc:brush');
+        expectRefused(order(reaching, brush), `${WITH_R}${OTHER}`);
+      },
+    );
+
     it.each([
       [
         'a nested container',

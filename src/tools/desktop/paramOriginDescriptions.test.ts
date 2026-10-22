@@ -22,15 +22,10 @@ import { desktopToolFactories } from './tools.js';
  *   test prevents missing provenance, missing omission behavior, and cross-tool coupling.
  *
  * SCOPE
- *   Semantic provenance and omission checks cover the four tools repaired by this gate.
+ *   Semantic provenance and omission checks cover the three tools repaired by this gate.
  *   The registered-name prohibition is surface-wide for the default served profile.
  */
-const COVERED_TOOLS: ReadonlySet<string> = new Set([
-  'add-field',
-  'resolve-field',
-  'bind-template',
-  'inject-template',
-]);
+const COVERED_TOOLS: ReadonlySet<string> = new Set(['add-field', 'resolve-field', 'bind-template']);
 
 /**
  * The origin class: a path minted by another call, a session id, or the name of a sheet /

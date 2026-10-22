@@ -45,8 +45,6 @@ const FORWARDED_TO_DESKTOP: Record<string, string[]> = {
   'export-storyboard-image': ['filePath'],
 };
 
-const LAYOUT = { kpis: ['K1'], charts: ['C1'], layoutType: 'auto-grid' };
-
 // Every cache-file argument, with arguments that satisfy the rest of the tool's input.
 const CACHE_FILE_CASES: Array<{
   tool: string;
@@ -86,46 +84,10 @@ const CACHE_FILE_CASES: Array<{
     args: (f) => ({ storyboardName: 'S', storyboardFile: f }),
   },
   {
-    tool: 'apply-dashboard-with-viewpoints',
-    param: 'dashboardFile',
-    reached: 'executor',
-    args: (f) => ({ dashboardName: 'D', dashboardFile: f, worksheetNames: ['W'] }),
-  },
-  {
-    tool: 'build-and-apply-dashboard',
-    param: 'dashboardFile',
-    reached: 'executor',
-    args: (f) => ({
-      dashboardName: 'D',
-      dashboardFile: f,
-      workbookFile: INSIDE_PLACEHOLDER,
-      layoutSpec: LAYOUT,
-      worksheetNames: ['K1', 'C1'],
-    }),
-  },
-  {
-    tool: 'build-and-apply-dashboard',
-    param: 'workbookFile',
-    reached: 'executor',
-    args: (f) => ({
-      dashboardName: 'D',
-      dashboardFile: INSIDE_PLACEHOLDER,
-      workbookFile: f,
-      layoutSpec: LAYOUT,
-      worksheetNames: ['K1', 'C1'],
-    }),
-  },
-  {
     tool: 'list-available-fields',
     param: 'workbookFile',
     reached: 'executor',
     args: (f) => ({ session: '12345', workbookFile: f }),
-  },
-  {
-    tool: 'list-fields',
-    param: 'worksheetFile',
-    reached: /No fields found/,
-    args: (f) => ({ worksheetFile: f }),
   },
   {
     tool: 'add-field',
@@ -155,26 +117,6 @@ const CACHE_FILE_CASES: Array<{
     param: 'workbookFile',
     reached: /"resolution"/,
     args: (f) => ({ workbookFile: f, query: 'Sales' }),
-  },
-  {
-    tool: 'build-and-apply-worksheet',
-    param: 'taskSpec.workbookFile',
-    reached: /Explicit template binding BLOCKED/,
-    args: (f) => ({
-      session: '12345',
-      taskSpec: { worksheetName: 'W', workbookFile: f, template: 'kpi-text', fields: [] },
-    }),
-  },
-  {
-    tool: 'inject-template',
-    param: 'workbookFile',
-    reached: /Template "t" not found/,
-    args: (f) => ({
-      workbookFile: f,
-      templateName: 't',
-      title: 'T',
-      sheetType: 'worksheet',
-    }),
   },
   {
     tool: 'read-cached-xml',

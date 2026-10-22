@@ -8,7 +8,9 @@ import {
   parseAuthorActionArgs,
   resolveClearOption,
   spliceActionIntoWorkbook,
+  workbookActionsBlock,
 } from './authorAction.js';
+import { readWorkbookActions } from './authorActionLifecycle.js';
 import {
   appliedDocumentXml,
   BASE_XML,
@@ -2155,6 +2157,11 @@ describe('authorActionTool', () => {
   });
 });
 
+const DATASOURCE_ACTIONS =
+  "<actions><action caption='Go' expression='https://example.com/ds' name='ds-link' /></actions>";
+const withDatasourceActions = (xml: string): string =>
+  xml.replace('</datasource></datasources>', `${DATASOURCE_ACTIONS}</datasource></datasources>`);
+
 describe('spliceActionIntoWorkbook fresh <actions> placement', () => {
   const ACTION = "<action caption='A' name='[Action1]' />";
   const placed = (xml: string): string => {
@@ -2185,6 +2192,90 @@ describe('spliceActionIntoWorkbook fresh <actions> placement', () => {
       ).isErr(),
     ).toBe(true);
   });
+
+  const datasourceSection = (xml: string): string => xml.slice(0, xml.indexOf('</datasources>'));
+
+  it('splices after the workbook action when a datasource-level <actions> block comes first', () => {
+    const existing =
+      "<action caption='B' name='[Action2]'><source type='sheet' worksheet='Profit' /><link caption='' expression='https://example.com/' /></action>";
+    const xml = withActions(withDatasourceActions(BASE_XML), existing);
+    const result = placed(xml);
+    expect(result).toContain(`</datasources><actions>${existing}${ACTION}</actions><worksheets>`);
+    expect(datasourceSection(result)).toBe(datasourceSection(xml));
+  });
+
+  it('creates a fresh block before <worksheets> when only a datasource-level block exists', () => {
+    const xml = withDatasourceActions(BASE_XML);
+    const result = placed(xml);
+    expect(result).toContain(`</datasources><actions>${ACTION}</actions><worksheets>`);
+    expect(datasourceSection(result)).toBe(datasourceSection(xml));
+  });
+
+  it('fills a self-closing workbook-level <actions brushing-enabled /> block', () => {
+    const xml = withDatasourceActions(BASE_XML).replace(
+      '<worksheets>',
+      "<actions brushing-enabled='false' />\n  <worksheets>",
+    );
+    const result = placed(xml);
+    expect(result).toContain(
+      `</datasources><actions brushing-enabled='false'>${ACTION}</actions>\n  <worksheets>`,
+    );
+    expect(datasourceSection(result)).toBe(datasourceSection(xml));
+  });
+
+  it('fails before splicing when the element before <worksheets> is unreadable', () => {
+    const xml = withActions(BASE_XML, '').replace('<worksheets>', '<!-- note --><worksheets>');
+    expect(spliceActionIntoWorkbook(xml, ACTION).isErr()).toBe(true);
+  });
+});
+
+describe('workbookActionsBlock', () => {
+  const nestedDashboardActions =
+    "<dashboards><dashboard name='D'><actions><action name='[Action9]' caption='Nested' /></actions></dashboard></dashboards>";
+  const workbookAction =
+    "<action caption='B' name='[Action2]'><source type='sheet' worksheet='Profit' /><link caption='' expression='https://example.com/' /></action>";
+  const workbooks = {
+    'no actions': BASE_XML,
+    'datasource-level only': withDatasourceActions(BASE_XML),
+    'datasource-level before workbook-level': withActions(
+      withDatasourceActions(BASE_XML),
+      workbookAction,
+    ),
+    'self-closing workbook-level': withDatasourceActions(BASE_XML).replace(
+      '<worksheets>',
+      "<actions brushing-enabled='false'/><worksheets>",
+    ),
+    'pretty-printed with nested dashboard actions': withActions(
+      withDatasourceActions(BASE_XML),
+      `\n    ${workbookAction}\n  `,
+    )
+      .replace('</actions><worksheets>', '</actions>\n  <worksheets>')
+      .replace('</workbook>', `${nestedDashboardActions}</workbook>`),
+  };
+
+  it.each(Object.entries(workbooks))(
+    'finds the same actions as the DOM reader (%s)',
+    (_label, xml) => {
+      const block = workbookActionsBlock(xml);
+      invariant(block.isOk());
+      const reference = readWorkbookActions(xml);
+      invariant(reference.isOk());
+      const scoped =
+        block.value === null
+          ? []
+          : (() => {
+              const actions = readWorkbookActions(
+                `<workbook><actions>${block.value.body}</actions></workbook>`,
+              );
+              invariant(actions.isOk());
+              return actions.value;
+            })();
+      expect(scoped.map((action) => action.name)).toEqual(
+        reference.value.map((action) => action.name),
+      );
+      expect(block.value === null).toBe(!/<\/datasources>\s*<actions[\s/>]/.test(xml));
+    },
+  );
 });
 
 describe('authorActionTool fresh <actions> placement', () => {
@@ -2215,5 +2306,59 @@ describe('authorActionTool fresh <actions> placement', () => {
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain(`${mapsources}<actions>`);
     expect(loaded).toContain('</actions><worksheets>');
+  });
+
+  it('does not treat a datasource-level action caption as a collision', async () => {
+    const initialXml = withDatasourceActions(BASE_XML);
+    const added =
+      "<action caption='Go' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><link caption='' expression='https://example.com/' /></action>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { mode: 'url', caption: 'Go', sourceWorksheet: 'Profit', url: 'https://example.com/' },
+      initialXml,
+      readbackXml: withActions(initialXml, added),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(`</datasources><actions>${added}</actions><worksheets>`);
+    expect(loaded).toContain(DATASOURCE_ACTIONS);
+  });
+
+  it('rejects a workbook-level <actions> block that is not right before <worksheets>', async () => {
+    const initialXml = BASE_XML.replace(
+      '</datasources>',
+      "</datasources><actions><action caption='W' name='[Action2]'/></actions><shared-views/>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { mode: 'url', caption: 'Go', sourceWorksheet: 'Profit', url: 'https://example.com/' },
+      initialXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not where the schema puts it');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('edits the only action in a compact workbook', async () => {
+    const urlAction = (caption: string): string =>
+      `<action caption='${caption}' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><link caption='' expression='https://example.com/' /></action>`;
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action1]',
+        mode: 'url',
+        caption: 'Edited',
+        sourceWorksheet: 'Profit',
+        url: 'https://example.com/',
+      },
+      initialXml: withActions(BASE_XML, urlAction('Original')),
+      readbackXml: withActions(BASE_XML, urlAction('Edited')),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(`<actions>${urlAction('Edited')}</actions><worksheets>`);
+    expect(loaded.match(/<actions[\s/>]/g)).toHaveLength(1);
   });
 });

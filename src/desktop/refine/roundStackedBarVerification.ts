@@ -1075,6 +1075,101 @@ function mentionsName(node: Node, name: string): boolean {
   return Array.from(node.childNodes).some((child) => mentionsName(child, name));
 }
 
+const ACTIVATION_TYPES = new Set(['explicit', 'on-select', 'on-hover']);
+const FILTER_PARAM_NAMES = new Set([
+  'exclude',
+  'on-empty',
+  'single-select',
+  'special-fields',
+  'target',
+]);
+
+function hasOnlyAttributes(element: Element, allowed: readonly string[]): boolean {
+  return Array.from(element.attributes).every((attribute) => allowed.includes(attribute.name));
+}
+
+function hasOnlyElementsAndBlankText(element: Element): boolean {
+  return Array.from(element.childNodes).every(
+    (node) => node.nodeType === 1 || (node.nodeType === 3 && (node.nodeValue ?? '').trim() === ''),
+  );
+}
+
+function isLeaf(element: Element): boolean {
+  return hasOnlyElementsAndBlankText(element) && childElements(element).length === 0;
+}
+
+// Accept only the filter-action grammar Desktop writes; refuse anything else.
+function filterActionParts(action: Element): { source: Element; command: Element } | null {
+  if (!hasOnlyAttributes(action, ['name', 'caption', 'enabled'])) return null;
+  if (!hasOnlyElementsAndBlankText(action)) return null;
+  const children = childElements(action);
+  const activations = children.filter((child) => child.tagName === 'activation');
+  const sources = children.filter((child) => child.tagName === 'source');
+  const commands = children.filter((child) => child.tagName === 'command');
+  if (
+    activations.length > 1 ||
+    sources.length !== 1 ||
+    commands.length !== 1 ||
+    activations.length + sources.length + commands.length !== children.length
+  ) {
+    return null;
+  }
+
+  const activation = activations[0];
+  if (
+    activation &&
+    (!hasOnlyAttributes(activation, ['type', 'auto-clear']) ||
+      (activation.hasAttribute('type') &&
+        !ACTIVATION_TYPES.has(activation.getAttribute('type') ?? '')) ||
+      !isLeaf(activation))
+  ) {
+    return null;
+  }
+
+  const [source] = sources;
+  if (
+    source.getAttribute('type') !== 'sheet' ||
+    !hasOnlyAttributes(source, ['type', 'worksheet', 'dashboard']) ||
+    !hasOnlyElementsAndBlankText(source) ||
+    childElements(source).some(
+      (child) =>
+        child.tagName !== 'exclude-sheet' ||
+        child.attributes.length !== 1 ||
+        !child.hasAttribute('name') ||
+        !isLeaf(child),
+    )
+  ) {
+    return null;
+  }
+
+  const [command] = commands;
+  if (
+    command.getAttribute('command') !== 'tsc:tsl-filter' ||
+    !hasOnlyAttributes(command, ['command']) ||
+    !hasOnlyElementsAndBlankText(command)
+  ) {
+    return null;
+  }
+  const params = childElements(command);
+  const paramNames = params.map((param) => param.getAttribute('name') ?? '');
+  if (
+    params.some(
+      (param) =>
+        param.tagName !== 'param' ||
+        param.attributes.length !== 2 ||
+        !param.hasAttribute('name') ||
+        !param.hasAttribute('value') ||
+        !isLeaf(param),
+    ) ||
+    paramNames.some((name) => !FILTER_PARAM_NAMES.has(name)) ||
+    new Set(paramNames).size !== paramNames.length ||
+    !paramNames.includes('target')
+  ) {
+    return null;
+  }
+  return { source, command };
+}
+
 function clipName(name: string): string {
   return name.slice(0, MAX_LISTED_NAME_LENGTH);
 }
@@ -1092,25 +1187,13 @@ function judgeFilterAction(
   const unsafe: ActionVerdict = { kind: 'unsafe' };
   // Covers a source worksheet, source dashboard or target that names the sheet.
   if (mentionsName(action, worksheetName)) return unsafe;
-  const commands = childElements(action, 'command');
-  const sources = childElements(action, 'source');
-  if (
-    commands.length !== 1 ||
-    sources.length !== 1 ||
-    commands[0].getAttribute('command') !== 'tsc:tsl-filter' ||
-    action.getElementsByTagName('link').length > 0
-  ) {
-    return unsafe;
-  }
-  const targets = childElements(commands[0], 'param').filter(
+  const parts = filterActionParts(action);
+  if (!parts) return unsafe;
+  const target = childElements(parts.command, 'param').find(
     (param) => param.getAttribute('name') === 'target',
   );
-  const sourceDashboard = sources[0].getAttribute('dashboard') ?? '';
-  if (
-    targets.length !== 1 ||
-    sourceDashboard.trim() === '' ||
-    targets[0].getAttribute('value') !== sourceDashboard
-  ) {
+  const sourceDashboard = parts.source.getAttribute('dashboard') ?? '';
+  if (sourceDashboard.trim() === '' || target?.getAttribute('value') !== sourceDashboard) {
     return unsafe;
   }
   const matching = dashboards.filter(
@@ -1178,16 +1261,16 @@ function topLevelActionsRefusal(workbook: Element, worksheetCanonicalName: strin
   const dashboardsContainer = topLevelContainer(workbook, 'dashboards');
   const dashboards = dashboardsContainer ? childElements(dashboardsContainer, 'dashboard') : [];
   const reaching: string[] = [];
-  let unsafe = false;
   for (const action of actions) {
     const verdict = judgeFilterAction(action, worksheetName, dashboards);
-    if (verdict.kind === 'unsafe') unsafe = true;
-    else if (verdict.kind === 'reaches-target') reaching.push(verdict.name);
+    // Naming only the reaching dashboards would hide the unsafe actions the user must also remove.
+    if (verdict.kind === 'unsafe') return GENERIC_ACTION_REFUSAL;
+    if (verdict.kind === 'reaches-target') reaching.push(verdict.name);
   }
   if (reaching.length > 0) {
     return `Rounded bars disappear when other sheets on ${targetDashboardList(reaching)} filter this chart. Remove those filter actions in Dashboard > Actions, or remove '${clipName(worksheetCanonicalName)}' from the dashboard, then try again.`;
   }
-  return unsafe ? GENERIC_ACTION_REFUSAL : null;
+  return null;
 }
 
 function canonicalUnrelatedWorkbookContent(

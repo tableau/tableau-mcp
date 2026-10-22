@@ -43,7 +43,10 @@ const TOOLS_DIR = 'src/tools/desktop/';
 const EXECUTOR_DIR = 'src/desktop/externalApi/';
 
 // Callers of these executor methods outside src/tools/desktop, with the reason each is safe.
-const OUTSIDE_TOOLS_ALLOWLIST: Readonly<Record<string, string>> = {};
+const OUTSIDE_TOOLS_ALLOWLIST: Readonly<Record<string, string>> = {
+  'src/desktop/wrappers/deleteDashboardGuarded.ts':
+    'run-dashboard-batch reads the workbook back to confirm the delete and shows Desktop warnings in its dashboard step',
+};
 
 function parse(file: string): ts.SourceFile {
   return ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);

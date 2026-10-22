@@ -806,10 +806,12 @@ export class ExternalApiToolExecutor {
   async deleteSheet(
     sheet: SheetRef,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(sheetActionRoute(sheet, 'delete'), signal),
       'delete-sheet',
+      options,
     );
   }
 

@@ -1,16 +1,13 @@
-// Shared inject core — the template→workbook transformation extracted from the
-// inject-template tool (src/tools/desktop/template/injectTemplate.ts) so the
-// bind-template auto-apply path can run the SAME proven inject without
-// duplicating it. This is intentionally PURE over strings: no fs (the caller
-// reads the template + workbook), no MCP, no logging. It reproduces the tool's
-// exact substitution order and escaping so both callers behave identically.
+// Shared inject core — the template→workbook transformation used by the
+// template apply paths. This is intentionally PURE over strings: no fs (the caller
+// reads the template + workbook), no MCP, no logging. It keeps one
+// exact substitution order and escaping so every caller behaves identically.
 //
-// ESCAPING CONTRACT (unchanged from the tool): {{TITLE}} and every non-DATASOURCE
+// ESCAPING CONTRACT: {{TITLE}} and every non-DATASOURCE
 // {{PLACEHOLDER}} value are XML-escaped HERE before substitution; DATASOURCE and
 // the field_mapping values are handed RAW to rewriteFieldReferences, which escapes
-// them EXACTLY ONCE via DOM serialization. Callers pass values verbatim — the
-// inject-template tool passes agent-supplied raw strings; bind-template passes the
-// binder's args as-is (matching what the manual inject-template call would receive).
+// them EXACTLY ONCE via DOM serialization. Callers pass values verbatim —
+// bind-template passes the binder's args as-is.
 
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
@@ -121,7 +118,7 @@ function mappedFieldName(columnInstance: string): string | null {
  * Lat/Long that only materialize for a genuinely geocoded field).
  *
  * Reading the workbook here rather than making each caller thread metadata through
- * means the inject-template tool and the dashboard path are covered too, not just the
+ * means the dashboard path is covered too, not just the
  * binder. A caller-supplied entry always wins — it came from the binder's own resolved
  * schema. Fields absent from the workbook schema are left alone: an entry is added
  * only to carry a role that genuinely exists.
@@ -245,8 +242,8 @@ function spliceHistogramBinSize(templateXml: string, binSize: number | undefined
 
 /**
  * Result of building the injected workbook XML. `ok:false` carries the
- * well-formedness issues so the caller decides how to surface them (the
- * inject-template tool → XmlValidationError; bind-template → graceful fallback).
+ * well-formedness issues so the caller decides how to surface them (bind-template
+ * → graceful fallback).
  * Structural failures inside injectTemplate THROW and propagate to the caller.
  */
 export type InjectTemplateCoreResult =
@@ -383,7 +380,7 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
 /**
  * Substitute a template's placeholders + field references and inject it into the
  * workbook XML, returning the modified workbook (or the well-formedness issues).
- * Mirrors the inject-template tool's transformation exactly.
+ * Pure string transformation; no fs or MCP.
  */
 export function buildInjectedWorkbookXml({
   workbookXml,

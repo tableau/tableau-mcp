@@ -114,12 +114,6 @@ after every worksheet has been populated, and apply verifies the registrations i
 Older or unknown API versions still require manual registration in Desktop. A whole-workbook
 replacement is never a fallback for missing registrations.
 
-The offline workflow test in
-`src/tools/desktop/authoring/sheets/planDashboardCreation.workflow.test.ts` covers planning,
-scaffold creation, worksheet build/apply, cache refresh, and dashboard apply on both legacy and
-supported API versions. Its supported-build cases perform no manual registration. The Desktop
-API is a test double; visible rendering and zone removal with undo/redo still need live validation.
-
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
 response formatters. The fake API preserves the distinction between dashboard layout updates and
