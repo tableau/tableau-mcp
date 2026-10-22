@@ -4,7 +4,7 @@
 
 // Runs the built Desktop bundle from a temp dir outside the repo and checks it reads its own
 // staged data (build/desktop/data), not the repo's src/desktop/data. It cannot reach a Tableau
-// Desktop, so it checks asset resolution through read-only search tools only.
+// Desktop, so it checks asset resolution through the read-only list-templates tool only.
 import { cpSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
@@ -30,12 +30,7 @@ async function callTools(entry: string, cwd: string): Promise<Record<string, Too
   try {
     await client.connect(transport);
     const calls: Record<string, { name: string; arguments: Record<string, unknown> }> = {
-      corpus: {
-        name: 'search-workbook-examples',
-        arguments: { query: 'dual axis', source: 'diff-corpus' },
-      },
-      twbIndex: { name: 'search-workbook-examples', arguments: { feature: 'dual-axis' } },
-      schema: { name: 'lookup-workbook-schema', arguments: { query: 'PrimitiveType-ST' } },
+      templates: { name: 'list-templates', arguments: { limit: 1 } },
     };
     const results: Record<string, ToolText> = {};
     for (const [key, call] of Object.entries(calls)) {
@@ -64,16 +59,8 @@ async function main(): Promise<void> {
     const entry = join(sandbox, 'build', 'index.desktop.js');
 
     const loaded = await callTools(entry, sandbox);
-    if (loaded.corpus.isError || !/Found \d+ example/.test(loaded.corpus.text)) {
-      fail(`corpus.json did not load from ${sandbox}: ${loaded.corpus.text.slice(0, 200)}`);
-    }
-    if (loaded.twbIndex.isError || !/"twbTotal": [1-9]/.test(loaded.twbIndex.text)) {
-      fail(
-        `twb-example-index.json did not load from ${sandbox}: ${loaded.twbIndex.text.slice(0, 200)}`,
-      );
-    }
-    if (loaded.schema.isError) {
-      fail(`twb XSD did not load from ${sandbox}: ${loaded.schema.text.slice(0, 200)}`);
+    if (loaded.templates.isError || !/"template":/.test(loaded.templates.text)) {
+      fail(`templates did not load from ${sandbox}: ${loaded.templates.text.slice(0, 200)}`);
     }
 
     // Control: the repo layout, with the data only under <root>/src and none in build/. A bundle
@@ -82,15 +69,13 @@ async function main(): Promise<void> {
     renameSync(join(sandbox, 'build', 'desktop', 'data'), join(sandbox, 'src', 'desktop', 'data'));
     console.log('Control run: the bundle has no data, so the errors below are expected.');
     const withoutOwnData = await callTools(entry, sandbox);
-    if (!withoutOwnData.corpus.isError || !withoutOwnData.schema.isError) {
+    if (!withoutOwnData.templates.isError && /"template":/.test(withoutOwnData.templates.text)) {
       fail(
         `the bundle loaded data from ${sandbox}/src/desktop/data instead of its own build/desktop/data`,
       );
     }
 
-    console.log(
-      `Desktop bundle OK: corpus, twb index and schema loaded from ${sandbox}/build/desktop/data`,
-    );
+    console.log(`Desktop bundle OK: templates loaded from ${sandbox}/build/desktop/data`);
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }

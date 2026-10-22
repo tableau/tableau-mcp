@@ -30,9 +30,8 @@
  * measure). This reproduces both facet slot contracts exactly — trend-line-chart's
  * facet_col (cols hold the truncated-date dimension) and ranking-ordered-bar's
  * facet_row (rows hold the ranked category) — without reading sidecar metadata at
- * apply time, so every apply path (inject-template and build-and-apply-worksheet,
- * which both funnel template XML + field_mapping into rewriteFieldReferences)
- * picks it up uniformly.
+ * apply time, so every apply path (anything that funnels template XML +
+ * field_mapping into rewriteFieldReferences) picks it up uniformly.
  */
 
 import { columnInstancePrefixLength } from '../derivations.js';

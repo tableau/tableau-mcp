@@ -161,7 +161,7 @@ describe('episode lifecycle events', () => {
     });
     sessionRouteState.recordAskOutcome('4242', 'SECRET ASK MUST NOT LEAK', 'bound');
     sessionRouteState.recordDeflection('4242', {
-      tool: 'build-and-apply-worksheet',
+      tool: 'apply-worksheet',
       ts: '2030-01-01T00:00:00Z',
       ask: 'SECRET ASK MUST NOT LEAK',
       template: 'ranking-ordered-bar',
@@ -195,7 +195,7 @@ describe('episode lifecycle events', () => {
         bind_attempts: { count: 1, outcomes: ['bound'] },
         deflections: [
           {
-            tool: 'build-and-apply-worksheet',
+            tool: 'apply-worksheet',
             ts: '2030-01-01T00:00:00Z',
             template: 'ranking-ordered-bar',
             next_route: 'bind-first',

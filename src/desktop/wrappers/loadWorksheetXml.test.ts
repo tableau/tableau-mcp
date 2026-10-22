@@ -113,7 +113,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         getWorkbookDocument,
         applyWorkbookDocument,
         // This double implements the whole-workbook transport (getWorkbookDocument +
-        // applyWorkbookDocument) that flag-off callers (build-and-apply-worksheet, refine-worksheet)
+        // applyWorkbookDocument) that flag-off callers (refine-worksheet)
         // use directly — they never attempt the per-sheet route. Its list route returns `not-found`
         // so the flag-on route-missing tests below (apply-worksheet, which DOES attempt the per-sheet
         // route) see `route-missing`. The per-sheet 'applied' path is covered in

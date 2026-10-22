@@ -3,8 +3,8 @@
 /**
  * Reproducible trim for `src/desktop/data/twb-example-index.json`.
  *
- * WHY: Desktop source builds stage this index and Desktop SEA builds embed it. Only the
- * `search-workbook-examples` tool consumes it, through
+ * WHY: Desktop source builds stage this index and Desktop SEA builds embed it. Only
+ * `searchWorkbookExamples` consumes it, through
  * `src/desktop/search/searchLibrary.ts::searchWorkbookExamples`, which:
  *   - scores each entry on its `features` tags (exact +10 / partial +5),
  *     `name` substring (+3), and — only when nothing else matched — a literal

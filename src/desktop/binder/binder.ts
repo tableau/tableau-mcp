@@ -127,7 +127,7 @@ export function buildLlmInput(
   return enrichSemanticRoles(buildCoreLlmInput(ask, manifests, summary, opts), summary);
 }
 
-/** The validated, injector-ready args for `tableau-inject-template`. */
+/** The validated, injector-ready args for the worksheet-path apply. */
 export interface InjectTemplateArgs {
   template_name: string;
   title: string;
@@ -160,16 +160,15 @@ export type DeclineReason = {
  * create a sheet and apply the substituted template worksheet FRAGMENT — smaller,
  * faster, and free of the whole-workbook round-trip risk (the workbook path had an
  * entity-corruption bug). `args` (InjectTemplateArgs) still carries everything the
- * inject-template + apply-workbook chain needs — `{template_name, title,
- * field_mapping, template_parameters:{DATASOURCE}}` is sufficient for a caller to
- * run EITHER chain from one bound result — so `apply_hint` names the recommended
- * default and `apply_instruction` is the one-line how-to. No apply is implemented
+ * apply needs — `{template_name, title, field_mapping,
+ * template_parameters:{DATASOURCE}}` — so `apply_hint` names the apply route
+ * and `apply_instruction` is the one-line how-to. No apply is implemented
  * here; the binder only produces the validated args + the routing hint.
  */
 export type ApplyHint = 'worksheet-path';
 export const APPLY_HINT: ApplyHint = 'worksheet-path';
 export const APPLY_INSTRUCTION =
-  'Worksheet-path (tier-1 default): create a sheet with tabdoc:new-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then tableau-apply-worksheet (no whole-workbook round-trip). The same args also drive the tableau-inject-template + tableau-apply-workbook chain. NOTE: title, template_parameters.DATASOURCE, and every field_mapping value are already XML-escaped for verbatim substitution into (single- or double-quoted) XML attributes — substitute them as-is; do NOT escape them again.';
+  'Worksheet-path (tier-1 default): create a sheet with tabdoc:new-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then apply-worksheet (no whole-workbook round-trip). NOTE: title, template_parameters.DATASOURCE, and every field_mapping value are already XML-escaped for verbatim substitution into (single- or double-quoted) XML attributes — substitute them as-is; do NOT escape them again.';
 
 export type BinderResult =
   | {
