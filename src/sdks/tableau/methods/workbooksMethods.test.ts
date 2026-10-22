@@ -573,6 +573,21 @@ describe('WorkbooksMethods', () => {
         expect(result.contentLength).toBeUndefined();
       }
     });
+
+    it('destroys the stream body of a non-2xx response and rethrows the same error', async () => {
+      const { workbooksMethods, mockGet } = setup({});
+      const errorStream = Readable.from([Buffer.from('{}')]);
+      const axiosError = new AxiosError('Request failed with status code 403', '403');
+      // @ts-expect-error - Minimal response for the test
+      axiosError.response = { status: 403, data: errorStream, headers: {} };
+      mockGet.mockRejectedValue(axiosError);
+
+      await expect(
+        workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId }),
+      ).rejects.toBe(axiosError);
+      expect(axiosError.response?.status).toBe(403);
+      expect(errorStream.destroyed).toBe(true);
+    });
   });
 
   describe('validateWorkbookAndUpload', () => {

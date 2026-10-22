@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Readable } from 'stream';
 import { buffer } from 'stream/consumers';
 
 import { WebMcpServer } from '../../../server.web.js';
@@ -277,6 +278,56 @@ describe('downloadWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('connection reset');
     expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+
+  it('should fail without falling back when the provider returns without reading the stream', async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'download-workbook-test-'));
+    vi.stubEnv('TMPDIR', tempRoot);
+    try {
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+      const content = Readable.from([Buffer.from('<workbook/>')]);
+      mocks.mockDownloadWorkbook.mockResolvedValue({
+        content,
+        contentType: 'application/xml',
+        filename: 'Superstore.twb',
+      });
+      mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
+
+      const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Blob storage provider returned without reading the upload data',
+      );
+      await vi.waitFor(() => expect(content.destroyed).toBe(true));
+      expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+      await expect(readdir(tempRoot)).resolves.toEqual([]);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('should return a blob storage resource link for an empty workbook the provider drained', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockDownloadWorkbook.mockResolvedValue({
+      content: streamOf(),
+      contentLength: 0,
+      contentType: 'application/xml',
+      filename: 'Empty.twb',
+    });
+    let uploadedBytes: Buffer | undefined;
+    mocks.mockUpload.mockImplementation(async ({ data }) => {
+      uploadedBytes = await buffer(data);
+      return { url: 'https://blob.example.com/signed-url' };
+    });
+
+    const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'resource_link');
+    expect(result.content[0].uri).toBe('https://blob.example.com/signed-url');
+    expect(uploadedBytes).toEqual(Buffer.alloc(0));
   });
 
   it('should reject a workbook whose Content-Length exceeds the cap before reading it', async () => {

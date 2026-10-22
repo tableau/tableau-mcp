@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
@@ -158,16 +160,31 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
-    const response = await this._apiClient.axios.get<AsyncIterable<Uint8Array>>(
-      buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
-      {
-        params: { includeExtract },
-        // Axios decompresses but keeps the compressed Content-Length, so ask for identity encoding
-        // to keep `contentLength` the exact byte count of `content`.
-        headers: { ...this.authHeader.headers, 'Accept-Encoding': 'identity' },
-        responseType: 'stream',
-      },
-    );
+    let response;
+    try {
+      response = await this._apiClient.axios.get<AsyncIterable<Uint8Array>>(
+        buildRestPath(
+          'sites',
+          siteId,
+          'workbooks',
+          assertLuid('workbookId', workbookId),
+          'content',
+        ),
+        {
+          params: { includeExtract },
+          // Axios decompresses but keeps the compressed Content-Length, so ask for identity encoding
+          // to keep `contentLength` the exact byte count of `content`.
+          headers: { ...this.authHeader.headers, 'Accept-Encoding': 'identity' },
+          responseType: 'stream',
+        },
+      );
+    } catch (error) {
+      // An unread non-2xx stream body holds its socket open.
+      if (isAxiosError(error) && error.response?.data instanceof Readable) {
+        error.response.data.destroy();
+      }
+      throw error;
+    }
 
     const contentLength = getHeader(response.headers, 'content-length');
     return {

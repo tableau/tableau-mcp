@@ -5,6 +5,7 @@ import { createWriteStream } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
@@ -52,16 +53,16 @@ export async function buildWorkbookToolResult({
     return await persistWorkbookToTempPath({ content: capped, mimeType, filename });
   }
 
+  let url: string;
   try {
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
     const key = `${keyPrefixSegment}${resourceId}/${randomUUID()}.${ext}`;
-    const { url } = await getBlobStorageProvider().upload({
+    ({ url } = await getBlobStorageProvider().upload({
       key,
       data: capped,
       contentType: mimeType,
       contentLength,
-    });
-    return { kind: 'url', url, mimeType, filename };
+    }));
   } catch (error) {
     // Once the provider has started reading, the stream can't be replayed into a temp file.
     if (started) {
@@ -82,6 +83,13 @@ export async function buildWorkbookToolResult({
       filename,
     });
   }
+
+  // `started` flips on the first pull, so a provider that drained an empty stream still counts.
+  if (!started) {
+    discard(content);
+    throw new Error('Blob storage provider returned without reading the upload data.');
+  }
+  return { kind: 'url', url, mimeType, filename };
 }
 
 export function workbookToolResultToCallToolResult(result: WorkbookToolResult): CallToolResult {
@@ -165,6 +173,11 @@ function tooLargeError(maxBytes: number): Error {
 
 /** Best-effort release of a stream that won't be read to the end (destroys a Node `Readable`). */
 function discard(content: AsyncIterable<Uint8Array>): void {
+  // `return()` on a fresh, unstarted Readable iterator is a no-op, so destroy it directly.
+  if (content instanceof Readable) {
+    content.destroy();
+    return;
+  }
   Promise.resolve(content[Symbol.asyncIterator]().return?.()).catch(() => undefined);
 }
 
