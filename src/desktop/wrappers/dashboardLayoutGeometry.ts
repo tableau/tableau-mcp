@@ -565,56 +565,101 @@ function singleHorizontalHeight(
   return Math.min(height, client[3] - client[1]);
 }
 
-export function layoutGeometryMatches(expected: Element, actual: Element): boolean {
+export function zoneLabel(zone: Element): string {
+  const id = zone.getAttribute('id');
+  const name = zone.getAttribute('name') || zone.getAttribute('param');
+  return `zone ${id ?? '(no id)'}${name ? ` (${quoted(name)})` : ''}`;
+}
+
+const REASON_VALUE_MAX = 80;
+const REASON_MAX = 300;
+
+function clipText(value: string, max = REASON_VALUE_MAX): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+/** JSON-quoted and clipped, so a quote or newline in the value cannot break the one-line reason. */
+export function quoted(value: string): string {
+  return JSON.stringify(clipText(value));
+}
+
+export function capReason(reason: string): string {
+  return clipText(reason, REASON_MAX);
+}
+
+function boundsText(rect: Bounds | undefined): string {
+  return rect
+    ? `x=${rect[0]} y=${rect[1]} w=${rect[2] - rect[0]} h=${rect[3] - rect[1]}`
+    : 'invalid';
+}
+
+/** First way the readback layout differs from the submitted layout, or undefined when it matches. */
+export function layoutGeometryDifference(expected: Element, actual: Element): string | undefined {
   if (expected.tagName === 'zones')
-    return (
-      (expected.getAttribute('is-pixels') === 'true') ===
+    return (expected.getAttribute('is-pixels') === 'true') !==
       (actual.getAttribute('is-pixels') === 'true')
-    );
-  if (expected.tagName !== 'zone') return true;
-  if (
-    !validZoneGeometry(expected) ||
-    !validZoneGeometry(actual) ||
-    hidden(expected) !== hidden(actual)
-  )
-    return false;
+      ? `the zones' is-pixels is ${describeAttribute(actual, 'is-pixels')} in Desktop, ${describeAttribute(expected, 'is-pixels')} submitted`
+      : undefined;
+  if (expected.tagName !== 'zone') return;
+  const label = zoneLabel(expected);
+  if (!validZoneGeometry(expected) || !validZoneGeometry(actual))
+    return `${label}: x, y, w or h is not a valid integer`;
+  if (hidden(expected) !== hidden(actual))
+    return `${label}: hidden-by-user is ${hidden(actual)} in Desktop, ${hidden(expected)} submitted`;
   for (const flag of ['is-fixed', 'hidden']) {
-    if (isTrue(expected.getAttribute(flag)) !== isTrue(actual.getAttribute(flag))) return false;
+    if (isTrue(expected.getAttribute(flag)) !== isTrue(actual.getAttribute(flag)))
+      return `${label}: ${flag} is ${isTrue(actual.getAttribute(flag))} in Desktop, ${isTrue(expected.getAttribute(flag))} submitted`;
   }
   for (const override of ['strategy-id', 'layout-horz']) {
-    if (expected.getAttribute(override) !== actual.getAttribute(override)) return false;
+    if (expected.getAttribute(override) !== actual.getAttribute(override))
+      return `${label}: ${override} is ${describeAttribute(actual, override)} in Desktop, ${describeAttribute(expected, override)} submitted`;
   }
   if (
     expected.getAttribute('layout-strategy-id') !== actual.getAttribute('layout-strategy-id') &&
     !canOmitDefaultStrategy(expected, actual)
   )
-    return false;
+    return `${label}: layout-strategy-id is ${describeAttribute(actual, 'layout-strategy-id')} in Desktop, ${describeAttribute(expected, 'layout-strategy-id')} submitted`;
   const aSpacing = spacing(expected);
   const bSpacing = spacing(actual);
-  if (JSON.stringify(aSpacing) !== JSON.stringify(bSpacing)) return false;
+  if (JSON.stringify(aSpacing) !== JSON.stringify(bSpacing))
+    return `${label}: margins, padding or border differ between Desktop and the submission`;
   const before = elements(expected).filter((child) => child.tagName === 'zone');
   const after = elements(actual).filter((child) => child.tagName === 'zone');
-  if (before.length !== after.length) return false;
-  if (before.length === 0 || (!isBasic(expected) && !isFlow(expected))) return true;
+  if (before.length !== after.length)
+    return `${label} has ${after.length} child zones in Desktop, ${before.length} submitted`;
+  if (before.length === 0 || (!isBasic(expected) && !isFlow(expected))) return;
   if (
     sameCoordinates(expected, actual) &&
     before.every((child, index) => sameCoordinates(child, after[index]))
   )
-    return true;
-  if (strategyHidden(expected))
-    return before.every((child, index) => sameCoordinates(child, after[index]));
+    return;
+  if (strategyHidden(expected)) {
+    const moved = before.findIndex((child, index) => !sameCoordinates(child, after[index]));
+    return moved < 0
+      ? undefined
+      : `${zoneLabel(before[moved])}: position is ${boundsText(bounds(after[moved]))} in Desktop, ${boundsText(bounds(before[moved]))} submitted`;
+  }
   const client = clientBounds(expected, actual);
-  if (!client) return false;
-  if (client[2] <= client[0] || client[3] <= client[1])
-    return before.every((child, index) => sameCoordinates(child, after[index]));
+  if (!client) return `${label}: Desktop's layout area for its children could not be determined`;
+  if (client[2] <= client[0] || client[3] <= client[1]) {
+    const moved = before.findIndex((child, index) => !sameCoordinates(child, after[index]));
+    return moved < 0
+      ? undefined
+      : `${zoneLabel(before[moved])}: position is ${boundsText(bounds(after[moved]))} in Desktop, ${boundsText(bounds(before[moved]))} submitted`;
+  }
   const oldBounds = before.map(bounds);
   const newBounds = after.map(bounds);
-  if (oldBounds.some((rect) => !rect) || newBounds.some((rect) => !rect)) return false;
+  const invalid = before.findIndex((_, index) => !oldBounds[index] || !newBounds[index]);
+  if (invalid >= 0)
+    return `${zoneLabel(before[invalid])}: x, y, w or h is missing or not a valid integer`;
   if (isBasic(expected)) {
     const normalized = normalizeBasic(oldBounds as Bounds[], client);
-    return (
-      !!normalized && normalized.every((rect, index) => matchesBounds(rect, newBounds[index]!))
-    );
+    if (!normalized)
+      return `${label}: the submitted child zones cannot be fit into the layout area`;
+    const off = normalized.findIndex((rect, index) => !matchesBounds(rect, newBounds[index]!));
+    return off < 0
+      ? undefined
+      : `${zoneLabel(before[off])}: position is ${boundsText(newBounds[off])} in Desktop, ${boundsText(normalized[off])} expected after normalizing the submitted layout`;
   }
   const indices = before.flatMap((child, index) => (hidden(child) ? [] : [index]));
   const visible = indices.map((index) => newBounds[index]!);
@@ -648,17 +693,32 @@ export function layoutGeometryMatches(expected: Element, actual: Element): boole
           fillsClient,
         )
       : undefined;
-  if (primaryAllocation === false) return false;
+  const axisName = axis === 0 ? 'width' : 'height';
+  const sizes = (rects: Array<Bounds | undefined>): string =>
+    indices.map((index) => rects[index]![axis + 2] - rects[index]![axis]).join(', ');
+  if (primaryAllocation === false)
+    return `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop, which does not match the allocation of the submitted [${sizes(oldBounds)}] in ${client[axis + 2] - client[axis]}px`;
   // With incomplete metrics, changed allocations must fill the client except for
   // integer remainders. Unchanged fixed-only flows may retain trailing space.
   if (visible.length > 0 && !primaryUnchanged && primaryAllocation !== true && !fillsClient)
-    return false;
-  return visible.every(
+    return `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop and do not fill the ${client[axis + 2] - client[axis]}px available`;
+  const off = visible.findIndex(
     (rect, index) =>
-      Math.abs(rect[cross] - client[cross]) <= 1 &&
-      Math.abs(rect[cross + 2] - rect[cross] - crossSize) <= 1 &&
-      Math.abs(rect[axis] - (index === 0 ? client[axis] : visible[index - 1][axis + 2])) <= 1 &&
-      (fittedHeight === undefined || Math.abs(rect[2] - rect[0] - (client[2] - client[0])) <= 1) &&
-      rect[axis + 2] <= client[axis + 2] + 1,
+      !(
+        Math.abs(rect[cross] - client[cross]) <= 1 &&
+        Math.abs(rect[cross + 2] - rect[cross] - crossSize) <= 1 &&
+        Math.abs(rect[axis] - (index === 0 ? client[axis] : visible[index - 1][axis + 2])) <= 1 &&
+        (fittedHeight === undefined ||
+          Math.abs(rect[2] - rect[0] - (client[2] - client[0])) <= 1) &&
+        rect[axis + 2] <= client[axis + 2] + 1
+      ),
   );
+  return off < 0
+    ? undefined
+    : `${zoneLabel(before[indices[off]])}: position is ${boundsText(visible[off])} in Desktop, which does not tile the ${boundsText(client)} layout area`;
+}
+
+function describeAttribute(element: Element, name: string): string {
+  const value = element.getAttribute(name);
+  return value === null || !element.hasAttribute(name) ? 'missing' : quoted(value);
 }

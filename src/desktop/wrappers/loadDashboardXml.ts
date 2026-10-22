@@ -22,9 +22,10 @@ import { ValidationIssue } from '../validation/types.js';
 import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
+import { capReason, quoted } from './dashboardLayoutGeometry.js';
 import {
   composeDashboardWorkbook,
-  createDashboardReadbackVerifier,
+  createDashboardReadbackDiagnoser,
   dashboardWorksheetNames,
   unregisteredDashboardWorksheets,
 } from './dashboardViewpoints.js';
@@ -34,7 +35,7 @@ import {
   type PerSheetKind,
   preparePerSheetApply,
 } from './perSheetDocumentApply.js';
-import { pollReadback } from './pollReadback.js';
+import { pollReadback, READBACK_POLL_MAX_ATTEMPTS } from './pollReadback.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -292,7 +293,7 @@ export async function loadDashboardXml({
           });
         }
       }
-      let matchesReadback: ((workbookXml: string) => boolean) | undefined;
+      let readbackDifference: ((workbookXml: string) => string | undefined) | undefined;
       if ((verifyReadback || requiresRegistrationReadback) && snapshot !== null) {
         try {
           // Compose only an in-memory expectation for readback, never a workbook POST.
@@ -307,7 +308,7 @@ export async function loadDashboardXml({
               type: 'load-dashboard-xml-error',
               error: { type: 'validation-failed', issues: expected.error },
             });
-          matchesReadback = createDashboardReadbackVerifier(expected.value.xml, checked.name);
+          readbackDifference = createDashboardReadbackDiagnoser(expected.value.xml, checked.name);
         } catch (error) {
           return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
         }
@@ -323,16 +324,37 @@ export async function loadDashboardXml({
       if (applied.isErr()) {
         return Err({ type: 'execute-command-error', error: applied.error });
       }
-      if (matchesReadback && typeof applied.value === 'object' && 'status' in applied.value) {
-        const matches = matchesReadback;
+      if (readbackDifference && typeof applied.value === 'object' && 'status' in applied.value) {
+        const difference = readbackDifference;
+        let lastProblem: string | undefined;
         const readback = await pollReadback({
           read: () => executor.getWorkbookDocument(signal),
-          settled: (value) =>
-            (expectedInstanceId === undefined ||
-              (value.instanceId ?? executor.desktopInstanceId) === expectedInstanceId) &&
-            matches(value.xml) &&
-            (kind !== 'dashboard' ||
-              unregisteredDashboardWorksheets(value.xml, checked.name, names).length === 0),
+          settled: (value) => {
+            lastProblem = undefined;
+            if (
+              expectedInstanceId !== undefined &&
+              (value.instanceId ?? executor.desktopInstanceId) !== expectedInstanceId
+            ) {
+              lastProblem =
+                'Desktop is now a different instance than the one the apply was sent to (it restarted or was reset).';
+              return false;
+            }
+            const layoutDifference = difference(value.xml);
+            if (layoutDifference !== undefined) {
+              lastProblem = `First difference after ${READBACK_POLL_MAX_ATTEMPTS} reads: ${layoutDifference}.`;
+              return false;
+            }
+            if (kind === 'dashboard') {
+              const unregistered = unregisteredDashboardWorksheets(value.xml, checked.name, names);
+              if (unregistered.length > 0) {
+                lastProblem = capReason(
+                  `Desktop has no view registered for worksheet${unregistered.length > 1 ? 's' : ''} ${unregistered.map(quoted).join(', ')}.`,
+                );
+                return false;
+              }
+            }
+            return true;
+          },
           signal,
         });
         if (!readback.ok || !readback.settled)
@@ -340,7 +362,11 @@ export async function loadDashboardXml({
             type: 'load-dashboard-xml-error',
             error: {
               type: 'verification-failed',
-              message: `Tableau accepted the dashboard apply, but the submitted layout and worksheet view settings for "${checked.name}" could not be verified on the original Desktop instance. Changes may have been applied. Re-read the live dashboard before retrying; do not blindly repeat the apply.`,
+              message: `Tableau accepted the dashboard apply, but the submitted layout and worksheet view settings for "${checked.name}" could not be verified on the original Desktop instance. ${
+                readback.ok
+                  ? (lastProblem ?? '')
+                  : `Reading the workbook back from Desktop failed (${readback.error.type}).`
+              } Changes may have been applied. Re-read the live dashboard before retrying; do not blindly repeat the apply.`,
             },
           });
         verifiedWorksheetNames = names;
