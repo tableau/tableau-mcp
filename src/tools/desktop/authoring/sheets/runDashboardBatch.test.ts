@@ -7,6 +7,7 @@ import type {
   ApplyWorkbookDocumentOptions,
   ExternalApiToolExecutor,
 } from '../../../../desktop/externalApi/executorTypes.js';
+import { listWorkbookDashboards } from '../../../../desktop/metadata/dashboards.js';
 import { captureTargetWorksheetState } from '../../../../desktop/metadata/targetWorksheetState.js';
 import * as sessionResolution from '../../../../desktop/session/sessionResolution.js';
 import {
@@ -778,7 +779,18 @@ function statefulExecutor({
         return Ok({ command_id: 'apply-1', status: 'completed' as const, submitted_at: 'now' });
       },
     ),
-    executeCommand: vi.fn(async () =>
+    getWorkbook: vi.fn(async () =>
+      Ok({
+        title: 'Workbook',
+        unsavedChanges: false,
+        dashboards: listWorkbookDashboards(current).map((name) => ({
+          id: `id-${name}`,
+          name,
+          hidden: false,
+        })),
+      }),
+    ),
+    goToSheet: vi.fn(async () =>
       Ok({ command_id: 'goto-1', status: 'completed' as const, submitted_at: 'now' }),
     ),
   } as unknown as ExternalApiToolExecutor;

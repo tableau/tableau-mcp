@@ -3901,6 +3901,8 @@ function datasourceBlock(xml: string, datasourceName: string): string {
   throw new Error(`missing datasource ${datasourceName}`);
 }
 
+const sheetIdFor = (name: string): string => `id-${name}`;
+
 /**
  * Wire the auto-apply seams for one bind-template call. Returns the executor's
  * command/document spies and the `getExecutor` factory to hand
@@ -3926,7 +3928,8 @@ function setupAutoApplyMocks({
   workbookReads?: string[];
   structuralReadback?: boolean;
 } = {}): {
-  executeCommand: ReturnType<typeof vi.fn>;
+  goToSheet: ReturnType<typeof vi.fn>;
+  getWorkbook: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorksheetDiagnostics: ReturnType<typeof vi.fn>;
@@ -3972,7 +3975,7 @@ function setupAutoApplyMocks({
       : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
   );
 
-  const executeCommand = vi.fn().mockResolvedValue(activationDispatch ?? dispatch);
+  const goToSheet = vi.fn().mockResolvedValue(activationDispatch ?? dispatch);
   const applyWorkbookDocument = vi.fn(async (xml: string) => {
     if (dispatch.isOk()) {
       liveXml = xml;
@@ -3986,20 +3989,33 @@ function setupAutoApplyMocks({
       xsdPayloadVersion: undefined,
     }),
   );
+  const getWorkbook = vi.fn(async () =>
+    Ok({
+      title: 'wb',
+      unsavedChanges: false,
+      worksheets: [...liveXml.matchAll(/<worksheet name='([^']+)'/g)].map(([, name]) => ({
+        id: sheetIdFor(name),
+        name,
+        hidden: false,
+      })),
+    }),
+  );
   const getWorksheetDiagnostics = vi.fn(async (worksheetId: string) =>
     Ok({ worksheets: [{ worksheetId, status: 'complete', invalidFields: [] }] }),
   );
   const getExecutor = vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
     desktopApiVersion: '0.2.16',
-    executeCommand,
+    goToSheet,
+    getWorkbook,
     getWorkbookDocument,
     applyWorkbookDocument,
     getWorksheetDiagnostics,
     ...(structuralReadback ? { listWorksheets: vi.fn(routeMissing) } : {}),
   });
   return {
-    executeCommand,
+    goToSheet,
+    getWorkbook,
     applyWorkbookDocument,
     getWorkbookDocument,
     getWorksheetDiagnostics,
@@ -4016,7 +4032,8 @@ const routeMissing = (): ReturnType<typeof Err> =>
 
 function readbackExecutor(
   base: {
-    executeCommand: ReturnType<typeof vi.fn>;
+    goToSheet: ReturnType<typeof vi.fn>;
+    getWorkbook: ReturnType<typeof vi.fn>;
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
     getWorkbookDocument: ReturnType<typeof vi.fn>;
   },
@@ -4028,7 +4045,8 @@ function readbackExecutor(
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
     desktopApiVersion: options.apiVersion ?? '0.2.16',
-    executeCommand: base.executeCommand,
+    goToSheet: base.goToSheet,
+    getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
     listWorksheets: vi.fn(routeMissing),
@@ -4042,7 +4060,8 @@ function readbackExecutor(
 
 function summaryRowsExecutor(
   base: {
-    executeCommand: ReturnType<typeof vi.fn>;
+    goToSheet: ReturnType<typeof vi.fn>;
+    getWorkbook: ReturnType<typeof vi.fn>;
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
     getWorkbookDocument: ReturnType<typeof vi.fn>;
   },
@@ -4065,7 +4084,8 @@ function summaryRowsExecutor(
   return vi.fn().mockResolvedValue({
     desktopInstanceId: 'inst-test',
     desktopApiVersion: options.apiVersion ?? '0.2.16',
-    executeCommand: base.executeCommand,
+    goToSheet: base.goToSheet,
+    getWorkbook: base.getWorkbook,
     applyWorkbookDocument: base.applyWorkbookDocument,
     getWorkbookDocument: base.getWorkbookDocument,
     listWorksheets: vi.fn().mockResolvedValue(
@@ -4097,7 +4117,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=false returns an honest unapplied bound result', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { goToSheet, getExecutor } = setupAutoApplyMocks();
 
     const result = await getToolResult({
       session: '1',
@@ -4116,7 +4136,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       guidance: NOT_APPLIED_GUIDANCE,
     });
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('auto-applies a recommended ranking proposal in one call and discloses the default', async () => {
@@ -4348,8 +4368,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(JSON.parse(result.content[0].text).guidance).not.toContain('without conversion');
   });
 
-  it('auto_apply=true on a standalone Call-1 bind applies then issues validated goto-sheet', async () => {
-    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+  it('auto_apply=true on a standalone Call-1 bind applies then navigates by sheet id', async () => {
+    const { goToSheet, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
     });
 
@@ -4398,16 +4418,11 @@ describe('bindTemplateTool auto_apply gate', () => {
       '@_active': 'true',
       '@_maximized': 'true',
     });
-    expect(executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabdoc',
-      command: 'goto-sheet',
-      args: { Sheet: 'Sales by Region' },
-      signal: expect.any(AbortSignal),
-    });
+    expect(goToSheet).toHaveBeenCalledWith(sheetIdFor('Sales by Region'), expect.any(AbortSignal));
   });
 
   it('auto_apply=true validates the brand-new worksheet and reissues focus when the first goto does not land', async () => {
-    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
     });
 
@@ -4423,19 +4438,14 @@ describe('bindTemplateTool auto_apply gate', () => {
     // second reads back, sees the goto did not land in this fixture, and reissues once.
     expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(2);
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'goto-sheet',
-        args: { Sheet: 'Sales by Region' },
-      }),
-    );
+    expect(goToSheet).toHaveBeenCalledTimes(2);
+    expect(goToSheet).toHaveBeenCalledWith(sheetIdFor('Sales by Region'), expect.any(AbortSignal));
   });
 
   it('activation failure preserves applied:true but cannot mint terminal success without readback', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
-    const { executeCommand, applyWorkbookDocument, getWorksheetDiagnostics, getExecutor } =
+    const { goToSheet, applyWorkbookDocument, getWorksheetDiagnostics, getExecutor } =
       setupAutoApplyMocks({
         inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
         activationDispatch: Err({ type: 'command-timed-out', error: 'activation timeout' }),
@@ -4482,7 +4492,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(goToSheet).toHaveBeenCalledTimes(1);
     expect(getWorksheetDiagnostics).toHaveBeenCalledTimes(1);
     expect(getWorksheetDiagnostics).toHaveBeenCalledWith(
       'sheet-sales-by-region',
@@ -6001,7 +6011,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('bad sort.by escalation never reaches auto-apply', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({
       bind: badSortFieldEscalateResult,
     });
 
@@ -6022,7 +6032,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.status).toBe('escalate');
     expect(body.blockers[0].detail).toContain('Definitely Not A Field');
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('keeps NOT APPLIED first when calcs are authored but the bind is not applied', async () => {
@@ -6919,7 +6929,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true leaves a contested-revenue ranking proposal unchanged', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({
       bind: contestedRevenueProposeResult,
     });
 
@@ -6937,11 +6947,11 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBeUndefined();
     expect(body.llm_input).not.toHaveProperty('recommended');
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('auto_apply=true leaves a non-ranking proposal unchanged', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: proposeResult });
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({ bind: proposeResult });
 
     const result = await getToolResult({
       session: '1',
@@ -6955,7 +6965,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.status).toBe('propose');
     expect(body.applied).toBeUndefined();
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('reports authored calcs when the subsequent bind proposes', async () => {
@@ -6984,7 +6994,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true leaves an escalate outcome unchanged (no apply)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: escalateResult });
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({ bind: escalateResult });
 
     const result = await getToolResult({
       session: '1',
@@ -6999,11 +7009,11 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('escalate');
     expect(body.applied).toBeUndefined();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('auto_apply=true does NOT apply when the chosen manifest is not fast_path_eligible', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ fastPathEligible: false });
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({ fastPathEligible: false });
 
     const result = await getToolResult({
       session: '1',
@@ -7017,7 +7027,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBeUndefined();
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('runs preflight validation BEFORE dispatching the apply (validated path)', async () => {
@@ -7082,7 +7092,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
   });
 
   it('inject failure returns the bound args intact with applied:false + apply_error', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({
       inject: { ok: false, issues: ['not well-formed'] },
     });
 
@@ -7109,7 +7119,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(String(body.guidance)).not.toContain('returned args');
     expect(String(body.guidance)).not.toContain('inject-template');
     // Apply is not attempted once inject fails.
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('apply failure returns the bound args intact with applied:false + apply_error', async () => {
@@ -7189,7 +7199,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
   );
 
   it('preflight validation failure aborts the apply and falls back (no dispatch)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ validationValid: false });
+    const { goToSheet, getExecutor } = setupAutoApplyMocks({ validationValid: false });
 
     const result = await getToolResult({
       session: '1',
@@ -7204,7 +7214,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.applied).toBe(false);
     expect(body.apply_error).toContain('preflight validation failed');
     // Preflight gates the dispatch — the invalid XML is never sent.
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('blocks a third bind after a pre-dispatch Call-2 apply failure', async () => {
@@ -7459,7 +7469,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
       /Sales by Region/g,
       'se-eval-scratch',
     );
-    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+    const { goToSheet, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: targetWorkbookXml },
     });
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
@@ -7485,13 +7495,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     // Naming a target sheet used to suppress navigation. It no longer does: the apply posts
     // the whole document, which moves the view on its own, so the sheet the call rewrote is
     // the sheet the user must land on.
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { Sheet: 'se-eval-scratch' },
-      }),
-    );
+    expect(goToSheet).toHaveBeenCalledWith(sheetIdFor('se-eval-scratch'), expect.any(AbortSignal));
   });
 
   it('resolves a target passed by id to its live name for the classify gate and the title', async () => {
@@ -7532,7 +7536,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
   });
 
   it('unknown target fails closed BEFORE the bind even runs', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { goToSheet, getExecutor } = setupAutoApplyMocks();
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
 
     const result = await getToolResult({
@@ -7549,11 +7553,11 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     expect(result.content[0].text).toContain('list-worksheets');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('dashboard-member target is refused: in-place replace would corrupt the dashboard', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { goToSheet, getExecutor } = setupAutoApplyMocks();
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('in-dashboard');
 
     const result = await getToolResult({
@@ -7569,7 +7573,7 @@ describe('bindTemplateTool auto_apply target_worksheet (stray-sheet class)', () 
     expect(result.content[0].text).toContain('dashboard member sheet');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('manual mode (no auto_apply): bound args echo carries the target title so the manual chain lands on it', async () => {
@@ -7707,7 +7711,7 @@ describe('bindTemplateTool route-state recording', () => {
   });
 
   it('does not leak route-state recording into the returned CallToolResult', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { goToSheet, getExecutor } = setupAutoApplyMocks();
 
     const result = await getToolResult({
       session: '1',
@@ -7728,7 +7732,7 @@ describe('bindTemplateTool route-state recording', () => {
     expect(body.current_ask).toBeUndefined();
     expect(body.next_route).toBeUndefined();
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('a THROWN bind clears the pending ask so the gate cannot read "no bind attempt yet"', async () => {
@@ -9526,7 +9530,8 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
     const getExecutor = vi.fn().mockResolvedValue({
-      executeCommand: mocks.executeCommand,
+      goToSheet: mocks.goToSheet,
+      getWorkbook: mocks.getWorkbook,
       getWorkbookDocument: mocks.getWorkbookDocument,
       applyWorkbookDocument: mocks.applyWorkbookDocument,
     });

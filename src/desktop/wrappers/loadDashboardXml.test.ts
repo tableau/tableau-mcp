@@ -38,7 +38,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${windows}</windows></workbook>`;
   }
 
-  // A goto-sheet moves the live document, so the readback the verify pass reads must
+  // Navigating moves the live document, so the readback the verify pass reads must
   // reflect it — otherwise the double reports a navigation that never landed.
   function withMaximizedWindow(workbookXml: string, sheetName: string): string {
     const quoteNormalized = workbookXml.replaceAll('"', "'");
@@ -53,19 +53,23 @@ describe('loadDashboardXml (External Client API transport)', () => {
   function dispatchingExecutor(workbookXml: string): {
     executor: ExternalApiToolExecutor;
     calls: Array<{
-      kind: 'command' | 'apply';
+      kind: 'command' | 'apply' | 'goto';
       namespace?: string;
       command?: string;
       args?: Record<string, unknown>;
       xml?: string;
+      sheetId?: string;
+      sheetName?: string;
     }>;
   } {
     const calls: Array<{
-      kind: 'command' | 'apply';
+      kind: 'command' | 'apply' | 'goto';
       namespace?: string;
       command?: string;
       args?: Record<string, unknown>;
       xml?: string;
+      sheetId?: string;
+      sheetName?: string;
     }> = [];
     const executeCommand = vi.fn(async (params: any) => {
       calls.push({
@@ -74,12 +78,33 @@ describe('loadDashboardXml (External Client API transport)', () => {
         command: params.command,
         args: params.args,
       });
-      if (params.command === 'goto-sheet') {
-        liveXml = withMaximizedWindow(liveXml, String(params.args?.Sheet));
-      }
       return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
     });
     let liveXml = workbookXml;
+    const sheetItems = (tagName: string): { id: string; name: string; hidden: boolean }[] =>
+      Array.from(
+        new DOMParser().parseFromString(liveXml, 'text/xml').getElementsByTagName(tagName),
+      ).map((node) => ({
+        id: `id-${node.getAttribute('name')}`,
+        name: node.getAttribute('name')!,
+        hidden: false,
+      }));
+    const getWorkbook = vi.fn(async () =>
+      Ok({
+        title: 'Workbook',
+        unsavedChanges: false,
+        worksheets: sheetItems('worksheet'),
+        dashboards: sheetItems('dashboard'),
+      }),
+    );
+    const goToSheet = vi.fn(async (sheetId: string) => {
+      const sheetName = [...sheetItems('worksheet'), ...sheetItems('dashboard')].find(
+        (sheet) => sheet.id === sheetId,
+      )!.name;
+      calls.push({ kind: 'goto', sheetId, sheetName });
+      liveXml = withMaximizedWindow(liveXml, sheetName);
+      return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
+    });
     const getWorkbookDocument = vi
       .fn()
       .mockImplementation(async () =>
@@ -93,6 +118,8 @@ describe('loadDashboardXml (External Client API transport)', () => {
     return {
       executor: makeExecutorMock({
         executeCommand,
+        getWorkbook,
+        goToSheet,
         getWorkbookDocument,
         applyWorkbookDocument,
         listDashboards: vi.fn().mockImplementation(async () =>
@@ -296,7 +323,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(windows[1]).toMatchObject({ '@_active': 'true', '@_maximized': 'true' });
     expect(windows[2]).not.toHaveProperty('@_active');
     expect(windows[2]).not.toHaveProperty('@_maximized');
-    expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
+    expect(calls.some((call) => call.kind === 'goto')).toBe(false);
   });
 
   it('navigates to the dashboard it just applied when the caller names it as the artifact', async () => {
@@ -311,9 +338,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(
-      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
-    ).toEqual([dashboardName]);
+    expect(calls.filter((call) => call.kind === 'goto').map((call) => call.sheetName)).toEqual([
+      dashboardName,
+    ]);
+    expect(calls.find((call) => call.kind === 'goto')?.sheetId).toBe(`id-${dashboardName}`);
   });
 
   it('navigates with the NFC canonical dashboard name', async () => {
@@ -330,9 +358,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(
-      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
-    ).toEqual([canonicalName]);
+    expect(calls.filter((call) => call.kind === 'goto').map((call) => call.sheetName)).toEqual([
+      canonicalName,
+    ]);
   });
 
   it('preserves referenced worksheets without resubmitting them', async () => {
@@ -1044,7 +1072,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
   // Resolves absent targets without a workbook fallback, regardless of the legacy flag.
   function absentDashboardExecutor(liveDashboardNames: string[]): {
     executor: ExternalApiToolExecutor;
-    calls: Array<{ kind: 'command' | 'apply'; xml?: string }>;
+    calls: Array<{ kind: 'command' | 'apply' | 'goto'; xml?: string }>;
   } {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(liveDashboardNames));
     (executor as unknown as { listDashboards: unknown }).listDashboards = vi.fn().mockResolvedValue(
