@@ -1,18 +1,24 @@
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import {
+  type ColumnFilterDatasource,
+  qualifyDatasourceColumn,
+} from '../../../desktop/wrappers/qualifyDatasourceColumn.js';
 
 /**
  * The underlying-data column filter (`columnsToIncludeByFieldName`) matches only a
- * datasource-qualified field name — `[<datasource caption>].[<field>]`, e.g.
- * `[Sample - Superstore].[Region]`. A bare `Region` is silently ignored (all columns come back),
- * so the tool qualifies it here from the worksheet's datasource caption.
+ * datasource-qualified field name — `[<datasource>].[<field>]`, e.g. `[federated.0abc123].[Region]`.
+ * A bare `Region` is silently ignored (all columns come back), so the tool qualifies it here from
+ * the worksheet's datasource. Desktop API 0.2.25 and later match the datasource internal name;
+ * earlier builds match its caption.
  *
  * A value already in `[ds].[field]` form is passed through verbatim (power-user escape hatch).
  */
 export function qualifyColumnFields(
   worksheetXml: string,
   columns: Array<string>,
+  apiVersion: string | undefined,
 ): { ok: true; columns: Array<string> } | { ok: false; reason: string } {
-  const captions = worksheetDatasourceCaptions(worksheetXml);
+  const datasources = worksheetDatasources(worksheetXml);
 
   const qualified: Array<string> = [];
   for (const raw of columns) {
@@ -21,27 +27,26 @@ export function qualifyColumnFields(
       qualified.push(column);
       continue;
     }
-    if (captions.length === 0) {
+    if (datasources.length === 0) {
       return {
         ok: false,
         reason: 'the worksheet declares no datasource to qualify the field name against',
       };
     }
-    if (captions.length > 1) {
+    if (datasources.length > 1) {
       return {
         ok: false,
         reason:
-          `the worksheet uses multiple datasources (${captions.join(', ')}), so "${column}" is ambiguous — ` +
+          `the worksheet uses multiple datasources (${datasources.map(({ caption }) => caption).join(', ')}), so "${column}" is ambiguous — ` +
           'pass the field as [datasource].[field]',
       };
     }
-    qualified.push(`[${captions[0]}].[${stripBrackets(column)}]`);
+    qualified.push(qualifyDatasourceColumn(apiVersion, datasources[0], column));
   }
   return { ok: true, columns: qualified };
 }
 
-/** Datasource captions declared on a worksheet, preferring `@_caption` over the internal `@_name`. */
-function worksheetDatasourceCaptions(worksheetXml: string): Array<string> {
+function worksheetDatasources(worksheetXml: string): Array<ColumnFilterDatasource> {
   let parsed: Record<string, unknown>;
   try {
     parsed = parseXML(worksheetXml) as unknown as Record<string, unknown>;
@@ -52,13 +57,21 @@ function worksheetDatasourceCaptions(worksheetXml: string): Array<string> {
   const view = ((worksheet?.['table'] as Record<string, unknown> | undefined)?.['view'] ??
     {}) as Record<string, unknown>;
   const container = (view['datasources'] ?? {}) as Record<string, unknown>;
-  const datasources = normalizeArray(
+  const datasources = new Map<string, ColumnFilterDatasource>();
+  for (const ds of normalizeArray(
     container['datasource'] as Record<string, unknown> | Record<string, unknown>[] | undefined,
-  );
-  const captions = datasources
-    .map((ds) => (ds['@_caption'] ?? ds['@_name']) as string | undefined)
-    .filter((caption): caption is string => typeof caption === 'string' && caption.length > 0);
-  return Array.from(new Set(captions));
+  )) {
+    const internalName = ds['@_name'];
+    if (typeof internalName !== 'string' || internalName.length === 0) {
+      continue;
+    }
+    const caption = ds['@_caption'];
+    datasources.set(internalName, {
+      caption: typeof caption === 'string' && caption.length > 0 ? caption : internalName,
+      internalName,
+    });
+  }
+  return Array.from(datasources.values());
 }
 
 function findWorksheetNode(parsed: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -76,8 +89,4 @@ function findWorksheetNode(parsed: Record<string, unknown>): Record<string, unkn
 
 function isDatasourceQualified(value: string): boolean {
   return /^\[[^\]]+\]\.\[.+\]$/.test(value);
-}
-
-function stripBrackets(value: string): string {
-  return value.replace(/^\[/, '').replace(/\]$/, '');
 }

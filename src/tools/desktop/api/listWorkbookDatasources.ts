@@ -20,8 +20,9 @@ export const getListWorkbookDatasourcesTool = (
     name: 'list-workbook-datasources',
     title,
     description:
-      "List the workbook's OWN connected datasources (id/name/caption/type; isExtract = extract vs live). " +
-      'luid is added for published, non-federated ones; hasDownloadFilePermission for published ones.',
+      'List every datasource in the open workbook, including ones no sheet uses and the built-in Parameters datasource (type parameters) when the workbook defines parameters. ' +
+      'Each has id/name/caption/type; isExtract = extract vs live. The id is percent-encoded: pass it back as-is, not re-encoded. ' +
+      'luid appears only for a published datasource when Desktop is signed in to its site; hasDownloadFilePermission for published ones.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

@@ -33,6 +33,8 @@ import {
   apiRootSchema,
   AppInfo,
   appInfoSchema,
+  CapabilityMatrix,
+  capabilityMatrixSchema,
   dashboardDocumentRoute,
   dashboardImageRoute,
   DashboardItem,
@@ -43,6 +45,7 @@ import {
   dashboardRefreshNowRoute,
   type DashboardRefreshOutcome,
   dashboardRefreshOutcomeSchema,
+  dashboardReloadExtensionsRoute,
   dashboardResumeAutoUpdatesRoute,
   dashboardRoute,
   DatasourceItem,
@@ -68,9 +71,17 @@ import {
   invokeDialogActionResultSchema,
   LogicalTableList,
   logicalTableListSchema,
+  OpenApiDocument,
+  openApiDocumentSchema,
   OperationEnvelope,
+  operationEnvelopeSchema,
   OperationError,
+  OperationList,
+  operationListSchema,
+  operationRoute,
   OperationWarning,
+  ProtectedResourceMetadata,
+  protectedResourceMetadataSchema,
   RefreshExtractRequest,
   sheetActionRoute,
   SheetRef,
@@ -91,6 +102,8 @@ import {
   storyboardRoute,
   SummaryData,
   summaryDataSchema,
+  ValidateCalculatedFieldResponse,
+  validateCalculatedFieldResponseSchema,
   ValidationResult,
   validationResultSchema,
   WindowInfo,
@@ -114,6 +127,7 @@ import {
   worksheetLogicalTablesRoute,
   worksheetPauseAutoUpdatesRoute,
   worksheetRefreshNowRoute,
+  worksheetReloadExtensionRoute,
   worksheetResumeAutoUpdatesRoute,
   worksheetRoute,
   worksheetShowMeOptionsRoute,
@@ -124,6 +138,7 @@ import {
   WorksheetSummaryDataQuery,
   worksheetSummaryDataRoute,
   WorksheetUnderlyingDataQuery,
+  worksheetValidateCalculatedFieldRoute,
 } from './types.js';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -362,6 +377,47 @@ export class ExternalApiToolExecutor {
   async getApp(signal: AbortSignal): Promise<Result<AppInfo, ExecuteCommandError>> {
     return this.readExternalApi((http) =>
       http.getJson(EXTERNAL_API_ROUTES.app, appInfoSchema, signal),
+    );
+  }
+
+  async getCapabilities(
+    signal: AbortSignal,
+  ): Promise<Result<CapabilityMatrix, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.capabilities, capabilityMatrixSchema, signal),
+    );
+  }
+
+  async getOAuthProtectedResource(
+    signal: AbortSignal,
+  ): Promise<Result<ProtectedResourceMetadata, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(
+        EXTERNAL_API_ROUTES.oauthProtectedResource,
+        protectedResourceMetadataSchema,
+        signal,
+      ),
+    );
+  }
+
+  async getOpenApi(signal: AbortSignal): Promise<Result<OpenApiDocument, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.openapi, openApiDocumentSchema, signal),
+    );
+  }
+
+  async listOperations(signal: AbortSignal): Promise<Result<OperationList, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(EXTERNAL_API_ROUTES.operations, operationListSchema, signal),
+    );
+  }
+
+  async getOperation(
+    operationId: string,
+    signal: AbortSignal,
+  ): Promise<Result<OperationEnvelope, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.getJson(operationRoute(operationId), operationEnvelopeSchema, signal),
     );
   }
 
@@ -666,6 +722,21 @@ export class ExternalApiToolExecutor {
     return Ok(result.value);
   }
 
+  async toggleDataSourcePage(
+    isDataSourcePageActive: boolean,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) =>
+        http.postJsonEnvelope(
+          EXTERNAL_API_ROUTES.appToggleDataSourcePage,
+          { isDataSourcePageActive },
+          signal,
+        ),
+      'toggle-data-source-page',
+    );
+  }
+
   async exportWorksheetImage(
     worksheetId: string,
     query: ImageExportQuery,
@@ -705,6 +776,21 @@ export class ExternalApiToolExecutor {
         EXTERNAL_API_ROUTES.workbookDocumentValidate,
         xml,
         validationResultSchema,
+        signal,
+      ),
+    );
+  }
+
+  async validateWorksheetCalculatedField(
+    worksheetId: string,
+    formula: string,
+    signal: AbortSignal,
+  ): Promise<Result<ValidateCalculatedFieldResponse, ExecuteCommandError>> {
+    return this.readExternalApi((http) =>
+      http.postJsonForBody(
+        worksheetValidateCalculatedFieldRoute(worksheetId),
+        { formula },
+        validateCalculatedFieldResponseSchema,
         signal,
       ),
     );
@@ -888,6 +974,26 @@ export class ExternalApiToolExecutor {
     return this.applyDocument(
       (http) => http.postEnvelope(worksheetRefreshNowRoute(worksheetId), signal),
       'refresh-worksheet-now',
+    );
+  }
+
+  async reloadWorksheetExtension(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(worksheetReloadExtensionRoute(worksheetId), signal),
+      'reload-worksheet-extension',
+    );
+  }
+
+  async reloadDashboardExtensions(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.applyDocument(
+      (http) => http.postEnvelope(dashboardReloadExtensionsRoute(dashboardId), signal),
+      'reload-dashboard-extensions',
     );
   }
 

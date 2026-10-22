@@ -70,7 +70,8 @@ export const getActivateSheetTool = (
     server,
     name: 'activate-sheet',
     title,
-    description: 'Activate an existing worksheet, dashboard, or storyboard by exact name or id.',
+    description:
+      'Activate an existing worksheet, dashboard, or storyboard by exact name or id. availableSheets lists worksheets, then dashboards, then storyboards; it is not tab order.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,

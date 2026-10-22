@@ -29,9 +29,8 @@ describe('getDatasourceInfoTool', () => {
     expect(tool.name).toBe('get-datasource-info');
     expect(tool.minApiVersion).toBe('0.2.10');
     expect(tool.title).toBe('Get Datasource Info');
-    expect(tool.description).toBe(
-      'Read metadata for one datasource in the open workbook by name or inventory id.',
-    );
+    expect(tool.description).toContain('internal name');
+    expect(tool.description).toContain('percent-encoded id from list-workbook-datasources');
     expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       datasourceName: expect.any(Object),

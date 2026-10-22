@@ -1,0 +1,50 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { OperationEnvelope } from '../../../desktop/externalApi/types.js';
+import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import { sessionParam } from '../params.js';
+import { DesktopTool } from '../tool.js';
+
+const paramsSchema = {
+  session: sessionParam(),
+  operationId: z.string().min(1).describe('The operation id, as returned by list-operations.'),
+};
+
+const title = 'Get Operation';
+
+export const getOperationTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'get-operation',
+    title,
+    description:
+      'Get one Tableau Desktop operation by id. Returns its kind, state, result or error, warnings, and timestamps. Dialogs in blockingWindows and progress in progressWindows appear only while the operation is not in a terminal state.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    callback: async ({ session, operationId }, extra): Promise<CallToolResult> => {
+      return await tool.logAndExecute<OperationEnvelope>({
+        extra,
+        args: { session, operationId },
+        callback: async () =>
+          await runExternalApiTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, call) =>
+              await call(
+                'operation',
+                async (executor, signal) => await executor.getOperation(operationId, signal),
+              ),
+          }),
+      });
+    },
+  });
+
+  return tool;
+};

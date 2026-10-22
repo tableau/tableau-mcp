@@ -19,39 +19,62 @@ const MULTI_DS_XML =
   '</view></table></worksheet>';
 
 describe('qualifyColumnFields', () => {
-  it('qualifies a bare field name with the single datasource caption', () => {
-    expect(qualifyColumnFields(SINGLE_DS_XML, ['Region', 'Sales'])).toEqual({
+  it('qualifies a bare field name with the datasource internal name on API 0.2.25 and later', () => {
+    expect(qualifyColumnFields(SINGLE_DS_XML, ['Region', 'Sales'], '0.2.25')).toEqual({
       ok: true,
       columns: ['[Sample - Superstore].[Region]', '[Sample - Superstore].[Sales]'],
     });
+    expect(qualifyColumnFields(CAPTIONED_DS_XML, ['Region'], '0.2.25')).toEqual({
+      ok: true,
+      columns: ['[federated.abc].[Region]'],
+    });
   });
 
-  it('prefers the datasource caption over the internal name', () => {
-    expect(qualifyColumnFields(CAPTIONED_DS_XML, ['Region'])).toEqual({
+  it('qualifies with the datasource caption on earlier API versions', () => {
+    expect(qualifyColumnFields(CAPTIONED_DS_XML, ['Region'], '0.2.24')).toEqual({
+      ok: true,
+      columns: ['[Sample - Superstore].[Region]'],
+    });
+  });
+
+  it('qualifies with the datasource caption when the API version is unknown', () => {
+    expect(qualifyColumnFields(CAPTIONED_DS_XML, ['Region'], undefined)).toEqual({
       ok: true,
       columns: ['[Sample - Superstore].[Region]'],
     });
   });
 
   it('passes an already-qualified value through verbatim', () => {
-    expect(qualifyColumnFields(SINGLE_DS_XML, ['[Other DS].[Profit]'])).toEqual({
+    expect(qualifyColumnFields(SINGLE_DS_XML, ['[Other DS].[Profit]'], '0.2.25')).toEqual({
       ok: true,
       columns: ['[Other DS].[Profit]'],
     });
   });
 
   it('tolerates a bracketed bare name', () => {
-    expect(qualifyColumnFields(SINGLE_DS_XML, ['[Region]'])).toEqual({
+    expect(qualifyColumnFields(CAPTIONED_DS_XML, ['[Region]'], '0.2.25')).toEqual({
       ok: true,
-      columns: ['[Sample - Superstore].[Region]'],
+      columns: ['[federated.abc].[Region]'],
     });
   });
 
   it('refuses a bare name when the worksheet has multiple datasources', () => {
-    const result = qualifyColumnFields(MULTI_DS_XML, ['Region']);
+    const result = qualifyColumnFields(MULTI_DS_XML, ['Region'], '0.2.25');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toContain('multiple datasources');
     }
+  });
+
+  it('refuses a bare name when the worksheet declares no datasource', () => {
+    const result = qualifyColumnFields(
+      '<?xml version="1.0"?><worksheet name="Sheet 1"><table><view /></table></worksheet>',
+      ['Region'],
+      '0.2.25',
+    );
+    expect(result).toEqual({
+      ok: false,
+      reason: 'the worksheet declares no datasource to qualify the field name against',
+    });
   });
 });

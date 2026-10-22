@@ -39,7 +39,7 @@ export const exportDashboardImageTool = (
     server,
     name: 'export-dashboard-image',
     title,
-    description: 'Render one dashboard as an image.',
+    description: 'Render one dashboard as an image. SVG output has no pixel width or height.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,

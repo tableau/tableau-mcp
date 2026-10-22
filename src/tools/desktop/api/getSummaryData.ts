@@ -43,7 +43,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'get-summary-data',
     title,
     description:
-      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard.',
+      'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard. Cells are raw, unaliased, unformatted values. Rows stop at maxRows with no truncation flag.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

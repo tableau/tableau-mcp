@@ -41,7 +41,7 @@ export const exportStoryboardImageTool = (
     minApiVersion: '0.2.7',
     title,
     description:
-      "Render a storyboard's active story point as an image. Only the active point is rendered; other story points are not included and cannot be selected.",
+      "Render a storyboard's active story point as an image. Only the active point is rendered; other story points are not included and cannot be selected. SVG output has no pixel width or height.",
     paramsSchema,
     annotations: {
       readOnlyHint: false,

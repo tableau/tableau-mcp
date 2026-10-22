@@ -39,7 +39,7 @@ export const exportWorksheetImageTool = (
     server,
     name: 'export-worksheet-image',
     title,
-    description: 'Render one worksheet as an image.',
+    description: 'Render one worksheet as an image. SVG output has no pixel width or height.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,

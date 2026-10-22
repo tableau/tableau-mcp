@@ -27,6 +27,11 @@ export function makeExecutorMock(
     health: vi.fn(),
     getRoot: vi.fn(),
     getApp: vi.fn(),
+    getCapabilities: vi.fn(),
+    getOAuthProtectedResource: vi.fn(),
+    getOpenApi: vi.fn(),
+    listOperations: vi.fn(),
+    getOperation: vi.fn(),
     getActiveDialogs: vi
       .fn<ExternalApiToolExecutor['getActiveDialogs']>()
       .mockResolvedValue(Ok({ dialogs: [] })),
@@ -65,9 +70,11 @@ export function makeExecutorMock(
     setStartPageVisibility: vi
       .fn<ExternalApiToolExecutor['setStartPageVisibility']>()
       .mockResolvedValue(Ok({ isStartPageVisible: false })),
+    toggleDataSourcePage: vi.fn(),
     exportWorksheetImage: vi.fn(),
     exportDashboardImage: vi.fn(),
     exportStoryboardImage: vi.fn(),
+    validateWorksheetCalculatedField: vi.fn(),
     validateWorkbookDocument: vi.fn(),
     applyWorkbookDocument: vi.fn(),
     applyDatasourceDocument: vi.fn(),
@@ -92,6 +99,8 @@ export function makeExecutorMock(
     pauseWorksheetAutoUpdates: vi.fn(),
     resumeWorksheetAutoUpdates: vi.fn(),
     refreshWorksheetNow: vi.fn(),
+    reloadWorksheetExtension: vi.fn(),
+    reloadDashboardExtensions: vi.fn(),
     refreshStoryboardNow: vi.fn(),
     refreshDashboardNow: vi.fn(),
     pauseDashboardAutoUpdates: vi.fn(),

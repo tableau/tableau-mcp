@@ -486,11 +486,11 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 77-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 79-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(77);
+      expect(selected).toHaveLength(79);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -530,6 +530,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'redo-workbook',
         'list-instances',
         'get-desktop-state',
+        'get-app-info',
         'get-diagnostics',
         'get-active-dialogs',
         'invoke-dialog-action',
@@ -546,6 +547,7 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'add-storyboard',
         'open-file',
         'set-start-page-visibility',
+        'set-data-source-page-active',
         'save-workbook',
         'workbook-export-as',
         'refresh-auto-updates',
@@ -846,6 +848,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
+    expect(floors.get('set-data-source-page-active')).toBe('0.2.25');
+    expect(floors.get('get-capabilities')).toBe('0.2.25');
+    expect(floors.get('reload-extensions')).toBe('0.2.25');
+    expect(floors.get('validate-calculated-field')).toBe('0.2.16');
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {

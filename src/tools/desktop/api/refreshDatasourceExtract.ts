@@ -15,7 +15,7 @@ const paramsSchema = {
     .string()
     .min(1)
     .describe(
-      "Datasource id from the workbook's datasource list; not its display name or caption.",
+      'Datasource id as returned by the datasource list (already percent-encoded); not its name or caption.',
     ),
   isFullRefresh: z
     .boolean()
@@ -36,8 +36,9 @@ export const getRefreshDatasourceExtractTool = (
     title,
     description:
       'Refresh the extract for a datasource in the open workbook. By default the refresh is incremental ' +
-      'when the extract supports it; pass isFullRefresh to force a full refresh. A datasource with no ' +
-      'refreshable extract does nothing.',
+      'when the extract is configured for incremental refresh; pass isFullRefresh to force a full refresh. ' +
+      'A datasource with no refreshable extract does nothing and still succeeds. An id that matches no ' +
+      'datasource fails.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

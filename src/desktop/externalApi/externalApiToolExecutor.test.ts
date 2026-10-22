@@ -1435,6 +1435,18 @@ describe('ExternalApiToolExecutor', () => {
           executor.resumeDashboardAutoUpdates('dash-exec', signal),
         path: '/v0/workbook/dashboards/dash-exec:resumeAutoUpdates',
       },
+      {
+        label: 'reloads a worksheet extension',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.reloadWorksheetExtension('sheet-sales', signal),
+        path: '/v0/workbook/worksheets/sheet-sales:reloadExtension',
+      },
+      {
+        label: 'reloads dashboard extensions',
+        call: (executor: ExternalApiToolExecutor) =>
+          executor.reloadDashboardExtensions('dash-exec', signal),
+        path: '/v0/workbook/dashboards/dash-exec:reloadExtensions',
+      },
     ])('$label via a bodyless POST to the per-sheet action route', async ({ call, path }) => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -1983,6 +1995,207 @@ describe('ExternalApiToolExecutor', () => {
         );
       },
     );
+  });
+
+  describe('operation, capability and discovery endpoints', () => {
+    it('gets the capability matrix keyed on operationId', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getCapabilities(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().capabilities['refreshDatasourceData']).toEqual({
+        requiresServer: true,
+      });
+      expect(server.requests.at(-1)).toMatchObject({ method: 'GET', path: '/v0/capabilities' });
+    });
+
+    it('gets the OAuth protected-resource metadata', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOAuthProtectedResource(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().bearer_methods_supported).toEqual(['header']);
+      expect(server.requests.at(-1)?.path).toBe('/.well-known/oauth-protected-resource');
+    });
+
+    it('gets the OpenAPI document', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOpenApi(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().info['version']).toBe('0.2.25');
+      expect(Object.keys(result.unwrap().paths)).toContain('/v0/health');
+      expect(server.requests.at(-1)?.path).toBe('/openapi.json');
+    });
+
+    it('lists and gets operations without touching the internal poll path', async () => {
+      server.setOperation('op-list-1', {
+        poll: [
+          { id: 'op-list-1', kind: 'workbook.document.apply', state: 'RUNNING' },
+          { id: 'op-list-1', kind: 'workbook.document.apply', state: 'SUCCEEDED', result: {} },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const listed = await executor.listOperations(signal);
+      const fetched = await executor.getOperation('op-list-1', signal);
+
+      expect(listed.unwrap().operations.map((operation) => operation.id)).toEqual(['op-list-1']);
+      expect(fetched.unwrap()).toMatchObject({ id: 'op-list-1', state: 'RUNNING' });
+      expect(server.requests.map((request) => request.path)).toEqual([
+        '/v0/operations',
+        '/v0/operations/op-list-1',
+      ]);
+    });
+
+    it('maps an unknown operation id to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOperation('op-missing', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+
+    it('refuses an unsafe operation id without sending a request', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getOperation('..', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(server.requests).toHaveLength(0);
+    });
+  });
+
+  describe('worksheet calculated-field validation', () => {
+    it('posts only the formula and returns the validation outcome', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateWorksheetCalculatedField(
+        'sheet-sales',
+        'SUM([Sales])',
+        signal,
+      );
+
+      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+      const posted = server.requests.at(-1);
+      expect(posted).toMatchObject({
+        method: 'POST',
+        path: '/v0/workbook/worksheets/sheet-sales:validateCalculatedField',
+        contentType: 'application/json',
+      });
+      expect(JSON.parse(posted?.body ?? '{}')).toEqual({ formula: 'SUM([Sales])' });
+    });
+
+    it('reports formula errors with their position', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateWorksheetCalculatedField(
+        'sheet-sales',
+        'SUM([Sales]',
+        signal,
+      );
+
+      expect(result.unwrap()).toEqual({
+        isValid: false,
+        errors: [{ position: 11, length: 0, message: 'Unbalanced parentheses.' }],
+      });
+    });
+
+    it('maps an unknown worksheet to a command failure', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateWorksheetCalculatedField('missing', '1', signal);
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+
+    it('polls a 202 to the validation result', async () => {
+      server.setOverride('POST /v0/workbook/worksheets/sheet-sales:validateCalculatedField', {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/op-validate', 'retry-after': '0' },
+        body: JSON.stringify({ id: 'op-validate', kind: 'calc.validate', state: 'RUNNING' }),
+      });
+      server.setOperation('op-validate', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-validate',
+            kind: 'calc.validate',
+            state: 'SUCCEEDED',
+            result: { isValid: true, errors: [] },
+          },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateWorksheetCalculatedField('sheet-sales', '1', signal);
+
+      expect(result.unwrap()).toEqual({ isValid: true, errors: [] });
+    });
+  });
+
+  describe('Data Source page', () => {
+    it.each([true, false])(
+      'sets the Data Source page active state to %s and the app info reports it',
+      async (isDataSourcePageActive) => {
+        const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+        await executor.start();
+
+        const result = await executor.toggleDataSourcePage(isDataSourcePageActive, signal);
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap().status).toBe('completed');
+        const posted = server.requests.at(-1);
+        expect(posted).toMatchObject({
+          method: 'POST',
+          path: '/v0/app:toggleDataSourcePage',
+          contentType: 'application/json',
+        });
+        expect(JSON.parse(posted?.body ?? '{}')).toEqual({ isDataSourcePageActive });
+        expect((await executor.getApp(signal)).unwrap().isDataSourcePageActive).toBe(
+          isDataSourcePageActive,
+        );
+      },
+    );
+
+    it('polls a 202 caused by a pending-extract dialog to completion', async () => {
+      server.setOverride('POST /v0/app:toggleDataSourcePage', {
+        status: 202,
+        contentType: 'application/json',
+        headers: { location: '/v0/operations/op-ds-page', 'retry-after': '0' },
+        body: JSON.stringify({
+          id: 'op-ds-page',
+          kind: 'app.toggleDataSourcePage',
+          state: 'RUNNING',
+        }),
+      });
+      server.setOperation('op-ds-page', {
+        retryAfterSeconds: 0,
+        poll: [{ id: 'op-ds-page', kind: 'app.toggleDataSourcePage', state: 'SUCCEEDED' }],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.toggleDataSourcePage(false, signal);
+
+      expect(result.unwrap().status).toBe('completed');
+    });
   });
 
   describe('dialog endpoints', () => {

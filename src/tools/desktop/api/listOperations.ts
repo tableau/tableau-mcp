@@ -1,0 +1,50 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+import { OperationList } from '../../../desktop/externalApi/types.js';
+import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import { sessionParam } from '../params.js';
+import { DesktopTool } from '../tool.js';
+
+const paramsSchema = {
+  session: sessionParam(),
+};
+
+const title = 'List Operations';
+
+export const getListOperationsTool = (
+  server: DesktopMcpServer,
+): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'list-operations',
+    title,
+    description:
+      'List the in-flight and recent operations known to Tableau Desktop. Each operation includes its id, kind, state, timestamps, and, when it failed, the error with its code and tableauErrorCode. Also returns any blocking or progress windows. Use get-operation to read one operation by id.',
+    paramsSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
+      return await tool.logAndExecute<OperationList>({
+        extra,
+        args: { session },
+        callback: async () =>
+          await runExternalApiTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, call) =>
+              await call(
+                'operations',
+                async (executor, signal) => await executor.listOperations(signal),
+              ),
+          }),
+      });
+    },
+  });
+
+  return tool;
+};

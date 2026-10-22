@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.20), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.25), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -21,6 +21,8 @@ export const EXTERNAL_API_ROUTES = {
   appInvokeDialogAction: '/v0/app:invokeDialogAction',
   appOpenFile: '/v0/app:openFile',
   appToggleStartPage: '/v0/app:toggleStartPage',
+  appToggleDataSourcePage: '/v0/app:toggleDataSourcePage',
+  capabilities: '/v0/capabilities',
   root: '/v0/',
   workbook: '/v0/workbook',
   workbookDiagnostics: '/v0/workbook/diagnostics',
@@ -48,6 +50,7 @@ export const EXTERNAL_API_ROUTES = {
   dashboardPauseAutoUpdates: '/v0/workbook/dashboards/{id}:pauseAutoUpdates',
   dashboardRefreshNow: '/v0/workbook/dashboards/{id}:refreshNow',
   dashboardResumeAutoUpdates: '/v0/workbook/dashboards/{id}:resumeAutoUpdates',
+  dashboardReloadExtensions: '/v0/workbook/dashboards/{id}:reloadExtensions',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
   storyboardImage: '/v0/workbook/storyboards/{id}/image',
@@ -69,6 +72,8 @@ export const EXTERNAL_API_ROUTES = {
   worksheetPauseAutoUpdates: '/v0/workbook/worksheets/{id}:pauseAutoUpdates',
   worksheetResumeAutoUpdates: '/v0/workbook/worksheets/{id}:resumeAutoUpdates',
   worksheetRefreshNow: '/v0/workbook/worksheets/{id}:refreshNow',
+  worksheetReloadExtension: '/v0/workbook/worksheets/{id}:reloadExtension',
+  worksheetValidateCalculatedField: '/v0/workbook/worksheets/{id}:validateCalculatedField',
   datasourceRefreshData: '/v0/datasources/{id}:refreshData',
   datasourceRefreshExtract: '/v0/datasources/{id}:refreshExtract',
   invokeCommand: '/v0/app:invokeCommand',
@@ -395,6 +400,14 @@ export function worksheetResumeAutoUpdatesRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:resumeAutoUpdates`;
 }
 
+export function worksheetReloadExtensionRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:reloadExtension`;
+}
+
+export function worksheetValidateCalculatedFieldRoute(worksheetId: string): string {
+  return `${worksheetRoute(worksheetId)}:validateCalculatedField`;
+}
+
 export function worksheetRefreshNowRoute(worksheetId: string): string {
   return `${worksheetRoute(worksheetId)}:refreshNow`;
 }
@@ -407,12 +420,20 @@ export function dashboardPauseAutoUpdatesRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:pauseAutoUpdates`;
 }
 
+export function dashboardReloadExtensionsRoute(dashboardId: string): string {
+  return `${dashboardRoute(dashboardId)}:reloadExtensions`;
+}
+
 export function dashboardRefreshNowRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:refreshNow`;
 }
 
 export function dashboardResumeAutoUpdatesRoute(dashboardId: string): string {
   return `${dashboardRoute(dashboardId)}:resumeAutoUpdates`;
+}
+
+export function operationRoute(operationId: string): string {
+  return `${EXTERNAL_API_ROUTES.operations}/${seg(operationId)}`;
 }
 
 export function worksheetLogicalTablesRoute(worksheetId: string): string {
@@ -476,11 +497,11 @@ export function storyboardImageRoute(storyboardId: string, query: ImageExportQue
 const DATASOURCE_ROUTE_PREFIX = '/v0/datasources';
 
 export function datasourceRefreshDataRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshData`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${canonicalDatasourceSegment(datasourceId)}:refreshData`;
 }
 
 export function datasourceRefreshExtractRoute(datasourceId: string): string {
-  return `${DATASOURCE_ROUTE_PREFIX}/${seg(datasourceId)}:refreshExtract`;
+  return `${DATASOURCE_ROUTE_PREFIX}/${canonicalDatasourceSegment(datasourceId)}:refreshExtract`;
 }
 
 /**
@@ -536,11 +557,21 @@ export const healthSchema = z
 /** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
 export const protectedResourceMetadataSchema = z
   .object({
-    authorization_servers: z.array(z.string()).optional(),
+    resource: z.string().optional(),
     bearer_methods_supported: z.array(z.string()).optional(),
   })
   .passthrough();
 export type ProtectedResourceMetadata = z.infer<typeof protectedResourceMetadataSchema>;
+
+/** The producer's OpenAPI document returned by `GET /openapi.json`. */
+export const openApiDocumentSchema = z
+  .object({
+    openapi: z.string(),
+    info: z.record(z.unknown()),
+    paths: z.record(z.record(z.unknown())),
+  })
+  .passthrough();
+export type OpenApiDocument = z.infer<typeof openApiDocumentSchema>;
 
 /** A live, reachable External Client API instance selected from discovery. */
 export type ExternalApiInstance = {
@@ -553,7 +584,7 @@ export type ExternalApiInstance = {
 
 /**
  * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
- * `/openapi.json` (0.2.16). Extensible on the wire: treat unknown codes as valid.
+ * `/openapi.json`. Extensible on the wire: treat unknown codes as valid.
  */
 export const PROBLEM_CODES = [
   'api-disabled',
@@ -563,8 +594,6 @@ export const PROBLEM_CODES = [
   'missing-user-agent',
   'invalid-request-body',
   'unsupported-content-type',
-  'missing-payload-version',
-  'payload-version-unsupported',
   'not-found',
   'datasource-not-found',
   'sheet-not-found',
@@ -577,7 +606,6 @@ export const PROBLEM_CODES = [
   'dialog-action-ambiguous',
   'dialog-action-disabled',
   'method-not-allowed',
-  'not-implemented',
   'command-not-found',
   'invalid-command-parameter',
   'invalid-query-parameter',
@@ -586,6 +614,8 @@ export const PROBLEM_CODES = [
   'file-not-found',
   'show-me-not-applicable',
   'show-me-unavailable',
+  'dashboard-refresh-now-failed',
+  'storyboard-refresh-now-failed',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
@@ -616,6 +646,7 @@ export const operationErrorSchema = z
   .object({
     code: z.string(),
     message: z.string().optional(),
+    tableauErrorCode: z.string().optional(),
   })
   .passthrough();
 export type OperationError = z.infer<typeof operationErrorSchema>;
@@ -782,6 +813,16 @@ export const operationEnvelopeSchema = z
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
+
+/** Operations returned by `GET /v0/operations`; entries omit `result` and window state. */
+export const operationListSchema = z
+  .object({
+    operations: z.array(operationEnvelopeSchema),
+    blockingWindows: z.array(windowInfoSchema).optional(),
+    progressWindows: z.array(windowInfoSchema).optional(),
+  })
+  .passthrough();
+export type OperationList = z.infer<typeof operationListSchema>;
 
 /** Worksheet item returned by `GET /v0/workbook/worksheets`. */
 export const worksheetItemSchema = z
@@ -1072,6 +1113,7 @@ export const appInfoSchema = z
     isStartPageVisible: z.boolean().optional(),
     isDataSourcePageActive: z.boolean().optional(),
     isPresentationMode: z.boolean().optional(),
+    isFocusMode: z.boolean().optional(),
   })
   .passthrough();
 export type AppInfo = z.infer<typeof appInfoSchema>;
@@ -1083,6 +1125,31 @@ export const startPageVisibilitySchema = z
   })
   .passthrough();
 export type StartPageVisibility = z.infer<typeof startPageVisibilitySchema>;
+
+/** Per-operation availability returned by `GET /v0/capabilities`, keyed on operationId. */
+export const capabilityMatrixSchema = z
+  .object({
+    capabilities: z.record(z.object({ requiresServer: z.boolean() }).passthrough()),
+  })
+  .passthrough();
+export type CapabilityMatrix = z.infer<typeof capabilityMatrixSchema>;
+
+/** Result of `POST /v0/workbook/worksheets/{id}:validateCalculatedField`. */
+export const validateCalculatedFieldResponseSchema = z
+  .object({
+    isValid: z.boolean(),
+    errors: z.array(
+      z
+        .object({
+          position: z.number().int(),
+          length: z.number().int(),
+          message: z.string(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+export type ValidateCalculatedFieldResponse = z.infer<typeof validateCalculatedFieldResponseSchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiHttp} methods. The internal

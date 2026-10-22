@@ -19,15 +19,17 @@ const paramsSchema = {
   logicalTable: z
     .string()
     .describe("A logical table caption or id from the worksheet's logical tables."),
-  maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
+  maxRows: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Default 200; max 1000; no truncation flag.'),
   includeAllColumns: z
     .boolean()
     .optional()
-    .describe('Include every column, not only the ones the view references.'),
-  columns: z
-    .array(z.string())
-    .optional()
-    .describe('Field names to restrict the columns (e.g. "Region").'),
+    .describe('Include columns the view does not reference.'),
+  columns: z.array(z.string()).optional().describe('Field names to keep (e.g. "Region").'),
 };
 const title = 'Get Worksheet Underlying Data';
 
@@ -58,7 +60,7 @@ export const getWorksheetUnderlyingDataTool = (
           return await runExternalApiReadTool({
             session,
             extra,
-            callback: async (_executor, _signal, read) => {
+            callback: async (executor, _signal, read) => {
               const listResult = await read(
                 'worksheet list',
                 async (executor, signal) => await executor.listWorksheets(signal),
@@ -105,7 +107,11 @@ export const getWorksheetUnderlyingDataTool = (
                 if (document.isErr()) {
                   return document;
                 }
-                const qualified = qualifyColumnFields(document.value.xml, columns);
+                const qualified = qualifyColumnFields(
+                  document.value.xml,
+                  columns,
+                  executor.desktopApiVersion,
+                );
                 if (!qualified.ok) {
                   return new ArgsValidationError(
                     `Cannot restrict columns: ${qualified.reason}.`,

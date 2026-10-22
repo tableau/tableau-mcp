@@ -46,7 +46,8 @@ export const getRefreshStoryboardAutoUpdatesTool = (
     name: 'refresh-storyboard-auto-updates',
     minApiVersion: '0.2.20',
     title,
-    description: 'Run pending automatic updates for the current point of one storyboard now.',
+    description:
+      'Run pending automatic updates for the current point of one storyboard now, without changing the active sheet or current story point. Worksheets that refresh stay refreshed when another fails; the call then returns an error whose result reports a PARTIAL or FAILED outcome with per-worksheet results.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -95,7 +96,13 @@ export const getRefreshStoryboardAutoUpdatesTool = (
                 ),
               ).toErr();
             }
-            return new DesktopCommandExecutionError(result.error).toErr();
+            return new DesktopCommandExecutionError(
+              result.error,
+              result.error.type === 'command-failed' &&
+                result.error.error?.code === 'storyboard-refresh-now-failed'
+                ? 'Desktop failed before refreshing any worksheet in the storyboard; nothing was refreshed.'
+                : undefined,
+            ).toErr();
           }
 
           if (result.value.status !== 'completed') {

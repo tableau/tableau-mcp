@@ -320,9 +320,11 @@ describe('getSummaryDataTool', () => {
     const tool = getSummaryDataTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-summary-data');
-    expect(tool.description).toBe(
+    expect(tool.description).toContain(
       'Read aggregated summary rows from a worksheet, ignoring selection (only fields on the view). These rows do not verify values shown by a worksheet instance in a dashboard.',
     );
+    expect(tool.description).toContain('raw, unaliased, unformatted values');
+    expect(tool.description).toContain('no truncation flag');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
