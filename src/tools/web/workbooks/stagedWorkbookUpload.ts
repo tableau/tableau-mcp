@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
 import { getBlobStorageProvider } from '../../../blobStorage/init.js';
+import { buildTenantBlobKey, TenantLuids } from '../../../blobStorage/tenantKey.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under common blob storage
 // single-PUT ceilings (e.g. S3's 5GB limit).
@@ -26,15 +27,18 @@ export type RequestWorkbookUploadResult = {
 
 type WorkbookUploadOptions = {
   fileName: string;
+  tenant: TenantLuids;
 };
 
 type ResolveWorkbookUploadOptions = {
   workbookUploadId: string;
+  tenant: TenantLuids;
   maxBytes?: number;
 };
 
 export async function requestStagedWorkbookUpload({
   fileName,
+  tenant,
 }: WorkbookUploadOptions): Promise<RequestWorkbookUploadResult> {
   const fileType = assertWorkbookUploadFileName(fileName);
 
@@ -42,7 +46,7 @@ export async function requestStagedWorkbookUpload({
   const contentType = getWorkbookUploadContentType(fileType);
   const { uploadUrl, requiredHeaders, expiresAt } =
     await getBlobStorageProvider().getPresignedUploadUrl({
-      key: buildWorkbookUploadKey(workbookUploadId, fileType),
+      key: buildWorkbookUploadKey(tenant, workbookUploadId, fileType),
       contentType,
     });
 
@@ -57,13 +61,15 @@ export async function requestStagedWorkbookUpload({
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
+  tenant,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
 }: ResolveWorkbookUploadOptions): Promise<ResolvedWorkbook> {
   assertWorkbookUploadId(workbookUploadId);
 
+  // The key is rebuilt from the caller's own tenant, so an id staged by another tenant misses.
   for (const fileType of WORKBOOK_FILE_TYPES) {
     const content = await getBlobStorageProvider().download({
-      key: buildWorkbookUploadKey(workbookUploadId, fileType),
+      key: buildWorkbookUploadKey(tenant, workbookUploadId, fileType),
       maxBytes,
     });
 
@@ -82,11 +88,15 @@ export async function resolveStagedWorkbookUpload({
 }
 
 export function buildWorkbookUploadKey(
+  tenant: TenantLuids,
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
   assertWorkbookUploadId(workbookUploadId);
-  return `${WORKBOOK_UPLOAD_PREFIX_SEGMENT}/${workbookUploadId}/workbook.${fileType}`;
+  return buildTenantBlobKey(
+    tenant,
+    `${WORKBOOK_UPLOAD_PREFIX_SEGMENT}/${workbookUploadId}/workbook.${fileType}`,
+  );
 }
 
 function assertWorkbookUploadFileName(fileName: string): WorkbookFileType {

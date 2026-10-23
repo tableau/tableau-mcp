@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok, Result } from 'ts-results-es';
 
 import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import {
+  buildTenantBlobKey,
+  getTenantLuids,
+  TenantIdentitySource,
+  TenantLuids,
+} from '../../../blobStorage/tenantKey.js';
 import { toUploadData } from '../../../blobStorage/uploadData.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -24,12 +32,12 @@ const CSV_CONTENT_TYPE = 'text/csv; charset=utf-8';
 export type DataToolResult = { kind: 'url'; url: string } | { kind: 'inline'; csv: string };
 
 /**
- * Builds the blob storage key for a view's CSV data. Namespacing/prefixing
- * beyond this logical key (e.g. an operator-configured base path) is the
+ * Builds the tenant-scoped blob storage key for a view's CSV data. Namespacing/
+ * prefixing beyond this key (e.g. an operator-configured base path) is the
  * custom provider's own concern.
  */
-function buildDataKey(resourceId: string): string {
-  return `data/${resourceId}/${randomUUID()}.csv`;
+function buildDataKey(tenant: TenantLuids, resourceId: string): string {
+  return buildTenantBlobKey(tenant, `data/${resourceId}/${randomUUID()}.csv`);
 }
 
 /**
@@ -43,31 +51,39 @@ function buildDataKey(resourceId: string): string {
  * The `view-data-file-mode` feature gate governs the entire offload path, so
  * disabling the flag keeps the URL result behind the gate and preserves the
  * original inline behavior. The `isBlobStorageEnabled()` check keeps an enabled
- * flag without a configured provider on the inline path.
+ * flag without a configured provider on the inline path. A missing or invalid
+ * tenant returns an error rather than falling back, so nothing is uploaded unscoped.
  */
 export async function buildDataToolResult({
   csv,
   resourceId,
   toolName,
+  tenant,
 }: {
   csv: string;
   resourceId: string;
   toolName: string;
-}): Promise<DataToolResult> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<DataToolResult, McpToolError>> {
   if (
     !isBlobStorageEnabled() ||
     !(await getFeatureGate().isFeatureEnabled('view-data-file-mode'))
   ) {
-    return { kind: 'inline', csv };
+    return new Ok({ kind: 'inline', csv });
+  }
+
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
   }
 
   try {
     const { url } = await getBlobStorageProvider().upload({
-      key: buildDataKey(resourceId),
+      key: buildDataKey(tenantLuids.value, resourceId),
       ...toUploadData(csv),
       contentType: CSV_CONTENT_TYPE,
     });
-    return { kind: 'url', url };
+    return new Ok({ kind: 'url', url });
   } catch (error) {
     // The full CSV is still in hand, so we can always fall back to inline. Log
     // the key facts (never the URL / signature).
@@ -78,7 +94,7 @@ export async function buildDataToolResult({
       level: 'warning',
       logger: 'tool',
     });
-    return { kind: 'inline', csv };
+    return new Ok({ kind: 'inline', csv });
   }
 }
 

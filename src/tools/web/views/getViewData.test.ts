@@ -9,7 +9,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getMockRequestHandlerExtra, MOCK_SITE_LUID, MOCK_USER_LUID } from '../toolContext.mock.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
 
@@ -341,7 +341,11 @@ describe('getViewDataTool', () => {
       expect(result._meta).toBeUndefined();
 
       expect(mocks.mockUpload).toHaveBeenCalledWith({
-        key: expect.stringMatching(new RegExp(`^data/${mockView.id}/[0-9a-f-]{36}\\.csv$`)),
+        key: expect.stringMatching(
+          new RegExp(
+            `^${MOCK_SITE_LUID}/${MOCK_USER_LUID}/data/${mockView.id}/[0-9a-f-]{36}\\.csv$`,
+          ),
+        ),
         data: expect.anything(),
         contentLength: Buffer.from(mockViewData, 'utf-8').byteLength,
         contentType: 'text/csv; charset=utf-8',
@@ -354,6 +358,13 @@ describe('getViewDataTool', () => {
       const firstKey = mocks.mockUpload.mock.calls.at(-1)?.[0].key;
       await getToolResult({ viewId: mockView.id });
       expect(mocks.mockUpload.mock.calls.at(-1)?.[0].key).not.toBe(firstKey);
+    });
+
+    it('fails closed without uploading when the session site LUID is not a valid LUID', async () => {
+      const result = await getToolResult({ viewId: mockView.id }, { _siteLuid: '../other-site' });
+
+      expect(result.isError).toBe(true);
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
 
     it('should return inline CSV when blob storage is not enabled', async () => {
@@ -396,16 +407,19 @@ describe('getViewDataTool', () => {
   });
 });
 
-async function getToolResult({
-  viewId,
-  viewFilters,
-}: {
-  viewId: string;
-  viewFilters?: Record<string, string>;
-}): Promise<CallToolResult> {
+async function getToolResult(
+  {
+    viewId,
+    viewFilters,
+  }: {
+    viewId: string;
+    viewFilters?: Record<string, string>;
+  },
+  extraOverrides: Parameters<typeof getMockRequestHandlerExtra>[0] = {},
+): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra(extraOverrides));
 }
 
 function parseJsonContent(result: CallToolResult): any {

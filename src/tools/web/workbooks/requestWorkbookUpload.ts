@@ -1,11 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
-import { UnknownError } from '../../../errors/mcpToolError.js';
+import { getTenantLuids } from '../../../blobStorage/tenantKey.js';
+import { McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -63,8 +65,18 @@ export const getRequestWorkbookUploadTool = (
             );
           }
 
-          const result = await requestStagedWorkbookUpload({ fileName });
-          return new Ok(result);
+          // Sign in so the staged key uses the same identity publish-workbook resolves.
+          return await useRestApi<Result<RequestWorkbookUploadResult, McpToolError>>({
+            ...extra,
+            jwtScopes: tool.requiredApiScopes,
+            callback: async () => {
+              const tenant = getTenantLuids(extra);
+              if (tenant.isErr()) {
+                return tenant;
+              }
+              return new Ok(await requestStagedWorkbookUpload({ fileName, tenant: tenant.value }));
+            },
+          });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
         getSuccessResult: (result) => ({

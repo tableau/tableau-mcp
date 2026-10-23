@@ -117,14 +117,13 @@ export const getGetViewImageTool = (
           // Offload to blob storage (returning a URL) when configured,
           // otherwise carry the raw bytes for inline base64. Falls back to
           // inline on any upload failure.
-          return new Ok(
-            await buildImageToolResult({
-              imageData: imageResult.value,
-              format,
-              resourceId: viewId,
-              toolName: getViewImageTool.name,
-            }),
-          );
+          return await buildImageToolResult({
+            imageData: imageResult.value,
+            format,
+            resourceId: viewId,
+            toolName: getViewImageTool.name,
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (imageToolResult) => {
           return {

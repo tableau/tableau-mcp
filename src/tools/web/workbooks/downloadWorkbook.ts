@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -78,16 +77,15 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
           const extension = mimeType === 'application/xml' ? 'twb' : 'twbx';
           const filename = workbook.filename ?? `workbook-${workbookId}.${extension}`;
 
-          return new Ok(
-            await buildWorkbookToolResult({
-              content: workbook.content,
-              contentLength: workbook.contentLength,
-              mimeType,
-              filename,
-              resourceId: workbookId,
-              toolName: downloadWorkbookTool.name,
-            }),
-          );
+          return await buildWorkbookToolResult({
+            content: workbook.content,
+            contentLength: workbook.contentLength,
+            mimeType,
+            filename,
+            resourceId: workbookId,
+            toolName: downloadWorkbookTool.name,
+            tenant: extra,
+          });
         },
         constrainSuccessResult: (result) => ({
           type: 'success',

@@ -6,6 +6,7 @@ import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { getTenantLuids, type TenantIdentitySource } from '../../../blobStorage/tenantKey.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -205,10 +206,15 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
-              const resolvedWorkbookFile = await resolveWorkbookInput({
+              const resolvedWorkbookInput = await resolveWorkbookInput({
                 workbookUploadId,
                 workbookFilePath,
+                tenant: extra,
               });
+              if (resolvedWorkbookInput.isErr()) {
+                return resolvedWorkbookInput;
+              }
+              const resolvedWorkbookFile = resolvedWorkbookInput.value;
               const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
               if (!fileType) {
                 throw new UnknownError(
@@ -409,10 +415,12 @@ async function uploadTwbx({
 async function resolveWorkbookInput({
   workbookUploadId,
   workbookFilePath,
+  tenant,
 }: {
   workbookUploadId?: string;
   workbookFilePath?: string;
-}): Promise<ResolvedWorkbook> {
+  tenant: TenantIdentitySource;
+}): Promise<Result<ResolvedWorkbook, McpToolError>> {
   if (workbookUploadId && workbookFilePath) {
     throw new ArgsValidationError('Provide either workbookFilePath or workbookUploadId, not both.');
   }
@@ -423,7 +431,7 @@ async function resolveWorkbookInput({
         'workbookFilePath is only supported when staged uploads are not configured. Call request-workbook-upload first and pass workbookUploadId.',
       );
     }
-    return await resolveLocalWorkbookFile(workbookFilePath);
+    return new Ok(await resolveLocalWorkbookFile(workbookFilePath));
   }
 
   if (!workbookUploadId) {
@@ -436,7 +444,11 @@ async function resolveWorkbookInput({
       'Blob storage provider must be configured before requesting staged workbook uploads.',
     );
   }
-  return await resolveStagedWorkbookUpload({ workbookUploadId });
+  const tenantLuids = getTenantLuids(tenant);
+  if (tenantLuids.isErr()) {
+    return tenantLuids;
+  }
+  return new Ok(await resolveStagedWorkbookUpload({ workbookUploadId, tenant: tenantLuids.value }));
 }
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
