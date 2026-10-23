@@ -2,10 +2,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
-import {
-  composeDashboardWorkbook,
-  createDashboardReadbackVerifier,
-} from './dashboardViewpoints.js';
+import { createDashboardReadbackVerifier } from './dashboardReflowFixtures.js';
+import { composeDashboardWorkbook } from './dashboardViewpoints.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
 type Rect = [x: number, y: number, width: number, height: number];

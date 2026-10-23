@@ -3,10 +3,8 @@ import { Ok } from 'ts-results-es';
 
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { runValidation } from '../validation/registry.js';
-import {
-  composeDashboardWorkbook,
-  createDashboardReadbackVerifier,
-} from './dashboardViewpoints.js';
+import { createDashboardReadbackVerifier } from './dashboardReflowFixtures.js';
+import { composeDashboardWorkbook } from './dashboardViewpoints.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
 type Metric = {

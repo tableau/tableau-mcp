@@ -38,12 +38,18 @@ export function dashboardWorksheetNames(dashboardXml: string): string[] {
   return worksheetNamesIn(doc.documentElement!);
 }
 
+/** The worksheet a zone shows, or undefined for containers, filters, text and other non-worksheet zones. */
+export function worksheetZoneName(zone: Element): string | undefined {
+  const name = zone.getAttribute('name');
+  const type = zone.getAttribute('type-v2');
+  return name && (!type || type === 'visual') ? name : undefined;
+}
+
 function worksheetNamesIn(dashboard: Element): string[] {
   const names = new Map<string, string>();
   for (const zone of Array.from(dashboard.getElementsByTagName('zone'))) {
-    const name = zone.getAttribute('name');
-    const type = zone.getAttribute('type-v2');
-    if (name && (!type || type === 'visual')) names.set(normalizeParsedXmlName(name), name);
+    const name = worksheetZoneName(zone);
+    if (name) names.set(normalizeParsedXmlName(name), name);
   }
   return [...names.values()];
 }
@@ -246,16 +252,7 @@ export function dashboardMembershipMatches(
   }
 }
 
-/** Prepare once before the POST; each readback parses only the returned workbook. */
-export function createDashboardReadbackVerifier(
-  candidateXml: string,
-  dashboardName: string,
-): (readbackXml: string) => boolean {
-  const difference = createDashboardReadbackDiagnoser(candidateXml, dashboardName);
-  return (readbackXml) => difference(readbackXml) === undefined;
-}
-
-/** Same checks as the verifier, returning the first difference in plain words (undefined = match). */
+/** Prepare once before the POST; returns the first difference in plain words (undefined = match). */
 export function createDashboardReadbackDiagnoser(
   candidateXml: string,
   dashboardName: string,
@@ -425,8 +422,16 @@ function authoredContentDifference(expected: Element, actual: Element): string |
       (expected.tagName === 'zone' && child.tagName === 'zone') ||
       expectedTags.has(expandedName(child)),
   );
-  if (expectedChildren.length !== actualChildren.length)
-    return `${label} has ${actualChildren.length} child ${expected.tagName === 'zone' || expected.tagName === 'zones' ? 'zones' : 'elements'} in Desktop, ${expectedChildren.length} submitted`;
+  if (expectedChildren.length !== actualChildren.length) {
+    const countOf = (list: Element[], child: Element): number =>
+      list.filter((item) => expandedName(item) === expandedName(child)).length;
+    for (const child of [...expectedChildren, ...actualChildren]) {
+      const submittedCount = countOf(expectedChildren, child);
+      const desktopCount = countOf(actualChildren, child);
+      if (submittedCount !== desktopCount)
+        return `${label} has ${desktopCount} ${child.tagName === 'zone' ? 'child zones' : `<${child.tagName}> children`} in Desktop, ${submittedCount} submitted`;
+    }
+  }
   const geometry = layoutGeometryDifference(expected, actual);
   if (geometry) return geometry;
   const claimed = new Set<Element>();
