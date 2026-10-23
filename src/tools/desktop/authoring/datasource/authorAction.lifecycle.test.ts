@@ -660,6 +660,25 @@ describe('author-action edit/delete', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('names the sourceWorksheet requirement when an edit omits it', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action7]',
+        mode: 'url',
+        caption: 'Original',
+        sourceWorksheet: undefined,
+        url: 'https://example.com/selected',
+      },
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "pass sourceWorksheet, or '' for a dashboard-only url, filter, or highlight source",
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('lists available internal names when the selected action is absent', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: { operation: 'delete', actionName: 'Original' },
