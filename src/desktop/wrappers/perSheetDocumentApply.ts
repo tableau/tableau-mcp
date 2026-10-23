@@ -1,7 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
-import { escapeXml } from '../binder/escape.js';
 import {
   ApplyWorkbookDocumentOptions,
   ExecuteCommandError,
@@ -44,7 +43,8 @@ export type PerSheetApplyOutcome =
   | 'sheet-absent'
   | 'route-missing'
   | 'source-drift'
-  | { type: 'validation-failed'; issues: ValidationIssue[] };
+  | { type: 'validation-failed'; issues: ValidationIssue[] }
+  | { type: 'name-differs'; submittedName: string; liveName: string };
 
 const ITEM_LABEL: Record<PerSheetKind, string> = {
   worksheet: 'Worksheet',
@@ -141,9 +141,15 @@ export async function preparePerSheetApply({
     }
   }
 
-  const retitledFragment = retitleFragment(kind, fragmentXml, resolved.value.name);
-  if (retitledFragment.isErr()) {
-    return retitledFragment;
+  // Desktop requires the root name to equal the live name, and these tools don't rename.
+  const submittedName = fragmentRootName(kind, fragmentXml);
+  if (submittedName.isErr()) return submittedName;
+  if (!parsedXmlNamesEqual(submittedName.value, resolved.value.name)) {
+    return Ok({
+      type: 'name-differs',
+      submittedName: submittedName.value,
+      liveName: resolved.value.name,
+    });
   }
 
   return Ok({
@@ -152,7 +158,7 @@ export async function preparePerSheetApply({
     liveDocumentXml,
     id: resolved.value.id,
     name: resolved.value.name,
-    fragmentXml: retitledFragment.value,
+    fragmentXml,
   });
 }
 
@@ -182,9 +188,6 @@ export async function applyPreparedSheet({
   expectedInstanceId?: string;
 } & WithExecutorAndAbortSignal): Promise<Result<PerSheetApplyOutcome, ExecuteCommandError>> {
   const client = executor as ExternalApiToolExecutor;
-  // The route is addressed by stable id, but Desktop still requires the fragment's root name to
-  // match the sheet's current display name. Reconcile a stale cached name before POST; otherwise a
-  // rename between read and apply opens a blocking "Requested worksheet(s) not found" dialog.
   const applyResult = await applyDocumentForKind(
     kind,
     prepared.id,
@@ -230,39 +233,19 @@ export async function applyPreparedSheet({
   });
 }
 
-function retitleFragment(
+function fragmentRootName(
   kind: PerSheetKind,
   fragmentXml: string,
-  currentName: string,
 ): Result<string, ExecuteCommandError> {
   try {
-    const expectedTag = kind === 'worksheet' ? 'worksheet' : 'dashboard';
     const outer = parseOuterElement(fragmentXml);
-    if (!outer?.name || outer.tagName !== expectedTag) {
+    if (!outer?.name || outer.tagName !== (kind === 'worksheet' ? 'worksheet' : 'dashboard')) {
       return Err({
         type: 'invalid-response',
         error: new Error(`The ${kind} fragment has no root name.`),
       });
     }
-    if (parsedXmlNamesEqual(outer.name, currentName)) {
-      return Ok(fragmentXml);
-    }
-
-    const rootTag = new RegExp(`<${expectedTag}\\b[^>]*>`).exec(fragmentXml);
-    const nameAttribute = rootTag ? /(\sname\s*=\s*)(['"])(.*?)\2/.exec(rootTag[0]) : null;
-    if (!rootTag || !nameAttribute) {
-      return Err({
-        type: 'invalid-response',
-        error: new Error(`The ${kind} fragment has no root name.`),
-      });
-    }
-
-    const valueStart =
-      rootTag.index + nameAttribute.index + nameAttribute[1].length + nameAttribute[2].length;
-    const valueEnd = valueStart + nameAttribute[3].length;
-    return Ok(
-      fragmentXml.slice(0, valueStart) + escapeXml(currentName) + fragmentXml.slice(valueEnd),
-    );
+    return Ok(outer.name);
   } catch (error) {
     return Err({ type: 'invalid-response', error });
   }

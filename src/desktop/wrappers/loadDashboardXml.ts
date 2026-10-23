@@ -1,3 +1,4 @@
+import { DOMParser, type Element } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../logging/logger.js';
@@ -15,6 +16,10 @@ import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import {
+  dashboardDatasourceRefusal,
+  hasDashboardDatasources,
+} from '../validation/dashboardDatasources.js';
+import {
   alwaysBlockingValidationIssues,
   blockingValidationIssues,
   runValidation,
@@ -29,6 +34,7 @@ import {
   createDashboardReadbackDiagnoser,
   dashboardWorksheetNames,
   unregisteredDashboardWorksheets,
+  worksheetZoneName,
 } from './dashboardViewpoints.js';
 import {
   applyPreparedSheet,
@@ -55,6 +61,8 @@ export type LoadDashboardXmlError =
   | { type: 'source-drift'; message: string }
   | { type: 'verification-failed'; message: string }
   | { type: 'registration-required'; message: string; worksheetNames: string[] }
+  // The fragment's <datasources> entry differs from the workbook's; Desktop would open a modal dialog.
+  | { type: 'datasource-mismatch'; message: string }
   // All dashboard callers require an existing sheet; no whole-workbook fallback is safe here.
   | { type: 'sheet-absent'; message: string }
   // The Desktop build lacks the per-sheet document endpoint; nothing was sent.
@@ -93,7 +101,9 @@ type LoadDashboardXmlResult = Result<
 function resolveCanonicalDashboardName(
   dashboardName: string,
   xml: string,
+  kind: LoadDashboardKind,
 ): Result<string, Extract<LoadDashboardXmlError, { type: 'name-mismatch' }>> {
+  const param = kind === 'storyboard' ? 'storyboardName' : 'dashboardName';
   const callerRef = dashboardName.trim();
   let xmlName = '';
   let xmlId = '';
@@ -128,10 +138,10 @@ function resolveCanonicalDashboardName(
     return Err({
       type: 'name-mismatch',
       message:
-        `dashboard_name "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with dashboard_name set to the XML's ` +
-        `name "${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <dashboard name> attribute ` +
-        `in the XML to "${dashboardName}" if the caller name is intended.`,
+        `${param} "${dashboardName}" does not match <${kind} name="${xmlName}"> in the file, and apply-${kind} cannot rename a ${kind}. ` +
+        `FIX: check the ${kind}'s name in Desktop${kind === 'dashboard' ? ' with list-dashboards' : ''}. If it is "${xmlName}", pass "${xmlName}" as ${param}. ` +
+        `If it is "${dashboardName}", set the name in the file to "${dashboardName}" and apply; to rename the ${kind}, call rename-sheet afterwards. ` +
+        `If it is neither, re-read the ${kind} with get-${kind}-xml and redo your edit in that file. No changes were sent to Tableau.`,
     });
   }
 
@@ -141,6 +151,92 @@ function resolveCanonicalDashboardName(
 type SnapshotOrApplyError =
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError };
+
+type ZoneContent = { id: string; zoneType?: string; worksheet?: string };
+
+// Device layouts arrange the same worksheets in their own zones; only the main layout's ids matter.
+function dashboardZoneContents(fragmentXml: string): ZoneContent[] | undefined {
+  try {
+    const root = new DOMParser({
+      onError: (level, message) => {
+        if (level !== 'warning') throw new Error(message);
+      },
+    }).parseFromString(fragmentXml, 'text/xml').documentElement;
+    if (!root || root.tagName !== 'dashboard') return undefined;
+    const contents: ZoneContent[] = [];
+    for (const child of Array.from(root.childNodes)) {
+      if (child.nodeType !== 1 || child.nodeName !== 'zones') continue;
+      for (const zone of Array.from((child as Element).getElementsByTagName('zone'))) {
+        const id = zone.getAttribute('id');
+        if (!id) continue;
+        contents.push({
+          id,
+          zoneType: zone.getAttribute('type-v2') || undefined,
+          worksheet: worksheetZoneName(zone),
+        });
+      }
+    }
+    return contents;
+  } catch (error) {
+    log({
+      level: 'debug',
+      message: 'Zone worksheet swap check skipped: dashboard fragment not parseable',
+      logger: 'dashboardCommands',
+      data: { error: String(error) },
+    });
+    return undefined;
+  }
+}
+
+// W-24619603: Desktop crashes when an existing zone id changes worksheet.
+function findZoneWorksheetSwap(
+  liveXml: string | undefined,
+  submittedXml: string,
+): string | undefined {
+  if (liveXml === undefined) return undefined;
+  const live = dashboardZoneContents(liveXml);
+  const submitted = dashboardZoneContents(submittedXml);
+  if (!live || !submitted) return undefined;
+  const crash = 'Desktop crashes when worksheets on an existing dashboard trade zone ids.';
+  const fix =
+    "FIX: keep each zone's id and name together, and give any new zone a new id. To rearrange " +
+    'worksheets, move their whole <zone> elements into the new order. In a layout-flow container ' +
+    'Desktop places zones in element order, so changing only x, y, w and h does not move them. If ' +
+    'that cannot express the change, ask the user before rebuilding the dashboard with ' +
+    'run-dashboard-batch replaceExisting. No changes were sent to Tableau.';
+  for (const before of live) {
+    if (before.worksheet === undefined) continue;
+    const shown = JSON.stringify(before.worksheet);
+    const afters = submitted.filter((zone) => zone.id === before.id);
+    const container = afters.find((zone) => zone.worksheet === undefined);
+    if (container) {
+      const zoneType = container.zoneType ? `of type "${container.zoneType}"` : 'with no type-v2';
+      return `Zone ${before.id} shows ${shown} in Desktop, but the submitted XML reuses id ${before.id} for a zone ${zoneType}. A worksheet zone's id must stay with that worksheet. ${fix}`;
+    }
+    for (const after of afters) {
+      if (parsedXmlNamesEqual(before.worksheet, after.worksheet!)) continue;
+      const moved = submitted.find(
+        (zone) =>
+          zone.id !== before.id &&
+          zone.worksheet !== undefined &&
+          parsedXmlNamesEqual(before.worksheet!, zone.worksheet),
+      );
+      if (moved) {
+        return `Zone ${before.id} shows ${shown} in Desktop, but the submitted XML puts ${JSON.stringify(after.worksheet)} in it and moves ${shown} to zone ${moved.id}. ${crash} ${fix}`;
+      }
+      const movedIn = live.find(
+        (zone) =>
+          zone.id !== before.id &&
+          zone.worksheet !== undefined &&
+          parsedXmlNamesEqual(after.worksheet!, zone.worksheet),
+      );
+      if (movedIn) {
+        return `Zone ${before.id} shows ${shown} in Desktop, but the submitted XML moves ${JSON.stringify(after.worksheet)} into it from zone ${movedIn.id}. ${crash} ${fix}`;
+      }
+    }
+  }
+  return undefined;
+}
 
 type LoadDashboardKind = Extract<PerSheetKind, 'dashboard' | 'storyboard'>;
 
@@ -211,7 +307,7 @@ export async function loadDashboardXml({
 
   // Require the caller's dashboard_name to agree with the XML root name before apply, then
   // thread the validated canonical name through the load.
-  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml);
+  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml, kind);
   if (canonicalNameResult.isErr()) {
     log({
       level: 'error',
@@ -228,11 +324,17 @@ export async function loadDashboardXml({
   // The lock serializes MCP snapshot/check/apply, not Desktop user edits.
   // A snapshot read failure fails closed; no workbook replacement or creation fallback is safe.
   let verifiedWorksheetNames: string[] | undefined;
+  const hasDatasourceBlock = hasDashboardDatasources(xml);
   const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
   const perSheetResult = await withApplyLock(
     async (): Promise<Result<PerSheetApplyOutcome, SnapshotOrApplyError>> => {
       let snapshot: WorkbookDocument | null = null;
-      if (dashboardWorksheetNames(xml).length > 0 || verifyReadback || worksheetNames.length > 0) {
+      if (
+        dashboardWorksheetNames(xml).length > 0 ||
+        verifyReadback ||
+        worksheetNames.length > 0 ||
+        hasDatasourceBlock
+      ) {
         const workbook = await executor.getWorkbookDocument(signal);
         if (workbook.isErr()) {
           return Err({ type: 'execute-command-error', error: workbook.error });
@@ -256,6 +358,38 @@ export async function loadDashboardXml({
         return Ok(prepared.value);
       }
       const checked = prepared.value;
+      if (kind === 'dashboard') {
+        const swap = findZoneWorksheetSwap(checked.liveDocumentXml, checked.fragmentXml);
+        if (swap) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: {
+              type: 'validation-failed',
+              issues: [
+                {
+                  ruleId: 'dashboard-zone-worksheet-swap',
+                  severity: 'error',
+                  message: swap,
+                },
+              ],
+            },
+          });
+        }
+      }
+      if (snapshot !== null && hasDatasourceBlock) {
+        let refusal: string | undefined;
+        try {
+          refusal = dashboardDatasourceRefusal(checked.fragmentXml, snapshot.xml);
+        } catch (error) {
+          return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+        }
+        if (refusal !== undefined) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: { type: 'datasource-mismatch', message: refusal },
+          });
+        }
+      }
       const referencedNames = dashboardWorksheetNames(checked.fragmentXml);
       const names = [...new Set([...referencedNames, ...worksheetNames])];
       const supportsRegistration = supportsDashboardVisualRegistration(executor.desktopApiVersion);
@@ -446,6 +580,18 @@ export async function loadDashboardXml({
       error: { type: 'validation-failed', issues: outcome.issues },
     });
   }
+  if (typeof outcome === 'object' && outcome.type === 'name-differs') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'name-mismatch',
+        message:
+          `The file names this ${kind} "${outcome.submittedName}", but in Desktop it is "${outcome.liveName}", and apply-${kind} cannot rename a ${kind}. ` +
+          `FIX: if you edited the name to rename it, set it to "${outcome.liveName}" in the file, apply, then call rename-sheet. ` +
+          `If the file is older than the ${kind} in Desktop, re-read it with get-${kind}-xml and redo your edit. No changes were sent to Tableau.`,
+      },
+    });
+  }
   if (outcome === 'source-drift') {
     return Err({
       type: 'load-dashboard-xml-error',
@@ -468,10 +614,24 @@ export async function loadDashboardXml({
       },
     });
   }
-  return Err({
-    type: 'load-dashboard-xml-error',
-    error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
-  });
+  if (outcome === 'sheet-absent') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
+    });
+  }
+  // Worksheet-only outcome: the dashboard routes never produce it, so it is not a sheet-absent case.
+  if (outcome.type === 'dashboard-member-blank-transition') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'load-rejected',
+        message: `Unexpected worksheet-only outcome while applying ${kind} "${canonicalName}". No changes were sent to Tableau.`,
+      },
+    });
+  }
+  const unmapped: never = outcome;
+  return unmapped;
 }
 
 /**
