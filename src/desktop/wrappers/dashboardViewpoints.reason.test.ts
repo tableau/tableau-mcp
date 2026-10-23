@@ -72,6 +72,37 @@ describe('dashboard readback reasons', () => {
     );
   });
 
+  describe('child count with a non-zone child', () => {
+    const styled = workbook(dashboard.replace('/>\n  </zone>', `/>\n  ${spacing}</zone>`));
+    const styledDifference = (actual: string): string | undefined =>
+      createDashboardReadbackDiagnoser(styled, 'D')(actual);
+
+    it('names the missing non-zone child instead of calling it a child zone', () => {
+      expect(styledDifference(styled.replace(spacing, ''))).toBe(
+        'zone 2 ("A") has 0 <zone-style> children in Desktop, 1 submitted',
+      );
+    });
+
+    it('still says child zones when a zone is missing next to other children', () => {
+      expect(styledDifference(styled.replace(/<zone id="3"[^>]*\/>/, ''))).toBe(
+        'zone 2 ("A") has 0 child zones in Desktop, 1 submitted',
+      );
+    });
+  });
+
+  it('names the child kind for the devicelayouts container', () => {
+    const layouts = (inner: string): string =>
+      workbook(
+        dashboard.replace('</dashboard>', `<devicelayouts>${inner}</devicelayouts></dashboard>`),
+      );
+    expect(
+      createDashboardReadbackDiagnoser(
+        layouts('<devicelayout name="Phone"><size minwidth="1"/></devicelayout>'),
+        'D',
+      )(layouts('')),
+    ).toBe('<devicelayouts> has 0 <devicelayout> children in Desktop, 1 submitted');
+  });
+
   it('reports a layout geometry failure from layoutGeometryDifference', () => {
     expect(difference(submitted.replace('<zone id="2"', '<zone is-fixed="true" id="2"'))).toBe(
       'zone 2 ("A"): is-fixed is true in Desktop, false submitted',

@@ -674,12 +674,21 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  FLOW_TOOLS_ENABLED: {
+  FLOW_READ_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Enable Tableau Prep flow MCP tools',
+    title: 'Enable read-only Tableau Prep flow MCP tools',
     description:
-      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, get-flow-task). describe-flow additionally requires Tableau Server 2026.3+ and the server feature flag `features.getFlowDocumentRestApi`. This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" and enable the "flow-tools" feature flag to enable the flow tool family.',
+      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default. Set to "false" to disable them. describe-flow also requires Tableau Server 2026.3 or later and the server feature flag features.getFlowDocumentRestApi.',
+    required: false,
+    sensitive: false,
+  },
+  FLOW_WRITE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable content-mutating Tableau Prep flow MCP tools',
+    description:
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default. Set to "false" to disable them. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
     required: false,
     sensitive: false,
   },
@@ -689,15 +698,6 @@ const envVars = {
     title: 'Enable insight-cards MCP tools',
     description:
       'Registers the datasource-context insight tools (generate-insight-cards). Disabled by default; set to "true" to enable them.',
-    required: false,
-    sensitive: false,
-  },
-  FLOW_WRITE_TOOLS_ENABLED: {
-    includeInUserConfig: false,
-    type: 'boolean',
-    title: 'Enable content-mutating flow MCP tools',
-    description:
-      'Requires FLOW_WRITE_TOOLS_ENABLED=true, FLOW_TOOLS_ENABLED=true, and the flow-tools feature flag. Enables run-flow, run-flow-task, and cancel-flow-run. Defaults to "false".',
     required: false,
     sensitive: false,
   },

@@ -11,7 +11,7 @@ import {
   FlowNotAllowedError,
   McpToolError,
 } from '../../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../../features/init.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
@@ -76,10 +76,7 @@ export const getDescribeFlowTool = (
     server,
     name: 'describe-flow',
     minRequiredRole: SiteRole.EXPLORER,
-    disabled: new Provider(
-      async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
-    ),
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Explains what a Tableau Prep flow actually *does* by reading and summarizing the flow's underlying document (the design of the flow itself, not just its catalog metadata). Use this when a user asks "what does this flow do?", "where does this flow get its data?", "what does it output?", "walk me through this flow", or wants to understand a flow's logic, sources, destinations, or shape without opening Tableau Prep.
 

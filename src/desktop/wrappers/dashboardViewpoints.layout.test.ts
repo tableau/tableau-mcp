@@ -1,12 +1,12 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 import {
+  createDashboardReadbackVerifier,
   readbackReflowDashboard,
   REFLOW_DASHBOARD_NAME,
   reflowWorkbook,
   submittedReflowDashboard,
 } from './dashboardReflowFixtures.js';
-import { createDashboardReadbackVerifier } from './dashboardViewpoints.js';
 
 type Rect = [x: number, y: number, width: number, height: number];
 type Axis = 'horz' | 'vert';
