@@ -138,6 +138,33 @@ describe('SEA release workflow', () => {
     expect(workflow).toContain('GH_REPO: ${{ github.repository }}');
     expect(workflow).toContain('gh release upload "$RELEASE_TAG"');
   });
+
+  it('keeps the Desktop executable out of release archives', () => {
+    const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
+
+    expect(workflow).toMatch(
+      /^env:\n {2}WITH_DESKTOP: \$\{\{ github\.event_name != 'release' && !inputs\.web_only \}\}$/m,
+    );
+    const steps = workflow.split(/^ {6}- /m).slice(1);
+    const generateSteps = steps.filter((step) => step.startsWith('name: Generate SEA'));
+    expect(generateSteps).toHaveLength(3);
+    for (const step of generateSteps) {
+      expect(step).toContain(
+        "--variant ${{ env.WITH_DESKTOP == 'true' && 'default desktop' || 'default' }}",
+      );
+    }
+    const webOnly = steps.filter((step) => step.startsWith('name: Package archive (Web only)'));
+    expect(webOnly).toHaveLength(3);
+    for (const step of webOnly) {
+      expect(step).toMatch(/^ {8}if: env\.WITH_DESKTOP != 'true'$/m);
+      expect(step).not.toContain('tableau-mcp-desktop');
+    }
+    const desktopSteps = steps.filter((step) => step.includes('tableau-mcp-desktop'));
+    expect(desktopSteps).toHaveLength(9);
+    for (const step of desktopSteps) {
+      expect(step).toMatch(/^ {8}if: env\.WITH_DESKTOP == 'true'$/m);
+    }
+  });
 });
 
 describe('release asset cleanup workflow', () => {

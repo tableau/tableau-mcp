@@ -6,8 +6,10 @@ When a pull request to `main` opens or updates, `.github/workflows/auto-version-
 
 The npm package is Web-only: it publishes `build/index.js` as the single command and excludes the
 Desktop entry point and Desktop data. Desktop uses a separate distribution path. On a published
-GitHub Release, `.github/workflows/upload-binaries.yml` builds the Web and Desktop standalone
-executables and puts both in each platform archive before attaching the archives to the release.
+GitHub Release, `.github/workflows/upload-binaries.yml` builds the Web standalone executable only
+and attaches one archive per platform to the release. Release archives do not carry the Desktop
+executable; Desktop builds are distributed separately. Pull request and manual runs still build,
+test, and package both executables; a manual run with the `web_only` input checked follows the release path.
 
 > **The Release publish is the trigger.** Both `publish.yml` and `docker-publish.yml` fire on `release: published` — pushing a tag alone publishes **nothing**. And both preflight that the release tag equals `v<package.json version>` at the tagged commit; a mismatch fails the run before anything publishes (npm keys prerelease-vs-stable off `package.json`, Docker off the tag name — the preflight keeps them agreeing).
 
