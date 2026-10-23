@@ -681,7 +681,7 @@ describe('ExternalAccessTokenValidator', () => {
     });
 
     beforeEach(() => {
-      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
     });
 
     function rfc9068Claims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -927,7 +927,7 @@ describe('ExternalAccessTokenValidator', () => {
     });
 
     beforeEach(() => {
-      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
       vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
       vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
       vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
@@ -1334,17 +1334,41 @@ describe('ExternalAccessTokenValidator', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('fetches a configured OAUTH_EXTERNAL_JWKS_URI with the injected fetch', async () => {
-      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'false');
-      vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', JWKS_URI);
-      const fetch = discoveryFetch();
+    it('fetches the JWKS again for an unknown kid, at most once per cooldown', async () => {
+      const second = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const rotated: JSONWebKeySet = {
+        keys: [
+          ...jwks.keys,
+          { ...(await exportJWK(second.publicKey)), kid: 'disc-key-2', use: 'sig' },
+        ],
+      };
+      let served = jwks;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url === DISCOVERY_URL) {
+          return jsonResponse(openIdConfiguration());
+        }
+        return url === JWKS_URI ? jsonResponse(served) : new Response('', { status: 404 });
+      });
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const rotatedToken = await new SignJWT(idTokenClaims())
+        .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'disc-key-2' })
+        .sign(second.privateKey);
 
-      const result = await new ExternalAccessTokenValidator({ fetch }).validate(
-        await signIdToken(),
-      );
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        expect((await validator.validate(await signIdToken())).isOk()).toBe(true);
 
-      expect(result.isOk()).toBe(true);
-      expect(fetchedUrls(fetch)).toEqual([JWKS_URI]);
+        served = rotated;
+        expect(errorOf(await validator.validate(rotatedToken))).toBe(INVALID_TOKEN_ERROR);
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+
+        vi.setSystemTime(Date.now() + 31_000);
+        expect((await validator.validate(rotatedToken)).isOk()).toBe(true);
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI, JWKS_URI]);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('skips discovery when a key resolver is injected', async () => {

@@ -36,7 +36,7 @@ Tableau Cloud customers can self-host Tableau MCP. A full guide can be found at
 [Tableau MCP Deployment Guide for Tableau Cloud Customers](../../../enterprise/tableau-cloud.md). A
 self-hosted MCP server can also accept tokens from
 [your own identity provider](../oauth.md#use-your-own-identity-provider-self-hosted-only) and sign
-in to Tableau Cloud with Direct Trust or UAT.
+in to Tableau Cloud with Direct Trust.
 
 ### Local Tableau MCP
 

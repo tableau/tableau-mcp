@@ -221,7 +221,7 @@ describe('external authorization server token scopes', () => {
     vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
     vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
-    vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+    vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
   });
 
   afterEach(() => {
@@ -307,7 +307,7 @@ describe('external OIDC ID tokens', () => {
     vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
     vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
     vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
-    vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+    vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
     vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
     vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
   });

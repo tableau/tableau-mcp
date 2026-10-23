@@ -925,7 +925,7 @@ describe('Config', () => {
       function stubExternalEnvVars(): void {
         vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
         vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
         vi.stubEnv('AUTH', 'direct-trust');
         vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
         vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'client-id');
@@ -933,34 +933,16 @@ describe('Config', () => {
         vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'secret-value');
       }
 
-      function stubDiscoveryEnvVars(): void {
-        stubExternalEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', '');
-        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
-      }
-
       const enableError =
         'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"';
-      const authError =
-        'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"';
-      const exactlyOneError =
-        'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set';
+      const authError = 'When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"';
+      const requireDiscoveryError =
+        'OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"';
 
-      it('parses a JWKS configuration with the default username claim', () => {
+      it('parses a discovery configuration', () => {
         stubExternalEnvVars();
 
         expect(new Config().oauth.external).toEqual({
-          jwksUri: 'https://idp.example.com/keys',
-          discovery: false,
-          usernameClaimName: 'sub',
-        });
-      });
-
-      it('parses a discovery configuration', () => {
-        stubDiscoveryEnvVars();
-
-        expect(new Config().oauth.external).toEqual({
-          jwksUri: '',
           discovery: true,
           usernameClaimName: 'sub',
         });
@@ -969,13 +951,13 @@ describe('Config', () => {
       it.each(['false', 'TRUE', '1', ''])('treats OAUTH_EXTERNAL_DISCOVERY %j as off', (value) => {
         stubExternalEnvVars();
         vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', value);
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'sub');
 
-        expect(new Config().oauth.external?.discovery).toBe(false);
+        expect(() => new Config()).toThrow(requireDiscoveryError);
       });
 
       it('does not enable external mode when OAUTH_EXTERNAL_DISCOVERY is not "true"', () => {
         stubExternalEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', '');
         vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'false');
 
         expect(new Config().oauth.external).toBeNull();
@@ -984,7 +966,7 @@ describe('Config', () => {
       it.each(['http://localhost:8080', 'http://127.0.0.1:8080/realms/mcp', 'http://[::1]'])(
         'allows a loopback http OAUTH_ISSUER %s with discovery',
         (issuer) => {
-          stubDiscoveryEnvVars();
+          stubExternalEnvVars();
           vi.stubEnv('OAUTH_ISSUER', issuer);
 
           expect(new Config().oauth.issuer).toBe(issuer);
@@ -992,7 +974,7 @@ describe('Config', () => {
       );
 
       it('throws when OAUTH_ISSUER uses http on a non-loopback host with discovery', () => {
-        stubDiscoveryEnvVars();
+        stubExternalEnvVars();
         vi.stubEnv('OAUTH_ISSUER', 'http://idp.example.com');
 
         expect(() => new Config()).toThrow(
@@ -1005,7 +987,7 @@ describe('Config', () => {
         'https://mcp@idp.example.com',
         'https://:s3cret@idp.example.com',
       ])('throws when OAUTH_ISSUER %s has credentials with discovery', (issuer) => {
-        stubDiscoveryEnvVars();
+        stubExternalEnvVars();
         vi.stubEnv('OAUTH_ISSUER', issuer);
 
         expect(() => new Config()).toThrow(
@@ -1022,28 +1004,6 @@ describe('Config', () => {
 
         expect(new Config().oauth.external?.usernameClaimName).toBe(expected);
       });
-
-      it('accepts AUTH "uat" when UAT_USERNAME_CLAIM contains {OAUTH_USERNAME}', () => {
-        stubExternalEnvVars();
-        vi.stubEnv('AUTH', 'uat');
-        vi.stubEnv('JWT_SUB_CLAIM', '');
-        vi.stubEnv('UAT_TENANT_ID', 'tenant-id');
-        vi.stubEnv('UAT_ISSUER', 'uat-issuer');
-        vi.stubEnv('UAT_USERNAME_CLAIM', '{OAUTH_USERNAME}');
-        vi.stubEnv('UAT_PRIVATE_KEY', 'private-key');
-
-        expect(new Config().oauth.external?.jwksUri).toBe('https://idp.example.com/keys');
-      });
-
-      it.each(['http://localhost:8080/keys', 'http://127.0.0.1/keys', 'http://[::1]:8080/keys'])(
-        'allows http for the loopback URI %s',
-        (uri) => {
-          stubExternalEnvVars();
-          vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', uri);
-
-          expect(new Config().oauth.external?.jwksUri).toBe(uri);
-        },
-      );
 
       it('throws when OAUTH_ISSUER is not set', () => {
         stubExternalEnvVars();
@@ -1066,51 +1026,31 @@ describe('Config', () => {
         expect(() => new Config()).toThrow(enableError);
       });
 
-      it.each([
-        [
-          'neither OAUTH_EXTERNAL_JWKS_URI nor discovery is set',
-          { OAUTH_EXTERNAL_JWKS_URI: '', OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: 'sub' },
-        ],
-        ['discovery and OAUTH_EXTERNAL_JWKS_URI are set', { OAUTH_EXTERNAL_DISCOVERY: 'true' }],
-      ])('throws when %s', (_, env) => {
+      it('throws when only OAUTH_EXTERNAL_USERNAME_CLAIM_NAME is set', () => {
         stubExternalEnvVars();
-        Object.entries(env).forEach(([name, value]) => vi.stubEnv(name, value));
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', '');
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'sub');
 
-        expect(() => new Config()).toThrow(exactlyOneError);
+        expect(() => new Config()).toThrow(requireDiscoveryError);
       });
 
-      it('throws when OAUTH_EXTERNAL_JWKS_URI uses http on a non-loopback host', () => {
+      it('throws when OAUTH_ISSUER is not a valid URL', () => {
         stubExternalEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'http://idp.example.com/endpoint');
+        vi.stubEnv('OAUTH_ISSUER', 'not a url');
 
         expect(() => new Config()).toThrow(
-          'The environment variable OAUTH_EXTERNAL_JWKS_URI must use https unless its host is loopback',
-        );
-      });
-
-      it('throws when OAUTH_EXTERNAL_JWKS_URI is not a valid URL', () => {
-        stubExternalEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'not a url');
-
-        expect(() => new Config()).toThrow(
-          'The environment variable OAUTH_EXTERNAL_JWKS_URI is not a valid URL',
+          'The environment variable OAUTH_ISSUER is not a valid URL',
         );
       });
 
       it.each([
         ['"oauth"', 'oauth'],
+        ['"uat"', 'uat'],
         ['"pat"', 'pat'],
         ['unset (defaults to "oauth")', undefined],
       ])('throws when AUTH is %s', (_, auth) => {
         stubExternalEnvVars();
         vi.stubEnv('AUTH', auth);
-
-        expect(() => new Config()).toThrow(authError);
-      });
-
-      it('throws when AUTH is "oauth" with discovery', () => {
-        stubDiscoveryEnvVars();
-        vi.stubEnv('AUTH', 'oauth');
 
         expect(() => new Config()).toThrow(authError);
       });
@@ -1121,16 +1061,6 @@ describe('Config', () => {
 
         expect(() => new Config()).toThrow(
           'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
-        );
-      });
-
-      it('throws when UAT_USERNAME_CLAIM does not contain {OAUTH_USERNAME} for uat', () => {
-        stubExternalEnvVars();
-        vi.stubEnv('AUTH', 'uat');
-        vi.stubEnv('UAT_USERNAME_CLAIM', 'shared-user@example.com');
-
-        expect(() => new Config()).toThrow(
-          'When OAUTH_EXTERNAL_* is set and AUTH is "uat", UAT_USERNAME_CLAIM (or JWT_SUB_CLAIM) must contain {OAUTH_USERNAME}',
         );
       });
     });

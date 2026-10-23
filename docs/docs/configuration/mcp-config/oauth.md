@@ -13,7 +13,7 @@ Tableau Cloud customers should refer to
 
 A self-hosted MCP server can instead use
 [your own identity provider](#use-your-own-identity-provider-self-hosted-only) with Tableau Server
-or Tableau Cloud, signing in with Direct Trust or UAT (UAT is Tableau Cloud only).
+or Tableau Cloud, signing in with Direct Trust.
 
 :::
 
@@ -45,21 +45,18 @@ For more information, please see the
 
 A self-hosted MCP server can accept access tokens from your own OAuth or OpenID Connect identity
 provider (IdP) instead of Tableau. The MCP server checks each token, reads the Tableau username from
-one claim, and signs in to Tableau as that user with [Direct Trust](authentication/direct-trust.md)
-or [UAT](authentication/uat.md). This mode is not available for hosted Tableau MCP.
+one claim, and signs in to Tableau as that user with [Direct Trust](authentication/direct-trust.md).
+This mode is not available for hosted Tableau MCP. It is an interim option for self-hosted
+deployments and may change or be removed in a later release.
 
 To set it up:
 
 - Set [`OAUTH_ISSUER`](#oauth_issuer) to your IdP's issuer and
   [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) to `false`. Tokens with any other
   `iss` are rejected.
-- Set exactly one of:
-  - [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) to `true` (JWTs, with the keys read from
-    your IdP's OpenID Connect discovery document).
-  - [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWTs: access tokens or OpenID Connect ID
-    tokens).
-- Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`, or to `uat` with
-  `{OAUTH_USERNAME}` in `UAT_USERNAME_CLAIM`.
+- Set [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) to `true` (JWTs: access tokens or
+  OpenID Connect ID tokens, with the keys read from your IdP's OpenID Connect discovery document).
+- Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`.
 - Have your IdP set the token's `aud` to this server's resource identifier: the
   [`OAUTH_RESOURCE_URI`](#oauth_resource_uri) origin with the `/tableau-mcp` path, or a value in
   [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris). Clients request it with the
@@ -92,8 +89,8 @@ Also note:
 ### Accept OpenID Connect ID tokens
 
 If your IdP signs users in with OpenID Connect ID tokens instead of access tokens, the MCP server
-can accept those as the bearer token. If your IdP publishes an OpenID Connect discovery document,
-the issuer is enough:
+can accept those as the bearer token. The MCP server reads the keys from your IdP's discovery
+document:
 
 ```bash
 OAUTH_ISSUER=https://idp.example.com
@@ -104,23 +101,13 @@ OAUTH_DISABLE_SCOPES=true
 OAUTH_EXTERNAL_USERNAME_CLAIM_NAME=employee_id
 ```
 
-Otherwise, set the JWKS URL yourself:
-
-```bash
-OAUTH_ISSUER=https://idp.example.com
-OAUTH_EMBEDDED_AUTHZ_SERVER=false
-OAUTH_EXTERNAL_JWKS_URI=https://idp.example.com/keys
-OAUTH_GLOBAL_RESOURCE_URIS=<this-mcp-server-client-id>
-OAUTH_DISABLE_SCOPES=true
-OAUTH_EXTERNAL_USERNAME_CLAIM_NAME=<username-claim>
-```
-
 Use this MCP server's own client ID only if no other app receives tokens for it: with scopes off,
 the audience is the only check that ties a token to this server.
 
 On each request, the MCP server checks that:
 
-- The token is signed with an asymmetric algorithm by a key from the JWKS.
+- The token is signed with an asymmetric algorithm by a key from the discovery document's
+  `jwks_uri`.
 - `iss` equals `OAUTH_ISSUER` exactly and `aud` is an accepted value.
 - The token has not expired (`exp`) and is already valid (`nbf`, if present), allowing 5 seconds of
   clock skew.
@@ -408,32 +395,24 @@ or [your own identity provider](#use-your-own-identity-provider-self-hosted-only
 
 <hr />
 
-### `OAUTH_EXTERNAL_JWKS_URI`
-
-The JWKS URL of your identity provider. When set, the MCP server accepts JWTs signed by a key from
-this URL: access tokens ([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
-[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set only one of this or
-[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery). Must use `https` unless the host is
-loopback. See [Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
-
-- Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
-- `exp` and `nbf` allow 5 seconds of clock skew.
-- `iss`, `sub`, `aud`, `exp`, and `iat` must be present.
-- Keys are cached and fetched again when a token names an unknown key ID (`kid`).
-
-<hr />
-
 ### `OAUTH_EXTERNAL_DISCOVERY`
 
 When `true`, the MCP server reads your identity provider's
 [OpenID Connect discovery document](https://openid.net/specs/openid-connect-discovery-1_0.html) at
 `OAUTH_ISSUER` + `/.well-known/openid-configuration` (without a doubled `/` if the issuer ends in
-one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with the same checks as
-[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). Set only one of this or
-[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). See
-[Accept OpenID Connect ID tokens](#accept-openid-connect-id-tokens).
+one). It then accepts JWTs signed by a key from the document's `jwks_uri`: access tokens
+([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
+[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). See
+[Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
 
-- Default: `false`. Any value other than `true` leaves it off.
+- Default: `false`. Any value other than `true` leaves it off. If
+  [`OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`](#oauth_external_username_claim_name) is set without
+  `OAUTH_EXTERNAL_DISCOVERY=true`, the server does not start.
+- Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
+- `exp` and `nbf` allow 5 seconds of clock skew.
+- `iss`, `sub`, `aud`, `exp`, and `iat` must be present.
+- Keys are cached. They are fetched again when a token names an unknown key ID (`kid`), at most once
+  every 30 seconds.
 - [`OAUTH_ISSUER`](#oauth_issuer) must use `https` unless the host is loopback, and must not contain
   a username or password.
 - The document is read on the first request, then kept for the life of the process. If your provider
@@ -442,8 +421,7 @@ one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with 
 - The document's `issuer` must equal `OAUTH_ISSUER` exactly, including any trailing slash.
 - `jwks_uri` must use `https` unless both its host and the `OAUTH_ISSUER` host are loopback. It can
   be on another host than the issuer.
-- If your provider doesn't serve the document at that path, set
-  [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) instead.
+- Your provider must serve the document at that path.
 
 <hr />
 

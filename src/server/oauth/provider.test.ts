@@ -43,7 +43,7 @@ describe('createOAuthProvider', () => {
     vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
     vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
     vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
-    vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+    vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
 
     expect(createOAuthProvider(getConfig())).toBeInstanceOf(ExternalOAuthProvider);
   });

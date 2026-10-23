@@ -343,9 +343,9 @@ function usernameFromClaim(value: unknown): string | undefined {
 
 /**
  * Validates tokens from an external OAuth/OIDC authorization server: JWT access tokens (RFC 9068)
- * or OpenID Connect ID tokens against its JWKS (configured, or read from its OpenID Connect
- * discovery document). The configured claim becomes the Tableau username; outbound Tableau auth
- * stays direct-trust or UAT.
+ * or OpenID Connect ID tokens, verified with the keys at the `jwks_uri` of its OpenID Connect
+ * discovery document. The configured claim becomes the Tableau username; outbound Tableau auth
+ * is Direct Trust.
  */
 export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private readonly external: NonNullable<Config['oauth']['external']>;
@@ -362,11 +362,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     invariant(this.config.oauth.external, 'OAUTH_EXTERNAL_* environment variables are not set');
     this.external = this.config.oauth.external;
     this.fetch = fetch;
-    this.getKey =
-      getKey ??
-      (this.external.jwksUri
-        ? createRemoteJWKSet(new URL(this.external.jwksUri), { [customFetch]: this.fetch })
-        : undefined);
+    this.getKey = getKey;
   }
 
   async validate(token: string): Promise<AccessTokenValidatorResult> {
@@ -408,7 +404,6 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
       return Ok(this.getKey);
     }
 
-    invariant(this.external.discovery, 'OAUTH_EXTERNAL_DISCOVERY is not enabled');
     this.discovery ??= this.discover().catch((error: unknown) => {
       this.discovery = undefined;
       throw error;

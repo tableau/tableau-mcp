@@ -67,7 +67,7 @@ describe('resetConsentTool', () => {
       it('should be disabled when an external authorization server is configured', async () => {
         vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
         vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'https://idp.example.com/keys');
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
         vi.stubEnv('AUTH', 'direct-trust');
         vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
         vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');

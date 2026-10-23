@@ -87,7 +87,6 @@ export class Config extends BaseConfig {
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
     external: {
-      jwksUri: string;
       discovery: boolean;
       usernameClaimName: string;
     } | null;
@@ -168,7 +167,6 @@ export class Config extends BaseConfig {
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
-      OAUTH_EXTERNAL_JWKS_URI: oauthExternalJwksUri,
       OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
       OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
@@ -297,13 +295,8 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
-      external: [
-        oauthExternalJwksUri,
-        oauthExternalDiscovery === 'true',
-        oauthExternalUsernameClaimName,
-      ].some(Boolean)
+      external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
         ? {
-            jwksUri: oauthExternalJwksUri ?? '',
             discovery: oauthExternalDiscovery === 'true',
             usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
           }
@@ -449,7 +442,7 @@ export class Config extends BaseConfig {
         auth: this.auth,
         oauth: this.oauth,
         external: this.oauth.external,
-        usernameTemplate: this.auth === 'uat' ? (uatUsernameClaim ?? jwtSubClaim) : jwtSubClaim,
+        usernameTemplate: jwtSubClaim,
       });
     }
 
@@ -607,7 +600,7 @@ function validateServer(server: string): void {
 function validateOAuthExternal({
   auth,
   oauth: { enabled, embeddedAuthzServer, issuer },
-  external: { jwksUri, discovery },
+  external: { discovery },
   usernameTemplate,
 }: {
   auth: AuthType;
@@ -621,36 +614,26 @@ function validateOAuthExternal({
     );
   }
 
-  if ([jwksUri, discovery].filter(Boolean).length !== 1) {
+  if (!discovery) {
+    throw new Error('OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"');
+  }
+
+  // The issuer becomes the discovery document's fetch target.
+  const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
+  // undici repeats the full URL, password included, in its errors.
+  if (issuerUrl.username || issuerUrl.password) {
     throw new Error(
-      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set',
+      'The environment variable OAUTH_ISSUER must not contain a username or password',
     );
   }
 
-  if (discovery) {
-    // The issuer becomes the discovery document's fetch target.
-    const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
-    // undici repeats the full URL, password included, in its errors.
-    if (issuerUrl.username || issuerUrl.password) {
-      throw new Error(
-        'The environment variable OAUTH_ISSUER must not contain a username or password',
-      );
-    }
-  } else {
-    validateHttpsOrLoopbackUri('OAUTH_EXTERNAL_JWKS_URI', jwksUri);
-  }
-
-  if (auth !== 'direct-trust' && auth !== 'uat') {
-    throw new Error(
-      'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"',
-    );
+  if (auth !== 'direct-trust') {
+    throw new Error('When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"');
   }
 
   if (!usernameTemplate?.includes('{OAUTH_USERNAME}')) {
     throw new Error(
-      auth === 'direct-trust'
-        ? 'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}'
-        : 'When OAUTH_EXTERNAL_* is set and AUTH is "uat", UAT_USERNAME_CLAIM (or JWT_SUB_CLAIM) must contain {OAUTH_USERNAME}',
+      'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
     );
   }
 }
