@@ -1,6 +1,7 @@
 import { DOMParser, type Element as XmlElement } from '@xmldom/xmldom';
 
 import type { ExternalApiToolExecutor } from '../../../../desktop/externalApi/executorTypes.js';
+import { isSessionFatalError } from '../../../../desktop/externalApi/sessionFatalError.js';
 import {
   deleteDashboard,
   listWorkbookDashboards,
@@ -18,6 +19,7 @@ import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { parsedXmlNamesEqual, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
+  getSessionFatalError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError, type McpToolError } from '../../../../errors/mcpToolError.js';
@@ -57,7 +59,7 @@ export interface BuildDashboardCandidateXmlArgs {
 
 export type ComposeDashboardOutcome =
   | { state: 'applied'; retrySafe: false; receipt: ComposeDashboardReceipt }
-  | { state: 'failed'; retrySafe: true; stage: string; error: McpToolError }
+  | { state: 'failed'; retrySafe: boolean; stage: string; error: McpToolError }
   | { state: 'unknown'; retrySafe: false; stage: string; error: McpToolError };
 
 export function buildDashboardCandidateXml({
@@ -246,6 +248,8 @@ async function createDashboard({
     signal,
   });
   if (!readbackResult.ok) {
+    const fatal = getSessionFatalError(readbackResult.error);
+    if (fatal) return unknown('post-apply-read', fatal);
     const error = recoveryError({
       applied: 'unknown',
       retrySafe: false,
@@ -417,6 +421,8 @@ function loadFailureOutcome({
   retryableStage: string;
   uncertainStage: string;
 }): ComposeDashboardOutcome {
+  const fatal = getSessionFatalError(error);
+  if (fatal) return unknown(uncertainStage, fatal);
   if (
     error.type === 'load-workbook-xml-error' &&
     (error.error.type === 'workbook-drift' || error.error.type !== 'load-rejected')
@@ -569,7 +575,7 @@ function recoveryError(payload: Record<string, unknown>): McpToolError {
 }
 
 function failed(stage: string, error: McpToolError): ComposeDashboardOutcome {
-  return { state: 'failed', retrySafe: true, stage, error };
+  return { state: 'failed', retrySafe: !isSessionFatalError(error), stage, error };
 }
 
 function unknown(stage: string, error: McpToolError): ComposeDashboardOutcome {

@@ -18,6 +18,26 @@ import {
 vi.mock('../../../../desktop/wrappers/getWorkbookXml.js');
 vi.mock('../../../../desktop/wrappers/loadWorkbookXml.js');
 
+it('preserves a session-fatal workbook read instead of declaring composition retry safe', async () => {
+  vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValueOnce(
+    Err({
+      type: 'command-failed',
+      error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+    }),
+  );
+  const outcome = await composeDashboardCore({
+    dashboardName: 'Fatal',
+    worksheetNames: ['Sales'],
+    executor: {} as ExternalApiToolExecutor,
+    signal: new AbortController().signal,
+  });
+  expect(outcome).toMatchObject({
+    state: 'failed',
+    retrySafe: false,
+    error: { type: 'desktop-session-fatal' },
+  });
+});
+
 // `<rows>`/`<cols>` text (any non-empty text, here just the field name) is enough for
 // worksheetRenderState's `worksheetDocumentState` to classify a `<table>` as rendered rather than
 // blank. Both states are eligible for explicit dashboard composition.
@@ -457,6 +477,32 @@ describe('resolveLiveWorksheetNames', () => {
 });
 
 describe('composeDashboardCore', () => {
+  it.each(['apply', 'readback'] as const)(
+    'preserves a session-fatal %s failure without live-inspection recovery',
+    async (stage) => {
+      const fatal = {
+        type: 'command-failed' as const,
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      };
+      const harness = setupHarness({
+        pristineXml: PRISTINE,
+        ...(stage === 'apply'
+          ? { applyResults: [Err({ type: 'execute-command-error' as const, error: fatal })] }
+          : { readbackResults: [Err(fatal)] }),
+      });
+      const outcome = await composeDashboardCore(validArgs(harness.executor));
+      expect(outcome).toMatchObject({
+        state: 'unknown',
+        retrySafe: false,
+        error: { type: 'desktop-session-fatal' },
+      });
+      if (outcome.state === 'applied') throw new Error('Expected fatal failure');
+      expect(outcome.error.getErrorText()).toContain('restart Tableau Desktop');
+      expect(outcome.error.getErrorText()).not.toContain('Call list-dashboards');
+      expect(harness.postedXml).toHaveLength(1);
+      expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(stage === 'apply' ? 1 : 2);
+    },
+  );
   beforeEach(() => {
     vi.clearAllMocks();
   });

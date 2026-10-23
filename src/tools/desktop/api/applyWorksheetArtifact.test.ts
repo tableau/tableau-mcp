@@ -14,6 +14,25 @@ import {
 vi.mock('../../../desktop/wrappers/loadWorksheetXml.js');
 
 describe('applyWorksheetArtifact', () => {
+  it.each([false, true])(
+    'never marks a session-fatal failure retry safe (dispatched=%s)',
+    async (dispatched) => {
+      const store = artifactStore();
+      vi.mocked(loadWorksheetXmlModule.loadWorksheetXml).mockImplementation(async (args) => {
+        args.artifactApply!.dispatchState.attempted = dispatched;
+        return Err({
+          type: 'execute-command-error',
+          error: {
+            type: 'command-failed',
+            error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+          },
+        });
+      });
+      const outcome = await applyWorksheetArtifact(deps(store));
+      expect(outcome).toMatchObject({ retrySafe: false, error: { type: 'desktop-session-fatal' } });
+      expect(store.reserve('a1', '12345').ok).toBe(!dispatched);
+    },
+  );
   it('consumes an artifact after a successful dispatch', async () => {
     const store = artifactStore();
     const consume = vi.spyOn(store, 'consume');

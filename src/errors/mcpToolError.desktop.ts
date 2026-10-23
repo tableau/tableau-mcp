@@ -100,6 +100,35 @@ export class DesktopCommandExecutionError extends McpToolError {
   }
 }
 
+export function getSessionFatalError(error: unknown): McpToolError | undefined {
+  if (!isSessionFatalError(error)) return undefined;
+  if (error instanceof McpToolError) return error;
+  if (typeof error !== 'object' || error === null) return undefined;
+  if (
+    'type' in error &&
+    (error.type === 'execute-command-error' || error.type === 'command-failed') &&
+    'error' in error
+  ) {
+    return getSessionFatalError(error.error);
+  }
+  return new DesktopCommandExecutionError({
+    type: 'command-failed',
+    error: {
+      ...error,
+      code: 'code' in error && typeof error.code === 'string' ? error.code : 'E71AE512',
+      message:
+        'message' in error && typeof error.message === 'string' ? error.message : 'Internal Error',
+      recoverable: false,
+    },
+  });
+}
+
+// Best-effort reads cannot downgrade a dead session to an ordinary verification miss.
+export function throwIfSessionFatalError(error: unknown): void {
+  const fatal = getSessionFatalError(error);
+  if (fatal) throw fatal;
+}
+
 function formatDesktopCommandExecutionError(error: ExecuteCommandError): string {
   if (error.type !== 'command-failed') {
     return JSON.stringify(error);

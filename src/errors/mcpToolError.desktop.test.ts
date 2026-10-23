@@ -1,4 +1,40 @@
-import { DesktopCommandExecutionError, ImageExportTimeoutError } from './mcpToolError.desktop.js';
+import {
+  DesktopCommandExecutionError,
+  getSessionFatalError,
+  ImageExportTimeoutError,
+  throwIfSessionFatalError,
+} from './mcpToolError.desktop.js';
+
+describe('session-fatal propagation', () => {
+  it('preserves classified errors and native evidence through wrapper layers', () => {
+    const raw = {
+      type: 'command-failed',
+      error: {
+        code: 'operation-failed',
+        'tableau-error-code': '0xe71ae512',
+        message: 'native diagnostic',
+        recoverable: true,
+      },
+    };
+    const fatal = getSessionFatalError({ type: 'execute-command-error', error: raw });
+    expect(fatal).toMatchObject({ type: 'desktop-session-fatal' });
+    expect(fatal?.message).toContain('native diagnostic');
+    expect(fatal?.message).toContain('tableau-error-code: 0xe71ae512');
+    expect(getSessionFatalError(fatal)).toBe(fatal);
+    expect(() => throwIfSessionFatalError(fatal)).toThrow(fatal);
+  });
+
+  it.each([
+    undefined,
+    null,
+    'E71AE512',
+    new Error('E71AE512'),
+    { code: 'awaiting-user', message: 'E71AE512', recoverable: false },
+  ])('leaves ordinary failures on their existing recovery path: %s', (error) => {
+    expect(getSessionFatalError(error)).toBeUndefined();
+    expect(() => throwIfSessionFatalError(error)).not.toThrow();
+  });
+});
 
 describe('DesktopCommandExecutionError', () => {
   it.each(['E71AE512', '0xe71ae512'])(

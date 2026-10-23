@@ -7,12 +7,21 @@ export const SESSION_FATAL_GUIDANCE =
   'Ask the user to restart Tableau Desktop and reopen the workbook. ' +
   'After the restart, call list-instances and use the new session before continuing.';
 
-export function isSessionFatalError(error: ExecuteCommandResponseError): boolean {
-  const tableauErrorCode = error?.['tableau-error-code'];
+export function isSessionFatalError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if ('type' in error) {
+    if (error.type === 'desktop-session-fatal') return true;
+    if (error.type === 'command-failed' || error.type === 'execute-command-error') {
+      return 'error' in error && isSessionFatalError(error.error);
+    }
+  }
+  const tableauErrorCode = 'tableau-error-code' in error ? error['tableau-error-code'] : undefined;
   const code =
     typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
       ? tableauErrorCode
-      : error?.code;
+      : 'code' in error
+        ? error.code
+        : undefined;
   return typeof code === 'string' && /^(?:0x)?E71AE512$/i.test(code.trim());
 }
 

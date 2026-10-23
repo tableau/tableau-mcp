@@ -41,6 +41,27 @@ const workbookInventory = {
 const expectedWorkbookTarget = workbookTargetFingerprint(workbookInventory);
 
 describe('apply-workbook-style', () => {
+  it.each(['getWorkbook', 'executeCommand', 'getWorkbookDocument'] as const)(
+    'preserves a session-fatal %s failure without theme recovery guidance',
+    async (method) => {
+      const executor = makeExecutorMock({
+        getWorkbook: vi.fn().mockResolvedValue(Ok(workbookInventory)),
+        executeCommand: vi.fn().mockResolvedValue(Ok(commandSuccess())),
+      });
+      vi.mocked(executor[method]).mockResolvedValueOnce(
+        Err({
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        }),
+      );
+      const result = await callTool({ executor });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+      expect(JSON.stringify(result)).not.toContain('retrySafe');
+      expect(result.structuredContent).toBeUndefined();
+      expect(executor[method]).toHaveBeenCalledOnce();
+    },
+  );
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

@@ -41,6 +41,7 @@ const ROOT_FILE_CONNECT_ARGS = {
 function makeRootFileConnectExtra(...datasourceReads: any[]): {
   extra: ReturnType<typeof getMockRequestHandlerExtra>;
   executeCommand: ReturnType<typeof vi.fn>;
+  listWorkbookDatasources: ReturnType<typeof vi.fn>;
 } {
   const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
   const listWorkbookDatasources = vi.fn();
@@ -49,7 +50,7 @@ function makeRootFileConnectExtra(...datasourceReads: any[]): {
   }
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({ executeCommand, listWorkbookDatasources });
-  return { extra, executeCommand };
+  return { extra, executeCommand, listWorkbookDatasources };
 }
 
 function writeExternalApiRegistry({
@@ -93,6 +94,151 @@ describe('executeTableauCommandTool', () => {
     for (const dir of TEST_REGISTRY_DIRS.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe('session-fatal verification reads', () => {
+    const worksheets = {
+      worksheets: [{ id: 'sheet-1', name: 'Sheet 1', hidden: false, isActiveSheet: true }],
+    };
+    const generateArgs = {
+      NotionalSpecJson:
+        '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Revenue","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+      ClearSheet: true,
+    };
+
+    it.each([
+      ['before', 'returned'],
+      ['before', 'thrown'],
+      ['after', 'returned'],
+      ['after', 'thrown'],
+    ] as const)(
+      'stops on a %s-command worksheet read with a %s session-fatal error',
+      async (stage, delivery) => {
+        const failure = {
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        };
+        const listWorksheets = vi.fn().mockResolvedValue(Ok(worksheets));
+        if (stage === 'after') listWorksheets.mockResolvedValueOnce(Ok(worksheets));
+        if (delivery === 'returned') listWorksheets.mockResolvedValueOnce(Err(failure));
+        else listWorksheets.mockRejectedValueOnce(failure);
+        const executeCommand = vi
+          .fn()
+          .mockResolvedValue(Ok({ command_id: 'generate-1', result: null }));
+        const getWorksheetDiagnostics = vi.fn();
+        const extra = getMockRequestHandlerExtra();
+        extra.getExecutor = vi.fn().mockResolvedValue({
+          desktopInstanceId: 'instance-1',
+          desktopApiVersion: '0.2.16',
+          executeCommand,
+          listWorksheets,
+          getWorksheetDiagnostics,
+        });
+
+        const result = await getResult(
+          {
+            session: SESSION,
+            command: 'tabdoc:generate-viz-from-notional-spec',
+            args: generateArgs,
+          },
+          extra,
+        );
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('restart Tableau Desktop');
+        expect(result.content[0].text).toContain('Stop all commands');
+        expect(result.content[0].text).not.toContain('Command executed successfully');
+        expect(result.content[0].text).not.toContain('"skipped"');
+        expect(executeCommand).toHaveBeenCalledTimes(stage === 'before' ? 0 : 1);
+        expect(listWorksheets).toHaveBeenCalledTimes(stage === 'before' ? 1 : 2);
+        expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['before', 'after'] as const)(
+      'preserves restart guidance on a %s-command datasource inventory failure',
+      async (stage) => {
+        const failure = Err({
+          type: 'command-failed',
+          error: {
+            code: 'operation-failed',
+            'tableau-error-code': '0xe71ae512',
+            message: 'Internal Error',
+            recoverable: false,
+          },
+        });
+        const { extra, executeCommand, listWorkbookDatasources } = makeRootFileConnectExtra(
+          ...(stage === 'after' ? [Ok({ datasources: [] }), failure] : [failure]),
+        );
+
+        const result = await getResult(
+          {
+            session: SESSION,
+            command: 'tabui:data-catalog-connect-to-file',
+            args: ROOT_FILE_CONNECT_ARGS,
+          },
+          extra,
+        );
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('restart Tableau Desktop');
+        expect(result.content[0].text).toContain('including reads');
+        expect(result.content[0].text).not.toContain('Inspect workbook datasources');
+        expect(executeCommand).toHaveBeenCalledTimes(stage === 'before' ? 0 : 1);
+        expect(listWorkbookDatasources).toHaveBeenCalledTimes(stage === 'before' ? 1 : 2);
+      },
+    );
+
+    it.each(['before', 'after'] as const)(
+      'keeps ordinary %s-command worksheet read failures as skipped verification',
+      async (stage) => {
+        const listWorksheets = vi.fn().mockResolvedValue(Ok(worksheets));
+        if (stage === 'after') listWorksheets.mockResolvedValueOnce(Ok(worksheets));
+        listWorksheets.mockResolvedValueOnce(
+          Err({
+            type: 'command-failed',
+            error: { code: 'not-found', message: 'Inventory unavailable', recoverable: false },
+          }),
+        );
+        const executeCommand = vi
+          .fn()
+          .mockResolvedValue(Ok({ command_id: 'generate-1', result: null }));
+        const getWorksheetDiagnostics = vi.fn();
+        const extra = getMockRequestHandlerExtra();
+        extra.getExecutor = vi.fn().mockResolvedValue({
+          desktopInstanceId: 'instance-1',
+          desktopApiVersion: '0.2.16',
+          executeCommand,
+          listWorksheets,
+          getWorksheetDiagnostics,
+        });
+
+        const result = await getResult(
+          {
+            session: SESSION,
+            command: 'tabdoc:generate-viz-from-notional-spec',
+            args: generateArgs,
+          },
+          extra,
+        );
+
+        expect(result.isError).toBe(false);
+        invariant(result.content[0].type === 'text');
+        expect(JSON.parse(result.content[0].text).verification).toMatchObject({
+          status: 'skipped',
+          findings: [
+            expect.objectContaining({
+              reason: stage === 'before' ? 'target-read-failed' : 'target-changed',
+            }),
+          ],
+        });
+        expect(executeCommand).toHaveBeenCalledOnce();
+        expect(listWorksheets).toHaveBeenCalledTimes(stage === 'before' ? 1 : 2);
+        expect(getWorksheetDiagnostics).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it('should create a tool instance with correct properties', () => {

@@ -99,6 +99,7 @@ import { decodeXmlEntities } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
+  throwIfSessionFatalError,
 } from '../../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
 import { log } from '../../../../logging/logger.js';
@@ -570,6 +571,7 @@ async function readAppliedSummaryRows({
       timeoutFailure,
     ]);
     if (result.isErr()) {
+      throwIfSessionFatalError(result.error.error);
       return {
         summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
       };
@@ -581,6 +583,7 @@ async function readAppliedSummaryRows({
       result.value.readScope,
     );
   } catch (error) {
+    throwIfSessionFatalError(error);
     return {
       summary_rows_error: boundedSummaryRowsError(
         deadlineFired ? SUMMARY_ROWS_TIMEOUT_ERROR : getExceptionMessage(error),
@@ -2381,6 +2384,7 @@ async function verifyTrustedWorkbookReadback({
       signal,
     });
     if (!polled.ok) {
+      throwIfSessionFatalError(polled.error);
       return {
         ok: true,
         status: 'skipped',
@@ -2424,6 +2428,7 @@ async function verifyTrustedWorkbookReadback({
     }
     return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
+    throwIfSessionFatalError(error);
     return {
       ok: true,
       status: 'skipped',
@@ -2629,6 +2634,7 @@ async function performAutoApply({
     applyOptions: expectedInstanceId ? { expectedInstanceId } : undefined,
   });
   if (applyResult.isErr()) {
+    throwIfSessionFatalError(applyResult.error);
     const failureDisposition = applyFailureDisposition(applyResult.error);
     return {
       result: applyFallback(

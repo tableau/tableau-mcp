@@ -50,6 +50,56 @@ beforeEach(() => {
 });
 
 describe('runDashboardBatchTool', () => {
+  it.each(['apply', 'readback'] as const)(
+    'stops a session-fatal batch %s failure and finalizes artifact reservations',
+    async (stage) => {
+      const { executor } = statefulExecutor();
+      const store = artifactStore(['a1']);
+      const fatal = {
+        type: 'command-failed' as const,
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      };
+      if (stage === 'apply') {
+        vi.mocked(executor.applyWorkbookDocument).mockImplementationOnce(
+          async (_xml, _signal, options) => {
+            options?.onDispatch?.();
+            return Err(fatal);
+          },
+        );
+      } else {
+        const original = vi.mocked(executor.getWorkbookDocument).getMockImplementation()!;
+        vi.mocked(executor.getWorkbookDocument).mockImplementation(async (...args) =>
+          vi.mocked(executor.applyWorkbookDocument).mock.calls.length > 0
+            ? Err(fatal)
+            : original(...args),
+        );
+      }
+      const result = await callBatch(['a1'], { executor, store });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+      expect(JSON.stringify(result)).not.toContain('retrySafe');
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.goToSheet).not.toHaveBeenCalled();
+      expect(store.reserve('a1', '12345')).toEqual({ ok: false, reason: 'consumed' });
+    },
+  );
+  it('returns the fatal error without retry metadata when the batch workbook read is session-fatal', async () => {
+    const { executor } = statefulExecutor();
+    vi.mocked(executor.getWorkbookDocument).mockResolvedValueOnce(
+      Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      }),
+    );
+    const result = await callBatch(['a1'], { executor });
+    expect(result.isError).toBe(true);
+    const text = JSON.stringify(result);
+    expect(text).toContain('restart Tableau Desktop');
+    expect(text).not.toContain('retrySafe');
+    expect(result.structuredContent).toBeUndefined();
+    expect(executor.getWorkbookDocument).toHaveBeenCalledOnce();
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('12345'));

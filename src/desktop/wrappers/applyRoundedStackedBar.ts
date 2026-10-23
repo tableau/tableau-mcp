@@ -1,5 +1,6 @@
 import { Err, Ok } from 'ts-results-es';
 
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import type {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -63,6 +64,7 @@ export async function applyRoundedStackedBar({
   return await withApplyLock(async () => {
     const liveSource = await executor.getWorksheetDocument(contract.worksheetId, signal);
     if (liveSource.isErr()) {
+      throwIfSessionFatalError(liveSource.error);
       return {
         state: 'failed',
         mutation: 'not-sent',
@@ -204,6 +206,7 @@ export async function applyRoundedStackedBar({
         signal,
       });
     } catch (error) {
+      throwIfSessionFatalError(error);
       return afterMutationUnknown(
         'apply-transport',
         'The per-sheet apply transport threw and cannot prove whether Desktop received the write.',
@@ -276,6 +279,7 @@ export async function applyRoundedStackedBar({
           signal,
         });
       } catch (error) {
+        throwIfSessionFatalError(error);
         return { ok: false as const, error: { type: 'unknown' as const, error } };
       }
     })();
@@ -328,6 +332,7 @@ function beforeMutationFailure(
   error?: ExecuteCommandError,
   findings?: RoundStackedBarFinding[],
 ): ApplyRoundedStackedBarOutcome {
+  throwIfSessionFatalError(error);
   return {
     state: 'failed',
     mutation: 'not-sent',
@@ -346,6 +351,7 @@ function afterMutationUnknown(
   error?: ExecuteCommandError,
   findings?: RoundStackedBarFinding[],
 ): ApplyRoundedStackedBarOutcome {
+  throwIfSessionFatalError(error);
   return {
     state: 'unknown',
     mutation,
