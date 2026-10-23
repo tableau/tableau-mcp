@@ -18,10 +18,19 @@ import * as loggerModule from '../../../../logging/logger.js';
 import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { Tool } from '../../../tool.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import * as composeDashboardCore from './composeDashboardCore.js';
 import { getRunDashboardBatchTool } from './runDashboardBatch.js';
 
 vi.mock('../../../../desktop/session/sessionResolution.js');
+vi.mock('./composeDashboardCore.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./composeDashboardCore.js')>();
+  return {
+    ...actual,
+    buildDashboardCandidateXml: vi.fn(actual.buildDashboardCandidateXml),
+  };
+});
 
 const BATCH = {
   dashboardName: 'Executive Overview',
@@ -83,6 +92,13 @@ describe('runDashboardBatchTool', () => {
     expect(
       schema.safeParse({ session: '12345', ...BATCH, existingWorksheetNames: [] }).success,
     ).toBe(true);
+    expect(schema.safeParse({ session: '12345', ...BATCH, kpiWorksheetNames: [] }).success).toBe(
+      true,
+    );
+    expect(
+      schema.safeParse({ session: '12345', ...BATCH, kpiWorksheetNames: Array(6).fill('a') })
+        .success,
+    ).toBe(false);
     const tooLong = 'x'.repeat(256);
     expect(schema.safeParse({ ...BATCH, artifactIds: [tooLong] }).success).toBe(false);
     expect(schema.safeParse({ ...BATCH, dashboardName: tooLong }).success).toBe(false);
@@ -126,7 +142,7 @@ describe('runDashboardBatchTool', () => {
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
-    expect(JSON.stringify(entry).length).toBe(1_315);
+    expect(JSON.stringify(entry).length).toBe(1_302);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
@@ -572,6 +588,82 @@ describe('runDashboardBatchTool', () => {
     expect(harness.posts).toHaveLength(0);
   });
 
+  it.each(['rows', 'auto-grid'] as const)(
+    'treats an empty KPI list like an absent one for %s',
+    async (layoutType) => {
+      const absent = statefulExecutor();
+      const empty = statefulExecutor();
+      const options = { existingWorksheetNames: ['Existing A', 'Existing B'], layoutType };
+
+      const composeRequests = (): unknown[] =>
+        vi
+          .mocked(composeDashboardCore.buildDashboardCandidateXml)
+          .mock.calls.map(([request]) => request.layout);
+      const absentResult = await callBatch([], { ...options, executor: absent.executor });
+      const absentRequests = composeRequests();
+      vi.mocked(composeDashboardCore.buildDashboardCandidateXml).mockClear();
+      const emptyResult = await callBatch([], {
+        ...options,
+        kpiWorksheetNames: [],
+        executor: empty.executor,
+      });
+
+      expect(emptyResult.isError).toBe(false);
+      expect(bodyOf(emptyResult)).toEqual(bodyOf(absentResult));
+      expect(empty.posts).toHaveLength(1);
+      expect(composeRequests()).toEqual(absentRequests);
+      expect(absentRequests).toEqual([{ layoutType }]);
+      expect(empty.posts.map(stripUuids)).toEqual(absent.posts.map(stripUuids));
+    },
+  );
+
+  it('logs an empty KPI list like an absent one', async () => {
+    const notify = vi.spyOn(Tool.prototype, 'notifyInvocation').mockImplementation(() => {});
+    const loggedArgs = async (kpiWorksheetNames?: string[]): Promise<unknown> => {
+      notify.mockClear();
+      await callBatch([], {
+        existingWorksheetNames: ['Existing A', 'Existing B'],
+        layoutType: 'rows',
+        kpiWorksheetNames,
+      });
+      return notify.mock.calls[0]?.[0].args;
+    };
+
+    const absentArgs = await loggedArgs(undefined);
+    expect(absentArgs).toBeDefined();
+    expect(await loggedArgs([])).toEqual(absentArgs);
+    notify.mockRestore();
+  });
+
+  it.each([
+    {
+      name: 'chart worksheets',
+      worksheetNames: ['Existing A', 'Existing B'],
+      error: 'layoutType "executive-summary" requires at least one KPI worksheet name.',
+    },
+    {
+      name: 'no worksheets',
+      worksheetNames: [],
+      error: 'A dashboard batch requires 1-7 combined worksheets, including KPI roles.',
+    },
+  ])('rejects an empty KPI list for executive-summary with $name', async (c) => {
+    const harness = statefulExecutor();
+
+    const result = await callBatch([], {
+      existingWorksheetNames: c.worksheetNames,
+      layoutType: 'executive-summary',
+      kpiWorksheetNames: [],
+      executor: harness.executor,
+    });
+
+    expect(bodyOf(result)).toMatchObject({
+      applied: false,
+      retrySafe: true,
+      steps: [expect.objectContaining({ stage: 'inputValidation', error: c.error })],
+    });
+    expect(harness.posts).toHaveLength(0);
+  });
+
   it('returns unknown when Tableau changes Top-N semantics on a composed live worksheet', async () => {
     vi.useFakeTimers();
     const harness = statefulExecutor({
@@ -869,6 +961,10 @@ function rankedWorkbook(): string {
     </view><panes><pane><mark class="Bar"/></pane></panes>
     <rows>${column}</rows><cols>${sales}</cols></table></worksheet>
   </worksheets><windows><window class="worksheet" name="Top Products"/></windows></workbook>`;
+}
+
+function stripUuids(xml: string): string {
+  return xml.replace(/uuid="\{[0-9A-F-]+\}"/g, 'uuid=""');
 }
 
 function bodyOf(result: CallToolResult): Record<string, any> {

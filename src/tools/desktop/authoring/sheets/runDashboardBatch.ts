@@ -105,7 +105,6 @@ const paramsSchema = {
   gridColumns: z.number().int().min(1).max(6).optional(),
   kpiWorksheetNames: z
     .array(z.string().trim().min(1).max(255))
-    .min(1)
     .max(5)
     .optional()
     .describe('Live KPI worksheet names in display order from left to right.'),
@@ -226,11 +225,14 @@ export const getRunDashboardBatchTool = (
         title: dashboardTitle,
         layoutType,
         gridColumns,
-        kpiWorksheetNames,
+        kpiWorksheetNames: requestedKpiWorksheetNames,
         replaceExisting = false,
       },
       extra,
     ): Promise<CallToolResult> => {
+      const kpiWorksheetNames = requestedKpiWorksheetNames?.length
+        ? requestedKpiWorksheetNames
+        : undefined;
       const startedAt = performance.now();
       const sessionId = resolveEpisodeKey(
         extra.config,
