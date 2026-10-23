@@ -35,6 +35,66 @@ function document(xml: string): {
 const signal = new AbortController().signal;
 
 describe('readColorMapsBack', () => {
+  it('propagates session-fatal inventory failure before reading any datasource', async () => {
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        }),
+      ),
+    });
+    await expect(
+      readColorMapsBack({ appliedXml: fixture('apply-L1b-ds.xml'), executor, signal }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(executor.listWorkbookDatasources).toHaveBeenCalledOnce();
+    expect(executor.getDatasourceDocument).not.toHaveBeenCalled();
+  });
+  it('stops after a session-fatal datasource read instead of warning or reading the next datasource', async () => {
+    const executor = makeExecutorMock({
+      listWorkbookDatasources: vi
+        .fn()
+        .mockResolvedValue(Ok({ datasources: [{ id: 'superstore' }, { id: 'second' }] })),
+      getDatasourceDocument: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: {
+            code: 'operation-failed',
+            'tableau-error-code': '0xe71ae512',
+            message: 'Internal Error',
+            recoverable: false,
+          },
+        }),
+      ),
+    });
+    await expect(
+      readColorMapsBack({
+        appliedXml: `<workbook><datasources>${fixture('apply-L1b-ds.xml')}${fixture('apply-L1b-ds.xml').replace("name='superstore'", "name='second'")}</datasources></workbook>`,
+        executor,
+        signal,
+      }),
+    ).rejects.toMatchObject({
+      type: 'desktop-session-fatal',
+      message: expect.stringContaining('restart Tableau Desktop'),
+    });
+    expect(executor.getDatasourceDocument).toHaveBeenCalledOnce();
+  });
+
+  it('does not swallow a session-fatal baseline read', async () => {
+    const read = vi.fn().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      }),
+    );
+    await expect(
+      readColorBaseline({
+        appliedXml: fixture('apply-r2-ws.xml'),
+        read,
+      }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(read).toHaveBeenCalledOnce();
+  });
   afterEach(() => vi.useRealTimers());
 
   it('makes no Desktop call when the payload carries no color map', async () => {

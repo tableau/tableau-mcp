@@ -39,6 +39,7 @@ import {
 } from '../../../desktop/wrappers/readColorMapsBack.js';
 import {
   DesktopCommandExecutionError,
+  getSessionFatalError,
   IncompleteOperationError,
   WorksheetXmlLoadFailedError,
 } from '../../../errors/mcpToolError.desktop.js';
@@ -545,7 +546,9 @@ export const getApplyWorksheetTool = (
 
 function artifactApplyError(
   outcome: Exclude<WorksheetArtifactOutcome, { state: 'applied' }>,
-): ReturnType<IncompleteOperationError<object>['toErr']> {
+): ReturnType<McpToolError['toErr']> {
+  const fatal = getSessionFatalError(outcome.error);
+  if (fatal) return fatal.toErr();
   return new IncompleteOperationError(
     withNextAction(
       {

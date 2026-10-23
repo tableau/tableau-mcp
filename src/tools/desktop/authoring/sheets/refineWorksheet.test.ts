@@ -1668,6 +1668,32 @@ const refusalSchema = z.object({
   reason: z.string(),
 });
 
+it('propagates session-fatal refinement confirmation instead of a skipped verification payload', async () => {
+  vi.mocked(getWorksheetXmlModule.getWorksheetXml)
+    .mockResolvedValueOnce(Ok({ xml: SOURCE, name: 'Sales by Region' }))
+    .mockResolvedValueOnce(
+      Err({
+        type: 'execute-command-error',
+        error: {
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        },
+      }),
+    );
+  vi.mocked(loadWorksheetXmlModule.loadWorksheetXml).mockResolvedValueOnce(
+    Ok({ readbackWarnings: [] }),
+  );
+  const result = await getToolResult({
+    worksheetName: 'Sales by Region',
+    operation: 'sort_direction',
+    sortDirection: { direction: 'ASC' },
+  });
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+  expect(JSON.stringify(result)).not.toContain('retrySafe');
+  expect(loadWorksheetXmlModule.loadWorksheetXml).toHaveBeenCalledOnce();
+});
+
 async function getToolResult({
   worksheetName,
   operation,

@@ -1,4 +1,5 @@
 import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/executorTypes.js';
+import { isSessionFatalError } from '../../../desktop/externalApi/sessionFatalError.js';
 import {
   type TemplateArtifactReserveResult,
   type TemplateArtifactStore,
@@ -37,7 +38,7 @@ export interface ApplyWorksheetArtifactPayloadArgs {
 
 export type WorksheetArtifactOutcome =
   | { state: 'applied'; retrySafe: false; receipt: ArtifactApplyReceipt }
-  | { state: 'failed'; retrySafe: true; error: McpToolError }
+  | { state: 'failed'; retrySafe: boolean; error: McpToolError }
   | { state: 'unknown'; retrySafe: false; error: McpToolError };
 
 const DISPATCHED_ARTIFACT_GUIDANCE =
@@ -109,7 +110,7 @@ export async function applyWorksheetArtifactPayload({
     const error = toMcpToolError(result.error, dispatchState.attempted);
     return dispatchState.attempted
       ? { state: 'unknown', retrySafe: false, error }
-      : { state: 'failed', retrySafe: true, error };
+      : { state: 'failed', retrySafe: !isSessionFatalError(error), error };
   }
 
   return {

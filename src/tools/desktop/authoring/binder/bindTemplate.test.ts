@@ -9471,6 +9471,79 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).toContain('Done — no further tool calls needed');
   });
 
+  it('a session-fatal summary preview stops binding instead of returning a completed receipt', async () => {
+    const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
+    const result = await getToolResult({
+      session: 'fatal-bind-summary',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(
+        mocks,
+        Err({
+          type: 'command-failed',
+          error: {
+            code: 'E71AE512',
+            message: 'Internal Error',
+            recoverable: false,
+          },
+        }),
+      ),
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+    expect(result.structuredContent).toBeUndefined();
+    expect(mocks.applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('a session-fatal bind apply returns restart guidance instead of a graceful fallback', async () => {
+    const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
+    mocks.applyWorkbookDocument.mockResolvedValueOnce(
+      Err({
+        type: 'command-failed',
+        error: {
+          code: 'E71AE512',
+          message: 'Internal Error',
+          recoverable: false,
+        },
+      }),
+    );
+    const result = await getToolResult({
+      session: 'fatal-bind-apply',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+    expect(JSON.stringify(result)).not.toContain('retry_safe');
+    expect(result.structuredContent).toBeUndefined();
+    expect(mocks.applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
+  it('a session-fatal post-apply read stops binding without a skipped receipt or fallback guidance', async () => {
+    const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
+    let read = 0;
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockImplementation(async () =>
+      read++ === 0
+        ? Ok(XML)
+        : Err({
+            type: 'command-failed',
+            error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+          }),
+    );
+    const result = await getToolResult({
+      session: 'fatal-bind-readback',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+    expect(JSON.stringify(result)).not.toContain('retry_safe');
+    expect(result.structuredContent).toBeUndefined();
+    expect(mocks.applyWorkbookDocument).toHaveBeenCalledOnce();
+  });
+
   it('an unreadable post-apply workbook gives no completion evidence', async () => {
     const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
     let read = 0;

@@ -1,5 +1,6 @@
 import type { Result } from 'ts-results-es';
 
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import type {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -67,7 +68,7 @@ function groupByDatasource(maps: readonly ColorMap[]): Map<string, ColorMap[]> {
 
 /**
  * The live XML to diff worksheet-style colors against, read before the apply. Reads only when the
- * payload carries such colors; a failed read means no baseline (warnings only, never an error).
+ * payload carries such colors; ordinary read failures mean no baseline. Session-fatal errors propagate.
  */
 export async function readColorBaseline({
   appliedXml,
@@ -79,8 +80,11 @@ export async function readColorBaseline({
   if (extractWorksheetStyleColorMaps(appliedXml).length === 0) return undefined;
   let xml: string | undefined;
   try {
-    xml = (await read()).unwrapOr(undefined);
-  } catch {
+    const result = await read();
+    if (result.isErr()) throwIfSessionFatalError(result.error);
+    xml = result.unwrapOr(undefined);
+  } catch (error) {
+    throwIfSessionFatalError(error);
     return undefined;
   }
   // An unparseable baseline would read as an empty one and fail every member.
@@ -90,7 +94,7 @@ export async function readColorBaseline({
 /**
  * Read each owning datasource document back after a raw-XML apply and check that the requested
  * categorical member colors survived. Returns `undefined`, with no Desktop call, when the applied
- * XML carries no color map. Read failures become warning findings, so the result never errors.
+ * XML carries no color map. Ordinary read failures become warnings; session-fatal errors propagate.
  * Takes no lock itself, so callers may run it inside or after `withApplyLock`.
  */
 export async function readColorMapsBack({
@@ -142,9 +146,12 @@ export async function readColorMapsBack({
     let datasources: Array<{ id?: string }> = [];
     try {
       const inventory = await executor.listWorkbookDatasources(signal);
-      if (inventory.isErr()) failure = describeReadError(inventory.error);
-      else datasources = inventory.value.datasources ?? [];
+      if (inventory.isErr()) {
+        throwIfSessionFatalError(inventory.error);
+        failure = describeReadError(inventory.error);
+      } else datasources = inventory.value.datasources ?? [];
     } catch (error) {
+      throwIfSessionFatalError(error);
       failure = error instanceof Error ? error.message : String(error);
     }
     if (failure !== undefined) {
@@ -189,6 +196,7 @@ export async function readColorMapsBack({
         signal,
       });
     } catch (error) {
+      throwIfSessionFatalError(error);
       // The apply already landed: an abort between polls must not turn it into a tool error.
       const detail = error instanceof Error ? error.message : String(error);
       findings.push(
@@ -197,6 +205,7 @@ export async function readColorMapsBack({
       continue;
     }
     if (!polled.ok) {
+      throwIfSessionFatalError(polled.error);
       findings.push(colorReadbackUnavailableFinding(name, describeReadError(polled.error)));
       continue;
     }
