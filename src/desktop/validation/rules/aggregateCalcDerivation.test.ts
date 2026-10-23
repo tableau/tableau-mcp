@@ -191,7 +191,7 @@ describe('aggregate-calc-derivation rule', () => {
       `<?xml version="1.0"?><workbook><datasources>${datasource('B')}</datasources></workbook>`,
     );
 
-    const introduced = introducedBlockingValidationIssues(baseline, candidate);
+    const introduced = introducedBlockingValidationIssues(baseline, candidate, 'workbook');
 
     expect(introduced).toHaveLength(1);
     expect(introduced[0].xpath).toContain('[@name="B"]');

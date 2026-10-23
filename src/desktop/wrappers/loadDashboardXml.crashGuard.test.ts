@@ -8,15 +8,19 @@ import { loadDashboardXml } from './loadDashboardXml.js';
 const signal = new AbortController().signal;
 const focus = { navigate: 'none', reason: 'intermediate-leg' } as const;
 
+const EAGER_CARD_ZONE =
+  "<zone h='100000' id='8' param='[federated.csv040059ff380b040059ff380b].[none:product_line:nk]' type-v2='filter' w='20000' x='80000' y='0' />";
+
 function fixture(
   phoneOnly: boolean,
   blank: boolean,
+  zoneXml = '<zone id="1" name="A" type-v2="worksheet"/>',
 ): {
   executor: ReturnType<typeof makeExecutorMock>;
   fragment: string;
   live: () => string;
 } {
-  const zone = '<zone id="1" name="A" type-v2="worksheet"/>';
+  const zone = zoneXml;
   const fragment = `<dashboard name="D"><zones>${phoneOnly ? '' : zone}</zones>${phoneOnly ? `<devicelayouts><devicelayout name="Phone"><zones>${zone}</zones></devicelayout></devicelayouts>` : ''}<simple-id uuid="dash-1"/></dashboard>`;
   let live = `<workbook><worksheets><worksheet name="A"><table><rows>${blank ? '' : '[Superstore].[sum:Sales:qk]'}</rows><cols/></table></worksheet></worksheets><dashboards>${fragment}</dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/></viewpoints></window></windows></workbook>`;
   const executor = makeExecutorMock({
@@ -130,4 +134,38 @@ describe('non-waivable dashboard worksheet-zone crash guard', () => {
       new XMLSerializer().serializeToString(before),
     );
   });
+});
+
+describe('non-waivable nameless card zone crash guard', () => {
+  const cardZones = `<zone id="1" name="A"/><zone type-v2="layout-flow" param="horz" id="2">${EAGER_CARD_ZONE}</zone>`;
+
+  it.each(modes.flatMap((mode) => [false, true].map((phoneOnly) => ({ ...mode, phoneOnly }))))(
+    'rejects a nameless filter zone before dispatch: %j',
+    async ({ phoneOnly, ...mode }) => {
+      const { executor, fragment, live } = fixture(phoneOnly, false, cardZones);
+      const before = live();
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment,
+        worksheetNames: ['A'],
+        ...mode,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({
+        error: {
+          type: 'load-dashboard-xml-error',
+          error: {
+            type: 'validation-failed',
+            issues: [expect.objectContaining({ ruleId: 'dashboard-card-zone-name' })],
+          },
+        },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+      expect(live()).toBe(before);
+    },
+  );
 });

@@ -592,6 +592,7 @@ export async function loadWorksheetXml({
       const workbookBlockingIssues = introducedBlockingValidationIssues(
         baselineValidation.issues,
         workbookValidation.issues,
+        'workbook',
       );
       if (workbookBlockingIssues.length > 0) {
         return Err({

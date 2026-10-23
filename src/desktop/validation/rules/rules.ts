@@ -6,6 +6,7 @@ import { categoricalFilterProliferationRule } from './categoricalFilterProlifera
 import { categoricalFilterSlicesRule } from './categoricalFilterSlices.js';
 import { computedSortCrashRule } from './computedSortCrash.js';
 import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
+import { dashboardCardZoneNameRule } from './dashboardCardZoneName.js';
 import { dashboardWorksheetZoneTypeRule } from './dashboardWorksheetZoneType.js';
 import { dashboardZonesReferenceIncludedWorksheetsRule } from './dashboardZonesReferenceIncludedWorksheets.js';
 import { dateFieldBoundAsStringRule } from './dateFieldBoundAsString.js';
@@ -46,6 +47,7 @@ export const validationRules = [
   undeclaredSetReferenceRule,
   undeclaredAggregateOkRefRule,
   dashboardWorksheetZoneTypeRule,
+  dashboardCardZoneNameRule,
   dashboardZonesReferenceIncludedWorksheetsRule,
   qualifiedNameBracketsRule,
   worksheetMissingWindowRule,

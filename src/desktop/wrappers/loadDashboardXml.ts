@@ -268,7 +268,7 @@ export async function loadDashboardXml({
   const validation = runValidation(xml, 'dashboard');
   const cachedApply = requireExistingSheet;
   const blockingIssues = cachedApply
-    ? alwaysBlockingValidationIssues(validation.issues)
+    ? alwaysBlockingValidationIssues(validation.issues, 'dashboard')
     : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({

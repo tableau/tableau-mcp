@@ -10,7 +10,15 @@ const allRules: ValidationRule[] = validationRules;
 
 // Known crash-producing XML must be repaired before any write, even when the same
 // defect exists in the live baseline or a deterministic caller skips ordinary checks.
-const alwaysBlockingRuleIds = new Set(['dashboard-worksheet-zone-type']);
+const alwaysBlockingRuleContexts = new Map<string, ValidationContext[]>([
+  ['dashboard-worksheet-zone-type', ['dashboard', 'workbook']],
+  // Desktop keeps a nameless card under some parents, so a live workbook can carry one on another dashboard.
+  ['dashboard-card-zone-name', ['dashboard']],
+]);
+
+function isAlwaysBlocking(ruleId: string, context: ValidationContext): boolean {
+  return alwaysBlockingRuleContexts.get(ruleId)?.includes(context) ?? false;
+}
 
 type ContextAwareValidationRule = ValidationRule & {
   validate(xml: string, context?: ValidationContext): ValidationIssue[];
@@ -21,9 +29,12 @@ export function blockingValidationIssues(issues: ValidationIssue[]): ValidationI
   return issues.filter((issue) => issue.severity === 'error');
 }
 
-export function alwaysBlockingValidationIssues(issues: ValidationIssue[]): ValidationIssue[] {
+export function alwaysBlockingValidationIssues(
+  issues: ValidationIssue[],
+  context: ValidationContext,
+): ValidationIssue[] {
   return blockingValidationIssues(issues).filter((issue) =>
-    alwaysBlockingRuleIds.has(issue.ruleId),
+    isAlwaysBlocking(issue.ruleId, context),
   );
 }
 
@@ -34,7 +45,7 @@ export function runAlwaysBlockingValidation(
   return runValidation(
     xml,
     context,
-    allRules.filter((rule) => alwaysBlockingRuleIds.has(rule.id)),
+    allRules.filter((rule) => isAlwaysBlocking(rule.id, context)),
   );
 }
 
@@ -42,6 +53,7 @@ export function runAlwaysBlockingValidation(
 export function introducedBlockingValidationIssues(
   baselineIssues: ValidationIssue[],
   candidateIssues: ValidationIssue[],
+  context: ValidationContext,
 ): ValidationIssue[] {
   const baselineCounts = new Map<string, number>();
   for (const issue of blockingValidationIssues(baselineIssues)) {
@@ -50,7 +62,7 @@ export function introducedBlockingValidationIssues(
   }
 
   return blockingValidationIssues(candidateIssues).filter((issue) => {
-    if (alwaysBlockingRuleIds.has(issue.ruleId)) return true;
+    if (isAlwaysBlocking(issue.ruleId, context)) return true;
     const key = validationIssueKey(issue);
     const remaining = baselineCounts.get(key) ?? 0;
     const candidateCount = issue.occurrenceCount ?? 1;
