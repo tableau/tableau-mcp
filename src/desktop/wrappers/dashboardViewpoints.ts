@@ -246,16 +246,7 @@ export function dashboardMembershipMatches(
   }
 }
 
-/** Prepare once before the POST; each readback parses only the returned workbook. */
-export function createDashboardReadbackVerifier(
-  candidateXml: string,
-  dashboardName: string,
-): (readbackXml: string) => boolean {
-  const difference = createDashboardReadbackDiagnoser(candidateXml, dashboardName);
-  return (readbackXml) => difference(readbackXml) === undefined;
-}
-
-/** Same checks as the verifier, returning the first difference in plain words (undefined = match). */
+/** Prepare once before the POST; returns the first difference in plain words (undefined = match). */
 export function createDashboardReadbackDiagnoser(
   candidateXml: string,
   dashboardName: string,
@@ -424,8 +415,16 @@ function authoredContentDifference(expected: Element, actual: Element): string |
       (expected.tagName === 'zone' && child.tagName === 'zone') ||
       expectedTags.has(expandedName(child)),
   );
-  if (expectedChildren.length !== actualChildren.length)
-    return `${label} has ${actualChildren.length} child ${expected.tagName === 'zone' || expected.tagName === 'zones' ? 'zones' : 'elements'} in Desktop, ${expectedChildren.length} submitted`;
+  if (expectedChildren.length !== actualChildren.length) {
+    const countOf = (list: Element[], child: Element): number =>
+      list.filter((item) => expandedName(item) === expandedName(child)).length;
+    for (const child of [...expectedChildren, ...actualChildren]) {
+      const submittedCount = countOf(expectedChildren, child);
+      const desktopCount = countOf(actualChildren, child);
+      if (submittedCount !== desktopCount)
+        return `${label} has ${desktopCount} ${child.tagName === 'zone' ? 'child zones' : `<${child.tagName}> children`} in Desktop, ${submittedCount} submitted`;
+    }
+  }
   const geometry = layoutGeometryDifference(expected, actual);
   if (geometry) return geometry;
   for (const [index, child] of expectedChildren.entries()) {
