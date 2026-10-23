@@ -6,9 +6,8 @@ inspect a workbook, list/inject chart templates, and bind fields into worksheets
 (stdio).
 
 Use the Desktop server from a source build or a standalone Desktop executable. This document
-covers the source path. For a published GitHub Release, the `upload-binaries` workflow is configured
-to put the Web and Desktop executables in each platform archive; releases that predate that workflow
-may not have those archives.
+covers the source path. GitHub Release archives carry the Web executable only; build the Desktop
+executable from source (`npm run build:sea:desktop`). Desktop builds are distributed separately.
 
 ## The template tool surface
 
@@ -38,7 +37,8 @@ want to keep. Edits require an explicit `mode`; only creation defaults to `param
 options use the creation defaults; edits do not merge individual settings. The internal action name
 and enabled state stay the same, including when the mode changes. URL actions can share a destination
 when their triggers, destination options, encoding, or source exclusions differ. For a dashboard-only
-source, pass `sourceWorksheet: ""` and `sourceDashboard`.
+source, create with `sourceDashboard` and omit `sourceWorksheet`. An edit must still pass
+`sourceWorksheet` (`""` for a dashboard-only source), because it replaces the full definition.
 
 If edit readback reports that the original action was removed or changed, run `undo-workbook` in
 the same session to restore the previous workbook before retrying. Failed verification does not

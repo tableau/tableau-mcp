@@ -66,11 +66,9 @@ iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/
    - macOS on Apple silicon: `tableau-mcp-macos-arm64.tar.gz`
    - macOS on Intel: `tableau-mcp-macos-x64.tar.gz`
    - If no archives exist, the release is too old and you'll need to choose a newer release. Older
-     releases may also lack the macOS archives and the Desktop executable.
-3. Extract the archive. Each archive contains two executables:
-   - `tableau-mcp` (`tableau-mcp.exe` on Windows): the standard Tableau MCP server. Run this one
-     unless you are setting up the Tableau Desktop server.
-   - `tableau-mcp-desktop` (`tableau-mcp-desktop.exe` on Windows): the Tableau Desktop server.
+     releases may also lack the macOS archives.
+3. Extract the archive. Each archive contains one executable, `tableau-mcp` (`tableau-mcp.exe` on
+   Windows): the standard Tableau MCP server. The Desktop executable is not in release archives.
 4. Create a [.env](https://www.dotenv.org/docs/security/env.html) file with your Tableau MCP
    settings. See [Environment Variables](../configuration/mcp-config/env-vars.md) section for more
    details.
@@ -80,8 +78,8 @@ iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/
 
 The macOS executables are ad-hoc signed but not notarized by Apple. macOS quarantines downloaded
 files, so Gatekeeper may block the first run. Remove the quarantine attribute from the extracted
-files (`xattr -d com.apple.quarantine tableau-mcp tableau-mcp-desktop`) or allow them in System
-Settings > Privacy & Security.
+files (`xattr -d com.apple.quarantine tableau-mcp`) or allow them in System Settings > Privacy &
+Security.
 
 :::
 

@@ -17,12 +17,14 @@ import {
 } from './desktop/instructions.js';
 import * as loggerModule from './logging/logger.js';
 import {
+  ALWAYS_LOAD_TOOL_NAMES,
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
   filterToolsByApiVersion,
   getDesktopToolListEntry,
+  getModelFacingToolEntry,
   resolveConnectedApiVersion,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
@@ -73,6 +75,9 @@ describe('DesktopMcpServer', () => {
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
+          ...(ALWAYS_LOAD_TOOL_NAMES.has(tool.name) && {
+            _meta: { 'anthropic/alwaysLoad': true },
+          }),
         },
         expect.any(Function),
       );
@@ -183,7 +188,7 @@ describe('DesktopMcpServer', () => {
         surface: 'desktop',
         profile: 'dynamic-authoring',
         tool_count: listedTools.length,
-        schemas_json_chars: JSON.stringify(listedTools).length,
+        schemas_json_chars: JSON.stringify(listedTools.map(getModelFacingToolEntry)).length,
         instructions_chars: instructions.length,
       });
       const event = emitSpy.mock.calls.at(-1)?.[1];
@@ -219,7 +224,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
 
 /** Serialize one tool entry for the per-tool size ratchets below. */
 async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<string> {
-  return JSON.stringify(await getDesktopToolListEntry(tool));
+  return JSON.stringify(getModelFacingToolEntry(await getDesktopToolListEntry(tool)));
 }
 
 // Aggregate tools/list size is no longer a product contract: TAS discovers tools through search.
@@ -320,7 +325,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['apply-worksheet', 1531], // ratcheted down 2026-08-19: worksheetName inferred from a cached fragment, describe drops the redundant "worksheet"; earlier ratchet 2026-08-12 trimming the worksheetName describe to id-or-name; earlier raise 2026-08-10: direct templatePlan folds an exact single-view build into the existing guarded apply tool; no new tool surface
     ['refine-worksheet', 1656], // ratcheted down with innermost nested-sort omit copy; do not grow
     ['build-worksheets-from-templates', 1140], // raised 2026-08-24: explicit Top-N artifact input keeps ranked executive views bounded before composition
-    ['run-dashboard-batch', 1315], // remeasured after preserving explicit replacement safety alongside live chart order, layout roles, and KPI display order
+    ['run-dashboard-batch', 1302], // remeasured after accepting an empty KPI list
     ['author-action', 2575], // trimmed while adding identity-based edit/delete; do not grow
     // Approved with the tool-search transition: the per-sheet schema prevents partial
     // cross-field bulk edits; preserve that contract instead of compressing its names.

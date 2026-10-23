@@ -185,6 +185,21 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'search-knowledge',
   ]);
 
+/** Claude Code keeps these loaded under tool search; evals showed agents calling each blind. */
+export const ALWAYS_LOAD_TOOL_NAMES: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
+  'rename-sheet',
+  'read-knowledge-resource',
+  'run-dashboard-batch',
+  'search-commands',
+  'get-dashboard-xml',
+  'invoke-dialog-action',
+  'search-knowledge',
+]);
+
+function getDesktopToolMeta(name: DesktopToolName): { _meta?: Record<string, unknown> } {
+  return ALWAYS_LOAD_TOOL_NAMES.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {};
+}
+
 /**
  * Select the tools to register for a TOOL_PROFILE value (already trimmed and lowercased by
  * Config). Unset or `dynamic-authoring` gives the default lean set. `demo` and `spec-loop` give
@@ -357,6 +372,7 @@ export class DesktopMcpServer extends Server {
           description: await Provider.from(description),
           inputSchema: await Provider.from(paramsSchema),
           annotations: await Provider.from(annotations),
+          ...getDesktopToolMeta(name),
         },
         toolCallback,
       );
@@ -371,7 +387,7 @@ export class DesktopMcpServer extends Server {
       surface: 'desktop',
       profile: normalizeToolSchemaProfile(config.toolProfile),
       tool_count: listedTools.length,
-      schemas_json_chars: JSON.stringify(listedTools).length,
+      schemas_json_chars: JSON.stringify(listedTools.map(getModelFacingToolEntry)).length,
       instructions_chars: instructions.length,
     });
 
@@ -487,5 +503,11 @@ export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<M
     description: await Provider.from(tool.description),
     inputSchema,
     annotations: await Provider.from(tool.annotations),
+    ...getDesktopToolMeta(tool.name),
   };
+}
+
+// _meta is a client flag (Claude Code reads alwaysLoad from it); it never reaches the model.
+export function getModelFacingToolEntry({ _meta, ...modelFacing }: McpTool): McpTool {
+  return modelFacing;
 }

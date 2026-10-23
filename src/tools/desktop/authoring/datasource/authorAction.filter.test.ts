@@ -1020,6 +1020,86 @@ describe('authorActionTool (filter mode)', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('treats an omitted sourceWorksheet like an empty one for a dashboard-only create', async () => {
+    const run = async (
+      sourceWorksheet: string | undefined,
+    ): Promise<{
+      result: Awaited<ReturnType<typeof getToolResult>>['result'];
+      applied: string;
+    }> => {
+      const args = {
+        mode: 'filter',
+        caption: 'Dash Only',
+        sourceWorksheet,
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+      } as const;
+      // The first pass captures the applied document; the second feeds it back as the readback.
+      const probe = await getToolResult({ args, initialXml: DASHBOARD_WITH_BOTH_SHEETS });
+      const applied = appliedDocumentXml(probe.applyWorkbookDocument);
+      const { result } = await getToolResult({
+        args,
+        initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+        readbackXml: applied,
+      });
+      return { result, applied };
+    };
+    const empty = await run('');
+    const omitted = await run(undefined);
+
+    expect(empty.result.isError).toBe(false);
+    expect(omitted.result.isError).toBe(false);
+    expect(omitted.applied).toBe(empty.applied);
+    expect(omitted.applied).toContain("<source type='sheet' dashboard='Overview' />");
+  });
+
+  it('rejects a create with neither sourceWorksheet nor sourceDashboard', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'No Source',
+        sourceWorksheet: undefined,
+        targetSheet: 'Details',
+      },
+      initialXml: WORKSHEETS_ONLY,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('filter mode requires a source');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('refuses an edit that omits sourceWorksheet even with sourceDashboard set', async () => {
+    const existingAction =
+      "<action caption='Dash Only' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' dashboard='Overview' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action1]',
+        mode: 'filter',
+        caption: 'Dash Only',
+        sourceWorksheet: undefined,
+        sourceDashboard: 'Overview',
+        targetSheet: 'Details',
+      },
+      initialXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, existingAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "pass sourceWorksheet, or '' for a dashboard-only url, filter, or highlight source",
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
   it('rejects a filter action with no source', async () => {
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {

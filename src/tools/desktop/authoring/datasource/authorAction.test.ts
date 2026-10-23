@@ -1554,7 +1554,9 @@ describe('authorActionTool', () => {
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('sourceWorksheet empty');
+    expect(result.content[0].text).toContain(
+      'sourceWorksheet is required in parameter and set mode (mode defaults to parameter)',
+    );
   });
 
   it("emits a byte-faithful worksheet-sourced url action with the URL in the link's expression attribute", async () => {
@@ -2132,6 +2134,57 @@ describe('authorActionTool', () => {
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain("<source type='sheet' dashboard='Sales Dashboard' />");
     expect(loaded).not.toContain("worksheet='Sales Dashboard'");
+  });
+
+  it('treats an omitted sourceWorksheet like an empty one for a dashboard-only url create', async () => {
+    const withDashboard = BASE_XML.replace(
+      '</workbook>',
+      "<dashboards><dashboard name='Sales Dashboard' /></dashboards></workbook>",
+    );
+    const run = async (
+      sourceWorksheet: string | undefined,
+    ): Promise<{
+      result: Awaited<ReturnType<typeof getToolResult>>['result'];
+      applied: string;
+    }> => {
+      const args = {
+        mode: 'url',
+        caption: 'Open City',
+        sourceWorksheet,
+        sourceDashboard: 'Sales Dashboard',
+        url: 'https://example.com/',
+      } as const;
+      // The first pass captures the applied document; the second feeds it back as the readback.
+      const probe = await getToolResult({ args, initialXml: withDashboard });
+      const applied = appliedDocumentXml(probe.applyWorkbookDocument);
+      const { result } = await getToolResult({
+        args,
+        initialXml: withDashboard,
+        readbackXml: applied,
+      });
+      return { result, applied };
+    };
+    const empty = await run('');
+    const omitted = await run(undefined);
+
+    expect(omitted.result.isError).toBe(false);
+    expect(omitted.applied).toBe(empty.applied);
+    expect(omitted.applied).toContain("<source type='sheet' dashboard='Sales Dashboard' />");
+  });
+
+  it.each([
+    { mode: 'parameter', targetParameter: '[Parameters].[Parameter 1]' },
+    { mode: 'set', targetSet: 'My Set' },
+  ] as const)('refuses a $mode create that omits sourceWorksheet', async (overrides) => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: { caption: 'X', sourceWorksheet: undefined, sourceField: 'City', ...overrides },
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'sourceWorksheet is required in parameter and set mode (mode defaults to parameter)',
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('detects caption collisions with plain <action> url elements', async () => {

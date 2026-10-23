@@ -302,7 +302,8 @@ data out of its tarball. The package has:
 - Requires Node.js >= 22.7.5
 
 Desktop remains available through `npm run build:desktop` from a clone and through the standalone
-Desktop executable built by the release archive workflow.
+Desktop executable from a source build (`npm run build:sea:desktop`); release archives carry the
+Web executable only.
 
 ## Documentation
 

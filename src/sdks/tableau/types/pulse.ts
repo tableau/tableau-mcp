@@ -66,11 +66,14 @@ const pulseLastXPeriodSchema = z.union([
   }),
 ]);
 
+const pulseMeasurementPeriodBaseSchema = z.object({
+  granularity: z.string(),
+  range: z.string(),
+});
+
 export const pulseMetricSpecificationSchema = z.object({
   filters: z.array(pulseFilterSchema).optional(),
-  measurement_period: z.object({
-    granularity: z.string(),
-    range: z.string(),
+  measurement_period: pulseMeasurementPeriodBaseSchema.extend({
     specific_period: z
       .object({
         date: tableauDateSchema,
@@ -90,9 +93,17 @@ export const pulseGoalsSchema = z.object({
   target: z.object({ value: z.number() }).optional(),
 });
 
+// Response side stays loose so odd period shapes never fail list-pulse-metrics.
+const pulseMetricResponseSpecificationSchema = pulseMetricSpecificationSchema.extend({
+  measurement_period: pulseMeasurementPeriodBaseSchema.extend({
+    specific_period: z.unknown().optional(),
+    last_x_period: z.unknown().optional(),
+  }),
+});
+
 export const pulseMetricSchema = z.object({
   id: z.string(),
-  specification: pulseMetricSpecificationSchema,
+  specification: pulseMetricResponseSpecificationSchema,
   definition_id: z.string(),
   is_default: z.boolean(),
   schema_version: z.string(),

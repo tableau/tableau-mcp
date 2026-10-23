@@ -262,19 +262,21 @@ export function parseAuthorActionArgs(
     ).toErr();
   }
   const mode = args.mode ?? 'parameter';
-  if (
-    args.caption === undefined ||
-    args.caption.trim().length === 0 ||
-    args.sourceWorksheet === undefined
-  ) {
+  if (args.caption === undefined || args.caption.trim().length === 0) {
     return new ArgsValidationError(
-      'caption and sourceWorksheet are required for create/edit; edit replaces the full definition (sourceWorksheet may be empty for a dashboard source)',
+      'caption is required for create/edit; edit replaces the full definition',
     ).toErr();
   }
+  // An edit that forgot the field must not silently widen a worksheet+dashboard source to the whole dashboard.
+  if (operation === 'edit' && args.sourceWorksheet === undefined) {
+    return new ArgsValidationError(
+      "edit replaces the full definition: pass sourceWorksheet, or '' for a dashboard-only url, filter, or highlight source",
+    ).toErr();
+  }
+  const sourceWorksheet = args.sourceWorksheet ?? '';
   const {
     session,
     caption,
-    sourceWorksheet,
     sourceField,
     targetParameter,
     targetSet,
@@ -325,7 +327,9 @@ export function parseAuthorActionArgs(
     mode !== 'highlight' &&
     effectiveSourceSheet.length === 0
   ) {
-    return new ArgsValidationError('sourceWorksheet empty').toErr();
+    return new ArgsValidationError(
+      'sourceWorksheet is required in parameter and set mode (mode defaults to parameter)',
+    ).toErr();
   }
   if (effectiveExcludedTargetSheets.length > 0 && mode !== 'filter' && mode !== 'highlight') {
     return new ArgsValidationError(
@@ -348,7 +352,7 @@ export function parseAuthorActionArgs(
     }
     if (hasSourceWorksheet || !hasSourceDashboard) {
       return new ArgsValidationError(
-        'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, leave sourceWorksheet empty)',
+        'excludeSourceSheets is only allowed with a dashboard-only source (set sourceDashboard, omit sourceWorksheet)',
       ).toErr();
     }
   }
@@ -743,7 +747,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             // miscategorized source up front and steer the caller to the correct slot.
             if (effectiveSourceSheet.length > 0 && dashboardNames.has(effectiveSourceSheet)) {
               return new ArgsValidationError(
-                `'${effectiveSourceSheet}' is a dashboard, not a worksheet. Pass it as sourceDashboard and leave sourceWorksheet empty (or set sourceWorksheet to a worksheet inside the dashboard) so the action is scoped to the dashboard.`,
+                `'${effectiveSourceSheet}' is a dashboard, not a worksheet. Pass it as sourceDashboard and omit sourceWorksheet (or set sourceWorksheet to a worksheet inside the dashboard) so the action is scoped to the dashboard.`,
               ).toErr();
             }
             if (
