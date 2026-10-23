@@ -16,7 +16,11 @@ import {
   type UsedFieldValidityOutcome,
 } from '../../../desktop/validation/usedFieldValidity.js';
 import { withApplyLock } from '../../../desktop/wrappers/applyMutex.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
+import {
+  DesktopCommandExecutionError,
+  getSessionFatalError,
+  throwIfSessionFatalError,
+} from '../../../errors/mcpToolError.desktop.js';
 import { ArgsValidationError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -91,6 +95,8 @@ export const getExecuteTableauCommandTool = (
             if (verifyRootFileConnection) {
               const beforeResult = await executor.listWorkbookDatasources(extra.signal);
               if (beforeResult.isErr()) {
+                const fatal = getSessionFatalError(beforeResult.error);
+                if (fatal) return fatal.toErr();
                 return commandPostconditionError(
                   'Cannot verify a new workbook datasource because the current datasource inventory could not be read. The command was not sent.',
                 ).toErr();
@@ -137,6 +143,8 @@ export const getExecuteTableauCommandTool = (
             if (verifyRootFileConnection) {
               const afterResult = await executor.listWorkbookDatasources(extra.signal);
               if (afterResult.isErr()) {
+                const fatal = getSessionFatalError(afterResult.error);
+                if (fatal) return fatal.toErr();
                 return commandPostconditionError(
                   'Desktop accepted the connection command, but datasource readback failed; state may have changed. Inspect workbook datasources and do not retry automatically.',
                 ).toErr();
@@ -378,7 +386,8 @@ async function resolveCommandWorksheetTarget(
           reason: 'target-unproven',
           message: `Field verification was not checked because worksheet ID ${target.worksheetId} could not be resolved uniquely.`,
         };
-  } catch {
+  } catch (error) {
+    throwIfSessionFatalError(error);
     return {
       status: 'unknown',
       reason: 'target-read-failed',
