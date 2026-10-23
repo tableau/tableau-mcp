@@ -71,5 +71,8 @@ Example:
 { "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
 
+`{OAUTH_USERNAME}` must sit inside a quoted JSON string value, as in the example. The username is
+JSON-escaped before it is inserted.
+
 [direct-trust]: https://help.tableau.com/current/online/en-us/connected_apps.htm#direct-trust
 [jwt]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt
