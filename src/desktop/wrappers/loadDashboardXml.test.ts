@@ -237,12 +237,14 @@ describe('loadDashboardXml (External Client API transport)', () => {
       vi.mocked(executor.listDashboards).mockResolvedValue(
         Ok({ dashboards: [{ id: 'dash-1', name: dashboardName, hidden: false }] }),
       );
-      vi.mocked(executor.getDashboardDocument).mockResolvedValue(
-        Ok({ xml: validXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      let liveDocument = validXml;
+      vi.mocked(executor.getDashboardDocument).mockImplementation(async () =>
+        Ok({ xml: liveDocument, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       );
-      vi.mocked(executor.applyDashboardDocument).mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }),
-      );
+      vi.mocked(executor.applyDashboardDocument).mockImplementation(async (_id, xml) => {
+        liveDocument = xml;
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      });
 
       const result = await loadDashboardXml({
         dashboardName,
@@ -1330,18 +1332,18 @@ describe('loadDashboardXml (External Client API transport)', () => {
   it('accepts a dashboard id and retitles a stale fragment before per-dashboard apply', async () => {
     const dashboardId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
     const fragment = `<dashboard name='Old Dashboard'><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
-    const applyDashboardDocument = vi
-      .fn()
-      .mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
-      );
+    let liveDocument = fragment;
+    const applyDashboardDocument = vi.fn().mockImplementation(async (_id: string, xml: string) => {
+      liveDocument = xml;
+      return Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' });
+    });
     const executor = makeExecutorMock({
       listDashboards: vi.fn().mockResolvedValue(
         Ok({
           dashboards: [{ id: dashboardId, name: 'Renamed Dashboard', hidden: false }],
         }),
       ),
-      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
+      getDashboardDocument: vi.fn().mockImplementation(async () => Ok({ xml: liveDocument })),
       applyDashboardDocument,
     });
 

@@ -9,6 +9,7 @@ import {
   WithExecutorAndAbortSignal,
   WorkbookDocument,
 } from '../externalApi/executorTypes.js';
+import { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
 import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
@@ -31,11 +32,13 @@ import {
 } from './dashboardViewpoints.js';
 import {
   applyPreparedSheet,
+  getDocumentForKind,
   type PerSheetApplyOutcome,
   type PerSheetKind,
   preparePerSheetApply,
 } from './perSheetDocumentApply.js';
 import { pollReadback, READBACK_POLL_MAX_ATTEMPTS } from './pollReadback.js';
+import { submissionContainedInLive } from './submissionContained.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -370,6 +373,43 @@ export async function loadDashboardXml({
             },
           });
         verifiedWorksheetNames = names;
+      } else if (
+        !verifyReadback &&
+        !requiresRegistrationReadback &&
+        checked.liveDocumentXml !== undefined &&
+        typeof applied.value === 'object' &&
+        'status' in applied.value &&
+        applied.value.status === 'applied' &&
+        applied.value.documentWarnings.length === 0 &&
+        !submissionContainedInLive(checked.fragmentXml, checked.liveDocumentXml)
+      ) {
+        const before = checked.liveDocumentXml;
+        const changed = await pollReadback({
+          read: () =>
+            getDocumentForKind(kind, checked.id, executor as ExternalApiToolExecutor, signal),
+          settled: (value) => value.xml !== before,
+          signal,
+        });
+        if (!changed.ok) {
+          log({
+            level: 'warning',
+            message: `Could not read the ${kind} back to confirm the apply changed it`,
+            logger: 'dashboardCommands',
+            data: { dashboardName: checked.name, error: changed.error },
+          });
+        } else if (!changed.settled) {
+          const flowHint =
+            kind === 'dashboard'
+              ? ' If you changed only x, y, w or h: Desktop sets those itself for most zones in layout-flow and layout-basic containers, so changing them does not move or resize the zones. To reorder zones, move the whole <zone> elements.'
+              : '';
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: {
+              type: 'verification-failed',
+              message: `Tableau accepted the ${kind} apply for "${checked.name}", but the ${kind} had not changed after ${READBACK_POLL_MAX_ATTEMPTS} reads. Desktop may have dropped or recomputed the change, or the apply may still be landing.${flowHint} Re-read the ${kind} with get-${kind}-xml and compare it with your edit before retrying.`,
+            },
+          });
+        }
       }
       return Ok(applied.value);
     },

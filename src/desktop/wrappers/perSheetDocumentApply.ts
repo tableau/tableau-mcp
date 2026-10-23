@@ -268,7 +268,7 @@ function retitleFragment(
   }
 }
 
-async function getDocumentForKind(
+export async function getDocumentForKind(
   kind: PerSheetKind,
   id: string,
   client: ExternalApiToolExecutor,
