@@ -453,10 +453,10 @@ export function resolveCanonicalWorksheetName(
     return Err({
       type: 'name-mismatch',
       message:
-        `worksheetName "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with worksheetName set to the XML's name ` +
-        `"${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <worksheet name> attribute in the ` +
-        `XML to "${worksheetName}" if the caller name is intended.`,
+        `worksheetName "${worksheetName}" does not match <worksheet name="${xmlName}"> in the file, and apply-worksheet cannot rename a worksheet. ` +
+        `FIX: check the worksheet's name in Desktop with list-worksheets. If it is "${xmlName}", pass "${xmlName}" as worksheetName. ` +
+        `If it is "${worksheetName}", set the name in the file to "${worksheetName}" and apply; to rename the worksheet, call rename-sheet afterwards. ` +
+        'If it is neither, re-read the worksheet with get-worksheet-xml and redo your edit in that file. No changes were sent to Tableau.',
     });
   }
 
@@ -693,6 +693,18 @@ export async function loadWorksheetXml({
               `Worksheet "${canonicalName}" is blank and already used by ${dashboardLabel} ${dashboardNames}. ` +
               'Desktop cannot safely populate it while it belongs to a dashboard. ' +
               'Remove it from the dashboard, build the chart, then add it back. No changes were sent to Tableau.',
+          },
+        });
+      }
+      if (typeof applyOutcome === 'object' && applyOutcome.type === 'name-differs') {
+        return Err({
+          type: 'load-worksheet-xml-error',
+          error: {
+            type: 'name-mismatch',
+            message:
+              `The file names this worksheet "${applyOutcome.submittedName}", but in Desktop it is "${applyOutcome.liveName}", and apply-worksheet cannot rename a worksheet. ` +
+              `FIX: if you edited the name to rename it, set it to "${applyOutcome.liveName}" in the file, apply, then call rename-sheet. ` +
+              'If the file is older than the worksheet in Desktop, re-read it with get-worksheet-xml and redo your edit. No changes were sent to Tableau.',
           },
         });
       }

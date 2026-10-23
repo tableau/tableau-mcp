@@ -4,6 +4,7 @@ import { planRoundStackedBar, type RoundStackedBarSemanticContract } from './rou
 import {
   captureRoundStackedBarBaseline,
   type RoundStackedBarBaseline,
+  type RoundStackedBarVerification,
   type TabularData,
   verifyRoundStackedBarPostSummary,
   verifyRoundStackedBarSeedEvidence,
@@ -431,17 +432,33 @@ function swapGeometryAxes(data: TabularData, xIndex: number, yIndex: number): Ta
   };
 }
 
-const FILTER_ACTIONS = `<actions>
-  <action name='[Action1_DE4200E5E5F14FC68D4CEE8CB0439BBB]' caption='Use Orders as Filter'>
+function filterAction(
+  options: {
+    source?: string;
+    dashboard?: string;
+    target?: string;
+    name?: string;
+    extra?: string;
+  } = {},
+): string {
+  const { source = 'Other Worksheet', dashboard = 'Other Dashboard', extra = '' } = options;
+  const { target = dashboard, name = '[Action1_DE4200E5E5F14FC68D4CEE8CB0439BBB]' } = options;
+  return `<action name='${name}' caption='Use ${source} as Filter'>
     <activation type='on-select' auto-clear='true' />
-    <source type='sheet' worksheet='Orders' dashboard='Dashboard' />
+    <source type='sheet' worksheet='${source}' dashboard='${dashboard}' />
     <command command='tsc:tsl-filter'>
-      <param name='exclude' value='Orders' />
+      <param name='exclude' value='${source}' />
       <param name='special-fields' value='all' />
-      <param name='target' value='Dashboard' />
+      <param name='target' value='${target}' />${extra}
     </command>
-  </action>
-</actions>`;
+  </action>`;
+}
+
+function actionsOf(...actions: string[]): string {
+  return `<actions>${actions.join('\n')}</actions>`;
+}
+
+const FILTER_ACTIONS = actionsOf(filterAction());
 
 const UNRELATED_WORKSHEET = `<worksheet name='Other Worksheet'>
   <table><style><style-rule element='worksheet'><format attr='display-tabs' value='true' /></style-rule></style><title><formatted-text><run>Other worksheet</run></formatted-text></title></table>
@@ -487,7 +504,7 @@ function workbook(sheet: string, helpersXml = '', actionsXml = FILTER_ACTIONS): 
     <datasources><datasource caption='Friendly Sales' name='Sales'><column name='[Existing]' />${helpersXml}</datasource></datasources>
     ${actionsXml}
     <worksheets>${sheet}${UNRELATED_WORKSHEET}</worksheets>
-    <dashboards><dashboard name='Dashboard'><zones><zone h='200' id='4' name='Orders' w='300' x='10' y='20' /></zones><simple-id uuid='{DASHBOARD}' /></dashboard><dashboard name='Story' type='storyboard'><simple-id uuid='{STORY}' /></dashboard></dashboards>
+    <dashboards><dashboard name='Other Dashboard'><zones><zone h='200' id='7' name='Other Worksheet' w='300' x='10' y='20' /></zones><simple-id uuid='{OTHER-DASHBOARD}' /></dashboard><dashboard name='Dashboard'><zones><zone h='200' id='4' name='Orders' w='300' x='10' y='20' /></zones><simple-id uuid='{DASHBOARD}' /></dashboard><dashboard name='Story' type='storyboard'><simple-id uuid='{STORY}' /></dashboard></dashboards>
     <windows><window class='worksheet' name='Orders'><active id='-1' /><simple-id uuid='{WINDOW}' /></window><window class='dashboard' name='Dashboard'><cards><edge name='left'><strip /></edge></cards><simple-id uuid='{DASHBOARD-WINDOW}' /></window></windows>
     <preferences><preference name='show-tabs' value='true' /></preferences>
   </workbook>`;
@@ -522,19 +539,6 @@ function findingCodes(result: ReturnType<typeof verifyRoundStackedBarStructure>)
 }
 
 describe('verifyRoundStackedBarSourceWorkbook', () => {
-  it('refuses top-level actions even when they do not reference the target worksheet', () => {
-    const unrelatedActions = FILTER_ACTIONS.replaceAll('Orders', 'Other Worksheet');
-
-    const verification = verifyRoundStackedBarSourceWorkbook(
-      workbook(sourceWorksheet(), '', unrelatedActions),
-      contract,
-      sourceWorksheet(),
-    );
-
-    expect(verification.ok).toBe(false);
-    expect(findingCodes(verification)).toContain('action');
-  });
-
   it('refuses an attribute-only top-level actions block', () => {
     const verification = verifyRoundStackedBarSourceWorkbook(
       workbook(sourceWorksheet(), '', "<actions brushing-enabled='true' />"),
@@ -569,31 +573,503 @@ describe('verifyRoundStackedBarSourceWorkbook', () => {
     ).toEqual({ ok: true, findings: [] });
   });
 
-  it.each([
-    ['as the action source worksheet', FILTER_ACTIONS],
-    [
-      'in another action descendant attribute',
-      FILTER_ACTIONS.replace(
-        "worksheet='Orders' dashboard='Dashboard'",
-        "worksheet='Other Worksheet' dashboard='Dashboard'",
-      ),
-    ],
-    [
-      'as exact action descendant text',
-      FILTER_ACTIONS.replaceAll('Orders', 'Other Worksheet').replace(
-        '</command>',
-        "<param name='source-sheet'>Orders</param></command>",
-      ),
-    ],
-  ])('refuses the target worksheet when referenced %s', (_label, actionsXml) => {
-    const verification = verifyRoundStackedBarSourceWorkbook(
-      workbook(sourceWorksheet(), '', actionsXml),
-      contract,
-      sourceWorksheet(),
+  describe('top-level actions', () => {
+    const R_ON_D_PREFIX = 'Rounded bars disappear when other sheets on ';
+    const R_ON_D_SUFFIX =
+      " filter this chart. Remove those filter actions in Dashboard > Actions, or remove 'Orders' from the dashboard, then try again.";
+    const GENERIC =
+      "This workbook has actions rounded bars can't support yet. Remove them in Dashboard > Actions or Worksheet > Actions, then try again.";
+    const OTHER_ZONES = "<zone id='7' name='Other Worksheet' />";
+
+    function dashboardXml(name: string, zones: string, attributes = ''): string {
+      return `<dashboard name='${name}'${attributes}><zones>${zones}</zones><simple-id uuid='{${name}}' /></dashboard>`;
+    }
+
+    function check(actionsXml: string, dashboardsXml?: string): RoundStackedBarVerification {
+      let xml = workbook(sourceWorksheet(), '', actionsXml);
+      if (dashboardsXml !== undefined) {
+        xml = xml.replace(
+          /<dashboards>[\s\S]*?<\/dashboards>/,
+          `<dashboards>${dashboardsXml}</dashboards>`,
+        );
+      }
+      return verifyRoundStackedBarSourceWorkbook(xml, contract, sourceWorksheet());
+    }
+
+    function messages(verification: ReturnType<typeof check>): string[] {
+      return verification.findings.filter((f) => f.code === 'action').map((f) => f.message);
+    }
+
+    function expectAccepted(actionsXml: string, dashboardsXml?: string): void {
+      expect(check(actionsXml, dashboardsXml)).toEqual({ ok: true, findings: [] });
+    }
+
+    function expectRefused(actionsXml: string, dashboardsXml?: string, text = GENERIC): void {
+      const verification = check(actionsXml, dashboardsXml);
+      expect(verification.ok).toBe(false);
+      expect(messages(verification)).toEqual([text]);
+    }
+
+    const OTHER = dashboardXml('Other Dashboard', OTHER_ZONES);
+    const WITH_R = dashboardXml('Dashboard', "<zone id='4' name='Orders' />");
+
+    it('accepts a generated-shape filter action on a dashboard without the sheet', () => {
+      expectAccepted(FILTER_ACTIONS);
+    });
+
+    it('accepts several filter actions on several dashboards without the sheet', () => {
+      expectAccepted(
+        actionsOf(filterAction(), filterAction({ source: 'Third', dashboard: 'Second Dashboard' })),
+        `${OTHER}${dashboardXml('Second Dashboard', "<zone id='8' name='Third' />")}${WITH_R}`,
+      );
+    });
+
+    it('accepts attribute order and quote variants, GUID-suffixed names and exclude params', () => {
+      expectAccepted(
+        `<actions>
+          <action caption="Use Other Worksheet as Filter" name="[Action2_0123456789ABCDEF0123456789ABCDEF]">
+            <source dashboard="Other Dashboard" worksheet="Other Worksheet" type="sheet"/>
+            <activation auto-clear="true" type="on-select"/>
+            <command command="tsc:tsl-filter">
+              <param value="Other Dashboard" name="target"/>
+              <param name="exclude" value="Other Worksheet"/>
+              <param name="on-empty" value="show-all"/>
+            </command>
+          </action>
+        </actions>`,
+      );
+    });
+
+    it('accepts entity-encoded names that decode to the same dashboard name', () => {
+      expectAccepted(
+        actionsOf(filterAction({ dashboard: 'Other &amp; Co', target: 'Other &#38; Co' })),
+        dashboardXml('Other &#x26; Co', OTHER_ZONES),
+      );
+    });
+
+    it('clips a long sheet name to 40 characters in the refusal', () => {
+      const long = 'Profit by region and customer segment per quarter';
+      const sheet = sourceWorksheet().replace("name='Orders'", `name='${long}'`);
+      const xml = workbook(sheet, '', FILTER_ACTIONS).replace(
+        /<dashboards>[\s\S]*?<\/dashboards>/,
+        `<dashboards>${dashboardXml('Other Dashboard', `${OTHER_ZONES}<zone id='4' name='${long}' />`)}</dashboards>`,
+      );
+      const verification = verifyRoundStackedBarSourceWorkbook(xml, contract, sheet);
+      expect(verification.ok).toBe(false);
+      expect(messages(verification)).toEqual([
+        `${R_ON_D_PREFIX}'Other Dashboard' filter this chart. Remove those filter actions in Dashboard > Actions, or remove '${long.slice(0, 40)}' from the dashboard, then try again.`,
+      ]);
+    });
+
+    it('refuses with the bounded dashboard list when the sheet is on a target dashboard', () => {
+      expectRefused(
+        actionsOf(filterAction({ dashboard: 'Dashboard', source: 'Other Worksheet' })),
+        `${WITH_R}${OTHER}`,
+        `${R_ON_D_PREFIX}'Dashboard'${R_ON_D_SUFFIX}`,
+      );
+    });
+
+    it('lists at most three dashboards, clipped to 40 characters, then "and N more"', () => {
+      const long = 'L'.repeat(60);
+      const names = ['Alpha', 'Beta', long, 'Delta', 'Echo'];
+      const dashboards = names
+        .map((name) => dashboardXml(name, "<zone id='4' name='Orders' />"))
+        .join('');
+      expectRefused(
+        actionsOf(...names.map((name) => filterAction({ dashboard: name }))),
+        dashboards,
+        `${R_ON_D_PREFIX}'Alpha', 'Beta', '${'L'.repeat(40)}' and 2 more${R_ON_D_SUFFIX}`,
+      );
+    });
+
+    it.each([
+      ['source is the sheet', actionsOf(filterAction({ source: 'Orders' })), undefined],
+      [
+        'source is the sheet in other case and spacing',
+        actionsOf(filterAction({ source: '  ORDERS ' })),
+        undefined,
+      ],
+      [
+        'the target differs from the source dashboard',
+        actionsOf(filterAction({ target: 'Second Dashboard' })),
+        `${OTHER}${dashboardXml('Second Dashboard', '')}`,
+      ],
+      [
+        'a target that differs from the source dashboard only in case and spacing',
+        actionsOf(filterAction({ target: ' other DASHBOARD ' })),
+        undefined,
+      ],
+      [
+        'a source dashboard that matches a dashboard name only in case',
+        actionsOf(filterAction({ dashboard: 'other dashboard' })),
+        undefined,
+      ],
+      [
+        'a target dashboard whose name matches another dashboard holding the sheet only in case',
+        actionsOf(filterAction({ dashboard: 'DASHBOARD' })),
+        `${WITH_R}${dashboardXml('DASHBOARD', OTHER_ZONES)}`,
+      ],
+      [
+        'a target that names the sheet while the source dashboard differs only in case',
+        actionsOf(filterAction({ dashboard: 'ORDERS', target: 'Orders' })),
+        dashboardXml('ORDERS', OTHER_ZONES),
+      ],
+      [
+        'a target dashboard named like the sheet',
+        actionsOf(filterAction({ dashboard: 'Orders' })),
+        dashboardXml('Orders', OTHER_ZONES),
+      ],
+      [
+        'the sheet as action param text',
+        actionsOf(filterAction({ extra: "<param name='source-sheet'>Orders</param>" })),
+        undefined,
+      ],
+      [
+        'the sheet as an action param value',
+        actionsOf(filterAction({ extra: "<param name='include' value='Orders' />" })),
+        undefined,
+      ],
+      [
+        'the sheet in other case inside action CDATA',
+        actionsOf(
+          filterAction({ extra: "<param name='source-sheet'><![CDATA[ orders ]]></param>" }),
+        ),
+        undefined,
+      ],
+      [
+        'a link element',
+        actionsOf(filterAction({ extra: "<link expression='http://x' />" })),
+        undefined,
+      ],
+      ['a highlight command', FILTER_ACTIONS.replace('tsc:tsl-filter', 'tsc:brush'), undefined],
+      ['a URL command', FILTER_ACTIONS.replace('tsc:tsl-filter', 'tsc:url'), undefined],
+      [
+        'a nav-action',
+        "<actions><nav-action name='n'><source dashboard='Other Dashboard' /></nav-action></actions>",
+        undefined,
+      ],
+      [
+        'an edit-parameter-action',
+        "<actions><edit-parameter-action name='p' /></actions>",
+        undefined,
+      ],
+      ['an edit-group-action', "<actions><edit-group-action name='g' /></actions>", undefined],
+      [
+        'two actions blocks',
+        `${actionsOf(filterAction())}${actionsOf(filterAction({ name: 'two' }))}`,
+        undefined,
+      ],
+      ['a comment inside', actionsOf('<!-- note -->', filterAction()), undefined],
+      ['CDATA inside', actionsOf('<![CDATA[x]]>', filterAction()), undefined],
+      ['stray text inside', actionsOf('stray', filterAction()), undefined],
+      [
+        'an attribute on the block',
+        FILTER_ACTIONS.replace('<actions>', "<actions a='b'>"),
+        undefined,
+      ],
+      ['no target param', FILTER_ACTIONS.replace(/<param name='target'[^>]*\/>/, ''), undefined],
+      [
+        'a target param only under activation',
+        FILTER_ACTIONS.replace(/<param name='target'[^>]*\/>/, '').replace(
+          "<activation type='on-select' auto-clear='true' />",
+          "<activation type='on-select' auto-clear='true'><param name='target' value='Other Dashboard' /></activation>",
+        ),
+        undefined,
+      ],
+      [
+        'a target param only directly under the action',
+        FILTER_ACTIONS.replace(/<param name='target'[^>]*\/>/, '').replace(
+          '</command>',
+          "</command><param name='target' value='Other Dashboard' />",
+        ),
+        undefined,
+      ],
+      [
+        'two target params',
+        FILTER_ACTIONS.replace(
+          '</command>',
+          "<param name='target' value='Other Dashboard' /></command>",
+        ),
+        undefined,
+      ],
+      ['a missing dashboard', FILTER_ACTIONS, WITH_R],
+      ['an ambiguous dashboard', FILTER_ACTIONS, `${OTHER}${OTHER}`],
+      [
+        'a storyboard marked by type',
+        FILTER_ACTIONS,
+        dashboardXml('Other Dashboard', OTHER_ZONES, " type='storyboard'"),
+      ],
+      [
+        'a storyboard marked by type-v2',
+        FILTER_ACTIONS,
+        dashboardXml('Other Dashboard', OTHER_ZONES, " type-v2='storyboard'"),
+      ],
+      [
+        'a zone naming another dashboard',
+        FILTER_ACTIONS,
+        `${dashboardXml('Other Dashboard', `${OTHER_ZONES}<zone id='9' name='Second Dashboard' />`)}${dashboardXml('Second Dashboard', '')}`,
+      ],
+      [
+        'one valid action mixed with an invalid one',
+        actionsOf(filterAction(), filterAction({ name: 'bad', extra: '<link />' })),
+        undefined,
+      ],
+    ])('refuses %s', (_label, actionsXml, dashboardsXml) => {
+      expectRefused(actionsXml, dashboardsXml);
+    });
+
+    const ACTIVATION = "<activation type='on-select' auto-clear='true' />";
+    const SOURCE =
+      "<source type='sheet' worksheet='Other Worksheet' dashboard='Other Dashboard' />";
+    const COMMAND_OPEN = "<command command='tsc:tsl-filter'>";
+    const SPECIAL_FIELDS = "<param name='special-fields' value='all' />";
+    const TARGET = "<param name='target' value='Other Dashboard' />";
+    const COMMAND = `${COMMAND_OPEN}${TARGET}</command>`;
+
+    it.each([
+      ['an unknown source type', FILTER_ACTIONS.replace("type='sheet'", "type='bogus'")],
+      ['a missing source type', FILTER_ACTIONS.replace("<source type='sheet' ", '<source ')],
+      ['a datasource source type', FILTER_ACTIONS.replace("type='sheet'", "type='datasource'")],
+      ['an all source type', FILTER_ACTIONS.replace("type='sheet'", "type='all'")],
+      [
+        'an unknown source attribute',
+        FILTER_ACTIONS.replace('<source ', "<source datasource='Sales' "),
+      ],
+      [
+        'an unknown child of the action',
+        FILTER_ACTIONS.replace('<activation', '<note /><activation'),
+      ],
+      ['an unknown action attribute', FILTER_ACTIONS.replace('<action ', "<action extra='x' ")],
+      ['an unknown activation type', FILTER_ACTIONS.replace("type='on-select'", "type='on-drag'")],
+      [
+        'an unknown activation attribute',
+        FILTER_ACTIONS.replace(ACTIVATION, "<activation type='on-select' delay='1' />"),
+      ],
+      [
+        'a child inside the activation',
+        FILTER_ACTIONS.replace(
+          ACTIVATION,
+          "<activation type='on-select' auto-clear='true'><note /></activation>",
+        ),
+      ],
+      [
+        'an unknown source child',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-field name='Category' /></source>",
+        ),
+      ],
+      [
+        'an exclude-sheet with an extra attribute',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-sheet name='Other Worksheet' scope='x' /></source>",
+        ),
+      ],
+      [
+        'an exclude-sheet with a child',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'><exclude-sheet name='Other Worksheet'><note /></exclude-sheet></source>",
+        ),
+      ],
+      [
+        'an unknown command attribute',
+        FILTER_ACTIONS.replace(COMMAND_OPEN, "<command command='tsc:tsl-filter' scope='x'>"),
+      ],
+      [
+        'an unknown param name',
+        actionsOf(filterAction({ extra: "<param name='include' value='Other Worksheet' />" })),
+      ],
+      ['a duplicate param', actionsOf(filterAction({ extra: SPECIAL_FIELDS }))],
+      [
+        'text inside a param',
+        FILTER_ACTIONS.replace(
+          SPECIAL_FIELDS,
+          "<param name='special-fields' value='all'>x</param>",
+        ),
+      ],
+      [
+        'a param without a value',
+        FILTER_ACTIONS.replace(SPECIAL_FIELDS, "<param name='special-fields' />"),
+      ],
+      [
+        'a param with an extra attribute',
+        FILTER_ACTIONS.replace(SPECIAL_FIELDS, "<param name='special-fields' value='all' x='y' />"),
+      ],
+      [
+        'a param inside a param',
+        actionsOf(
+          filterAction({ extra: `<param name='on-empty' value='none'>${SPECIAL_FIELDS}</param>` }),
+        ),
+      ],
+      ['two activations', FILTER_ACTIONS.replace(ACTIVATION, `${ACTIVATION}${ACTIVATION}`)],
+      [
+        'a comment inside the action',
+        FILTER_ACTIONS.replace(ACTIVATION, `<!-- c -->${ACTIVATION}`),
+      ],
+      ['CDATA inside the command', actionsOf(filterAction({ extra: '<![CDATA[x]]>' }))],
+      [
+        'stray text inside the source',
+        FILTER_ACTIONS.replace(
+          "dashboard='Other Dashboard' />",
+          "dashboard='Other Dashboard'>x</source>",
+        ),
+      ],
+      ['zero sources', actionsOf(`<action name='a'>${ACTIVATION}${COMMAND}</action>`)],
+      [
+        'two sources',
+        actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}${SOURCE}${COMMAND}</action>`),
+      ],
+      ['zero commands', actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}</action>`)],
+      [
+        'two commands',
+        actionsOf(`<action name='a'>${ACTIVATION}${SOURCE}${COMMAND}${COMMAND}</action>`),
+      ],
+    ])('refuses a filter action outside the Desktop grammar: %s', (_label, actionsXml) => {
+      expect(actionsXml).not.toEqual(FILTER_ACTIONS);
+      expectRefused(actionsXml);
+    });
+
+    const DESKTOP_DASHBOARD_ACTION =
+      "<action caption='Click to filter (D)' name='[Action2]'><activation auto-clear='true' type='on-select' /><source dashboard='D' type='sheet' /><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='D' /></command></action>";
+    const D_DASHBOARDS = `${dashboardXml('D', `${OTHER_ZONES}<zone id='8' name='Sales KPI' />`)}${WITH_R}`;
+    const LIVE_SOURCE_SHEET_ACTION =
+      "<action caption='Filter map by Sales by Region' name='[Action3]'> <activation auto-clear='true' type='on-select' /> <source dashboard='Sales &amp; Profit Overview' type='sheet' worksheet='Sales by Region (Ranked)' /> <command command='tsc:tsl-filter'> <param name='exclude' value='Sales by Region (Ranked),Profit by Segment (Ranked)' /> <param name='special-fields' value='all' /> <param name='target' value='Sales &amp; Profit Overview' /> </command> </action>";
+    const LIVE_ZONES =
+      "<zone id='1' name='Sales by Region (Ranked)' /><zone id='2' name='Profit by Segment (Ranked)' />";
+
+    it.each([
+      ['the exact Desktop-written dashboard-source shape', DESKTOP_DASHBOARD_ACTION, D_DASHBOARDS],
+      [
+        'the Desktop-written shape with exclude-sheet children',
+        DESKTOP_DASHBOARD_ACTION.replace(
+          "<source dashboard='D' type='sheet' />",
+          "<source dashboard='D' type='sheet'><exclude-sheet name='Sales KPI' /></source>",
+        ),
+        D_DASHBOARDS,
+      ],
+      [
+        'the click-to-filter shape author-action writes with KPI exclude-sheet children',
+        "<action caption='Click to filter (D)' name='[Action1_0123456789ABCDEF0123456789ABCDEF]'><activation auto-clear='true' type='on-select' /><source type='sheet' dashboard='D'><exclude-sheet name='Sales KPI' /><exclude-sheet name='Profit KPI' /></source><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='D' /></command></action>",
+        `${dashboardXml('D', `${OTHER_ZONES}<zone id='8' name='Sales KPI' /><zone id='9' name='Profit KPI' />`)}${WITH_R}`,
+      ],
+      [
+        'no activation type',
+        DESKTOP_DASHBOARD_ACTION.replace(" type='on-select'", ''),
+        D_DASHBOARDS,
+      ],
+      [
+        'no activation',
+        DESKTOP_DASHBOARD_ACTION.replace("<activation auto-clear='true' type='on-select' />", ''),
+        D_DASHBOARDS,
+      ],
+      ['on-hover', DESKTOP_DASHBOARD_ACTION.replace('on-select', 'on-hover'), D_DASHBOARDS],
+      ['explicit', DESKTOP_DASHBOARD_ACTION.replace('on-select', 'explicit'), D_DASHBOARDS],
+      [
+        "enabled='false'",
+        DESKTOP_DASHBOARD_ACTION.replace('<action ', "<action enabled='false' "),
+        D_DASHBOARDS,
+      ],
+      [
+        'single-select and on-empty params',
+        DESKTOP_DASHBOARD_ACTION.replace(
+          "<param name='special-fields'",
+          "<param name='on-empty' value='none' /><param name='single-select' value='' /><param name='special-fields'",
+        ),
+        D_DASHBOARDS,
+      ],
+      [
+        'live pretty-printed source-sheet output',
+        LIVE_SOURCE_SHEET_ACTION,
+        `${dashboardXml('Sales &amp; Profit Overview', LIVE_ZONES)}${WITH_R}`,
+      ],
+    ])('accepts %s on a dashboard without the sheet', (_label, action, dashboardsXml) => {
+      expectAccepted(actionsOf(action), dashboardsXml);
+    });
+
+    it.each([
+      ['its exclude param leaves the sheet out', LIVE_SOURCE_SHEET_ACTION],
+      [
+        'its exclude param lists the sheet',
+        LIVE_SOURCE_SHEET_ACTION.replace(
+          "value='Sales by Region (Ranked),Profit by Segment (Ranked)'",
+          "value='Sales by Region (Ranked),Orders'",
+        ),
+      ],
+    ])(
+      'refuses live source-sheet output on a dashboard holding the sheet when %s',
+      (_label, action) => {
+        expectRefused(
+          actionsOf(action),
+          dashboardXml('Sales &amp; Profit Overview', `${LIVE_ZONES}<zone id='4' name='Orders' />`),
+          `${R_ON_D_PREFIX}'Sales & Profit Overview'${R_ON_D_SUFFIX}`,
+        );
+      },
     );
 
-    expect(verification.ok).toBe(false);
-    expect(findingCodes(verification)).toContain('action');
+    it.each([
+      ['reaching first', (reaching: string, brush: string) => actionsOf(reaching, brush)],
+      ['highlight first', (reaching: string, brush: string) => actionsOf(brush, reaching)],
+    ])(
+      'prefers the generic refusal when a reaching filter mixes with a highlight action, %s',
+      (_label, order) => {
+        const reaching = filterAction({ dashboard: 'Dashboard', name: 'reach' });
+        const brush = filterAction({ name: 'brush' }).replace('tsc:tsl-filter', 'tsc:brush');
+        expectRefused(order(reaching, brush), `${WITH_R}${OTHER}`);
+      },
+    );
+
+    it.each([
+      [
+        'a nested container',
+        "<zone id='1'><zone id='2'><zone id='3' name='Orders' /></zone></zone>",
+      ],
+      ['different case and spacing', "<zone id='4' name='  oRDERS ' />"],
+      [
+        'a device layout',
+        "<devicelayouts><devicelayout><zones><zone id='4' name='Orders' /></zones></devicelayout></devicelayouts>",
+      ],
+      [
+        'a story point captured-sheet',
+        "<story-points><story-point captured-sheet='Orders' /></story-points>",
+      ],
+    ])('refuses when the target dashboard holds the sheet in %s', (_label, inner) => {
+      const dashboard = `<dashboard name='Other Dashboard'><zones>${OTHER_ZONES}</zones>${inner}<simple-id uuid='{X}' /></dashboard>`;
+      expectRefused(FILTER_ACTIONS, dashboard, `${R_ON_D_PREFIX}'Other Dashboard'${R_ON_D_SUFFIX}`);
+    });
+
+    it('fails closed when the sheet identity is unresolved while actions exist', () => {
+      const verification = verifyRoundStackedBarSourceWorkbook(
+        workbook(sourceWorksheet().replace(WORKSHEET_ID, '{OTHER}')),
+        contract,
+        sourceWorksheet(),
+      );
+      expect(verification.ok).toBe(false);
+      expect(messages(verification)).toEqual([GENERIC]);
+    });
+
+    it('never mentions deleting an action through the author tools', () => {
+      expect(R_ON_D_SUFFIX + GENERIC).not.toMatch(/author/i);
+    });
+
+    it('passes structure readback with accepted actions unchanged', () => {
+      expect(verifyRoundStackedBarStructure(structureInput())).toEqual({ ok: true, findings: [] });
+    });
+
+    it.each([
+      ['drops', (xml: string) => xml.replace(FILTER_ACTIONS, '<actions />')],
+      [
+        'duplicates',
+        (xml: string) => xml.replace(FILTER_ACTIONS, actionsOf(filterAction(), filterAction())),
+      ],
+      ['edits', (xml: string) => xml.replace("auto-clear='true'", "auto-clear='false'")],
+    ])('flags workbook-identity when the readback %s an action', (_label, mutate) => {
+      const input = structureInput();
+      input.readbackWorkbookXml = mutate(input.readbackWorkbookXml);
+      expect(input.readbackWorkbookXml).not.toEqual(structureInput().readbackWorkbookXml);
+      expect(findingCodes(verifyRoundStackedBarStructure(input))).toContain('workbook-identity');
+    });
   });
 
   it.each([

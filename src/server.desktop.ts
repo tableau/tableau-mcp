@@ -51,10 +51,9 @@ const serverVersion = pkg.version;
 /**
  * Small tool set for demos, selected by TOOL_PROFILE=demo. Registering fewer tools keeps the
  * serialized schemas small, which cuts per-turn latency and token cost. It holds the fast-path
- * and coordination tools plus the fallback chain (get-workbook-xml, inject-template,
- * apply-worksheet) the model needs when the fast path cannot finish. It keeps the older
- * template binder path because it does not include the modern artifact builder. Experimental:
- * it may change or be removed in a minor release.
+ * and coordination tools plus the fallback chain (get-workbook-xml, apply-worksheet) the model
+ * needs when the fast path cannot finish. Experimental: it may change or be removed in a minor
+ * release.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
@@ -65,10 +64,7 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'get-worksheet-xml',
   'apply-workbook',
   'get-workbook-xml',
-  'inject-template',
   'apply-worksheet',
-  'batch-create-and-cache-sheets',
-  'build-and-apply-dashboard',
 ]);
 
 /**

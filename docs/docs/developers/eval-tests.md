@@ -114,12 +114,6 @@ after every worksheet has been populated, and apply verifies the registrations i
 Older or unknown API versions still require manual registration in Desktop. A whole-workbook
 replacement is never a fallback for missing registrations.
 
-The offline workflow test in
-`src/tools/desktop/authoring/sheets/planDashboardCreation.workflow.test.ts` covers planning,
-scaffold creation, worksheet build/apply, cache refresh, and dashboard apply on both legacy and
-supported API versions. Its supported-build cases perform no manual registration. The Desktop
-API is a test double; visible rendering and zone removal with undo/redo still need live validation.
-
 The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
 fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
 response formatters. The fake API preserves the distinction between dashboard layout updates and
@@ -181,17 +175,15 @@ When `true`, enables evals that can invoke the content-mutating Tableau Prep flo
 are skipped by default because the eval harness executes real MCP tool calls against the configured
 Tableau site. Only enable them on a disposable site.
 
-This is a test-safety gate, separate from the product feature gates. Mutating flow evals also
-require `FLOW_WRITE_TOOLS_ENABLED=true`; the eval harness sets `FLOW_TOOLS_ENABLED=true` because the
-write tools are subordinate to the base flow tool gate.
+This is a test-safety gate, separate from the product feature gates. Mutating flow evals also require
+`FLOW_WRITE_TOOLS_ENABLED=true`.
 
 <hr />
 
 ### `FLOW_WRITE_TOOLS_ENABLED`
 
 Required, together with `ALLOW_MUTATING_FLOW_EVALS=true`, to expose the mutating flow tools during
-the mutating flow evals. The harness also enables `FLOW_TOOLS_ENABLED` for this isolated server.
-Leave unset for the default eval run.
+the mutating flow evals. Leave unset for the default eval run.
 
 ## Running the Eval tests against a different site
 

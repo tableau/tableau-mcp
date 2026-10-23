@@ -17,7 +17,7 @@ import {
 
 function mkDeflection(over: Partial<RouteDeflection> = {}): RouteDeflection {
   return {
-    tool: 'build-and-apply-worksheet',
+    tool: 'apply-worksheet',
     ts: new Date().toISOString(),
     ask: 'bar chart of sales by region',
     template: 'ranking-ordered-bar',
@@ -52,7 +52,7 @@ describe('SessionRouteStateStore', () => {
   it('recordOverride appends and hasOverride tracks it per (session, ask)', () => {
     const store = new SessionRouteStateStore();
     store.recordOverride('S1', {
-      tool: 'build-and-apply-worksheet',
+      tool: 'apply-worksheet',
       ts: new Date().toISOString(),
       ask: 'bar chart of sales by region',
       template: 'ranking-ordered-bar',

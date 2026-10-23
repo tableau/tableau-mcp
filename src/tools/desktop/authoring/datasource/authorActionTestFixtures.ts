@@ -87,10 +87,10 @@ export const BASE_XML = [
   '</workbook>',
 ].join('');
 
-// Splices an <actions> block in right after </datasources>, matching where the tool inserts it.
+// Splices an <actions> block in right before <worksheets>, matching where the tool inserts it.
 export function withActions(baseXml: string, actionXml: string): string {
-  const dsClose = baseXml.indexOf('</datasources>') + '</datasources>'.length;
-  return baseXml.slice(0, dsClose) + `<actions>${actionXml}</actions>` + baseXml.slice(dsClose);
+  const at = baseXml.indexOf('<worksheets>');
+  return baseXml.slice(0, at) + `<actions>${actionXml}</actions>` + baseXml.slice(at);
 }
 
 export type AuthorActionArgs = {

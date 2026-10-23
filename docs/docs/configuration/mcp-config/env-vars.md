@@ -557,29 +557,58 @@ sends the usual `tool_call` event.
 
 <hr />
 
-## `FLOW_TOOLS_ENABLED`
+## `FLOW_READ_TOOLS_ENABLED`
 
-Controls the base gate for the Tableau Prep flow tool family. It controls read-only tool registration directly and is also required for the mutating tools.
+Controls the read-only Tableau Prep flow tools. They are enabled by default.
 
-- Default: `false`
-- Set to `true` to enable:
+- Default: unset, which enables the read-only flow tools
+- Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The mutating flow tools are controlled separately by
+  [`FLOW_WRITE_TOOLS_ENABLED`](#flow_write_tools_enabled)
+- When enabled, registers:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
   - [`list-flow-runs`](../../tools/flows/list-flow-runs.md)
   - [`list-flow-tasks`](../../tools/flows/list-flow-tasks.md)
   - [`describe-flow`](../../tools/flows/describe-flow.md)
   - [`get-flow-task`](../../tools/flows/get-flow-task.md)
-- Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
-  disabled.
-- Setting this to `true` is necessary but not sufficient. The flow tools also require the
-  `flow-tools` feature flag to be enabled, which lets a deployment roll them out per environment
-  without a redeploy. Both switches must be on for the tools to register; either one turns them
-  off. Self-hosted deployments control the flag through `features.json`, where it ships as `false`.
-- The mutating flow tools also require [`FLOW_WRITE_TOOLS_ENABLED=true`](#flow_write_tools_enabled); all flow tools remain subject to the `flow-tools` feature flag.
-- When the tools are disabled, their OAuth scopes (`tableau:mcp:flow:read`,
-  `tableau:flows:read`, and `tableau:flows:download`) are neither advertised nor enforced.
-- When enabled, individual flow tools can still be excluded via
-  [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:read` scope is neither
+  advertised nor accepted. REST API scopes that an enabled tool still uses stay advertised. For
+  example, `run-flow` uses `tableau:flows:read`
+
+<hr />
+
+## `FLOW_WRITE_TOOLS_ENABLED`
+
+Controls the content-**mutating** Tableau Prep flow tools. They are enabled by default. A confirmed
+run consumes Tableau Prep Conductor capacity and can overwrite flow outputs. Each tool previews the
+change first and returns a single-use confirmation token. The tool makes the change only when it's
+called again with that token, after the user approves the preview.
+
+- Default: unset, which enables the mutating flow tools
+- Set to `true` to enable them explicitly. Any other value is treated as unset
+- Set to `false` to disable them
+- The read-only flow tools are controlled separately by
+  [`FLOW_READ_TOOLS_ENABLED`](#flow_read_tools_enabled)
+- When enabled, registers:
+  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
+  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
+  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
+- When disabled, these tools are not registered, and the `tableau:mcp:flow:run` and
+  `tableau:mcp:flow:cancel` scopes are neither advertised nor accepted. Their REST API scopes
+  (`tableau:flows:run`, `tableau:flow_tasks:run`, and `tableau:flow_runs:update`) are not advertised
+- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
+- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
+- You can still remove individual flow tools with [`EXCLUDE_TOOLS`](#exclude_tools), or remove all
+  of them with `EXCLUDE_TOOLS=flow`
+
+| `FLOW_READ_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
+| --- | --- | --- |
+| unset or `true` | unset or `true` | read-only and mutating flow tools |
+| unset or `true` | `false` | read-only flow tools |
+| `false` | unset or `true` | mutating flow tools |
+| `false` | `false` | none |
 
 <hr />
 
@@ -601,28 +630,6 @@ Enables admin-only tools that require site administrator permissions.
   - ServerAdministrator
 - Admin tools perform runtime role verification and will return a 403 error if the user does not
   have the required permissions.
-
-<hr />
-
-## `FLOW_WRITE_TOOLS_ENABLED`
-
-Provides the second opt-in for the content-**mutating** Tableau Prep flow run tools. These tools change site state for other users because a run consumes Tableau Prep Conductor capacity and can overwrite outputs, so they are opt-in.
-
-- Default: `false`
-- The base `FLOW_TOOLS_ENABLED=true` gate is also required. If `FLOW_TOOLS_ENABLED=false`, the write tools remain disabled even when this flag is `true`
-- When both flags are `true`, enables:
-  - [`run-flow`](../../tools/flows/run-flow.md) — run a flow on demand (Run Flow Now)
-  - [`run-flow-task`](../../tools/flows/run-flow-task.md) — run an existing scheduled task now (Run Flow Task)
-  - [`cancel-flow-run`](../../tools/flows/cancel-flow-run.md) — request cancellation of a flow run (Cancel Flow Run)
-- When either flag is `false`, these tools are not registered and their OAuth scopes (`tableau:mcp:flow:run` for the run tools and `tableau:mcp:flow:cancel` for cancel, plus the corresponding `tableau:flows:run` / `tableau:flow_tasks:run` / `tableau:flow_runs:update` API scopes) are not advertised
-- These tools require **Data Management with Tableau Prep Conductor**, and the site's **Run Now** setting must be enabled. They honor the caller's flow permissions and the server's `INCLUDE_PROJECT_IDS` / `INCLUDE_TAGS` bounded context
-- Known REST API minimums are preflighted before mutation (`run-flow`: 3.14+; `cancel-flow-run`: 3.10+). License, site-setting, deployment, and permission failures are surfaced from Tableau's REST error details
-
-| `FLOW_TOOLS_ENABLED` | `FLOW_WRITE_TOOLS_ENABLED` | Registered flow tools |
-| --- | --- | --- |
-| `false` | `false` or `true` | none |
-| `true` | `false` | read-only flow tools |
-| `true` | `true` | read-only and mutating flow tools |
 
 <hr />
 
@@ -892,9 +899,9 @@ used (it is not raised to the minimum). A value above a clamp is lowered to the 
 | `TABLEAU_KNOWLEDGE_DIR`                                                                                         | none (the knowledge corpus is empty)                                                                                                                                                                                       |                                          | Knowledge roots served as `expertise://` resources. Separate several roots with the OS path delimiter (`:` on macOS and Linux, `;` on Windows). Earlier roots win on a name collision.                                                                                           | spawner     |
 | `TEMPLATES_DIR`                                                                                                 | the bundled `templates` directory                                                                                                                                                                                          |                                          | Replaces the whole template catalog with this directory.                                                                                                                                                                                                                         | dev/test    |
 | `TABLEAU_REPOSITORY_DIR`                                                                                        | none                                                                                                                                                                                                                       |                                          | Adds three external template folders under this directory, in order: `Tableau Agent/templates/.vendored/overridable`, `Bookmarks`, then `Tableau Agent/templates`. A later folder overrides a bundled or earlier template with the same name. Ignored when `TEMPLATES_DIR` is set. | spawner     |
-| `WORKBOOK_XSD_PATH`                                                                                             | the bundled workbook XSD                                                                                                                                                                                                   |                                          | Workbook XSD file used by `lookup-workbook-schema`.                                                                                                                                                                                                                              | dev/test    |
-| `TWB_INDEX_PATH`                                                                                                | the bundled workbook example index                                                                                                                                                                                         |                                          | JSON index of example workbooks. A path that does not exist gives an empty index.                                                                                                                                                                                                | dev/test    |
-| `EXAMPLES_DIR`                                                                                                  | the bundled `examples`                                                                                                                                                                                                     |                                          | Directory of `.json` and `.md` examples for `search-examples`. When set, even to an empty string, only this directory is read and the bundled examples are not used. An empty string or a missing directory gives no examples.                                                   | dev/test    |
+| `WORKBOOK_XSD_PATH`                                                                                             | the bundled workbook XSD                                                                                                                                                                                                   |                                          | Workbook XSD file for the search library. No registered tool reads it now.                                                                                                                                                                                                                              | dev/test    |
+| `TWB_INDEX_PATH`                                                                                                | the bundled workbook example index                                                                                                                                                                                         |                                          | JSON index of example workbooks. No registered tool reads it now. A path that does not exist gives an empty index.                                                                                                                                                                                                | dev/test    |
+| `EXAMPLES_DIR`                                                                                                  | the bundled `examples`                                                                                                                                                                                                     |                                          | Directory of `.json` and `.md` examples for the search library. No registered tool reads it now. When set, even to an empty string, only this directory is read and the bundled examples are not used. An empty string or a missing directory gives no examples.                                                   | dev/test    |
 | `SYSTEM_PROMPT_VERSION`                                                                                         | `mcp-server@<server version>`                                                                                                                                                                                              |                                          | Sent as `system_prompt_version` on the episode-begin event only. | spawner     |
 | `AGENT_TYPES`                                                                                                   | none                                                                                                                                                                                                                       |                                          | Comma-separated agent types, sent as `agent_types` on the episode-begin event only. Blank entries are dropped. | spawner     |
 | `LANGSMITH_RUN_ID`, `LANGSMITH_TRACE_ID`                                                                        | none                                                                                                                                                                                                                       |                                          | Sent as `langsmith_run_id` on the episode-begin event only. `LANGSMITH_RUN_ID` wins when both are set. | spawner     |

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { makeExecutorMock } from '../../../desktop/externalApi/executor.mock.js';
@@ -58,13 +58,11 @@ const successSchema = z.object({
   availableSheets: z.array(z.string()),
 });
 
-// The post-apply focus path (applyFocus.ts) still drives navigation through the XML-read
-// validated goto; the tool no longer does. These pin that surviving core command fn.
 describe('activateSheetValidated', () => {
   const signal = new AbortController().signal;
 
-  it('fresh-reads the workbook before issuing goto-sheet with the exact target', async () => {
-    const { executor, getWorkbookDocument, executeCommand } = makeXmlExecutor();
+  it('fresh-reads the workbook, then resolves the exact target name to its id for goToSheet', async () => {
+    const { executor, getWorkbookDocument, goToSheet } = makeXmlExecutor();
 
     const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
 
@@ -74,25 +72,20 @@ describe('activateSheetValidated', () => {
       availableSheets: ['Alpha', 'Beta'],
     });
     expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabdoc',
-      command: 'goto-sheet',
-      args: { Sheet: 'Beta' },
-      signal,
-    });
+    expect(goToSheet).toHaveBeenCalledExactlyOnceWith('id-Beta', signal);
   });
 
-  it('refuses a missing sheet without issuing any command', async () => {
-    const { executor, executeCommand } = makeXmlExecutor();
+  it('refuses a missing sheet without navigating', async () => {
+    const { executor, goToSheet } = makeXmlExecutor();
 
     const result = await activateSheetValidated({ sheetName: 'Missing', executor, signal });
 
     expect(result).toEqual({ status: 'not-found', availableSheets: ['Alpha', 'Beta'] });
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
   });
 
   it('dispatches nothing when the target window is already the maximized one', async () => {
-    const { executor, executeCommand } = makeXmlExecutor({
+    const { executor, getWorkbook, goToSheet } = makeXmlExecutor({
       xml: buildWorkbook({ activeSheetName: 'Beta' }),
     });
 
@@ -103,7 +96,38 @@ describe('activateSheetValidated', () => {
       previousSheet: 'Beta',
       availableSheets: ['Alpha', 'Beta'],
     });
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(getWorkbook).not.toHaveBeenCalled();
+    expect(goToSheet).not.toHaveBeenCalled();
+  });
+
+  it('returns not-found when the name is in the XML but absent from the inventory', async () => {
+    const { executor, goToSheet } = makeXmlExecutor({ inventoryNames: ['Alpha'] });
+
+    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+
+    expect(result).toEqual({ status: 'not-found', availableSheets: ['Alpha'] });
+    expect(goToSheet).not.toHaveBeenCalled();
+  });
+
+  it('returns read-failed when the inventory read fails', async () => {
+    const error = { type: 'command-timed-out' as const, error: 'inventory timeout' };
+    const { executor, getWorkbook, goToSheet } = makeXmlExecutor();
+    getWorkbook.mockResolvedValue(Err(error));
+
+    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+
+    expect(result).toEqual({ status: 'read-failed', error });
+    expect(goToSheet).not.toHaveBeenCalled();
+  });
+
+  it('returns command-failed when goToSheet fails', async () => {
+    const error = { type: 'command-timed-out' as const, error: 'goto timeout' };
+    const { executor, goToSheet } = makeXmlExecutor();
+    goToSheet.mockResolvedValue(Err(error));
+
+    const result = await activateSheetValidated({ sheetName: 'Beta', executor, signal });
+
+    expect(result).toEqual({ status: 'command-failed', error });
   });
 });
 
@@ -212,10 +236,14 @@ function makeApiExecutor(): {
   };
 }
 
-function makeXmlExecutor({ xml = buildWorkbook() }: { xml?: string } = {}): {
+function makeXmlExecutor({
+  xml = buildWorkbook(),
+  inventoryNames = ['Alpha', 'Beta'],
+}: { xml?: string; inventoryNames?: string[] } = {}): {
   executor: ExternalApiToolExecutor;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
-  executeCommand: ReturnType<typeof vi.fn>;
+  getWorkbook: ReturnType<typeof vi.fn>;
+  goToSheet: ReturnType<typeof vi.fn>;
 } {
   const getWorkbookDocument = vi.fn().mockResolvedValue(
     Ok({
@@ -224,10 +252,20 @@ function makeXmlExecutor({ xml = buildWorkbook() }: { xml?: string } = {}): {
       xsdPayloadVersion: undefined,
     }),
   );
-  const executeCommand = vi.fn().mockResolvedValue(Ok({ command_id: 'goto-1' }));
+  const getWorkbook = vi.fn().mockResolvedValue(
+    Ok({
+      title: 'Book',
+      unsavedChanges: false,
+      worksheets: inventoryNames.map((name) => ({ id: `id-${name}`, name, hidden: false })),
+    }),
+  );
+  const goToSheet = vi
+    .fn()
+    .mockResolvedValue(Ok({ command_id: 'goto-1', status: 'completed', submitted_at: '' }));
   return {
-    executor: makeExecutorMock({ getWorkbookDocument, executeCommand }),
+    executor: makeExecutorMock({ getWorkbookDocument, getWorkbook, goToSheet }),
     getWorkbookDocument,
-    executeCommand,
+    getWorkbook,
+    goToSheet,
   };
 }

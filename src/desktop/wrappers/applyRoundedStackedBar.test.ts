@@ -278,11 +278,22 @@ function helperDefinitions(xml: string): string {
     .join('');
 }
 
-function workbook(sheet: string, helpers = ''): string {
+const UNRELATED_ACTION =
+  "<action caption='Click to filter (Regional Overview)' name='[Action1]'><activation auto-clear='true' type='on-select' /><source dashboard='Regional Overview' type='sheet' /><command command='tsc:tsl-filter'><param name='special-fields' value='all' /><param name='target' value='Regional Overview' /></command></action>";
+const UNRELATED_DASHBOARD =
+  "<dashboard name='Regional Overview'><zones><zone id='7' name='Region Map' /><zone id='8' name='Region Table' /></zones><simple-id uuid='{REGIONAL-OVERVIEW}' /></dashboard>";
+
+function workbook(
+  sheet: string,
+  helpers = '',
+  options: { unrelatedAction?: boolean } = {},
+): string {
+  const actions = options.unrelatedAction ? `<actions>${UNRELATED_ACTION}</actions>` : '';
+  const otherDashboard = options.unrelatedAction ? UNRELATED_DASHBOARD : '';
   return `<workbook>
     <datasources><datasource caption='Friendly Sales' name='Sales'><column name='[Existing]' />${helpers}</datasource></datasources>
-    <worksheets>${sheet}</worksheets>
-    <dashboards><dashboard name='Dashboard'><zones><zone id='4' name='Orders' /></zones><simple-id uuid='{DASHBOARD}' /></dashboard></dashboards>
+    ${actions}<worksheets>${sheet}</worksheets>
+    <dashboards><dashboard name='Dashboard'><zones><zone id='4' name='Orders' /></zones><simple-id uuid='{DASHBOARD}' /></dashboard>${otherDashboard}</dashboards>
     <windows><window class='worksheet' name='Orders'><simple-id uuid='{WINDOW}' /></window><window class='dashboard' name='Dashboard'><simple-id uuid='{DASHBOARD-WINDOW}' /></window></windows>
   </workbook>`;
 }
@@ -292,7 +303,7 @@ function document(xml: string): WorkbookDocument {
 }
 
 function successfulExecutor(
-  options: { distinctSeeds?: boolean; sourceWorksheetXml?: string } = {},
+  options: { distinctSeeds?: boolean; sourceWorksheetXml?: string; unrelatedAction?: boolean } = {},
 ): {
   planned: RoundStackedBarPlan;
   executor: ExternalApiToolExecutor;
@@ -319,12 +330,15 @@ function successfulExecutor(
   const getWorksheetUnderlyingData = vi
     .fn()
     .mockResolvedValue(Ok(underlyingRows(options.distinctSeeds ?? true)));
+  const workbookOptions = { unrelatedAction: options.unrelatedAction };
   const executor = makeExecutorMock({
     getWorksheetDocument,
     getWorkbookDocument: vi
       .fn()
-      .mockResolvedValueOnce(Ok(document(workbook(source))))
-      .mockResolvedValue(Ok(document(workbook(intended, helperDefinitions(intended))))),
+      .mockResolvedValueOnce(Ok(document(workbook(source, '', workbookOptions))))
+      .mockResolvedValue(
+        Ok(document(workbook(intended, helperDefinitions(intended), workbookOptions))),
+      ),
     getWorksheetSummaryData,
     listWorksheetLogicalTables: vi
       .fn()
@@ -618,6 +632,117 @@ describe('applyRoundedStackedBar', () => {
         stage: 'workbook-preflight',
       });
       expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('fails before mutation when a filter action targets a dashboard holding the sheet', async () => {
+    const harness = successfulExecutor();
+    const actions =
+      "<actions><action name='a'><activation type='on-select' /><source type='sheet' worksheet='Other' dashboard='Dashboard' /><command command='tsc:tsl-filter'><param name='target' value='Dashboard' /></command></action></actions>";
+    vi.mocked(harness.executor.getWorkbookDocument)
+      .mockReset()
+      .mockResolvedValue(
+        Ok(document(workbook(sourceWorksheet()).replace('<worksheets>', `${actions}<worksheets>`))),
+      );
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: sourceWorksheet(),
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome).toMatchObject({
+      state: 'failed',
+      mutation: 'not-sent',
+      retrySafe: true,
+      stage: 'workbook-preflight',
+    });
+    expect(JSON.stringify(outcome)).toContain('Rounded bars disappear when other sheets on');
+    expect(harness.applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
+  it('applies rounded bars and keeps a filter action on a dashboard without the sheet', async () => {
+    const harness = successfulExecutor({ unrelatedAction: true });
+
+    const outcome = await applyRoundedStackedBar({
+      sourceWorksheetXml: sourceWorksheet(),
+      intendedWorksheetXml: harness.planned.xml,
+      contract: harness.planned.semanticContract,
+      focus: NO_FOCUS,
+      executor: harness.executor,
+      signal: SIGNAL,
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ state: 'applied', mutation: 'sent' });
+    expect(harness.applyWorksheetDocument).toHaveBeenCalledOnce();
+    expect(harness.applyWorksheetDocument).toHaveBeenCalledWith(
+      WORKSHEET_ID,
+      harness.planned.xml,
+      SIGNAL,
+    );
+    const workbookReads = vi.mocked(harness.executor.getWorkbookDocument).mock.results;
+    expect(workbookReads.length).toBeGreaterThan(1);
+    for (const read of workbookReads) {
+      expect((await read.value).unwrap().xml).toContain(UNRELATED_ACTION);
+    }
+  });
+
+  it.each([
+    ['drops', (xml: string) => xml.replace(UNRELATED_ACTION, '')],
+    ['duplicates', (xml: string) => xml.replace(UNRELATED_ACTION, UNRELATED_ACTION.repeat(2))],
+    [
+      'edits',
+      (xml: string) =>
+        xml.replace(
+          UNRELATED_ACTION,
+          UNRELATED_ACTION.replace("auto-clear='true'", "auto-clear='false'"),
+        ),
+    ],
+  ])(
+    'marks rounded bars unknown when the post-apply workbook %s the unrelated action',
+    async (_label, mutate) => {
+      vi.useFakeTimers();
+      try {
+        const harness = successfulExecutor({ unrelatedAction: true });
+        const landed = workbook(harness.planned.xml, helperDefinitions(harness.planned.xml), {
+          unrelatedAction: true,
+        });
+        expect(mutate(landed)).not.toEqual(landed);
+        vi.mocked(harness.executor.getWorkbookDocument)
+          .mockReset()
+          .mockResolvedValueOnce(
+            Ok(document(workbook(sourceWorksheet(), '', { unrelatedAction: true }))),
+          )
+          .mockResolvedValue(Ok(document(mutate(landed))));
+
+        const pending = applyRoundedStackedBar({
+          sourceWorksheetXml: sourceWorksheet(),
+          intendedWorksheetXml: harness.planned.xml,
+          contract: harness.planned.semanticContract,
+          focus: NO_FOCUS,
+          executor: harness.executor,
+          signal: SIGNAL,
+        });
+        await vi.runAllTimersAsync();
+        const outcome = await pending;
+
+        expect(outcome).toMatchObject({
+          state: 'unknown',
+          mutation: 'sent',
+          retrySafe: false,
+          stage: 'verification',
+        });
+        expect(outcome.state !== 'applied' && outcome.findings?.map(({ code }) => code)).toEqual([
+          'workbook-identity',
+        ]);
+        expect(harness.applyWorksheetDocument).toHaveBeenCalledOnce();
+        expect(harness.getWorksheetDocument).toHaveBeenCalledTimes(10);
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
 

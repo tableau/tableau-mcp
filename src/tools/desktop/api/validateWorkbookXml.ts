@@ -112,7 +112,7 @@ function workbookValidationEndpointMissing(): McpToolError {
     type: 'endpoint-not-in-this-build',
     message:
       'This Tableau Desktop build does not serve the workbook validation endpoint yet. ' +
-      'Use get-app-info to identify the build; this validation lights up on a newer Desktop update. Do not retry.',
+      'Use list-instances to see the API version of each running Desktop; this validation lights up on a newer Desktop update. Do not retry.',
     statusCode: 404,
   });
 }

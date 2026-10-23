@@ -4,7 +4,7 @@ import { parseInstanceRef } from '../templates/bookmarkTemplate.js';
 import { parsedXmlNamesEqual } from '../xmlElement.js';
 import { listAvailableFields } from './field-builder.js';
 import { carryNamespaceDeclarations, findWorksheet, normalizeArray, parseXML } from './parser.js';
-import type { ParsedWindow } from './types.js';
+import type { ParsedWindow, ParsedWorkbook } from './types.js';
 
 export type TargetElementState = { state: 'absent' } | { state: 'present'; sha256: string };
 
@@ -116,8 +116,7 @@ function worksheetState(workbookXml: string, worksheetName: string): TargetEleme
   return { state: 'present', sha256: sha256(stableStringify(worksheet)) };
 }
 
-function windowState(workbookXml: string, worksheetName: string): TargetElementState {
-  const workbook = parseXML(workbookXml);
+function matchingWindows(workbook: ParsedWorkbook, worksheetName: string): ParsedWindow[] {
   const worksheetWindows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window).filter(
     (candidate) =>
       candidate['@_class'] === undefined ||
@@ -128,9 +127,23 @@ function windowState(workbookXml: string, worksheetName: string): TargetElementS
     (candidate) =>
       candidate['@_name'] !== undefined && parsedXmlNamesEqual(candidate['@_name'], worksheetName),
   )?.['@_name'];
-  const windows = worksheetWindows.filter(
+  return worksheetWindows.filter(
     (candidate) => matchedName !== undefined && candidate['@_name'] === matchedName,
   );
+}
+
+export function worksheetWindowsAllHidden(workbookXml: string, worksheetName: string): boolean {
+  const windows = matchingWindows(parseXML(workbookXml), worksheetName);
+  return windows.length > 0 && windows.every((window) => window['@_hidden'] === 'true');
+}
+
+function windowState(
+  workbookXml: string,
+  worksheetName: string,
+  ignoreHidden: boolean,
+): TargetElementState {
+  const workbook = parseXML(workbookXml);
+  const windows = matchingWindows(workbook, worksheetName);
   if (windows.length === 0) return { state: 'absent' };
   const structural = windows.map((window) => {
     const stripVolatileNavigation = (value: unknown): unknown => {
@@ -149,6 +162,7 @@ function windowState(workbookXml: string, worksheetName: string): TargetElementS
       );
     };
     const candidate = stripVolatileNavigation(window) as Record<string, unknown>;
+    if (ignoreHidden) delete candidate['@_hidden'];
     const prefixes = new Set<string>();
     collectUsedNamespacePrefixes(candidate, prefixes);
     const local = relevantNamespaces(candidate, prefixes);
@@ -380,11 +394,12 @@ export function captureTargetWorksheetState(
   workbookXml: string,
   worksheetName: string,
   worksheetXml: string,
+  { ignoreWindowHidden = false }: { ignoreWindowHidden?: boolean } = {},
 ): TargetWorksheetState {
   return {
     worksheetName,
     target: worksheetState(workbookXml, worksheetName),
-    targetWindow: windowState(workbookXml, worksheetName),
+    targetWindow: windowState(workbookXml, worksheetName, ignoreWindowHidden),
     dependenciesSha256: dependencyFingerprint(workbookXml, worksheetXml),
   };
 }
@@ -393,11 +408,13 @@ export function compareTargetWorksheetState(
   expected: TargetWorksheetState,
   latestWorkbookXml: string,
   worksheetXml: string,
+  options: { ignoreWindowHidden?: boolean } = {},
 ): TargetWorksheetStateComparison {
   const latest = captureTargetWorksheetState(
     latestWorkbookXml,
     expected.worksheetName,
     worksheetXml,
+    options,
   );
   const reasons: TargetWorksheetDriftReason[] = [];
   if (stableStringify(latest.target) !== stableStringify(expected.target)) {

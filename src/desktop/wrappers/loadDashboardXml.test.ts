@@ -8,6 +8,7 @@ import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
+import { sourceSha256 } from './cacheFingerprint.js';
 import { synchronizeDashboardViewpoints } from './dashboardViewpoints.js';
 import { loadDashboardXml, loadStoryboardXml } from './loadDashboardXml.js';
 
@@ -20,9 +21,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
   const validXml = `<dashboard name='${dashboardName}'><zones></zones></dashboard>`;
 
   function liveWorkbook(dashboardNames: string[], worksheetNames: string[] = ['Sheet 1']): string {
-    // Populated (not blank) by default — the render guard (checkWorksheetsRendered) would
-    // otherwise reject any dashboard whose zones reference these by name. Tests of that guard
-    // build their own blank fixture explicitly.
     const worksheets = worksheetNames
       .map(
         (name) =>
@@ -41,7 +39,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${windows}</windows></workbook>`;
   }
 
-  // A goto-sheet moves the live document, so the readback the verify pass reads must
+  // Navigating moves the live document, so the readback the verify pass reads must
   // reflect it — otherwise the double reports a navigation that never landed.
   function withMaximizedWindow(workbookXml: string, sheetName: string): string {
     const quoteNormalized = workbookXml.replaceAll('"', "'");
@@ -56,19 +54,23 @@ describe('loadDashboardXml (External Client API transport)', () => {
   function dispatchingExecutor(workbookXml: string): {
     executor: ExternalApiToolExecutor;
     calls: Array<{
-      kind: 'command' | 'apply';
+      kind: 'command' | 'apply' | 'goto';
       namespace?: string;
       command?: string;
       args?: Record<string, unknown>;
       xml?: string;
+      sheetId?: string;
+      sheetName?: string;
     }>;
   } {
     const calls: Array<{
-      kind: 'command' | 'apply';
+      kind: 'command' | 'apply' | 'goto';
       namespace?: string;
       command?: string;
       args?: Record<string, unknown>;
       xml?: string;
+      sheetId?: string;
+      sheetName?: string;
     }> = [];
     const executeCommand = vi.fn(async (params: any) => {
       calls.push({
@@ -77,12 +79,33 @@ describe('loadDashboardXml (External Client API transport)', () => {
         command: params.command,
         args: params.args,
       });
-      if (params.command === 'goto-sheet') {
-        liveXml = withMaximizedWindow(liveXml, String(params.args?.Sheet));
-      }
       return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
     });
     let liveXml = workbookXml;
+    const sheetItems = (tagName: string): { id: string; name: string; hidden: boolean }[] =>
+      Array.from(
+        new DOMParser().parseFromString(liveXml, 'text/xml').getElementsByTagName(tagName),
+      ).map((node) => ({
+        id: `id-${node.getAttribute('name')}`,
+        name: node.getAttribute('name')!,
+        hidden: false,
+      }));
+    const getWorkbook = vi.fn(async () =>
+      Ok({
+        title: 'Workbook',
+        unsavedChanges: false,
+        worksheets: sheetItems('worksheet'),
+        dashboards: sheetItems('dashboard'),
+      }),
+    );
+    const goToSheet = vi.fn(async (sheetId: string) => {
+      const sheetName = [...sheetItems('worksheet'), ...sheetItems('dashboard')].find(
+        (sheet) => sheet.id === sheetId,
+      )!.name;
+      calls.push({ kind: 'goto', sheetId, sheetName });
+      liveXml = withMaximizedWindow(liveXml, sheetName);
+      return Ok({ command_id: 'cmd-ok', status: 'completed' as const, submitted_at: '' });
+    });
     const getWorkbookDocument = vi
       .fn()
       .mockImplementation(async () =>
@@ -96,6 +119,8 @@ describe('loadDashboardXml (External Client API transport)', () => {
     return {
       executor: makeExecutorMock({
         executeCommand,
+        getWorkbook,
+        goToSheet,
         getWorkbookDocument,
         applyWorkbookDocument,
         listDashboards: vi.fn().mockImplementation(async () =>
@@ -299,7 +324,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(windows[1]).toMatchObject({ '@_active': 'true', '@_maximized': 'true' });
     expect(windows[2]).not.toHaveProperty('@_active');
     expect(windows[2]).not.toHaveProperty('@_maximized');
-    expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
+    expect(calls.some((call) => call.kind === 'goto')).toBe(false);
   });
 
   it('navigates to the dashboard it just applied when the caller names it as the artifact', async () => {
@@ -314,9 +339,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(
-      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
-    ).toEqual([dashboardName]);
+    expect(calls.filter((call) => call.kind === 'goto').map((call) => call.sheetName)).toEqual([
+      dashboardName,
+    ]);
+    expect(calls.find((call) => call.kind === 'goto')?.sheetId).toBe(`id-${dashboardName}`);
   });
 
   it('navigates with the NFC canonical dashboard name', async () => {
@@ -333,9 +359,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(
-      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
-    ).toEqual([canonicalName]);
+    expect(calls.filter((call) => call.kind === 'goto').map((call) => call.sheetName)).toEqual([
+      canonicalName,
+    ]);
   });
 
   it('preserves referenced worksheets without resubmitting them', async () => {
@@ -376,7 +402,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
-  describe('render guard (checkWorksheetsRendered)', () => {
+  describe('worksheet registration and locked snapshot', () => {
     function liveWorkbookWithBlankWorksheet(
       dashboardNames: string[],
       worksheetName = 'Sheet 1',
@@ -394,7 +420,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       );
     }
 
-    it('rejects the default helper route (requireExistingSheet off) when a referenced worksheet exists but is blank, and never dispatches', async () => {
+    it('rejects an unregistered blank worksheet on the default route with unknown API', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
       const { executor, calls } = dispatchingExecutor(
         liveWorkbookWithBlankWorksheet(['Sales Dashboard']),
@@ -411,34 +437,23 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
+        invariant(result.error.error.type === 'registration-required');
         expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
         expect(result.error.error.message).toContain('Sales Dashboard');
         expect(result.error.error.message).toContain('Sheet 1');
-        // Recovery hint names only tools served by the dynamic-authoring profile (guardrail test
-        // recoveryTextNamesReachableTools): render via add-field or apply-worksheet, never the
-        // off-profile build-and-apply-worksheet.
-        expect(result.error.error.message).toContain('add-field');
-        expect(result.error.error.message).toContain('apply-worksheet');
-        expect(result.error.error.message).not.toContain('build-and-apply-worksheet');
+        expect(result.error.error.message).toContain(
+          'Add the worksheets to this dashboard in Desktop',
+        );
+        expect(result.error.error.message).not.toContain('add-field');
+        expect(result.error.error.message).not.toContain('apply-worksheet');
         expect(result.error.error.message).toContain('No changes were sent to Tableau');
       }
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('rejects the per-sheet route (requireExistingSheet on) when a referenced worksheet exists but is blank, and never dispatches', async () => {
+    it('rejects an unregistered blank worksheet on the cached route with unknown API', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
-      const applyDashboardDocument = vi.fn();
-      const executor = makeExecutorMock({
-        getWorkbookDocument: vi.fn().mockResolvedValue(
-          Ok({
-            xml: liveWorkbookWithBlankWorksheet(['Sales Dashboard']),
-            applicationVersion: undefined,
-            xsdPayloadVersion: undefined,
-          }),
-        ),
-        applyDashboardDocument,
-      });
+      const { executor } = dispatchingExecutor(liveWorkbookWithBlankWorksheet(['Sales Dashboard']));
 
       const result = await loadDashboardXml({
         dashboardName,
@@ -452,13 +467,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
+        invariant(result.error.error.type === 'registration-required');
         expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
       }
-      expect(applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
     });
 
-    it('lets the per-sheet route (requireExistingSheet on) through when the referenced worksheet is rendered', async () => {
+    it('lets the cached route through when the populated worksheet is registered', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
       const applyDashboardDocument = vi
         .fn()
@@ -502,7 +517,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(applyDashboardDocument).toHaveBeenCalledOnce();
     });
 
-    it('keeps workbook namespace context while guarding an unchanged per-sheet dashboard apply', async () => {
+    it('keeps workbook namespace context during an unchanged per-sheet dashboard apply', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Namespaced' /></zones></dashboard>`;
       const workbookXml = `<?xml version='1.0'?><workbook>
         <worksheets xmlns:user='urn:tableau:user' xmlns:mid='urn:intermediate'>
@@ -550,7 +565,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     it.each([false, true])(
-      'blocks a blank namespaced worksheet before dispatch when requireExistingSheet is %s',
+      'blocks an unregistered namespaced worksheet with unknown API (cached=%s)',
       async (requireExistingSheet) => {
         const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Namespaced Blank' /></zones></dashboard>`;
         const workbookXml = `<?xml version='1.0'?><workbook xmlns:user='urn:tableau:user'>
@@ -594,7 +609,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
         expect(result.isErr()).toBe(true);
         if (result.isErr()) {
           invariant(result.error.type === 'load-dashboard-xml-error');
-          invariant(result.error.error.type === 'sheet-not-rendered');
+          invariant(result.error.error.type === 'registration-required');
           expect(result.error.error.worksheetNames).toEqual(['Namespaced Blank']);
         }
         expect(applyDashboardDocument).not.toHaveBeenCalled();
@@ -602,13 +617,14 @@ describe('loadDashboardXml (External Client API transport)', () => {
       },
     );
 
-    it('does not collapse entity-distinct worksheet names when guarding a dashboard apply', async () => {
+    it('does not collapse entity-distinct worksheet names when checking registration', async () => {
       const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='A &amp;amp; B' /></zones></dashboard>`;
       const workbookXml = `<workbook><worksheets>
         <worksheet name='A &amp; B'><table><rows>[none:First:nk]</rows><cols /></table></worksheet>
         <worksheet name='A &amp;amp; B'><table><rows /><cols /></table></worksheet>
       </worksheets><dashboards><dashboard name='${dashboardName}'><zones /></dashboard></dashboards>
-      <windows><window class='worksheet' name='A &amp; B' /><window class='worksheet' name='A &amp;amp; B' /></windows></workbook>`;
+      <windows><window class='dashboard' name='${dashboardName}'><viewpoints><viewpoint name='A &amp; B'/></viewpoints></window>
+      <window class='worksheet' name='A &amp; B' /><window class='worksheet' name='A &amp;amp; B' /></windows></workbook>`;
       const applyWorkbookDocument = vi.fn();
       const executor = makeExecutorMock({
         getWorkbookDocument: vi
@@ -616,6 +632,10 @@ describe('loadDashboardXml (External Client API transport)', () => {
           .mockResolvedValue(
             Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
           ),
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: dashboardName }] })),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: validXml })),
         applyWorkbookDocument,
       });
 
@@ -630,20 +650,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
+        invariant(result.error.error.type === 'registration-required');
         expect(result.error.error.worksheetNames).toEqual(['A &amp; B']);
       }
       expect(applyWorkbookDocument).not.toHaveBeenCalled();
     });
 
-    // ── Worksheet-zone semantics: type-v2='visual' + nested/container zones (PR #918 review) ──
-    // The guard must use the same worksheet-zone predicate as the authoritative
-    // target-dashboard-invariant: a <zone> at ANY depth whose @name is set and whose @type-v2 is
-    // absent or 'visual'. These pin the inclusive predicate and the deep walk (worksheet zones
-    // wrapped by a layout container are still reached), plus a negative control that a named
-    // non-visual (text) zone is NOT treated as a worksheet even when a blank worksheet shares its
-    // name.
-    it("fires when the worksheet zone carries type-v2='visual' (inclusive predicate, not just absent type-v2)", async () => {
+    it("requires registration when the worksheet zone carries type-v2='visual'", async () => {
       const dashboardXml =
         `<dashboard name='${dashboardName}'><zones>` +
         "<zone name='Sheet 1' type-v2='visual' /></zones></dashboard>";
@@ -662,13 +675,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
+        invariant(result.error.error.type === 'registration-required');
         expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
       }
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('fires on a worksheet zone nested inside a layout container zone (deep walk, matches real dashboard XML)', async () => {
+    it('requires registration for a worksheet zone nested inside a layout container', async () => {
       // Real dashboards nest the worksheet zone under a type-v2='layout-basic' container zone.
       const dashboardXml =
         `<dashboard name='${dashboardName}'><zones>` +
@@ -690,15 +703,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
+        invariant(result.error.error.type === 'registration-required');
         expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
       }
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
     it('does NOT treat a named non-visual (text) zone as a worksheet, even when a blank worksheet shares its name', async () => {
-      // A text zone carries a non-visual type-v2, so it is not a worksheet zone; the guard must
-      // not collect it (and therefore must not fire) despite the blank worksheet of the same name.
       const dashboardXml =
         `<dashboard name='${dashboardName}'><zones>` +
         "<zone name='Legend' type-v2='text' /></zones></dashboard>";
@@ -718,14 +729,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
       expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
     });
 
-    // ── Controlled repro: field placement vs dashboard viewpoints (PR #918 review) ──
-    // Native HasVisualDoc (ParseDashboardWindow in WindowParser.cpp) inspects the dashboard's
-    // registered visual documents, and the original conflated fixture carried BOTH a blank
-    // worksheet AND an empty <viewpoints />, so it could not establish which one trips the gate.
-    // Our preflight proxy keys on the WORKSHEET's <table> render-state (worksheetDocumentState),
-    // independent of <viewpoints>. These two cases pin that separation: the guard fires on a
-    // blank worksheet even when the dashboard window carries VALID viewpoints, and does NOT fire
-    // on a populated worksheet even when <viewpoints /> is empty.
     function liveWorkbookWithViewpoints({
       worksheetName = 'Sheet 1',
       worksheetRendered,
@@ -749,35 +752,212 @@ describe('loadDashboardXml (External Client API transport)', () => {
       );
     }
 
-    // Valid/populated viewpoints so the ONLY defect is the blank worksheet.
     const VALID_VIEWPOINTS =
       "<viewpoints><viewpoint name='Sheet 1'><zoom type='entire-view' /></viewpoint></viewpoints>";
 
-    it('fires on a blank worksheet even when the dashboard window has VALID viewpoints (blank worksheet is the cause, not viewpoints)', async () => {
-      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
-      const { executor, calls } = dispatchingExecutor(
-        liveWorkbookWithViewpoints({
-          worksheetRendered: false,
-          dashboardName,
-          viewpoints: VALID_VIEWPOINTS,
-        }),
-      );
+    it.each([undefined, '0.2.21', '0.2.22', '0.2.23'])(
+      'accepts a registered blank worksheet on API %s',
+      async (version) => {
+        const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+        const { executor, calls } = dispatchingExecutor(
+          liveWorkbookWithViewpoints({
+            worksheetRendered: false,
+            dashboardName,
+            viewpoints: VALID_VIEWPOINTS,
+          }),
+        );
+        Object.defineProperty(executor, 'desktopApiVersion', { value: version });
 
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml: dashboardXml,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+        });
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap().verifiedWorksheetNames).toEqual(['Sheet 1']);
+        expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+        expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+        expect((await executor.getWorkbookDocument(mockSignal)).unwrap().xml).toContain(
+          '<rows/><cols/>',
+        );
+      },
+    );
+
+    function nativeRegistrationFixture(
+      version: string | undefined,
+      mixed: boolean,
+      repair = true,
+    ): { executor: ExternalApiToolExecutor; original: string } {
+      const original = liveWorkbook([dashboardName], ['Sheet 1', 'Sheet 2'])
+        .replace(/<viewpoints>[\s\S]*?<\/viewpoints>/, '<viewpoints/>')
+        .replace('[Sample - Superstore].[none:Category:nk]', '')
+        .replace(mixed ? 'never-match' : '[Sample - Superstore].[none:Category:nk]', '');
+      const { executor } = dispatchingExecutor(original);
+      Object.defineProperty(executor, 'desktopApiVersion', { value: version });
+      const apply = vi.mocked(executor.applyDashboardDocument).getMockImplementation()!;
+      let registeredXml: string | undefined;
+      const read = vi.mocked(executor.getWorkbookDocument).getMockImplementation()!;
+      vi.mocked(executor.getWorkbookDocument).mockImplementation(async (...args) => {
+        const result = await read(...args);
+        return registeredXml
+          ? Ok({ xml: registeredXml, applicationVersion: undefined, xsdPayloadVersion: undefined })
+          : result;
+      });
+      vi.mocked(executor.applyDashboardDocument).mockImplementation(async (...args) => {
+        const result = await apply(...args);
+        if (repair) {
+          const current = (await read(mockSignal)).unwrap().xml;
+          const doc = new DOMParser().parseFromString(current, 'text/xml');
+          const viewpoints = doc.getElementsByTagName('viewpoints')[0];
+          for (const zone of Array.from(
+            new DOMParser().parseFromString(args[1], 'text/xml').getElementsByTagName('zone'),
+          )) {
+            const name = zone.getAttribute('name');
+            if (!name) continue;
+            const viewpoint = doc.createElement('viewpoint');
+            viewpoint.setAttribute('name', name);
+            viewpoints.appendChild(viewpoint);
+          }
+          registeredXml = new XMLSerializer().serializeToString(doc);
+        }
+        return result;
+      });
+      return { executor, original };
+    }
+
+    it.each(
+      ['0.2.22', '0.2.23'].flatMap((version) =>
+        [false, true].flatMap((mixed) =>
+          [false, true].map((cached) => ({ version, mixed, cached })),
+        ),
+      ),
+    )(
+      'native registration accepts blank/mixed sheets with mandatory readback: %j',
+      async ({ version, mixed, cached }) => {
+        const { executor, original } = nativeRegistrationFixture(version, mixed);
+        const xml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1'/><zone name='Sheet 2'/></zones></dashboard>`;
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet: cached,
+          verifyReadback: !cached,
+        });
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap().verifiedWorksheetNames).toEqual(['Sheet 1', 'Sheet 2']);
+        expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+        expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+        expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+        const sheets = (xml: string): string[] =>
+          Array.from(
+            new DOMParser().parseFromString(xml, 'text/xml').getElementsByTagName('worksheet'),
+          ).map((node) => new XMLSerializer().serializeToString(node));
+        expect(sheets((await executor.getWorkbookDocument(mockSignal)).unwrap().xml)).toEqual(
+          sheets(original),
+        );
+      },
+    );
+
+    it.each(
+      [undefined, '0.2.21'].flatMap((version) =>
+        [false, true].map((mixed) => ({ version, mixed })),
+      ),
+    )(
+      'missing registration stays blocked for blank/mixed sheets on older/unknown API: %j',
+      async ({ version, mixed }) => {
+        const { executor } = nativeRegistrationFixture(version, mixed);
+        const result = await loadDashboardXml({
+          dashboardName,
+          xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1'/><zone name='Sheet 2'/></zones></dashboard>`,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+        });
+        expect(result).toMatchObject({
+          error: {
+            error: { type: 'registration-required', worksheetNames: ['Sheet 1', 'Sheet 2'] },
+          },
+        });
+        expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
+
+    it('native registration does not cover extra worksheetNames outside submitted zones', async () => {
+      const { executor } = nativeRegistrationFixture('0.2.22', false);
       const result = await loadDashboardXml({
         dashboardName,
-        xml: dashboardXml,
+        xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1'/></zones></dashboard>`,
+        worksheetNames: ['Sheet 2'],
         executor,
         signal: mockSignal,
         focus: NO_FOCUS,
       });
+      expect(result).toMatchObject({
+        error: { error: { type: 'registration-required', worksheetNames: ['Sheet 1', 'Sheet 2'] } },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
 
-      expect(result.isErr()).toBe(true);
-      if (result.isErr()) {
-        invariant(result.error.type === 'load-dashboard-xml-error');
-        invariant(result.error.error.type === 'sheet-not-rendered');
-        expect(result.error.error.worksheetNames).toEqual(['Sheet 1']);
+    it('requires native registration readback for blank worksheets even on cached apply', async () => {
+      vi.useFakeTimers();
+      try {
+        const { executor } = nativeRegistrationFixture('0.2.22', false, false);
+        const pending = loadDashboardXml({
+          dashboardName,
+          xml: `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1'/></zones></dashboard>`,
+          executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet: true,
+        });
+        await vi.runAllTimersAsync();
+        expect(await pending).toMatchObject({ error: { error: { type: 'verification-failed' } } });
+        expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+        expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+        expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
       }
-      expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+    });
+
+    it('delegates a blank worksheet reference to the surgical storyboard endpoint', async () => {
+      const xml = `<dashboard name='${dashboardName}' type='storyboard'><zones><zone name='Sheet 1'/></zones></dashboard>`;
+      const executor = makeExecutorMock({
+        getWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ xml: liveWorkbookWithBlankWorksheet([dashboardName]) })),
+        listStoryboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ storyboards: [{ id: 'sb-1', name: dashboardName }] })),
+        getStoryboardDocument: vi.fn().mockResolvedValue(Ok({ xml })),
+        applyStoryboardDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+      });
+      const result = await loadStoryboardXml({
+        storyboardName: dashboardName,
+        xml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+      expect(result.isOk()).toBe(true);
+      expect(executor.applyStoryboardDocument).toHaveBeenCalledOnce();
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     });
 
     it('reports missing registration, not blank worksheet, when a populated sheet has no viewpoint', async () => {
@@ -799,16 +979,17 @@ describe('loadDashboardXml (External Client API transport)', () => {
       });
 
       expect(result).toMatchObject({ error: { error: { type: 'registration-required' } } });
-      // The apply must repair registration while keeping the populated worksheet.
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('fails CLOSED (retriable error, no dispatch) when the live workbook read errors, so a transient read cannot silently disable the guard', async () => {
-      // The guard now reads under the apply lock and shares that one read with the apply. A read
-      // failure surfaces as a retriable execute-command error instead of skipping the protection
-      // (PR #918 review: do not bypass the render guard when its read fails). The workbook is read
-      // exactly once (no second apply-path read) and nothing is dispatched.
-      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+    it.each([
+      { zones: true, verifyReadback: false, worksheetNames: [] },
+      { zones: false, verifyReadback: true, worksheetNames: [] },
+      { zones: false, verifyReadback: false, worksheetNames: ['Sheet 1'] },
+    ])('fails closed when the required snapshot read errors: %j', async (options) => {
+      const dashboardXml = options.zones
+        ? `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`
+        : validXml;
       const { executor, calls } = dispatchingExecutor(
         liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
       );
@@ -824,22 +1005,27 @@ describe('loadDashboardXml (External Client API transport)', () => {
         executor,
         signal: mockSignal,
         focus: NO_FOCUS,
+        verifyReadback: options.verifyReadback,
+        worksheetNames: options.worksheetNames,
       });
 
-      expect(result.isErr()).toBe(true);
-      if (result.isErr()) {
-        expect(result.error.type).toBe('execute-command-error');
-      }
+      expect(result).toMatchObject({ error: { type: 'execute-command-error', error: readError } });
       expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
+      expect(executor.listDashboards).not.toHaveBeenCalled();
       expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
     });
 
-    it('reuses the guard snapshot and verifies the surgical apply', async () => {
-      // A snapshot is shared by guard and the readback expectation; the POST contains only the dashboard.
-      const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
-      const { executor, calls } = dispatchingExecutor(
-        liveWorkbook(['Sales Dashboard'], ['Sheet 1']),
-      );
+    it.each([
+      { zones: true, verifyReadback: true, worksheetNames: [], reads: 2 },
+      { zones: true, verifyReadback: false, worksheetNames: [], reads: 1 },
+      { zones: false, verifyReadback: true, worksheetNames: [], reads: 2 },
+      { zones: false, verifyReadback: false, worksheetNames: ['Sheet 1'], reads: 1 },
+      { zones: false, verifyReadback: false, worksheetNames: [], reads: 0 },
+    ])('shares one pre-apply snapshot only when needed: %j', async (options) => {
+      const dashboardXml = options.zones
+        ? `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`
+        : validXml;
+      const { executor } = dispatchingExecutor(liveWorkbook(['Sales Dashboard'], ['Sheet 1']));
 
       const result = await loadDashboardXml({
         dashboardName,
@@ -847,18 +1033,47 @@ describe('loadDashboardXml (External Client API transport)', () => {
         executor,
         signal: mockSignal,
         focus: NO_FOCUS,
+        requireExistingSheet: true,
+        verifyReadback: options.verifyReadback,
+        worksheetNames: options.worksheetNames,
       });
 
       expect(result.isOk()).toBe(true);
-      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
-      expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+      expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(options.reads);
+      expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+      const applyOrder = vi.mocked(executor.applyDashboardDocument).mock.invocationCallOrder[0];
+      expect(
+        vi
+          .mocked(executor.getWorkbookDocument)
+          .mock.invocationCallOrder.filter((order) => order < applyOrder),
+      ).toHaveLength(options.reads > 0 ? 1 : 0);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('checks explicit worksheet registrations even without worksheet zones or readback', async () => {
+      const { executor } = dispatchingExecutor(liveWorkbook([dashboardName], []));
+      const result = await loadDashboardXml({
+        dashboardName,
+        xml: validXml,
+        worksheetNames: ['Sheet 1'],
+        verifyReadback: false,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+      expect(result).toMatchObject({
+        error: { error: { type: 'registration-required', worksheetNames: ['Sheet 1'] } },
+      });
+      expect(executor.getWorkbookDocument).toHaveBeenCalledOnce();
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     });
   });
 
   // Resolves absent targets without a workbook fallback, regardless of the legacy flag.
   function absentDashboardExecutor(liveDashboardNames: string[]): {
     executor: ExternalApiToolExecutor;
-    calls: Array<{ kind: 'command' | 'apply'; xml?: string }>;
+    calls: Array<{ kind: 'command' | 'apply' | 'goto'; xml?: string }>;
   } {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(liveDashboardNames));
     (executor as unknown as { listDashboards: unknown }).listDashboards = vi.fn().mockResolvedValue(
@@ -1113,39 +1328,249 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
-  it('accepts a dashboard id and retitles a stale fragment before per-dashboard apply', async () => {
+  describe('refuses to rename (apply-dashboard / apply-storyboard never change the submitted name)', () => {
     const dashboardId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
-    const fragment = `<dashboard name='Old Dashboard'><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
-    const applyDashboardDocument = vi
-      .fn()
-      .mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
-      );
-    const executor = makeExecutorMock({
-      listDashboards: vi.fn().mockResolvedValue(
-        Ok({
-          dashboards: [{ id: dashboardId, name: 'Renamed Dashboard', hidden: false }],
-        }),
-      ),
-      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
-      applyDashboardDocument,
-    });
+    const doc = (name: string, kind: 'dashboard' | 'storyboard' = 'dashboard'): string =>
+      `<dashboard name='${name}'${kind === 'storyboard' ? " type='storyboard'" : ''}><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
+    const okApply = (): ReturnType<typeof vi.fn> =>
+      vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
 
-    const result = await loadDashboardXml({
-      dashboardName: dashboardId,
-      xml: fragment,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
+    type Fixture = {
+      executor: ReturnType<typeof makeExecutorMock>;
+      applyDashboardDocument: ReturnType<typeof vi.fn>;
+      applyStoryboardDocument: ReturnType<typeof vi.fn>;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    };
+    function executorFor(
+      liveName: string,
+      liveXml: string,
+      kind: 'dashboard' | 'storyboard',
+    ): Fixture {
+      const applyDashboardDocument = okApply();
+      const applyStoryboardDocument = okApply();
+      const applyWorkbookDocument = okApply();
+      const item = { id: dashboardId, name: liveName, hidden: false };
+      const executor = makeExecutorMock({
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: kind === 'dashboard' ? [item] : [] })),
+        listStoryboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ storyboards: kind === 'storyboard' ? [item] : [] })),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        getStoryboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        applyDashboardDocument,
+        applyStoryboardDocument,
+        applyWorkbookDocument,
+      });
+      return { executor, applyDashboardDocument, applyStoryboardDocument, applyWorkbookDocument };
+    }
 
-    expect(result.isOk()).toBe(true);
-    expect(applyDashboardDocument).toHaveBeenCalledWith(
-      dashboardId,
-      expect.stringContaining("name='Renamed Dashboard'"),
-      mockSignal,
+    function expectNoApply(e: Fixture): void {
+      expect(e.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(e.applyStoryboardDocument).not.toHaveBeenCalled();
+      expect(e.applyWorkbookDocument).not.toHaveBeenCalled();
+    }
+
+    function nameMismatchMessage(result: Awaited<ReturnType<typeof loadDashboardXml>>): string {
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      return result.error.error.message;
+    }
+
+    it.each([
+      { label: 'id, with a hash', ref: dashboardId, hash: true },
+      { label: 'the renamed name, with a hash', ref: 'Renamed Dashboard', hash: true },
+      { label: 'id, with no hash', ref: dashboardId, hash: false },
+    ])(
+      'refuses a renamed dashboard fragment resolved by $label, with zero applies',
+      async ({ ref, hash }) => {
+        const live = doc('Dashboard 1');
+        const fragment = doc('Renamed Dashboard');
+        const e = executorFor('Dashboard 1', live, 'dashboard');
+
+        const result = await loadDashboardXml({
+          dashboardName: ref === dashboardId ? dashboardId : ref,
+          xml: fragment,
+          executor: e.executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet: true,
+          expectedSourceHash: hash ? sourceSha256(live) : undefined,
+        });
+
+        if (ref === 'Renamed Dashboard') {
+          // The gate passes (name matches the file); the live-name check is what refuses.
+          const message = nameMismatchMessage(result);
+          expect(message).toContain(
+            'The file names this dashboard "Renamed Dashboard", but in Desktop it is "Dashboard 1"',
+          );
+          expect(message).toContain('apply-dashboard cannot rename a dashboard');
+          expect(message).toContain('call rename-sheet');
+          expect(message).toContain('If the file is older');
+          expect(message).toContain('No changes were sent to Tableau.');
+        } else {
+          expect(nameMismatchMessage(result)).toContain('The file names this dashboard');
+        }
+        expectNoApply(e);
+      },
     );
+
+    it('refuses a renamed storyboard fragment with storyboard wording and zero applies', async () => {
+      const live = doc('Story 1', 'storyboard');
+      const e = executorFor('Story 1', live, 'storyboard');
+
+      const result = await loadStoryboardXml({
+        storyboardName: dashboardId,
+        xml: doc('Renamed Story', 'storyboard'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      const message = nameMismatchMessage(result);
+      expect(message).toContain(
+        'The file names this storyboard "Renamed Story", but in Desktop it is "Story 1"',
+      );
+      expect(message).toContain('apply-storyboard cannot rename a storyboard');
+      expect(message).toContain('get-storyboard-xml');
+      expect(message).not.toContain('back to');
+      expectNoApply(e);
+    });
+
+    it('refuses a renamed dashboard whose worksheet zones would need native registration, before any apply', async () => {
+      const live = `<dashboard name='Dashboard 1'><zones><zone name='Sheet 1' /></zones><simple-id uuid='${dashboardId}' /></dashboard>`;
+      const fragment = live.replace("name='Dashboard 1'", "name='Renamed Dashboard'");
+      const e = executorFor('Dashboard 1', live, 'dashboard');
+      vi.mocked(e.executor.getWorkbookDocument).mockResolvedValue(
+        Ok({
+          xml: "<?xml version='1.0'?><workbook><worksheets><worksheet name='Sheet 1'><table><rows /><cols /></table></worksheet></worksheets><dashboards /><windows><window class='dashboard' name='Dashboard 1'/></windows></workbook>",
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName: dashboardId,
+        xml: fragment,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      expect(nameMismatchMessage(result)).toContain('apply-dashboard cannot rename a dashboard');
+      expectNoApply(e);
+    });
+
+    it('refuses a rename-sheet race at the gate, then reports source-drift for an edit made against the old cache', async () => {
+      // Cache was read as "Old Name"; rename-sheet then renamed the live dashboard to "Renamed".
+      const oldDoc = doc('Old Name');
+      const liveDoc = doc('Renamed');
+      const e = executorFor('Renamed', liveDoc, 'dashboard');
+
+      const gate = await loadDashboardXml({
+        dashboardName: 'Renamed',
+        xml: oldDoc,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(oldDoc),
+      });
+      const gateMessage = nameMismatchMessage(gate);
+      expect(gateMessage).toContain(
+        'dashboardName "Renamed" does not match <dashboard name="Old Name"> in the file',
+      );
+      expect(gateMessage).toContain('with list-dashboards');
+      expect(gateMessage).toContain('pass "Old Name" as dashboardName');
+      expect(gateMessage).toContain('get-dashboard-xml');
+      expect(gateMessage).not.toContain('Retry with');
+
+      const drift = await loadDashboardXml({
+        dashboardName: 'Renamed',
+        xml: liveDoc.replace('<zones />', '<zones><zone /></zones>'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(oldDoc),
+      });
+      invariant(drift.isErr());
+      invariant(drift.error.type === 'load-dashboard-xml-error');
+      expect(drift.error.error.type).toBe('source-drift');
+      expectNoApply(e);
+    });
+
+    it('reports source-drift before name-differs when the live sheet was renamed and the hash is stale', async () => {
+      const live = doc('Renamed');
+      const e = executorFor('Renamed', live, 'dashboard');
+
+      const result = await loadDashboardXml({
+        dashboardName: dashboardId,
+        xml: doc('Old Name'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(doc('Old Name')),
+      });
+
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      expect(result.error.error.type).toBe('source-drift');
+      expectNoApply(e);
+    });
+
+    it('uses storyboard wording at the gate', async () => {
+      const e = executorFor('Renamed', doc('Renamed', 'storyboard'), 'storyboard');
+      const result = await loadStoryboardXml({
+        storyboardName: 'Renamed',
+        xml: doc('Old Name', 'storyboard'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+      const message = nameMismatchMessage(result);
+      expect(message).toContain(
+        'storyboardName "Renamed" does not match <storyboard name="Old Name">',
+      );
+      expect(message).toContain('get-storyboard-xml');
+      expect(message).toContain('pass "Old Name" as storyboardName');
+      expect(message).not.toContain('list-');
+      expect(message).not.toContain('Retry with');
+      expectNoApply(e);
+    });
+
+    it.each([
+      { label: 'id', ref: dashboardId },
+      { label: 'name', ref: 'Dashboard 1' },
+    ])('still applies when the names are equal, targeted by $label', async ({ ref }) => {
+      const live = doc('Dashboard 1');
+      const e = executorFor('Dashboard 1', live, 'dashboard');
+
+      const result = await loadDashboardXml({
+        dashboardName: ref,
+        xml: live,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(e.applyDashboardDocument).toHaveBeenCalledWith(dashboardId, live, mockSignal);
+    });
   });
 
   it('should return invalid-xml error when xml is empty', async () => {

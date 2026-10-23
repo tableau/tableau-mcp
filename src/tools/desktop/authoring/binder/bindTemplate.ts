@@ -2498,7 +2498,7 @@ async function performAutoApply({
     // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
     const templateXml = templateSnapshot.xml;
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
-    // guards same-millisecond applies), mirroring the inject-template tool's nonce.
+    // guards same-millisecond applies).
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
     const requestedTitle = decodeXmlEntities(args.title);
     literalTitle =
@@ -2644,8 +2644,8 @@ async function performAutoApply({
   const documentWarnings = applyResult.value.documentWarnings;
 
   // ── Host verification receipt on the HOT path (W-23447506) ────────
-  // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
-  // report what the host actually saw. bind-template — the path nearly every chart ask
+  // apply-worksheet re-reads the sheet it just wrote and
+  // reports what the host actually saw. bind-template — the path nearly every chart ask
   // takes — applied through loadWorkbookXml, which has no readback: when Tableau stripped a
   // requested encoding out of a bind, the response read exactly like a bind it kept whole.
   // Same two helpers as the cold path (verifyPostApplyWorksheetReadback +

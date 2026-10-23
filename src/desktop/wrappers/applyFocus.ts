@@ -88,8 +88,7 @@ export async function hideStartPage({
 /**
  * Move the view after a completed whole-document write. Best-effort by construction: the
  * apply already landed, so nothing here can fail the caller's result. The name is validated
- * against a fresh read before dispatch — a goto-sheet with a name Tableau does not know
- * returns FAILED *and* pops a blocking modal that wedges the next call.
+ * against a fresh read and resolved to a sheet id before dispatch.
  */
 export async function dispatchApplyFocus({
   focus,
@@ -141,7 +140,7 @@ export async function dispatchApplyFocus({
         });
         return;
       case 'command-failed':
-        logFocusEvent(target, 'goto-sheet failed; the apply itself remains successful', {
+        logFocusEvent(target, 'goToSheet failed; the apply itself remains successful', {
           error: activation.error,
         });
         return;

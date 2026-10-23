@@ -1,7 +1,11 @@
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveLooseFieldReference } from '../../../../desktop/binder/classify.js';
+import {
+  normalizeLooseFieldReferencePhrase,
+  pluralEquivalent,
+  resolveLooseFieldReference,
+} from '../../../../desktop/binder/classify.js';
 import {
   bareName,
   type SchemaField,
@@ -287,17 +291,16 @@ export async function authorCalculationsWithValidation({
         comparisonFormula,
         { datasource: datasourceName, fields: looseFields },
         '',
+        findWorkbookParameters(workbookXml),
+        targetResult.value.xml,
+        specs.map((spec) => spec.caption),
       );
       // An unresolvable loose reference can't be an identical retry; fall through to collision.
       if (loose.isOk()) {
         comparisonFormula = loose.value;
       }
     }
-    const resolvedFormula = resolveCaptionReferences(
-      comparisonFormula,
-      targetResult.value.xml,
-      workbookXml,
-    );
+    const resolvedFormula = resolveCaptionReferences(comparisonFormula, targetResult.value.xml);
     if (existingCalcMatches(existingColumn, resolvedFormula, calc)) {
       idempotentOutcomes.set(index, {
         status: 'created',
@@ -375,6 +378,10 @@ export async function authorCalculationsWithValidation({
       let formula = calc.formula;
       if (resolveLooseReferences) {
         const schema = summarizeSchema(liveXml);
+        const liveTarget = selectTargetDatasource(liveXml, datasourceName);
+        if (liveTarget.isErr()) {
+          return liveTarget.error.toErr();
+        }
         const loose = resolveLooseFormulaReferences(
           formula,
           {
@@ -382,6 +389,9 @@ export async function authorCalculationsWithValidation({
             fields: schema.fields.filter((field) => field.datasource === datasourceName),
           },
           '',
+          findWorkbookParameters(liveXml),
+          liveTarget.value.xml,
+          specs.map((spec) => spec.caption),
         );
         if (loose.isErr()) {
           outcomes[index] = {
@@ -433,7 +443,7 @@ export async function authorCalculationsWithValidation({
       if (target.isErr()) {
         return target.error.toErr();
       }
-      const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml, editedXml);
+      const resolvedFormula = resolveCaptionReferences(item.formula, target.value.xml);
       const calcName = nextCalculationName(editedXml, Date.now());
       const columnXml = renderCalculationColumn({
         caption: calc.caption,
@@ -704,11 +714,14 @@ function prepareCalculationBatch({
           fields: workbookSchema.fields.filter((field) => field.datasource === target.name),
         },
         label,
+        findWorkbookParameters(editedXml),
+        target.xml,
+        calcs.map((batchCalc) => batchCalc.caption),
       );
       if (looseFormula.isErr()) return looseFormula;
       formula = looseFormula.value;
     }
-    const resolvedFormula = resolveCaptionReferences(formula, target.xml, editedXml);
+    const resolvedFormula = resolveCaptionReferences(formula, target.xml);
     const existingColumn = findColumnByCaption(target.xml, caption);
     if (existingColumn !== undefined) {
       const existingFormula = getAttr(existingColumn, 'formula');
@@ -792,6 +805,9 @@ function resolveLooseFormulaReferences(
   formula: string,
   schema: ReturnType<typeof summarizeSchema>,
   label: string,
+  parameters: WorkbookParameter[],
+  datasourceXml: string,
+  batchCaptions: string[] = [],
 ): Result<string, ArgsValidationError> {
   let error: ArgsValidationError | undefined;
   const rewritten = rewriteUnquotedFieldReferences(formula, (whole, token, offset, end) => {
@@ -809,6 +825,41 @@ function resolveLooseFormulaReferences(
       );
     }
 
+    // Synonym-only ambiguity (no candidate is named like the token) can still be a parameter.
+    const normalized = normalizeLooseFieldReferencePhrase(bareName(token).trim());
+    const realNameAmbiguity =
+      resolution.kind === 'ambiguous' &&
+      resolution.candidates.some((field) =>
+        [field.caption, bareName(field.columnName)].some(
+          (name) =>
+            name !== undefined &&
+            pluralEquivalent(normalizeLooseFieldReferencePhrase(name), normalized),
+        ),
+      );
+    const ownedByBatchCalc = batchCaptions.some((caption) =>
+      pluralEquivalent(normalizeLooseFieldReferencePhrase(bareName(caption.trim())), normalized),
+    );
+    if (
+      !realNameAmbiguity &&
+      !ownedByBatchCalc &&
+      !datasourceNamesToken(datasourceXml, normalized)
+    ) {
+      const matches = findParametersByReference(token, parameters);
+      if (matches.length === 1) return `[Parameters].${matches[0].name}`;
+      if (matches.length > 1 && !error) {
+        const names = matches
+          .map(
+            (parameter) =>
+              `[Parameters].${parameter.name}${parameter.caption ? ` (${parameter.caption})` : ''}`,
+          )
+          .join(', ');
+        error = new ArgsValidationError(
+          `${label}field reference [${token}] is ambiguous between parameters: ${names}`,
+        );
+        return whole;
+      }
+    }
+
     if (!error) {
       const candidates = formatFieldCandidates(resolution.candidates);
       const outcome = resolution.kind === 'ambiguous' ? 'is ambiguous' : 'was not found';
@@ -818,6 +869,47 @@ function resolveLooseFormulaReferences(
   });
 
   return error ? error.toErr() : new Ok(rewritten);
+}
+
+// Desktop copies referenced parameters into <datasource-dependencies>; those belong to another datasource.
+function withoutDatasourceDependencies(datasourceXml: string): string {
+  return datasourceXml.replace(
+    /<datasource-dependencies\b(?:[^>]*\/>|[\s\S]*?<\/datasource-dependencies>)/g,
+    '',
+  );
+}
+
+// Hidden columns and sets (<group>) are not in the field schema but still own their name, singular or plural.
+function datasourceNamesToken(datasourceXml: string, normalizedToken: string): boolean {
+  const ownXml = withoutDatasourceDependencies(datasourceXml);
+  return [...ownXml.matchAll(/<(?:column|group)\b[^>]*>/g)].some(
+    (match) =>
+      getAttr(match[0], 'datatype') !== 'table' &&
+      ['caption', 'name'].some((attr) => {
+        const value = getAttr(match[0], attr);
+        return (
+          value !== undefined &&
+          pluralEquivalent(
+            normalizeLooseFieldReferencePhrase(bareName(unescapeXml(value))),
+            normalizedToken,
+          )
+        );
+      }),
+  );
+}
+
+// Parameters are not in the field schema; match them by internal name or caption.
+function findParametersByReference(
+  token: string,
+  parameters: WorkbookParameter[],
+): WorkbookParameter[] {
+  const query = normalizeLooseFieldReferencePhrase(bareName(token).trim());
+  if (!query) return [];
+  return parameters.filter((parameter) =>
+    [parameter.name, parameter.caption].some(
+      (name) => name !== undefined && normalizeLooseFieldReferencePhrase(bareName(name)) === query,
+    ),
+  );
 }
 
 function rewriteUnquotedFieldReferences(
@@ -1141,7 +1233,7 @@ function normalizeFormula(formula: string): string {
 }
 
 function findColumnByCaption(datasourceXml: string, caption: string): string | undefined {
-  return findColumnTags(datasourceXml).find(
+  return findColumnTags(withoutDatasourceDependencies(datasourceXml)).find(
     (tag) => unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
   );
 }
@@ -1216,13 +1308,9 @@ export function findWorkbookParameters(xml: string): WorkbookParameter[] {
 
 export { resolveCaptionReferences as resolveCaptionReferencesForTest };
 
-function resolveCaptionReferences(
-  formula: string,
-  datasourceXml: string,
-  workbookXml?: string,
-): string {
+function resolveCaptionReferences(formula: string, datasourceXml: string): string {
   const captionToRef = new Map<string, string>();
-  for (const tag of findColumnTags(datasourceXml)) {
+  for (const tag of findColumnTags(withoutDatasourceDependencies(datasourceXml))) {
     const cap = getAttr(tag, 'caption');
     const name = getAttr(tag, 'name');
     if (cap === undefined || name === undefined) continue;
@@ -1236,18 +1324,6 @@ function resolveCaptionReferences(
       );
     }
   }
-  // Parameters live in their own datasource, so caption references must be qualified.
-  if (workbookXml !== undefined) {
-    const paramsDs = parametersDatasourceBlock(workbookXml);
-    if (paramsDs !== undefined) {
-      for (const tag of findColumnTags(paramsDs)) {
-        const cap = getAttr(tag, 'caption');
-        const name = getAttr(tag, 'name');
-        if (cap === undefined || name === undefined) continue;
-        captionToRef.set(unescapeXml(cap), `[Parameters].${unescapeXml(name)}`);
-      }
-    }
-  }
   if (captionToRef.size === 0) return formula;
   return rewriteUnquotedFieldReferences(formula, (whole, token, offset, end) => {
     if (
@@ -1258,13 +1334,6 @@ function resolveCaptionReferences(
     }
     return captionToRef.get(token) ?? whole;
   });
-}
-
-function parametersDatasourceBlock(xml: string): string | undefined {
-  const open = /<datasource\b[^>]*\bname=(['"])Parameters\1[^>]*>/.exec(xml);
-  if (!open || open.index === undefined) return undefined;
-  const close = xml.indexOf('</datasource>', open.index);
-  return close === -1 ? undefined : xml.slice(open.index, close + '</datasource>'.length);
 }
 
 function nextCalculationName(xml: string, epochMillis: number): string {

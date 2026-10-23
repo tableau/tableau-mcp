@@ -199,11 +199,15 @@ export function formatDashboardZonesDocument(
 
   const edits: TextEdit[] = [];
   for (const zone of targets) {
-    if (zone.selfClosing) {
-      return {
-        ok: false,
-        message: `Dashboard zone "${zone.id}" is self-closing and cannot contain a zone-style.`,
-      };
+    const expandedZone = expandSelfClosing(
+      dashboardXml,
+      zone.start,
+      zone.openEnd,
+      `${renderZoneStyle(request.cornerRadius)}</zone>`,
+    );
+    if (expandedZone !== undefined) {
+      edits.push(...expandedZone);
+      continue;
     }
     if (zone.directStyles.length > 1) {
       return {
@@ -237,24 +241,19 @@ export function formatDashboardZonesDocument(
       continue;
     }
     if (style.selfClosing) {
-      const rawStyle = dashboardXml.slice(style.start, style.end);
-      const selfClosingSlash = /\/(\s*)>$/.exec(rawStyle);
-      if (selfClosingSlash === null) {
+      const expandedStyle = expandSelfClosing(
+        dashboardXml,
+        style.start,
+        style.end,
+        `${renderCornerFormat(request.cornerRadius)}</zone-style>`,
+      );
+      if (expandedStyle === undefined) {
         return {
           ok: false,
           message: `Dashboard zone "${zone.id}" has a zone-style that cannot be expanded safely.`,
         };
       }
-      edits.push({
-        start: style.start + selfClosingSlash.index,
-        end: style.start + selfClosingSlash.index + 1,
-        text: '',
-      });
-      edits.push({
-        start: style.end,
-        end: style.end,
-        text: `${renderCornerFormat(request.cornerRadius)}</zone-style>`,
-      });
+      edits.push(...expandedStyle);
       continue;
     }
     edits.push({
@@ -320,14 +319,9 @@ type ZoneStyle = {
 };
 type Zone = {
   id: string;
-  selfClosing: boolean;
   parentZoneId?: string;
   name?: string;
   typeV2?: string;
-  x?: string;
-  y?: string;
-  w?: string;
-  h?: string;
   start: number;
   openEnd: number;
   closeStart: number;
@@ -386,21 +380,17 @@ function parseDashboardZones(
     }
 
     const frame: Frame = { name: tag.name, start: tag.start, openEnd: tag.end };
-    if (tag.name === 'zone') {
+    // Device layouts belong to Desktop; only the default layout is formatted and compared.
+    if (tag.name === 'zone' && !stack.some(({ name }) => name === 'devicelayouts')) {
       const id = readAttribute(tag.raw, 'id');
       if (id === undefined || id === '') {
         return { ok: false, message: 'Malformed dashboard: every zone needs an id.' };
       }
       const zone: Zone = {
         id,
-        selfClosing: tag.selfClosing,
         parentZoneId: [...stack].reverse().find(({ zone }) => zone !== undefined)?.zone?.id,
         name: readAttribute(tag.raw, 'name'),
         typeV2: readAttribute(tag.raw, 'type-v2'),
-        x: readAttribute(tag.raw, 'x'),
-        y: readAttribute(tag.raw, 'y'),
-        w: readAttribute(tag.raw, 'w'),
-        h: readAttribute(tag.raw, 'h'),
         start: tag.start,
         openEnd: tag.end,
         closeStart: tag.end,
@@ -472,17 +462,7 @@ function hasSameDashboardStructure(leftXml: string, rightXml: string): boolean {
 
 function zoneStructureSignature(zones: Zone[]): string {
   return JSON.stringify(
-    zones.map(({ id, selfClosing, parentZoneId, name, typeV2, x, y, w, h }) => ({
-      id,
-      selfClosing,
-      parentZoneId,
-      name,
-      typeV2,
-      x,
-      y,
-      w,
-      h,
-    })),
+    zones.map(({ id, parentZoneId, name, typeV2 }) => ({ id, parentZoneId, name, typeV2 })),
   );
 }
 
@@ -508,8 +488,8 @@ function hasSameDashboardContent(
   }
 
   return (
-    JSON.stringify(canonicalElement(readback, targetZoneStyleIds, radiusOnlyZoneStyleIds)) ===
-    JSON.stringify(canonicalElement(intended, targetZoneStyleIds, radiusOnlyZoneStyleIds))
+    JSON.stringify(canonicalElement(readback, targetZoneStyleIds, radiusOnlyZoneStyleIds, true)) ===
+    JSON.stringify(canonicalElement(intended, targetZoneStyleIds, radiusOnlyZoneStyleIds, true))
   );
 }
 
@@ -525,15 +505,27 @@ function parseDashboardElement(xml: string): XmlElement | undefined {
   return root;
 }
 
+type CanonicalElement = {
+  name: string;
+  attributes: [string, string][];
+  children: unknown[];
+  directStyle?: unknown;
+};
+
 function canonicalElement(
   element: XmlElement,
   targetZoneStyleIds: Set<string>,
   radiusOnlyZoneStyleIds: Set<string>,
-): unknown {
+  ignoreDesktopLayout: boolean,
+): CanonicalElement {
   const attributes: [string, string][] = [];
   for (let index = 0; index < element.attributes.length; index += 1) {
     const attribute = element.attributes.item(index);
-    if (attribute !== null) {
+    const isZoneGeometry =
+      ignoreDesktopLayout &&
+      element.tagName === 'zone' &&
+      ['x', 'y', 'w', 'h'].includes(attribute?.name ?? '');
+    if (attribute !== null && !isZoneGeometry) {
       attributes.push([
         attribute.name,
         canonicalAttributeValue(element, attribute.name, attribute.value),
@@ -548,18 +540,37 @@ function canonicalElement(
   for (let child: XmlNode | null = element.firstChild; child !== null; child = child.nextSibling) {
     if (child.nodeType === 1) {
       const childElement = child as XmlElement;
-      if (radiusOnlyZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
+      if (ignoreDesktopLayout && childElement.tagName === 'layout-cache') continue;
+      if (childElement.tagName === 'devicelayouts') {
+        const layouts = canonicalElement(childElement, new Set(), new Set(), ignoreDesktopLayout);
+        if (layouts.children.length > 0) children.push(layouts);
+      } else if (childElement.tagName === 'devicelayout') {
+        if (childElement.getAttribute('auto-generated') !== 'true') {
+          children.push(canonicalElement(childElement, new Set(), new Set(), false));
+        }
+      } else if (radiusOnlyZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
         directStyle = canonicalRadiusOnlyStyle(
           childElement,
           targetZoneStyleIds,
           radiusOnlyZoneStyleIds,
         );
       } else if (targetZoneStyleIds.has(zoneId) && childElement.tagName === 'zone-style') {
-        children.push(
-          canonicalTargetZoneStyle(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds),
+        const style = canonicalElement(
+          childElement,
+          targetZoneStyleIds,
+          radiusOnlyZoneStyleIds,
+          ignoreDesktopLayout,
         );
+        children.push({ ...style, children: style.children.map((c) => JSON.stringify(c)).sort() });
       } else {
-        children.push(canonicalElement(childElement, targetZoneStyleIds, radiusOnlyZoneStyleIds));
+        children.push(
+          canonicalElement(
+            childElement,
+            targetZoneStyleIds,
+            radiusOnlyZoneStyleIds,
+            ignoreDesktopLayout,
+          ),
+        );
       }
     } else if ((child.nodeType === 3 || child.nodeType === 4) && child.nodeValue?.trim()) {
       children.push({ text: child.nodeValue });
@@ -585,43 +596,7 @@ function canonicalRadiusOnlyStyle(
     children:
       cornerFormat === undefined
         ? []
-        : [canonicalElement(cornerFormat, targetZoneStyleIds, radiusOnlyZoneStyleIds)],
-  };
-}
-
-function canonicalTargetZoneStyle(
-  style: XmlElement,
-  targetZoneStyleIds: Set<string>,
-  radiusOnlyZoneStyleIds: Set<string>,
-): unknown {
-  const children = directElementChildren(style);
-  const reorderable = ['corner-radius', 'margin', 'background-color'];
-  const indexes = reorderable.map((attr) =>
-    children.findIndex((child) => isExactFormat(child, attr)),
-  );
-  const canNormalizeOrder =
-    style.attributes.length === 0 &&
-    !hasSignificantText(style) &&
-    indexes.every((index) => index >= 0) &&
-    new Set(indexes).size === reorderable.length &&
-    Math.max(...indexes) - Math.min(...indexes) === reorderable.length - 1 &&
-    reorderable.every(
-      (attr) => children.filter((child) => isExactFormat(child, attr)).length === 1,
-    );
-  if (!canNormalizeOrder) {
-    return canonicalElement(style, targetZoneStyleIds, radiusOnlyZoneStyleIds);
-  }
-  const normalizedChildren = [
-    ...children.slice(0, Math.min(...indexes)),
-    ...reorderable.map((attr) => children.find((child) => isExactFormat(child, attr))!),
-    ...children.slice(Math.max(...indexes) + 1),
-  ];
-  return {
-    name: style.tagName,
-    attributes: [] as [string, string][],
-    children: normalizedChildren.map((child) =>
-      canonicalElement(child, targetZoneStyleIds, radiusOnlyZoneStyleIds),
-    ),
+        : [canonicalElement(cornerFormat, targetZoneStyleIds, radiusOnlyZoneStyleIds, true)],
   };
 }
 
@@ -647,10 +622,13 @@ function unsupportedCornerRadiusVersionMessage(
 }
 
 function findZoneElement(dashboard: XmlElement, id: string): XmlElement | undefined {
-  const zones = dashboard.getElementsByTagName('zone');
-  for (let index = 0; index < zones.length; index += 1) {
-    const zone = zones.item(index);
-    if (zone?.getAttribute('id') === id) return zone;
+  for (const root of directElementChildren(dashboard)) {
+    if (root.tagName !== 'zones') continue;
+    const zones = root.getElementsByTagName('zone');
+    for (let index = 0; index < zones.length; index += 1) {
+      const zone = zones.item(index);
+      if (zone?.getAttribute('id') === id) return zone;
+    }
   }
   return undefined;
 }
@@ -799,6 +777,20 @@ function readAttributeValueSpan(
   if (quoteStart === -1) return undefined;
   const start = matchStart + quoteStart + 1;
   return { value: decodeXmlEntities(rawValue), start, end: start + rawValue.length };
+}
+
+function expandSelfClosing(
+  xml: string,
+  start: number,
+  end: number,
+  tail: string,
+): TextEdit[] | undefined {
+  const slash = /\/(\s*)>$/.exec(xml.slice(start, end));
+  if (slash === null) return undefined;
+  return [
+    { start: start + slash.index, end: start + slash.index + 1, text: '' },
+    { start: end, end, text: tail },
+  ];
 }
 
 function renderZoneStyle(radius: number): string {

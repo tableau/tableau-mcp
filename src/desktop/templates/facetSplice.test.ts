@@ -9,7 +9,7 @@ import { getRuntimeTemplateSnapshot } from './runtimeTemplateCatalog.js';
 //
 // Notes:
 //   - There is no single `replaceFieldReferences` chokepoint; each apply path
-//     (inject-template, build-and-apply-worksheet) now composes the splice with the
+//     now composes the splice with the
 //     frozen core inline. `apply()` below reproduces that exact two-stage pipeline
 //     (splice BEFORE rewrite) so the integration pins run the shipped composition.
 //   - The product-path check uses the runtime XML and descriptor derived from the shipped

@@ -60,7 +60,7 @@ describe('trimmed twb-example-index.json is small enough to publish', () => {
   });
 });
 
-describe('search-workbook-examples over the trimmed index', () => {
+describe('searchWorkbookExamples over the trimmed index', () => {
   it('returns a capped, populated slice for an empty query', () => {
     const result = searchWorkbookExamples('');
     expect(result.twbTotal).toBeGreaterThan(50);

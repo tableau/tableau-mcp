@@ -68,11 +68,14 @@ function terminalReadResult(
   envelope: OperationEnvelope,
 ): Result<Record<string, unknown>, ExternalApiError> {
   if (envelope.error !== undefined || envelope.state?.toUpperCase() !== 'SUCCEEDED') {
+    const tableauErrorCode =
+      envelope.error?.tableauErrorCode ?? envelope.error?.['tableau-error-code'];
     return Err({
       type: 'problem',
       status: 500,
       code: envelope.error?.code ?? 'operation-failed',
       detail: envelope.error?.message ?? `Read operation ${envelope.kind} did not succeed.`,
+      ...(typeof tableauErrorCode === 'string' ? { tableauErrorCode } : {}),
     });
   }
   return Ok(envelope.result ?? {});

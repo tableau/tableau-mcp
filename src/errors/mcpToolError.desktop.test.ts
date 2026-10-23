@@ -1,6 +1,27 @@
 import { DesktopCommandExecutionError, ImageExportTimeoutError } from './mcpToolError.desktop.js';
 
 describe('DesktopCommandExecutionError', () => {
+  it.each(['E71AE512', '0xe71ae512'])(
+    'prioritizes session-fatal recovery for %s over a command fix',
+    (code) => {
+      const error = new DesktopCommandExecutionError(
+        {
+          type: 'command-failed',
+          error: { code, message: 'Command tabdoc:apply failed', recoverable: false },
+        },
+        'Retry with different XML.',
+      );
+
+      expect(error.type).toBe('desktop-session-fatal');
+      expect(error.message).toContain('Command tabdoc:apply failed');
+      expect(error.message).toContain('Stop all commands');
+      expect(error.message).toContain('restart Tableau Desktop');
+      expect(error.message).not.toContain('Retry with different XML');
+      expect(error.message).not.toContain('retry once');
+      expect(error.blockedByDesktopDialog).toBe(false);
+    },
+  );
+
   it('forbids invented causes for a bare command failure', () => {
     const error = new DesktopCommandExecutionError({
       type: 'command-failed',

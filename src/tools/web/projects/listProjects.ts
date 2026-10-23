@@ -9,8 +9,14 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  GetPageResult,
+  MAX_PAGE_SIZE,
+} from '../../../utils/paginate.js';
 import { Provider } from '../../../utils/provider.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
@@ -36,7 +42,7 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of projects to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of projects to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
 };
 
@@ -47,6 +53,12 @@ type ListProjectsParamsSchema = z.ZodType<
   z.ZodTypeDef,
   z.input<typeof capabilityParamsSchema>
 >;
+
+type ListProjectsResult = GetPageResult<Project> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
+};
 
 const isProjectCapabilityFilterSupported = (): boolean => RestApi.versionIsAtLeast('3.30');
 
@@ -92,7 +104,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsP
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
   The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
-  To get just the count of projects matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more projects exist; page up to \`totalAvailable\` or filter to reach the rest.`,
     ),
     paramsSchema: new Provider(() =>
       isProjectCapabilityFilterSupported() ? capabilityParamsSchema : baseParamsSchema,
@@ -109,7 +121,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsP
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
-      return await listProjectsTool.logAndExecute({
+      return await listProjectsTool.logAndExecute<ListProjectsResult>({
         extra,
         args: {},
         callback: async () => {
@@ -163,6 +175,15 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsP
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },

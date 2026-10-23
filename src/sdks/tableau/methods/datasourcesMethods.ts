@@ -2,11 +2,17 @@ import { isErrorFromAlias } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
-import { RouteSafetyError } from '../../routeSafety/core.js';
+import { buildRestPath, RouteSafetyError } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
-import { DataSource, PublishedDataSource } from '../types/dataSource.js';
+import {
+  DataSource,
+  PublishedDataSourceResponse,
+  publishedDataSourceResponseSchema,
+} from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -43,7 +49,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     filter: string;
     pageSize?: number;
     pageNumber?: number;
-  }): Promise<{ pagination: Pagination; datasources: PublishedDataSource[] }> => {
+  }): Promise<{ pagination: Pagination; datasources: DataSource[] }> => {
     const response = await this._apiClient.listDatasources({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },
@@ -200,5 +206,63 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       params: { siteId, datasourceId, tagName: tagLabel },
       ...this.authHeader,
     });
+  };
+
+  /**
+   * Publishes a data source on the specified site, committing a file previously uploaded
+   * via `PublishingMethods.uploadFileInChunks`.
+   * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
+   * Zodios-typed client and calls the underlying axios instance directly.
+   *
+   * Required scopes: `tableau:datasources:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param datasourceType - `tds` or `tdsx`, matching the file uploaded to the session
+   * @param name - The name to give the published data source
+   * @param projectId - The ID of the project to publish the data source into
+   * @param overwrite - Whether to overwrite an existing data source with the same name
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#publish_data_source
+   */
+  publishDatasource = async ({
+    siteId,
+    uploadSessionId,
+    datasourceType,
+    name,
+    projectId,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    datasourceType: 'tds' | 'tdsx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<PublishedDataSourceResponse> => {
+    const xml =
+      `<tsRequest><datasource name="${escapeXmlAttribute(name)}">` +
+      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      '</datasource></tsRequest>';
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      buildRestPath('sites', siteId, 'datasources'),
+      body,
+      {
+        params: {
+          uploadSessionId,
+          datasourceType,
+          overwrite,
+        },
+        headers: {
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return publishedDataSourceResponseSchema.parse(response.data.datasource);
   };
 }

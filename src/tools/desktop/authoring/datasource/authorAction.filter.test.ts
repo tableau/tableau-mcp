@@ -31,9 +31,22 @@ const DASHBOARD_WITH_FILTER_FIELDS = buildWorkbookXml({
   dashboards: [{ name: 'Overview', zones: ['Profit', 'Details'] }],
   fields: ['Profit', 'Category', 'Sub-Category'],
 });
+const STORY_WITH_BOTH_SHEETS = buildWorkbookXml({
+  worksheets: ['Profit', 'Details'],
+  dashboards: [{ name: 'Story', zones: ['Profit', 'Details'] }],
+}).replace("<dashboard name='Story'>", "<dashboard name='Story' type='storyboard'>");
 
 const FILTER_DS_NAME = DATASOURCE_NAME;
 const FILTER_DS_CAPTION = DATASOURCE_CAPTION;
+
+// The success-hint warning for a worksheet-only source whose sheets share a dashboard.
+const STANDALONE_SOURCE_MARKER = "won't run this action";
+const standaloneSourceWarning = (dashboard: string): string =>
+  `. Clicks on dashboard '${dashboard}' won't run this action because its source is the standalone sheet 'Profit'. To run it from '${dashboard}', resend the full action with sourceDashboard '${dashboard}'.`;
+const receiptHint = (result: Awaited<ReturnType<typeof getToolResult>>['result']): string => {
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text).hint;
+};
 
 // Builders for the action XML the tool is expected to emit (assertion targets, not workbook inputs).
 const filterLink = (caption: string, expression: string): string =>
@@ -263,6 +276,45 @@ describe('authorActionTool (filter mode)', () => {
     },
   );
 
+  it('reads specific-field dependencies from the workbook block when a datasource-level <actions> block precedes it', async () => {
+    const datasourceActions =
+      "<actions><action caption='Go' expression='https://example.com/ds' name='ds-link' /></actions>";
+    const workbook = WORKSHEETS_WITH_FILTER_FIELDS.replace(
+      '</datasource></datasources>',
+      `${datasourceActions}</datasource></datasources>`,
+    );
+    const expectedAction =
+      "<action caption='Filter Selected' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      filterLink(
+        'Filter Selected',
+        'tsl:Details?%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BCategory%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Category]~na&gt;&amp;%5Bfederated.1syzfv90anwuu119p4zra1ga299n%5D.%5BSub-Category%5D~s0=&lt;[federated.1syzfv90anwuu119p4zra1ga299n].[Sub-Category]~na&gt;',
+      ) +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const expectedBlocks = filterDependencyBlocks(['Category', 'Sub-Category']);
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Filter Selected',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+        filterFields: ['Category', 'Sub-Category'],
+      },
+      initialXml: workbook,
+      readbackXml: withActions(workbook, expectedAction + expectedBlocks),
+    });
+
+    expect(result.isError).toBe(false);
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(
+      `</datasources><actions>${expectedAction}${expectedBlocks}</actions><worksheets>`,
+    );
+    expect(loaded).toContain(`${datasourceActions}</datasource></datasources>`);
+  });
+
   it('fails readback when the specific-field datasource-dependencies are dropped', async () => {
     const survivingAction =
       "<action caption='Filter Selected' name='[Action1]'>" +
@@ -460,6 +512,7 @@ describe('authorActionTool (filter mode)', () => {
     expect(loaded).toContain(expectedAction);
     expect(loaded).not.toContain("<param name='exclude'");
     expect(loaded).not.toContain("dashboard='Overview'");
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
   });
 
   it('keeps a worksheet target as a worksheet action even when both sheets sit on a dashboard', async () => {
@@ -487,7 +540,160 @@ describe('authorActionTool (filter mode)', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.target).toBe('Details');
     expect(parsed.targetSheet).toBe('Details');
+    expect(parsed.hint).toContain("drive the filter. Clicks on dashboard 'Overview'");
+    expect(parsed.hint.endsWith(`drive the filter${standaloneSourceWarning('Overview')}`)).toBe(
+      true,
+    );
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+  });
+
+  it('names every dashboard that holds both sheets of a worksheet-only source', async () => {
+    const workbook = buildWorkbookXml({
+      worksheets: ['Profit', 'Details'],
+      dashboards: [
+        { name: 'Overview', zones: ['Profit', 'Details'] },
+        { name: 'Details Only', zones: ['Details'] },
+        { name: 'Summary', zones: ['Details', 'Profit'] },
+      ],
+    });
+    const expectedAction =
+      "<action caption='Cross Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Cross Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+      },
+      initialXml: workbook,
+      readbackXml: withActions(workbook, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const hint = receiptHint(result);
+    expect(hint).toContain(
+      "drive the filter. Clicks on dashboards 'Overview', 'Summary' won't run this action because its source is the standalone sheet 'Profit'. To run it from one, resend the full action with that dashboard as sourceDashboard.",
+    );
+    expect(hint).not.toContain('Details Only');
+  });
+
+  it('lists at most three shared dashboards in the standalone-source warning', async () => {
+    const shared = ['D1', 'D2', 'D3', 'D4', 'D5'];
+    const workbook = buildWorkbookXml({
+      worksheets: ['Profit', 'Details'],
+      dashboards: shared.map((name) => ({ name, zones: ['Profit', 'Details'] })),
+    });
+    const expectedAction =
+      "<action caption='Cross Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Cross Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+      },
+      initialXml: workbook,
+      readbackXml: withActions(workbook, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    const hint = receiptHint(result);
+    expect(hint).toContain(
+      ". Clicks on dashboards 'D1', 'D2', 'D3' and 2 more won't run this action because its source is the standalone sheet 'Profit'.",
+    );
+    expect(hint).not.toContain("'D4'");
+  });
+
+  it('warns on an edit that leaves a worksheet-only source between sheets on a dashboard', async () => {
+    const original =
+      "<action caption='Original' name='[Action7]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Details' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Profit' /></command>" +
+      '</action>';
+    const edited =
+      "<action caption='Cross Filter' name='[Action7]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        operation: 'edit',
+        actionName: '[Action7]',
+        mode: 'filter',
+        caption: 'Cross Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+      },
+      initialXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, original),
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, edited),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(receiptHint(result)).toContain(standaloneSourceWarning('Overview'));
+  });
+
+  it('does not warn when only a story holds both sheets', async () => {
+    const expectedAction =
+      "<action caption='Cross Filter' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:tsl-filter'>" +
+      "<param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command>" +
+      '</action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'filter',
+        caption: 'Cross Filter',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+      },
+      initialXml: STORY_WITH_BOTH_SHEETS,
+      readbackXml: withActions(STORY_WITH_BOTH_SHEETS, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
+  });
+
+  it('does not add the filter warning to a highlight action between sheets on a dashboard', async () => {
+    const expectedAction =
+      "<action caption='Highlight Details' name='[Action1]'>" +
+      "<activation auto-clear='true' type='on-select' /><source type='sheet' worksheet='Profit' />" +
+      "<command command='tsc:brush'><param name='special-fields' value='all' />" +
+      "<param name='target' value='Details' /></command></action>";
+    const { result } = await getToolResult({
+      args: {
+        mode: 'highlight',
+        caption: 'Highlight Details',
+        sourceWorksheet: 'Profit',
+        targetSheet: 'Details',
+      },
+      initialXml: DASHBOARD_WITH_BOTH_SHEETS,
+      readbackXml: withActions(DASHBOARD_WITH_BOTH_SHEETS, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
   });
 
   it('keeps a self-filtering worksheet action on the worksheet, not its dashboard', async () => {
@@ -520,6 +726,7 @@ describe('authorActionTool (filter mode)', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.target).toBe('Profit');
     expect(parsed.targetSheet).toBe('Profit');
+    expect(parsed.hint).not.toContain(STANDALONE_SOURCE_MARKER);
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain(expectedAction);
     expect(loaded).toContain(expectedBlocks);
@@ -624,6 +831,7 @@ describe('authorActionTool (filter mode)', () => {
     });
 
     expect(result.isError).toBe(false);
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
     const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded).toContain(expectedAction);
     expect(loaded).toContain(expectedBlocks);
@@ -655,6 +863,7 @@ describe('authorActionTool (filter mode)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).target).toBe('Details');
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
   });
 
@@ -681,6 +890,7 @@ describe('authorActionTool (filter mode)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).target).toBe('Details');
+    expect(receiptHint(result)).not.toContain(STANDALONE_SOURCE_MARKER);
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
   });
 
@@ -1494,4 +1704,45 @@ describe('authorActionTool (filter mode)', () => {
     expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['no excludes', undefined, "<source type='sheet' dashboard='Overview' />"],
+    [
+      'KPI sheet excluded',
+      ['KPI Sales'],
+      "<source type='sheet' dashboard='Overview'><exclude-sheet name='KPI Sales' /></source>",
+    ],
+  ] as const)(
+    'pins the click-to-filter offer action (%s)',
+    async (_label, excludeSourceSheets, sourceXml) => {
+      const workbook = buildWorkbookXml({
+        worksheets: ['KPI Sales', 'Profit', 'Details'],
+        dashboards: [{ name: 'Overview', zones: ['KPI Sales', 'Profit', 'Details'] }],
+      });
+      const expectedAction =
+        "<action caption='Click to filter (Overview)' name='[Action1]'>" +
+        "<activation auto-clear='true' type='on-select' />" +
+        sourceXml +
+        "<command command='tsc:tsl-filter'>" +
+        "<param name='special-fields' value='all' />" +
+        "<param name='target' value='Overview' /></command>" +
+        '</action>';
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'filter',
+          caption: 'Click to filter (Overview)',
+          sourceWorksheet: '',
+          sourceDashboard: 'Overview',
+          targetSheet: 'Overview',
+          clearSelection: 'show-all',
+          ...(excludeSourceSheets ? { excludeSourceSheets: [...excludeSourceSheets] } : {}),
+        },
+        initialXml: workbook,
+        readbackXml: withActions(workbook, expectedAction),
+      });
+
+      expect(result.isError).toBe(false);
+      expect(appliedDocumentXml(applyWorkbookDocument)).toContain(expectedAction);
+    },
+  );
 });

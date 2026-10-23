@@ -8,6 +8,7 @@ import {
   BLOCKING_DIALOG_GUIDANCE,
   desktopCallTimeoutMessage,
   INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE,
+  INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE,
   isDesktopCallTimeout,
 } from '../callDeadline.js';
 import {
@@ -26,6 +27,7 @@ import {
   WorkbookDocument,
 } from './executorTypes.js';
 import { ExternalApiHttp, ExternalApiHttpOptions } from './externalApiHttp.js';
+import { classifySessionFatalError, isSessionFatalError } from './sessionFatalError.js';
 import {
   ApiRoot,
   apiRootSchema,
@@ -482,7 +484,7 @@ export class ExternalApiToolExecutor {
     signal: AbortSignal,
     expectedInstanceId: string,
   ): Promise<Result<WorkbookDiagnostics, ExecuteCommandError>> {
-    const result = await this.withRescan('read', (http) => {
+    const result = await this.withRescan('read', async (http) => {
       if (http.instanceId !== expectedInstanceId) {
         return Promise.resolve(
           Err({
@@ -502,14 +504,24 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     query: ShowMeOptionsQuery,
     signal: AbortSignal,
+    expectedInstanceId?: string,
   ): Promise<Result<ShowMeOptionsResult, ExecuteCommandError>> {
-    return this.readExternalApi((http) =>
-      http.getJson(
+    const result = await this.withRescan('read', async (http) => {
+      if (expectedInstanceId !== undefined && http.instanceId !== expectedInstanceId) {
+        return Err({
+          type: 'instance-mismatch' as const,
+          expected: expectedInstanceId,
+          actual: http.instanceId,
+        });
+      }
+      return await http.getJson(
         worksheetShowMeOptionsRoute(worksheetId, query),
         showMeOptionsResultSchema,
         signal,
-      ),
-    );
+      );
+    });
+    if (result.isErr()) return Err(mapClientError(result.error, this.deps.pid));
+    return Ok(result.value);
   }
 
   async getDashboard(
@@ -794,10 +806,12 @@ export class ExternalApiToolExecutor {
   async deleteSheet(
     sheet: SheetRef,
     signal: AbortSignal,
+    options?: ApplyWorkbookDocumentOptions,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postEnvelope(sheetActionRoute(sheet, 'delete'), signal),
       'delete-sheet',
+      options,
     );
   }
 
@@ -827,10 +841,12 @@ export class ExternalApiToolExecutor {
     worksheetId: string,
     request: WorksheetShowMeRequest,
     signal: AbortSignal,
+    expectedInstanceId?: string,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
     return this.applyDocument(
       (http) => http.postJsonEnvelope(worksheetShowMeRoute(worksheetId), request, signal),
       'show-me-worksheet',
+      { expectedInstanceId },
     );
   }
 
@@ -1243,12 +1259,12 @@ function buildCommandStatus(
     const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
     return Err({
       type: 'command-failed',
-      error: {
+      error: classifySessionFatalError({
         code: outcome.envelopeError?.code ?? 'operation-failed',
         message: outcome.envelopeError?.message ?? `Command ${namespace}:${command} failed`,
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-      },
+      }),
       ...(outcome.result !== undefined ? { result: outcome.result } : {}),
       ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(outcome.diagnostics ? { diagnostics: outcome.diagnostics } : {}),
@@ -1364,12 +1380,12 @@ function mapClientError(
       const tableauErrorCode = error.tableauErrorCode ?? error.code;
       return {
         type: 'command-failed',
-        error: {
+        error: classifySessionFatalError({
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
           ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
-        },
+        }),
       };
     }
     case 'unauthorized':
@@ -1503,11 +1519,18 @@ function mapInvokeDialogActionError(
   ) {
     const mapped = mapClientError(error, pinnedPid);
     if (mapped.type === 'command-failed' && mapped.error !== undefined) {
+      // A session-fatal 5xx must not carry the full indeterminate guidance: its get-active-dialogs
+      // read clause contradicts the stop-all-commands-and-reads contract. But the replay-safety core
+      // (the action may already have run; do not re-invoke it; ask the user about any consequential
+      // choice) still holds — the first outcome is unknown even after a restart — so append only that.
+      const guidance = isSessionFatalError(mapped.error)
+        ? INVOKE_DIALOG_ACTION_REPLAY_GUIDANCE
+        : INVOKE_DIALOG_ACTION_INDETERMINATE_GUIDANCE;
       return {
         type: 'command-failed',
         error: {
           ...mapped.error,
-          message: appendInvokeDialogActionIndeterminateGuidance(mapped.error.message),
+          message: `${mapped.error.message} ${guidance}`,
         },
       };
     }

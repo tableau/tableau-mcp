@@ -600,7 +600,7 @@ describe('cannot-know hunter gate', () => {
   });
 
   it('does not exempt a new same-named flag in an allowlisted file', () => {
-    const file = join(DESKTOP_ROOT, 'authoring/datasource/formatLabels.ts');
+    const file = join(DESKTOP_ROOT, 'authoring/binder/bindTemplate.ts');
     const source = `${readFileSync(file, 'utf-8')}
       function syntheticFlag(optionalResult?: object) {
         const applied = optionalResult !== undefined;

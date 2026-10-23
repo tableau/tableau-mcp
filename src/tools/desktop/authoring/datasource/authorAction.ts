@@ -644,7 +644,15 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           const effectiveExcludedTargetSheets =
             input.mode === 'filter' || input.mode === 'highlight' ? input.excludeTargetSheets : [];
 
-          if (hasActionCaption(xmlWithoutSelectedAction, caption)) {
+          const actionsBlock = workbookActionsBlock(xmlWithoutSelectedAction);
+          if (actionsBlock.isErr()) return actionsBlock.error.toErr();
+          if (actionsBlock.value === null && baselineActions.value.length > 0) {
+            return new XmlModificationError(
+              "cannot add the action: the workbook's <actions> block is not where the schema puts it, right before <worksheets>",
+            ).toErr();
+          }
+          const workbookActionsXml = actionsBlock.value?.body ?? '';
+          if (hasActionCaption(workbookActionsXml, caption)) {
             return new ArgsValidationError(
               'caption collision — pick a new caption or edit the existing action',
             ).toErr();
@@ -835,7 +843,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
                     : 'all'
                   : undefined,
             };
-            if (hasHighlightAction(xmlWithoutSelectedAction, highlightAction)) {
+            if (hasHighlightAction(workbookActionsXml, highlightAction)) {
               return new ArgsValidationError(
                 'an identical highlight action (same source, target, fields, and behavior) already exists',
               ).toErr();
@@ -898,7 +906,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           if (
             input.mode === 'filter' &&
-            hasFilterActionDuplicate(xmlWithoutSelectedAction, filterAction!)
+            hasFilterActionDuplicate(workbookActionsXml, filterAction!)
           ) {
             return new ArgsValidationError(
               'an identical filter action (same source, target, fields, and behavior) already exists',
@@ -1117,6 +1125,13 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
             });
           }
           if (input.mode === 'filter') {
+            const sourceWarning =
+              hasSourceWorksheet &&
+              !hasSourceDashboard &&
+              worksheetNames.has(target) &&
+              target !== effectiveSourceSheet
+                ? standaloneSourceWarning(liveXml, effectiveSourceSheet, target)
+                : '';
             const hint = `readback verified the tsl-filter action targeting '${target}'; source scoped to ${[
               hasSourceWorksheet ? `worksheet '${effectiveSourceSheet}'` : '',
               hasSourceDashboard ? `dashboard '${effectiveSourceDashboard}'` : '',
@@ -1124,7 +1139,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
               .filter(Boolean)
               .join(
                 ' on ',
-              )}; Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter`;
+              )}; Tableau generates the sheet_link group column on the target datasource(s) when the action runs, and the source view must expose marks that drive the filter${sourceWarning}`;
             return new Ok({
               actionName,
               caption,
@@ -1163,6 +1178,34 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
   return tool;
 };
+
+// Live-verified: a worksheet-only source does not fire when the user clicks that sheet on a dashboard.
+function standaloneSourceWarning(xml: string, sourceSheet: string, targetSheet: string): string {
+  const dashboardsStart = xml.indexOf('<dashboards>');
+  if (dashboardsStart === -1) return '';
+  const dashboardsEnd = xml.indexOf('</dashboards>', dashboardsStart);
+  const dashboardsBlock = xml.slice(
+    dashboardsStart,
+    dashboardsEnd === -1 ? xml.length : dashboardsEnd,
+  );
+  const shared: string[] = [];
+  for (const match of dashboardsBlock.matchAll(/<dashboard(?=\s)[^>]*>/g)) {
+    if (getAttr(match[0], 'type') === 'storyboard') continue;
+    const name = unescapeXml(getAttr(match[0], 'name') ?? '');
+    const zoneNames = findDashboardZoneNames(xml, name);
+    if (zoneNames?.has(sourceSheet) && zoneNames.has(targetSheet)) shared.push(name);
+  }
+  if (shared.length === 0) return '';
+  const listed =
+    shared
+      .slice(0, 3)
+      .map((name) => `'${name}'`)
+      .join(', ') + (shared.length > 3 ? ` and ${shared.length - 3} more` : '');
+  const reason = `won't run this action because its source is the standalone sheet '${sourceSheet}'`;
+  return shared.length === 1
+    ? `. Clicks on dashboard ${listed} ${reason}. To run it from ${listed}, resend the full action with sourceDashboard ${listed}.`
+    : `. Clicks on dashboards ${listed} ${reason}. To run it from one, resend the full action with that dashboard as sourceDashboard.`;
+}
 
 function validateExcludedSheets(
   liveXml: string,
@@ -2202,10 +2245,11 @@ function hasFilterDependencies(
   if (deps === undefined || deps.columnsXml.length === 0) {
     return true;
   }
-  const actionsBlock = xml.match(/<actions\b[^>]*>[\s\S]*?<\/actions>/)?.[0];
-  if (actionsBlock === undefined) {
+  const block = workbookActionsBlock(xml);
+  if (block.isErr() || block.value === null) {
     return false;
   }
+  const actionsBlock = block.value.body;
   // The datasource must still be listed in the action-scoped <datasources> block.
   const datasourcesBlock = actionsBlock.match(/<datasources>[\s\S]*?<\/datasources>/)?.[0];
   const datasourceListed =
@@ -2245,38 +2289,98 @@ function hasFilterDependencies(
 }
 
 // Where an action should be spliced: inside an existing <actions> block (innerStart just past
-// <actions>, close at </actions>), or in a fresh block anchored right after the top-level
-// </datasources> when none exists yet.
+// <actions>, close at </actions>), or in a fresh block right before
+// <worksheets>, its slot in the twb XSD, when none exists yet.
 type ActionsSite =
   | { kind: 'existing'; innerStart: number; close: number }
   | { kind: 'empty'; start: number; end: number; opening: string }
   | { kind: 'fresh'; insertAt: number };
 
-function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
-  const opening = /<actions\b[^>]*>/.exec(xml);
-  if (opening !== null) {
-    if (/\/\s*>$/.test(opening[0])) {
+type WorkbookActionsBlock = {
+  start: number;
+  opening: string;
+  selfClosing: boolean;
+  innerStart: number;
+  close: number;
+  end: number;
+  body: string;
+};
+
+// Workbook actions sit right before <worksheets> (XSD WorkbookFile-CT); a <datasource> can hold its own <actions>.
+export function workbookActionsBlock(
+  xml: string,
+): Result<WorkbookActionsBlock | null, XmlModificationError> {
+  const worksheets = /<worksheets[\s>/]/.exec(xml);
+  if (worksheets === null) {
+    return /<actions[\s/>]/.test(xml)
+      ? new XmlModificationError(
+          'cannot locate the workbook <actions> block: no <worksheets> anchor in document',
+        ).toErr()
+      : new Ok(null);
+  }
+  const before = xml.slice(0, worksheets.index).trimEnd();
+  const opener = [...before.matchAll(/<actions(?=[\s/>])[^>]*>/g)].at(-1);
+  const closeTag = /<\/actions\s*>$/.exec(before);
+  if (opener !== undefined) {
+    const opening = opener[0];
+    const start = opener.index;
+    const innerStart = start + opening.length;
+    const selfClosing = /\/\s*>$/.test(opening);
+    if (selfClosing && innerStart === before.length) {
       return new Ok({
-        kind: 'empty',
-        start: opening.index,
-        end: opening.index + opening[0].length,
-        opening: opening[0].replace(/\/\s*>$/, '>'),
+        start,
+        opening,
+        selfClosing,
+        innerStart,
+        close: innerStart,
+        end: innerStart,
+        body: '',
       });
     }
-    const close = xml.indexOf('</actions>', opening.index + opening[0].length);
-    if (close === -1) {
-      return new XmlModificationError('malformed document: <actions> without </actions>').toErr();
+    if (
+      !selfClosing &&
+      closeTag !== null &&
+      !before.slice(innerStart, closeTag.index).includes('</actions')
+    ) {
+      return new Ok({
+        start,
+        opening,
+        selfClosing,
+        innerStart,
+        close: closeTag.index,
+        end: before.length,
+        body: before.slice(innerStart, closeTag.index),
+      });
     }
-    return new Ok({ kind: 'existing', innerStart: opening.index + opening[0].length, close });
   }
-
-  const dsClose = xml.indexOf('</datasources>');
-  if (dsClose === -1) {
+  if (closeTag !== null || !/<\/?[\w:-]+[^<>]*>$/.test(before)) {
     return new XmlModificationError(
-      'cannot place actions: no </datasources> anchor in document',
+      'cannot locate the workbook <actions> block: unexpected markup right before <worksheets>',
     ).toErr();
   }
-  return new Ok({ kind: 'fresh', insertAt: dsClose + '</datasources>'.length });
+  return new Ok(null);
+}
+
+function locateActionsSite(xml: string): Result<ActionsSite, XmlModificationError> {
+  const block = workbookActionsBlock(xml);
+  if (block.isErr()) {
+    return block.error.toErr();
+  }
+  if (block.value !== null) {
+    const { start, end, opening, innerStart, close, selfClosing } = block.value;
+    if (selfClosing) {
+      return new Ok({ kind: 'empty', start, end, opening: opening.replace(/\s*\/\s*>$/, '>') });
+    }
+    return new Ok({ kind: 'existing', innerStart, close });
+  }
+
+  const worksheets = /<worksheets[\s>/]/.exec(xml);
+  if (worksheets === null) {
+    return new XmlModificationError(
+      'cannot place actions: no <worksheets> anchor in document',
+    ).toErr();
+  }
+  return new Ok({ kind: 'fresh', insertAt: worksheets.index });
 }
 
 // twb_2026.2.0.xsd fixes the child order of <actions> as a sequence of families:
@@ -2313,10 +2417,10 @@ function familySlotOffset(inner: string, familyIndex: number): number {
   return offset;
 }
 
-// Splice a new action into the workbook-level <actions> block, creating the block between
-// </datasources> and <worksheets> if it does not yet exist. The action lands in its XSD
+// Splice a new action into the workbook-level <actions> block, creating the block just
+// before <worksheets> if it does not yet exist. The action lands in its XSD
 // family slot (see ACTION_FAMILY_MARKERS) rather than at the end of the block.
-function spliceActionIntoWorkbook(
+export function spliceActionIntoWorkbook(
   xml: string,
   actionXml: string,
   deps?: { datasourceName: string; datasourceXml: string; columnsXml: string[] },
