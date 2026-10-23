@@ -562,6 +562,55 @@ describe('listViewsTool', () => {
     });
   });
 
+  describe('INCLUDE_TAGS server-side filter', () => {
+    it('injects the allowed tag on the slow path when the caller supplies no filter', async () => {
+      vi.stubEnv('INCLUDE_TAGS', 'Finance');
+      mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+
+      await getToolResult({});
+
+      expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Finance' }),
+      );
+    });
+
+    it('appends the allowed tags onto the caller filter on the slow path', async () => {
+      vi.stubEnv('INCLUDE_TAGS', 'Finance,HR');
+      mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+
+      await getToolResult({ filter: 'name:eq:Overview' });
+
+      expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'name:eq:Overview,tags:in:[Finance,HR]' }),
+      );
+    });
+
+    it('leaves a caller-supplied tags filter untouched', async () => {
+      vi.stubEnv('INCLUDE_TAGS', 'Finance');
+      mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+
+      await getToolResult({ filter: 'tags:eq:Other' });
+
+      expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Other' }),
+      );
+    });
+
+    it('still uses the INCLUDE_VIEW_IDS fast path when tags are also configured and no filter is given', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},${mockView2.id}`);
+      vi.stubEnv('INCLUDE_TAGS', 'Finance');
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) =>
+        viewId === mockView.id ? mockView : mockView2,
+      );
+
+      const result = await getToolResult({});
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+      expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+    });
+  });
+
   describe('constrainViews', () => {
     it('should return empty result when no views are found', () => {
       const result = constrainViews({

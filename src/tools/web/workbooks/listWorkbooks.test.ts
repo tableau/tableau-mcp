@@ -301,6 +301,44 @@ describe('listWorkbooksTool', () => {
     });
   });
 
+  describe('INCLUDE_TAGS server-side filter', () => {
+    function extraWithTags(tags: Set<string> | null): TableauWebRequestHandlerExtra {
+      const extra = getMockRequestHandlerExtra();
+      const config = new OverridableConfig({});
+      config.boundedContext = { ...config.boundedContext, tags };
+      config.disableMetadataApiRequests = true;
+      extra.getConfigWithOverrides = vi.fn().mockResolvedValue(config);
+      return extra;
+    }
+
+    it('injects the allowed tag when the caller supplies no filter', async () => {
+      mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
+      await getToolResult({ filter: '' }, extraWithTags(new Set(['Finance'])));
+      expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Finance' }),
+      );
+    });
+
+    it('appends the allowed tags onto the caller filter', async () => {
+      mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
+      await getToolResult(
+        { filter: 'name:eq:Superstore' },
+        extraWithTags(new Set(['Finance', 'HR'])),
+      );
+      expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'name:eq:Superstore,tags:in:[Finance,HR]' }),
+      );
+    });
+
+    it('leaves a caller-supplied tags filter untouched', async () => {
+      mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
+      await getToolResult({ filter: 'tags:eq:Other' }, extraWithTags(new Set(['Finance'])));
+      expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Other' }),
+      );
+    });
+  });
+
   describe('constrainWorkbooks', () => {
     it('should return empty result when no workbooks are found', () => {
       const result = constrainWorkbooks({
