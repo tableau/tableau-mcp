@@ -60,6 +60,53 @@ export async function requestStagedUpload<FileType extends string>({
   };
 }
 
+export type ResolvedStagedFileStream = {
+  fileName: string;
+  fileStream: AsyncIterable<Uint8Array>;
+};
+
+/**
+ * Locates a staged upload and returns its bytes as a stream, without buffering. Non-byte chunks
+ * are rejected as they are consumed; size and emptiness are enforced by the consumer.
+ */
+export async function resolveStagedUploadStream<FileType extends string>({
+  kind,
+  uploadId,
+  maxBytes = MAX_STAGED_UPLOAD_BYTES,
+}: {
+  kind: StagedUploadKind<FileType>;
+  uploadId: string;
+  maxBytes?: number;
+}): Promise<ResolvedStagedFileStream> {
+  assertStagedUploadId(kind, uploadId);
+
+  for (const fileType of kind.fileTypes) {
+    const download = await getBlobStorageProvider().download({
+      key: buildStagedUploadKey(kind, uploadId, fileType),
+      maxBytes,
+    });
+
+    if (download === undefined) {
+      continue;
+    }
+
+    return { fileName: `${uploadId}.${fileType}`, fileStream: requireByteChunks(download.data) };
+  }
+
+  throw new Error(
+    `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
+  );
+}
+
+async function* requireByteChunks(stream: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
+  for await (const piece of stream) {
+    if (!(piece instanceof Uint8Array)) {
+      throw new Error('Blob storage provider yielded a non-byte chunk.');
+    }
+    yield piece;
+  }
+}
+
 export async function resolveStagedUpload<FileType extends string>({
   kind,
   uploadId,

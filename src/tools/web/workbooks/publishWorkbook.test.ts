@@ -13,9 +13,11 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from './mockWorkbook.js';
 import { getPublishWorkbookTool } from './publishWorkbook.js';
+import { MAX_STAGED_WORKBOOK_BYTES } from './stagedWorkbookUpload.js';
 
 const mocks = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
+  mockStat: vi.fn(),
+  mockCreateReadStream: vi.fn(),
   mockPublishWorkbook: vi.fn(),
   mockQueryWorkbookPermissions: vi.fn(),
   mockPermissionsSignIn: vi.fn(),
@@ -24,17 +26,17 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
+  mockIsBlobStorageEnabled: vi.fn(),
+}));
+
+vi.mock('fs', () => ({
+  createReadStream: mocks.mockCreateReadStream,
 }));
 
 vi.mock('fs/promises', () => ({
-  readFile: mocks.mockReadFile,
-}));
-
-vi.mock('../../../blobStorage/init.js', () => ({
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+  stat: mocks.mockStat,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -75,11 +77,29 @@ vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
+vi.mock('../../../blobStorage/init.js', () => ({
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+}));
+
 const validArgs = {
   workbookUploadId: '123e4567-e89b-42d3-a456-426614174000',
   name: 'My New Workbook',
   projectId: 'target-project-id',
 };
+
+async function* streamOf(...pieces: Array<string | Uint8Array>): AsyncGenerator<Uint8Array> {
+  for (const piece of pieces) {
+    yield typeof piece === 'string' ? Buffer.from(piece) : piece;
+  }
+}
+
+async function collect(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  for await (const piece of fileStream) {
+    pieces.push(piece);
+  }
+  return Buffer.concat(pieces);
+}
 
 const validLocalArgs = {
   workbookFilePath: '/tmp/source-superstore.twb',
@@ -103,18 +123,20 @@ describe('publishWorkbookTool', () => {
     mocks.mockValidateWorkbookAndUpload.mockReset();
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
-    mocks.mockReadFile.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockStat.mockReset();
+    mocks.mockCreateReadStream.mockReset();
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockGetPersonalSpace.mockReset();
     mocks.useRestApiCalls.length = 0;
     mocks.sessionEvents.length = 0;
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('<workbook source="local" />'));
-    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+    mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
+    mocks.mockStat.mockResolvedValue({ size: 1024 });
+    mocks.mockCreateReadStream.mockImplementation(() => streamOf('<workbook source="local" />'));
+    mocks.mockResolveStagedWorkbookUpload.mockImplementation(async () => ({
       fileName: 'source-superstore.twb',
-      bytes: Buffer.from('<workbook source="new" />'),
-    });
+      fileStream: streamOf('<workbook source="new" />'),
+    }));
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
@@ -214,7 +236,7 @@ describe('publishWorkbookTool', () => {
     ]);
     expect(mocks.useRestApiCalls).toHaveLength(0);
     expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
@@ -358,7 +380,7 @@ describe('publishWorkbookTool', () => {
   it('uploads and publishes a TWBX file without a separate validation step', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',
-      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockResolvedValue({
@@ -377,8 +399,12 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.twbx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -393,7 +419,7 @@ describe('publishWorkbookTool', () => {
   it('returns an error when Tableau rejects an invalid TWBX workbook during publish', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',
-      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockRejectedValue(
@@ -408,7 +434,7 @@ describe('publishWorkbookTool', () => {
   });
 
   it('uploads and publishes a local TWBX workbook file path without a separate validation step', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
+    mocks.mockCreateReadStream.mockImplementation(() => streamOf('PK\x03\x04-fake-zip-bytes'));
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishWorkbook.mockResolvedValue({
       ...mockWorkbook,
@@ -421,13 +447,18 @@ describe('publishWorkbookTool', () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twbx');
+    expect(mocks.mockStat).toHaveBeenCalledWith('/tmp/source-superstore.twbx');
+    expect(mocks.mockCreateReadStream).toHaveBeenCalledWith('/tmp/source-superstore.twbx');
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.twbx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ workbookType: 'twbx' }),
     );
@@ -526,7 +557,7 @@ describe('publishWorkbookTool', () => {
     const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
+    expect(mocks.mockCreateReadStream).toHaveBeenCalledWith('/tmp/source-superstore.twb');
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -543,7 +574,7 @@ describe('publishWorkbookTool', () => {
     expect(result.content[0].text).toContain(
       'workbookFilePath is only supported when staged uploads are not configured',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
@@ -560,18 +591,52 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('workbookFilePath must point to a .twb or .twbx file');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
 
   it('returns an args-validation error when local workbook file is empty', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
+    mocks.mockStat.mockResolvedValue({ size: 0 });
 
     const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('workbookFilePath must not point to an empty');
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns an args-validation error without validating when a TWB exceeds the 64 MB validate limit', async () => {
+    // One reused 1 MB piece keeps the test's own allocation small.
+    const megabyte = Buffer.alloc(1024 * 1024, 'a');
+    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+      fileName: 'source-superstore.twb',
+      fileStream: streamOf(...Array<Uint8Array>(65).fill(megabyte)),
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'TWB workbooks larger than 64 MB cannot be validated and published',
+    );
+    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('returns an args-validation error without validating when a staged TWB is empty', async () => {
+    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+      fileName: 'source-superstore.twb',
+      fileStream: streamOf(),
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Workbook file must not be empty');
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
 
@@ -586,7 +651,7 @@ describe('publishWorkbookTool', () => {
     expect(result.content[0].text).toContain(
       'Provide either workbookFilePath or workbookUploadId, not both',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
@@ -597,7 +662,7 @@ describe('publishWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Either workbookFilePath or workbookUploadId');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
@@ -661,7 +726,7 @@ describe('publishWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('projectId is required');
     expect(mocks.useRestApiCalls).toHaveLength(0);
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
@@ -1303,6 +1368,7 @@ function getMockExtra({
   boundedProjectIds = null,
 }: {
   boundedProjectIds?: Set<string> | null;
+  blobStorageEnabled?: boolean;
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {

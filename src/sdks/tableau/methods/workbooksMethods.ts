@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
 import { createGuardedZodios } from '../../routeSafety/zodios.js';
@@ -14,6 +16,12 @@ import {
   workbookValidationResultSchema,
 } from '../types/workbookValidation.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+/**
+ * `validateWorkbookAndUpload` takes the whole TWB in one request, so it is held to Tableau's
+ * 64 MB single-request publish limit; larger workbooks must use the chunked fileUploads flow.
+ */
+export const MAX_TWB_VALIDATE_BYTES = 64 * 1024 * 1024;
 
 /**
  * Workbooks methods of the Tableau Server REST API
@@ -137,9 +145,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    *
    * Required scopes (Tableau Cloud): `tableau:workbooks:download`
    *
-   * @param workbookId - The ID of the workbook to delete.
+   * @param workbookId - The ID of the workbook to download.
    * @param siteId - The Tableau site ID
    * @param includeExtract - Whether to include the extract in the workbook.
+   * @returns The workbook bytes as a stream (never buffered whole) plus its headers. The caller
+   *   must consume `fileStream`, or destroy it if it is a Node `Readable`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
    */
   downloadWorkbook = async ({
@@ -151,17 +161,35 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     siteId: string;
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
-    const response = await this._apiClient.axios.get<ArrayBuffer>(
-      buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
-      {
-        params: { includeExtract },
-        ...this.authHeader,
-        responseType: 'arraybuffer',
-      },
-    );
+    let response;
+    try {
+      response = await this._apiClient.axios.get<AsyncIterable<Uint8Array>>(
+        buildRestPath(
+          'sites',
+          siteId,
+          'workbooks',
+          assertLuid('workbookId', workbookId),
+          'content',
+        ),
+        {
+          params: { includeExtract },
+          // Axios decompresses but keeps the compressed Content-Length, so ask for identity encoding
+          // to keep `contentLength` the exact byte count of `fileStream`.
+          headers: { ...this.authHeader.headers, 'Accept-Encoding': 'identity' },
+          responseType: 'stream',
+        },
+      );
+    } catch (error) {
+      // An unread non-2xx stream body holds its socket open.
+      if (isAxiosError(error) && error.response?.data instanceof Readable) {
+        error.response.data.destroy();
+      }
+      throw error;
+    }
 
     return {
-      content: Buffer.from(response.data),
+      fileStream: response.data,
+      contentLength: parseContentLength(getHeader(response.headers, 'content-length')),
       contentType: getHeader(response.headers, 'content-type'),
       filename: getFilenameFromContentDisposition(
         getHeader(response.headers, 'content-disposition'),
@@ -376,7 +404,8 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    *
    * @param siteId - The Tableau site ID
    * @param filename - The TWB filename presented to Tableau. Must end with `.twb`.
-   * @param workbook - The raw TWB XML bytes to validate and upload.
+   * @param workbook - The raw TWB XML bytes to validate and upload, at most
+   *   `MAX_TWB_VALIDATE_BYTES`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#validate_workbook_and_upload
    */
   validateWorkbookAndUpload = async ({
@@ -433,6 +462,12 @@ function getHeader(headers: Record<string, unknown>, name: string): string | und
     return typeof first === 'string' ? first : undefined;
   }
   return typeof value === 'string' ? value : undefined;
+}
+
+// Strict digits-only: Number() would accept '1e3', '0x10', ' 12 ', and an untrusted header must not
+// yield a wrong exact byte count.
+function parseContentLength(header: string | undefined): number | undefined {
+  return header && /^\d+$/.test(header) ? Number(header) : undefined;
 }
 
 function getFilenameFromContentDisposition(
