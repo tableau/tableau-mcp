@@ -133,6 +133,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
   }): Promise<string> => {
     let uploadSessionId: string | undefined;
     const appendChunk = async (chunk: Buffer): Promise<void> => {
+      // Opened lazily on the first chunk, so an empty stream never creates a session.
       uploadSessionId ??= (await this.initiateFileUpload({ siteId })).uploadSessionId;
       await this.appendToFileUpload({ siteId, uploadSessionId, filename, chunk });
     };
@@ -141,21 +142,26 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     let currentChunk: Uint8Array[] = [];
     let currentChunkBytes = 0;
     let totalBytes = 0;
+    // Each pass awaits the next piece of the stream (64 KB from disk, arbitrary sizes from S3), so
+    // the whole file is never in memory at once.
     for await (const piece of content) {
       totalBytes += piece.byteLength;
       if (totalBytes > maxBytes) {
         throw new Error(`File content exceeds the maximum allowed size of ${maxBytes} bytes.`);
       }
 
+      // Add the piece to the current chunk, splitting it when it crosses a chunk boundary.
       let offset = 0;
       while (offset < piece.byteLength) {
-        const spaceLeft = maxChunkBytes - currentChunkBytes;
-        const end = Math.min(piece.byteLength, offset + spaceLeft);
+        const remainingChunkBytes = maxChunkBytes - currentChunkBytes;
+        // The rest of the piece if it fits, otherwise only enough to fill the chunk.
+        const end = Math.min(piece.byteLength, offset + remainingChunkBytes);
         currentChunk.push(piece.subarray(offset, end));
         currentChunkBytes += end - offset;
         offset = end;
 
         if (currentChunkBytes === maxChunkBytes) {
+          // Chunk is full: send it, then keep filling a fresh chunk with the rest of this piece.
           await appendChunk(Buffer.concat(currentChunk, currentChunkBytes));
           currentChunk = [];
           currentChunkBytes = 0;
