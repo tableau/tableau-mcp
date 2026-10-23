@@ -56,6 +56,32 @@ export default [
     },
   },
   {
+    // Type-only imports are fine; dynamic import()/require() are caught by src/scripts/desktopSources.test.ts, not here.
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/desktop/**',
+      'src/tools/desktop/**',
+      '**/*.desktop.ts',
+      '**/*.combined.ts',
+      '**/*.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/desktop/**', '**/*.desktop.js', '**/index.combined.js'],
+              allowTypeImports: true,
+              message:
+                'Web and shared code must not import Desktop code. Desktop code lives under src/desktop/, src/tools/desktop/, resources/desktop/, *.desktop.ts and index.combined.ts.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // REST route safety. These selectors are a HINT for reviewers, not the guarantee: static
     // analysis cannot follow every alias (e.g. an axios instance passed to a helper). The real
     // guard is runtime: `createGuardedZodios` installs a path-param plugin plus an axios request

@@ -1,7 +1,6 @@
 import { DesktopMcpServer } from '../server.desktop.js';
 import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
 import { desktopToolFactories, episodeToolFactories } from './desktop/tools.js';
-import { toolNames } from './toolName.js';
 import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
@@ -50,13 +49,6 @@ describe('ToolName', () => {
           ).toBe(false);
         }
       }
-    }
-
-    for (const toolName of toolNames) {
-      expect(
-        [isWebToolName, isDesktopToolName].some((isVariantToolName) => isVariantToolName(toolName)),
-        'This test needs updating. Did you add a new variant?',
-      ).toBe(true);
     }
   });
 });

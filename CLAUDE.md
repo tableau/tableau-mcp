@@ -22,7 +22,8 @@ npm run start:http:docker     # Run via Docker container
 
 ### Testing
 ```bash
-npm test                      # Unit tests (src/**/*.test.ts)
+npm test                      # Web + Desktop unit tests (src/**/*.test.ts); watch mode in an interactive terminal; use the one-shot command below in scripts
+npx vitest run --config ./vitest.config.ts   # One-shot, CI-safe unit run
 npm run test:e2e              # End-to-end tests
 npm run test:eval             # Evaluation tests
 npm run test:oauth:embedded   # OAuth embedded tests
@@ -128,6 +129,9 @@ Tools for local Tableau Desktop, organized by how they use the External Client A
 - Root: `tool.ts` base class, `tools.ts` + `toolName.ts` registration, shared
   helpers, and the cross-tool invariant tests
 
+#### Web/Desktop boundary
+Web and shared code must not import Desktop code at runtime (`src/desktop/**`, `src/tools/desktop/**`, `resources/desktop/**`, `*.desktop.ts`, `index.combined.ts`). Lint catches static imports and re-exports (type-only imports are allowed); the Web build test (`src/scripts/desktopSources.test.ts`) catches anything bundled, including dynamic imports.
+
 #### Tool Context (`src/tools/web/toolContext.ts`)
 `TableauWebRequestHandlerExtra` provides:
 - Config with request overrides
@@ -231,7 +235,7 @@ Key variables (see `env.example.list` and `.env`):
 ### Unit Tests (`vitest.config.ts`)
 - Located in `src/` alongside source files
 - Coverage excludes: scripts, SDKs, server
-- Run with `npm test`
+- Run with `npx vitest run --config ./vitest.config.ts` (`npm test` watches in an interactive terminal)
 
 ### E2E Tests (`vitest.config.e2e.ts`)
 - Located in `tests/e2e/`
