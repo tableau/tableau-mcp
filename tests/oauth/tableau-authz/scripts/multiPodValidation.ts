@@ -26,6 +26,7 @@ function runTestsForSite(site: SiteName): SiteResult {
       shell: true,
       env: {
         ...process.env,
+        PRODUCT_TELEMETRY_ENABLED: 'false',
         TEST_SITE_NAME: site,
         FILL_SITE_NAME: 'true',
         MCP_SERVER_URL:

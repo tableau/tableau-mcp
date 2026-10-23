@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -39,6 +40,10 @@ vi.mock('../resourceAccessChecker.js', () => ({
     resetResourceAccessCheckerSingleton: vi.fn(),
   },
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getViewTool', () => {
   beforeEach(() => {

@@ -16,5 +16,4 @@ export function stubDefaultEnvVars(): void {
   vi.stubEnv('PAT_NAME', 'sponge');
   vi.stubEnv('PAT_VALUE', 'bob');
   vi.stubEnv('TABLEAU_MCP_TEST', 'true');
-  vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', 'false');
 }

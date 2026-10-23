@@ -1,0 +1,47 @@
+{
+  "_description": "FIXED LOD expression: computes a value at a fixed granularity, independent of view dimensions. Place the calculated column in the datasource columns section.",
+  "_feature": "lod,calculated-field",
+  "column_in_datasource": {
+    "_description": "Define the FIXED LOD calculated field in the datasource > columns section",
+    "type": "column",
+    "attrs": {
+      "caption": "Total Sales per Customer",
+      "datatype": "real",
+      "name": "[Calculation_LOD_Fixed]",
+      "role": "measure",
+      "type": "quantitative"
+    },
+    "children": [
+      {
+        "type": "calculation",
+        "attrs": {
+          "class": "tableau",
+          "formula": "{ FIXED [Customer Name] : SUM([Sales]) }"
+        }
+      }
+    ]
+  },
+  "column_instance_in_view": {
+    "_description": "Reference the LOD field in datasource-dependencies as a column-instance",
+    "type": "column-instance",
+    "attrs": {
+      "column": "[Calculation_LOD_Fixed]",
+      "derivation": "Sum",
+      "name": "[sum:Calculation_LOD_Fixed:qk]",
+      "pivot": "key",
+      "type": "quantitative"
+    }
+  },
+  "lod_variants": {
+    "FIXED": "{ FIXED [Dim1], [Dim2] : AGG([Measure]) } — ignores view dims, computes at specified dims",
+    "INCLUDE": "{ INCLUDE [Dim] : AGG([Measure]) } — adds extra dim to view granularity",
+    "EXCLUDE": "{ EXCLUDE [Dim] : AGG([Measure]) } — removes a dim from view granularity"
+  },
+  "notes": {
+    "formula_syntax": "{ FIXED [DimField] : AGG([Measure]) } — curly braces required",
+    "naming_convention": "[Calculation_LOD_Fixed] — use descriptive names with timestamp suffix in production",
+    "derivation": "LOD fields typically use Sum derivation in column-instance; the formula itself specifies the aggregation",
+    "context_filters": "Context filters (context='true') ARE respected by FIXED LOD; regular filters are not",
+    "FIXED_vs_INCLUDE_EXCLUDE": "FIXED ignores all view dimensions; INCLUDE/EXCLUDE modify view grain relatively"
+  }
+}

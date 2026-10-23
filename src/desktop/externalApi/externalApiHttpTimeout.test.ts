@@ -1,0 +1,139 @@
+import { ExternalApiHttp } from './externalApiHttp.js';
+import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
+import { EXTERNAL_API_ROUTES, ExternalApiInstance } from './types.js';
+
+const instance: ExternalApiInstance = {
+  baseUrl: 'http://127.0.0.1:65535',
+  token: 'valid-token',
+  pid: 4321,
+  instanceId: 'inst-test',
+  apiVersion: '1.0',
+};
+
+// Real timers: AbortSignal.timeout runs on a native timer that vi.useFakeTimers cannot advance,
+// so these use a small budget instead. The budget's size is not what is under test — whether the
+// clock applies at all is.
+const BUDGET_MS = 60;
+
+/** A Desktop that accepted the socket and then went quiet — settles only when aborted. */
+function hangingFetch(): typeof fetch {
+  return ((_url: string, init?: RequestInit): Promise<Response> =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    })) as unknown as typeof fetch;
+}
+
+describe('ExternalApiHttp request deadline', () => {
+  it('applies the health budget beneath the configured global ceiling', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('<workbook />', { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'op-1',
+            kind: 'command.invoke',
+            state: 'SUCCEEDED',
+          }),
+          { status: 200 },
+        ),
+      ) as unknown as typeof fetch;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    // Production always supplies this option from sessionManager. The health budget is the
+    // executor's per-call override, so the probe goes through the executor here.
+    const executor = new ExternalApiToolExecutor({
+      discover: () => [instance],
+      clientOptions: { fetchFn, timeoutMs: 60_000 },
+    });
+    const signal = new AbortController().signal;
+
+    try {
+      await executor.health(signal);
+      await executor.getWorkbookDocument(signal);
+      await executor.executeCommand({ namespace: 'tabdoc', command: 'undo', signal });
+
+      expect(timeoutSpy.mock.calls.map(([budgetMs]) => budgetMs)).toEqual([10_000, 60_000, 60_000]);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('creates a fresh deadline for every request', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const http = new ExternalApiHttp(instance, { fetchFn });
+
+    try {
+      await http.getOk(EXTERNAL_API_ROUTES.health);
+      await http.getOk(EXTERNAL_API_ROUTES.health);
+
+      expect(timeoutSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('applies its own clock even when the caller supplies a signal', async () => {
+    // The `??` this replaces meant a caller signal removed the timeout entirely, and every
+    // desktop tool supplies extra.signal — so the 60s default was unreachable in shipped code.
+    const http = new ExternalApiHttp(instance, {
+      fetchFn: hangingFetch(),
+      timeoutMs: BUDGET_MS,
+    });
+    const neverAborts = new AbortController().signal;
+
+    const result = await http.getOk(EXTERNAL_API_ROUTES.health, neverAborts);
+
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error.type).toBe('network');
+    expect((error as { error: unknown }).error).toMatchObject({ name: 'TimeoutError' });
+  });
+
+  it('still applies the clock when the caller supplies no signal', async () => {
+    const http = new ExternalApiHttp(instance, {
+      fetchFn: hangingFetch(),
+      timeoutMs: BUDGET_MS,
+    });
+
+    const result = await http.getOk(EXTERNAL_API_ROUTES.health);
+
+    expect(result.isErr()).toBe(true);
+    expect((result.unwrapErr() as { error: unknown }).error).toMatchObject({
+      name: 'TimeoutError',
+    });
+  });
+
+  it('lets the caller cancel before the clock runs out', async () => {
+    const http = new ExternalApiHttp(instance, {
+      fetchFn: hangingFetch(),
+      timeoutMs: 60_000,
+    });
+    const controller = new AbortController();
+
+    const pending = http.getOk(EXTERNAL_API_ROUTES.health, controller.signal);
+    controller.abort(new Error('client cancelled'));
+    const result = await pending;
+
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    expect(error.type).toBe('network');
+    expect((error as { error: unknown }).error).toMatchObject({ message: 'client cancelled' });
+  });
+
+  it('does not cut a request that finishes inside the budget', async () => {
+    const fetchFn = ((): Promise<Response> =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve(new Response('{}', { status: 200 })), 5);
+      })) as unknown as typeof fetch;
+    const http = new ExternalApiHttp(instance, { fetchFn, timeoutMs: 5_000 });
+
+    const result = await http.getOk(EXTERNAL_API_ROUTES.health, new AbortController().signal);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().ok).toBe(true);
+  });
+});

@@ -94,7 +94,6 @@ vi.mock('../adminGate.js', () => ({
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -120,7 +119,7 @@ async function establishApproval(
 describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    vi.stubEnv('MUTATION_PREVIEW_TTL_MINUTES', undefined);
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'owner-1',

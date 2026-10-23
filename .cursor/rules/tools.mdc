@@ -1,19 +1,19 @@
 ---
 description: MCP tool development patterns — factory pattern, base class, callbacks, and descriptions
 globs:
-  - "src/tools/**/*.ts"
+  - "src/tools/web/**/*.ts"
 ---
 
 # Tool Development Patterns
 
 ## Factory Pattern
-Every tool exports a factory function registered in `src/tools/tools.ts`:
+Every tool exports a factory function registered in `src/tools/web/tools.ts`:
 
 ```typescript
-export const getMyTool = (server: Server): Tool<typeof paramsSchema> => {
-  const myTool = new Tool({
+export const getMyTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const myTool = new WebTool({
     server,
-    name: 'my-tool',           // Must be in ToolName union (src/tools/toolName.ts)
+    name: 'my-tool',           // Must be in WebToolName union (src/tools/web/toolName.ts)
     description: '...',
     paramsSchema,               // Zod schema object (not z.object, just raw shape)
     annotations: { title: 'My Tool', readOnlyHint: true, openWorldHint: false },
@@ -24,12 +24,12 @@ export const getMyTool = (server: Server): Tool<typeof paramsSchema> => {
 ```
 
 ## Adding a New Tool — Checklist
-1. Add tool name to `toolNames` array in `src/tools/toolName.ts`
-2. Add to appropriate `toolGroups` entry (or create new group)
+1. Add tool name to `webToolNames` array in `src/tools/web/toolName.ts`
+2. Add to appropriate `webToolGroups` entry (or create new group)
 3. Add scope mapping in `src/server/oauth/scopes.ts` (`toolScopeMap`)
-4. Create tool directory under `src/tools/`
+4. Create tool directory under `src/tools/web/`
 5. Implement factory function following the pattern above
-6. Register factory in `src/tools/tools.ts` (`toolFactories` array)
+6. Register factory in `src/tools/web/tools.ts` (`webToolFactories` array)
 
 ## Tool Callback Pattern
 Callbacks use `logAndExecute` from the base `Tool` class:

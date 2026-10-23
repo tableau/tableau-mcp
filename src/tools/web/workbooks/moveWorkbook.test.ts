@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -38,6 +39,10 @@ vi.mock('../../../restApiInstance.js', () => ({
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('moveWorkbookTool', () => {
   beforeEach(() => {

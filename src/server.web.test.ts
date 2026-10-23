@@ -5,7 +5,7 @@ import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
-import { serverName, WebMcpServer } from './server.web.js';
+import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
@@ -19,7 +19,7 @@ import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationCondi
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
+  mockRunningAsSea: vi.fn(() => false),
+  mockReadSeaAssetText: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockCheckRegistrationConditions: vi.fn(),
@@ -60,6 +62,12 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./utils/sea.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/sea.js')>()),
+  runningAsSea: mocks.mockRunningAsSea,
+  readSeaAssetText: mocks.mockReadSeaAssetText,
+}));
+
 vi.mock('./tools/web/adminGate.js', () => ({
   getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
   assertAdmin: mocks.mockAssertAdmin,
@@ -82,10 +90,13 @@ describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockRunningAsSea.mockReset().mockReturnValue(false);
+    mocks.mockReadSeaAssetText.mockReset();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
     mocks.mockCheckRegistrationConditions
@@ -102,8 +113,20 @@ describe('server', () => {
   function getServer(opts?: {
     capabilities?: ClientCapabilitiesWithUiExtension;
     clientId?: string;
+    shared?: boolean;
   }): WebMcpServer {
+    const mcpServer = opts?.shared
+      ? new McpServer(
+          { name: 'combined-test', version: '0.0.0' },
+          { capabilities: { tools: {} }, instructions: buildWebInstructions() },
+        )
+      : undefined;
+    if (mcpServer) {
+      (mcpServer.server as unknown as { _instructions?: string })._instructions =
+        buildWebInstructions();
+    }
     const server = new WebMcpServer({
+      mcpServer,
       capabilities: opts?.capabilities,
       clientId: opts?.clientId,
     });
@@ -112,9 +135,13 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
+  function createMockAppTool(opts?: {
+    hideWhenUnsupported?: boolean;
+    htmlPath?: string;
+    name?: WebToolName;
+  }): WebTool<any> {
     return {
-      name: 'mock-app-tool' as WebToolName,
+      name: opts?.name ?? ('mock-app-tool' as WebToolName),
       server: {} as any,
       title: 'Test App Tool',
       description: 'Test App Tool',
@@ -126,7 +153,7 @@ describe('server', () => {
         idempotentHint: true,
         openWorldHint: false,
       },
-      callback: vi.fn(),
+      callback: vi.fn().mockResolvedValue({ content: [] }),
       disabled: false,
       requiredApiScopes: [],
       minRequiredRole: SiteRole.VIEWER,
@@ -136,7 +163,7 @@ describe('server', () => {
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
-        htmlPath: '<html><body>Test App UI</body></html>',
+        htmlPath: opts?.htmlPath ?? 'web/apps/dist/mcp-app.html',
         ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
@@ -776,6 +803,13 @@ describe('server', () => {
 
     const result = await readCallback();
 
+    expect(mocks.mockReadFile).toHaveBeenCalledWith(
+      expect.stringMatching(/web[\\/]apps[\\/]dist[\\/]mcp-app\.html$/),
+      'utf-8',
+    );
+    expect(mocks.mockReadSeaAssetText).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html><body>Test App UI</body></html>');
+
     expect(result.contents[0]._meta).toEqual({
       ui: {
         csp: {
@@ -802,6 +836,302 @@ describe('server', () => {
           ]),
         },
       },
+    });
+  });
+
+  it('reads app resources from the embedded asset when running as a SEA', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue('<html>embedded app</html>');
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    const result = await readCallback();
+
+    expect(mocks.mockReadSeaAssetText).toHaveBeenCalledWith('web/apps/dist/mcp-app.html');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html>embedded app</html>');
+  });
+
+  it('fails closed when a SEA app resource is missing instead of falling back to disk', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue(null);
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    await expect(readCallback()).rejects.toThrow(
+      "SEA app resource 'web/apps/dist/mcp-app.html' is missing or unreadable",
+    );
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      clientId: 'https://cursor.com/some/cimd',
+      expectedRenderable: true,
+      registration: 'app',
+    },
+    {
+      clientId: 'https://claude.ai/some/cimd',
+      expectedRenderable: false,
+      registration: 'plain',
+    },
+  ])(
+    'passes mcpAppToolsRenderable=$expectedRenderable through a lazily registered $registration tool',
+    async ({ clientId, expectedRenderable, registration }) => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'mcp-apps',
+      );
+
+      const server = getServer({ clientId, shared: true });
+      const mockAppTool = createMockAppTool({ name: 'delete-content' });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+      await server.registerTools();
+      await server.loadWebTools('content');
+
+      const registeredCallback =
+        registration === 'app'
+          ? mocks.mockRegisterAppTool.mock.calls[0]?.[3]
+          : vi
+              .mocked(server.mcpServer.registerTool)
+              .mock.calls.find((call) => call[0] === 'delete-content')?.[2];
+      invariant(registeredCallback);
+      await registeredCallback({}, getMockRequestHandlerExtra());
+
+      expect(mockAppTool.callback).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ mcpAppToolsRenderable: expectedRenderable }),
+      );
+    },
+  );
+
+  describe('mcp-apps flag read', () => {
+    const mcpAppsReads = (): number =>
+      mocks.mockFeatureGate.isFeatureEnabled.mock.calls.filter(
+        ([featureName]) => featureName === 'mcp-apps',
+      ).length;
+
+    it('happens once per eager registration pass regardless of tool count', async () => {
+      const server = getServer();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'get-view-data' }),
+        createMockAppTool({ name: 'query-datasource' }),
+      ]);
+      await server.registerTools();
+      expect(mcpAppsReads()).toBe(1);
+    });
+
+    it('happens once per lazy load pass regardless of tool count', async () => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'confirm-delete-content' }),
+      ]);
+      const result = await server.loadWebTools('content');
+      expect(result.toolNames).toEqual(['delete-content', 'confirm-delete-content']);
+      expect(mcpAppsReads()).toBe(1);
+    });
+  });
+
+  it('registers admin instructions, prompts and skills on the combined-lean shared stateful path', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'admin-tools' || featureName === 'skills-over-mcp',
+    );
+
+    const server = getServer({ shared: true });
+    await server.registerTools();
+
+    const instructions =
+      (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+    expect(instructions).toContain('site-administration capabilities');
+    expect(vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining(['stale-content-cleanup-inform', 'user-license-reclamation-apply']),
+    );
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+    expect(
+      vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.some(([name]) => String(name).startsWith('skill://')),
+    ).toBe(true);
+    expect(vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0])).toEqual([
+      'load-web-tools',
+    ]);
+  });
+
+  describe('combined-lean group loading', () => {
+    const contentTool = (): WebTool<any> =>
+      ({ ...createMockAdminTool(), name: 'delete-content' }) as WebTool<any>;
+
+    async function setup(): Promise<WebMcpServer> {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      return server;
+    }
+
+    const registered = (server: WebMcpServer): string[] =>
+      vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
+
+    it('returns the role-fetch warning in the tool result, keeps the group retryable, and leaves instructions alone', async () => {
+      const server = await setup();
+      const before = getInstructions(server);
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('site role could not be determined'),
+      ]);
+      expect(first.warnings?.[0]).toContain('Call load-web-tools again');
+      expect(first.warnings?.[0]).not.toContain('reconnect');
+      expect(getInstructions(server)).toBe(before);
+
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+      expect(second.warnings).toBeUndefined();
+      expect(registered(server)).toContain('delete-content');
+
+      const third = await server.loadWebTools('content');
+      expect(third.status).toBe('already-loaded');
+    });
+
+    it('treats a tool omitted for a low role as loaded so the role is not refetched', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockClear().mockResolvedValue('Viewer');
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first).toEqual({ status: 'loaded', toolNames: [] });
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('already-loaded');
+      expect(mocks.mockGetCurrentUserSiteRole).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a registration error as a warning and retries the group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+      vi.mocked(server.mcpServer.registerTool).mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('Failed to register delete-content: boom'),
+      ]);
+
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+    });
+
+    const pulseTool = (): WebTool<any> =>
+      ({
+        ...createMockConditionalTool(),
+        name: 'list-all-pulse-metric-definitions',
+        minRequiredRole: SiteRole.VIEWER,
+      }) as WebTool<any>;
+
+    it('retries a Pulse group after an indeterminate condition probe and registers it once the probe succeeds', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions
+        .mockResolvedValueOnce({
+          registrationConditionsMet: false,
+          failingCondition: 'RequiresPulse',
+          indeterminate: true,
+        })
+        .mockResolvedValueOnce({ registrationConditionsMet: true });
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([pulseTool()])
+        .mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([expect.stringContaining('could not be confirmed')]);
+      expect(first.notes).toBeUndefined();
+
+      const second = await server.loadWebTools('pulse');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['list-all-pulse-metric-definitions']);
+    });
+
+    it('reports a definitive unmet condition as a note and closes the group', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresPulse',
+      });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('loaded');
+      expect(first.warnings).toBeUndefined();
+      expect(first.notes).toEqual([expect.stringContaining('Pulse is not available')]);
+      expect((await server.loadWebTools('pulse')).status).toBe('already-loaded');
+    });
+
+    it('only reports problems for tools in the requested group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const result = await server.loadWebTools('datasource');
+
+      expect(result.status).toBe('loaded');
+      expect(result.warnings).toBeUndefined();
+      expect(result.notes).toBeUndefined();
+    });
+
+    it('describes every group and tool in the load-web-tools description', async () => {
+      const server = await setup();
+      const config = vi.mocked(server.mcpServer.registerTool).mock.calls[0][1] as {
+        description: string;
+      };
+      expect(config.description).toContain('"partial"');
+      for (const [group, tools] of Object.entries(webToolGroups)) {
+        expect(config.description).toContain(group);
+        for (const tool of tools) {
+          expect(config.description).toContain(tool);
+        }
+      }
     });
   });
 

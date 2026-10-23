@@ -12,6 +12,8 @@ export interface ValidationIssue {
   ruleId: string;
   severity: ValidationSeverity;
   message: string;
+  /** Number of equivalent defects represented when a rule intentionally aggregates them. */
+  occurrenceCount?: number;
   /** XPath-like location hint within the XML, if available */
   xpath?: string;
   /** Suggested remediation shown in logs / error messages */
@@ -25,7 +27,7 @@ export interface ValidationResult {
 }
 
 /** Which apply context the rule should run in */
-export type ValidationContext = 'workbook' | 'worksheet' | 'datasource';
+export type ValidationContext = 'workbook' | 'worksheet' | 'datasource' | 'dashboard';
 
 export interface ValidationRule {
   id: string;
