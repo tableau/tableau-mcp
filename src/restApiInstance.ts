@@ -3,6 +3,7 @@ import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { getConfig } from './config.js';
 import { log } from './logging/logger.js';
 import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
+import { isAsyncIterable } from './logging/sanitize.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
   AxiosResponseInterceptorConfig,
@@ -384,7 +385,13 @@ function logResponse(
   requestId: RequestId,
 ): void {
   const config = getConfig();
-  const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
+  // Redact before masking: a stream can't be cloned, and masking may be disabled.
+  const loggableResponse = isAsyncIterable(response.data)
+    ? { ...response, data: { redacted: true, reason: 'stream-payload' } }
+    : response;
+  const maskedResponse = config.disableLogMasking
+    ? loggableResponse
+    : maskResponse(loggableResponse);
   const url = new URL(
     `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
   );

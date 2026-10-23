@@ -98,7 +98,7 @@ function isBinaryLike(value: unknown): value is BinaryLike {
   return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
 }
 
-function isAsyncIterable(value: unknown): boolean {
+export function isAsyncIterable(value: unknown): boolean {
   return (
     !!value &&
     typeof value === 'object' &&
