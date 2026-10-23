@@ -168,7 +168,7 @@ function loadCustomProvider(config?: Record<string, unknown>): ActivityLogProvid
         'If using a file path, ensure the file exists and the path is correct. ' +
         'If using an npm package, ensure it is installed.';
     } else {
-      errorMessage += `Error: ${error}`;
+      errorMessage += getExceptionMessage(error);
     }
 
     throw new Error(errorMessage);

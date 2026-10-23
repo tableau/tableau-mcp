@@ -1,5 +1,7 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error/v3';
 
 import {
   ActivityLogConfig,
@@ -308,7 +310,11 @@ export class Config extends BaseConfig {
       }
       this.telemetry = {
         provider: 'custom',
-        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
+        providerConfig: parseProviderConfig(
+          'TELEMETRY_PROVIDER_CONFIG',
+          telemetryProviderConfig,
+          providerConfigSchema,
+        ),
       };
     } else {
       this.telemetry = {
@@ -331,8 +337,10 @@ export class Config extends BaseConfig {
       }
       this.featureGate = {
         provider: 'custom',
-        providerConfig: featureGateProviderConfigSchema.parse(
-          JSON.parse(featureGateProviderConfig),
+        providerConfig: parseProviderConfig(
+          'FEATURE_GATE_PROVIDER_CONFIG',
+          featureGateProviderConfig,
+          featureGateProviderConfigSchema,
         ),
       };
     } else {
@@ -350,8 +358,10 @@ export class Config extends BaseConfig {
       }
       this.sessionStore = {
         provider: 'custom',
-        providerConfig: sessionStoreProviderConfigSchema.parse(
-          JSON.parse(sessionStoreProviderConfig),
+        providerConfig: parseProviderConfig(
+          'SESSION_STORE_PROVIDER_CONFIG',
+          sessionStoreProviderConfig,
+          sessionStoreProviderConfigSchema,
         ),
       };
     } else {
@@ -369,8 +379,10 @@ export class Config extends BaseConfig {
       }
       this.activityLog = {
         provider: 'custom',
-        providerConfig: activityLogProviderConfigSchema.parse(
-          JSON.parse(activityLogProviderConfig),
+        providerConfig: parseProviderConfig(
+          'ACTIVITY_LOG_PROVIDER_CONFIG',
+          activityLogProviderConfig,
+          activityLogProviderConfigSchema,
         ),
       };
     } else {
@@ -419,8 +431,10 @@ export class Config extends BaseConfig {
       }
       this.blobStorage = {
         provider: blobStorageProvider,
-        providerConfig: blobStorageProviderConfigSchema.parse(
-          JSON.parse(blobStorageProviderConfig),
+        providerConfig: parseProviderConfig(
+          'BLOB_STORAGE_PROVIDER_CONFIG',
+          blobStorageProviderConfig,
+          blobStorageProviderConfigSchema,
         ),
       };
     }
@@ -567,6 +581,27 @@ function validateServer(server: string): void {
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
     );
   }
+}
+
+function parseProviderConfig<T extends z.ZodTypeAny>(
+  envVarName: string,
+  raw: string,
+  schema: T,
+): z.infer<T> {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    // Omit the SyntaxError: on Node 24 its message echoes part of the raw value, which may hold
+    // provider secrets.
+    throw new Error(`${envVarName} is not valid JSON.`);
+  }
+
+  const result = schema.safeParse(json);
+  if (!result.success) {
+    throw new Error(fromError(result.error, { prefix: `${envVarName} is invalid` }).message);
+  }
+  return result.data;
 }
 
 function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
