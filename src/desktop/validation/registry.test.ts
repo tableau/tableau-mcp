@@ -58,6 +58,17 @@ describe('validation framework', () => {
       expect(introducedBlockingValidationIssues([], [card], 'workbook')).toEqual([card]);
     });
 
+    it('never grandfathers a non-numeric zone id in dashboard context', () => {
+      const bad = issue({ ruleId: 'dashboard-zone-id-number' });
+      expect(introducedBlockingValidationIssues([bad], [bad], 'dashboard')).toEqual([bad]);
+    });
+
+    it('waives an unchanged non-numeric zone id in workbook context but returns an introduced one', () => {
+      const bad = issue({ ruleId: 'dashboard-zone-id-number' });
+      expect(introducedBlockingValidationIssues([bad], [bad], 'workbook')).toEqual([]);
+      expect(introducedBlockingValidationIssues([], [bad], 'workbook')).toEqual([bad]);
+    });
+
     it('returns a newly introduced blocking issue', () => {
       const introduced = issue({ xpath: '//worksheet[@name="New"]' });
 
@@ -109,6 +120,14 @@ describe('validation framework', () => {
           expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type' }),
         ]);
       }
+    });
+
+    it('runs the zone id rule for dashboard context only', () => {
+      const idXml = '<dashboard name="D"><zones><zone id="05" name="A"/></zones></dashboard>';
+      expect(runAlwaysBlockingValidation(idXml, 'dashboard').issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-zone-id-number' }),
+      ]);
+      expect(runAlwaysBlockingValidation(idXml, 'workbook').issues).toEqual([]);
     });
 
     it('filters always-blocking issues by context', () => {

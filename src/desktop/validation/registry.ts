@@ -14,6 +14,8 @@ const alwaysBlockingRuleContexts = new Map<string, ValidationContext[]>([
   ['dashboard-worksheet-zone-type', ['dashboard', 'workbook']],
   // Desktop keeps a nameless card under some parents, so a live workbook can carry one on another dashboard.
   ['dashboard-card-zone-name', ['dashboard']],
+  // A whole-workbook check stays introduced-only: Desktop's handling of a hand-edited workbook's ids is untested.
+  ['dashboard-zone-id-number', ['dashboard']],
 ]);
 
 function isAlwaysBlocking(ruleId: string, context: ValidationContext): boolean {

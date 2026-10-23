@@ -169,3 +169,92 @@ describe('non-waivable nameless card zone crash guard', () => {
     },
   );
 });
+
+describe('non-waivable zone id spelling crash guard', () => {
+  const liveZones =
+    '<zone id="5" name="Total Revenue"/><zone id="6" name="Revenue by Product per Period"/>';
+  const names = ['Total Revenue', 'Revenue by Product per Period'];
+  const shapes = [
+    {
+      shape: 'lzswap50',
+      zones:
+        '<zone id="05" name="Revenue by Product per Period"/><zone id="06" name="Total Revenue"/>',
+    },
+    {
+      shape: 'lz50',
+      zones:
+        '<zone id="05" name="Total Revenue"/><zone id="06" name="Revenue by Product per Period"/>',
+    },
+  ];
+  const named = [
+    { ...modes[0], label: 'cached' },
+    { ...modes[1], label: 'cached, verified' },
+    { ...modes[2], label: 'uncached, verified' },
+  ];
+
+  it.each(
+    (['dashboard', 'storyboard'] as const).flatMap((kind) =>
+      shapes.flatMap((s) => named.map((m) => ({ ...s, ...m, kind }))),
+    ),
+  )(
+    'rejects zone ids "05"/"06" before dispatch: $kind, $shape, $label',
+    async ({ zones, requireExistingSheet, verifyReadback, kind }) => {
+      const { executor, live } = fixture(false, false, liveZones);
+      const before = live();
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: `<dashboard name="D"><zones>${zones}</zones><simple-id uuid="dash-1"/></dashboard>`,
+        worksheetNames: names,
+        kind,
+        requireExistingSheet,
+        verifyReadback,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({
+        error: {
+          type: 'load-dashboard-xml-error',
+          error: {
+            type: 'validation-failed',
+            issues: expect.arrayContaining([
+              expect.objectContaining({ ruleId: 'dashboard-zone-id-number' }),
+            ]),
+          },
+        },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+      expect(live()).toBe(before);
+    },
+  );
+  it.each(named)(
+    'always-blocking: refuses an unchanged live id "05" that a baseline would waive: $label',
+    async ({ requireExistingSheet, verifyReadback }) => {
+      const { executor, fragment, live } = fixture(false, false, '<zone id="05" name="A"/>');
+      const before = live();
+      const result = await loadDashboardXml({
+        dashboardName: 'D',
+        xml: fragment,
+        worksheetNames: ['A'],
+        requireExistingSheet,
+        verifyReadback,
+        focus,
+        executor,
+        signal,
+      });
+      expect(result).toMatchObject({
+        error: {
+          type: 'load-dashboard-xml-error',
+          error: {
+            type: 'validation-failed',
+            issues: [expect.objectContaining({ ruleId: 'dashboard-zone-id-number' })],
+          },
+        },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(live()).toBe(before);
+    },
+  );
+});

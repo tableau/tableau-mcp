@@ -157,6 +157,7 @@ describe('ExternalApiToolExecutor', () => {
       '<zones><zone id="1" name="Sales" type-v2="worksheet"/></zones>',
       '<devicelayouts><devicelayout name="Phone"><zones><zone id="1" name="Sales" type-v2="worksheet"/></zones></devicelayout></devicelayouts>',
       "<zones><zone type-v2='layout-flow' param='horz' id='2'><zone h='100000' id='8' param='[federated.csv040059ff380b040059ff380b].[none:product_line:nk]' type-v2='filter' w='20000' x='80000' y='0' /></zone></zones>",
+      '<zones><zone id="05" name="Sales"/></zones>',
     ])(
       'blocks crash-producing dashboard XML at the shared boundary without dispatch: %s',
       async (zones) => {
