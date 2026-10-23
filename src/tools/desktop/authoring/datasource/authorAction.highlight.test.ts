@@ -273,6 +273,29 @@ describe('author-action highlight mode', () => {
     });
   });
 
+  it('treats an omitted sourceWorksheet like an empty one for a dashboard-only create', async () => {
+    const run = async (
+      sourceWorksheet: string | undefined,
+    ): Promise<{
+      result: Awaited<ReturnType<typeof getToolResult>>['result'];
+      applied: string;
+    }> => {
+      const args = { ...ARGS, sourceWorksheet, sourceDashboard: 'Overview' };
+      // The first pass captures the applied document; the second feeds it back as the readback.
+      const probe = await getToolResult({ args, initialXml: WORKBOOK });
+      const applied = appliedDocumentXml(probe.applyWorkbookDocument);
+      const { result } = await getToolResult({ args, initialXml: WORKBOOK, readbackXml: applied });
+      return { result, applied };
+    };
+    const empty = await run('');
+    const omitted = await run(undefined);
+
+    expect(omitted.result.isError).toBe(false);
+    expect(omitted.applied).toBe(empty.applied);
+    expect(omitted.applied).toContain("dashboard='Overview'");
+    expect(omitted.applied).not.toContain("worksheet='Profit' dashboard");
+  });
+
   it('supports a worksheet on a dashboard targeting a standalone sheet', async () => {
     const action = ALL_FIELDS.replace(
       "worksheet='Profit'",
