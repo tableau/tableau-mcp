@@ -850,9 +850,10 @@ await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: Readable.from(data)
 When `contentLength` is absent, use `@aws-sdk/lib-storage`'s `Upload` (multipart) instead.
 
 `download` returns `{ data, contentLength? }`, where `data` is a stream
-(`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found. Throw (don't truncate) if the
-object is known to exceed `maxBytes`; tableau-mcp also enforces `maxBytes` while reading. In Node,
-S3's GetObject `Body` is already an async iterable (map `NoSuchKey` to `undefined` and check
+(`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found, so multi-GB staged workbooks
+are never held in memory whole. Throw (don't truncate) if the object is known to exceed `maxBytes`;
+tableau-mcp also enforces `maxBytes` while reading. In Node, S3's GetObject `Body` is already an
+async iterable (map `NoSuchKey` to `undefined` and check
 `ContentLength` against `maxBytes` first):
 
 ```ts
