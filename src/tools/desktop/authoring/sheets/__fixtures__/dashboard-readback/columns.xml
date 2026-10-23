@@ -1,0 +1,42 @@
+    <dashboard enable-sort-zone-taborder='true' name='L1 Columns'>
+      <style />
+      <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
+      <zones>
+        <zone h='100000' id='9' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='100000' id='14' param='vert' type-v2='layout-flow' w='100000' x='0' y='0'>
+            <zone h='3700' id='10' type-v2='text' w='100000' x='0' y='0'>
+              <formatted-text>
+                <run bold='true' fontalignment='1' fontsize='16'>L1 Columns</run>
+              </formatted-text>
+              <zone-style>
+                <format attr='border-color' value='#000000' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='4' />
+              </zone-style>
+            </zone>
+            <zone h='96300' id='13' param='horz' type-v2='layout-flow' w='100000' x='0' y='3700'>
+              <zone h='96300' id='11' name='bar chart of revenue by region' w='49285' x='0' y='3700'>
+                <layout-cache minwidth='180' type-h='cell' type-w='scalable' />
+                <zone-style>
+                  <format attr='border-color' value='#000000' />
+                  <format attr='border-style' value='none' />
+                  <format attr='border-width' value='0' />
+                  <format attr='margin' value='4' />
+                </zone-style>
+              </zone>
+              <zone h='96300' id='12' name='bar chart of cogs by product_line' w='50714' x='49285' y='3700'>
+                <layout-cache minwidth='200' type-h='cell' type-w='scalable' />
+                <zone-style>
+                  <format attr='border-color' value='#000000' />
+                  <format attr='border-style' value='none' />
+                  <format attr='border-width' value='0' />
+                  <format attr='margin' value='4' />
+                </zone-style>
+              </zone>
+            </zone>
+          </zone>
+        </zone>
+      </zones>
+      <simple-id uuid='{F1375F1E-8245-4587-B17B-5FE5AF0340B0}' />
+    </dashboard>

@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { InMemorySessionStore } from './inMemorySessionStore.js';
 import type { SessionStore } from './sessionStore.js';
 
@@ -146,8 +147,7 @@ function loadCustomProvider(config?: Record<string, unknown>): SessionStore<unkn
   try {
     // `module` is trusted operator-controlled config, same trust model as
     // FEATURE_GATE_PROVIDER/TELEMETRY_PROVIDER's custom loaders.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
-    const module = require(resolvedPath);
+    const module = loadProviderModule(resolvedPath, require);
 
     // Look for default export or named export "SessionStore"
     const ProviderClass = module.default || module.SessionStore;

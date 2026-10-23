@@ -1,0 +1,104 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='ranking-dot-strip-plot'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+      </datasources>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[Sample - Superstore].[mn:Order Date:ok]'>
+        <groupfilter function='level-members' level='[mn:Order Date:ok]' />
+      </filter>
+      <slices>
+        <column>[Sample - Superstore].[mn:Order Date:ok]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[Sample - Superstore].[sum:Profit:qk]' scope='cols' value='' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='band-size' scope='rows' value='1' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='stroke-color' id='refline0' value='#000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[Sample - Superstore].[none:Customer Name:nk]' />
+        </encodings>
+        <reference-line axis-column='[Sample - Superstore].[sum:Profit:qk]' enable-instant-analytics='false' formula='average' id='refline0' label-type='none' probability='95' scope='per-cell' value-column='[Sample - Superstore].[sum:Profit:qk]' z-order='1' />
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.4172928333282471' />
+            <format attr='mark-transparency' value='129' />
+            <format attr='has-stroke' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[Sample - Superstore].[mn:Order Date:ok]</rows>
+    <cols>[Sample - Superstore].[sum:Profit:qk]</cols>
+  </table>
+</bookmark>

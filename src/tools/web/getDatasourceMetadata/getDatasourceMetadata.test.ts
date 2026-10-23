@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
@@ -277,6 +278,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {

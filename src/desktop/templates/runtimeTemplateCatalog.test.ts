@@ -1,0 +1,251 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+
+import {
+  getRuntimeTemplateSnapshot,
+  loadRuntimeTemplateCatalogSnapshots,
+  loadRuntimeTemplateDescriptors,
+  type RuntimeTemplateCatalogOptions,
+  runtimeTemplateDescriptorFromSnapshot,
+} from './runtimeTemplateCatalog.js';
+import * as templatePath from './templatePath.js';
+import { createTemplateRuntimeSnapshot } from './templateRuntimeSnapshot.js';
+
+const BOOKMARK =
+  "<?xml version='1.0'?><bookmark version='10.1'>" +
+  '<datasources>' +
+  "<datasource name='federated.donor'>" +
+  "<column name='[Value]' datatype='real' role='measure' type='quantitative'/>" +
+  "<column name='[Member]' datatype='string' role='dimension' type='nominal'/>" +
+  '</datasource>' +
+  '</datasources>' +
+  '<table><rows>[federated.donor].[none:Member:nk]</rows>' +
+  '<cols>[federated.donor].[sum:Value:qk]</cols></table>' +
+  '</bookmark>';
+
+const UNSUPPORTED_BOOKMARK =
+  "<?xml version='1.0'?><bookmark version='10.1'>" +
+  '<datasources>' +
+  "<datasource name='federated.donor'>" +
+  "<column name='[Broken Calc]' datatype='real' role='measure' type='quantitative'>" +
+  "<calculation class='tableau' formula='[Missing Input]'/>" +
+  '</column>' +
+  '</datasource>' +
+  '</datasources>' +
+  '<table><cols>[federated.donor].[sum:Broken Calc:qk]</cols></table>' +
+  '</bookmark>';
+
+describe('runtimeTemplateDescriptorFromSnapshot', () => {
+  it('derives puppet selection facts from the TBM name and structure', () => {
+    const snapshot = createTemplateRuntimeSnapshot(
+      'ranking__ordered-bar__show-order-when-rank-matters-more-than-value',
+      BOOKMARK,
+    );
+
+    const descriptor = runtimeTemplateDescriptorFromSnapshot(snapshot);
+
+    expect(descriptor).toMatchObject({
+      template: snapshot.template,
+      family: 'ranking',
+      fast_path_eligible: true,
+      slots: snapshot.descriptor.slots,
+      calcs: snapshot.descriptor.calcs,
+    });
+    expect(descriptor.intent_keywords).toEqual(
+      expect.arrayContaining(['ranking', 'ordered bar', 'rank', 'value']),
+    );
+    expect(descriptor).not.toHaveProperty('source');
+    expect(descriptor).not.toHaveProperty('local_xml_path');
+    expect(descriptor).not.toHaveProperty('readiness');
+    expect(descriptor).not.toHaveProperty('portability_evidence');
+    expect(descriptor).not.toHaveProperty('hazards');
+  });
+
+  it('fails closed for a structurally ineligible TBM without hand-authored policy', () => {
+    const snapshot = createTemplateRuntimeSnapshot('custom-chart', BOOKMARK);
+    snapshot.eligibility = {
+      pass1_eligible: false,
+      pass1_blockers: ['bare-field-reference'],
+    };
+
+    const descriptor = runtimeTemplateDescriptorFromSnapshot(snapshot);
+
+    expect(descriptor.fast_path_eligible).toBe(false);
+    expect(descriptor.fast_path_blockers).toEqual(['bare-field-reference']);
+  });
+});
+
+describe('loadRuntimeTemplateCatalogSnapshots', () => {
+  const markClasses = (
+    template: string,
+    options: RuntimeTemplateCatalogOptions = {},
+  ): string[] | undefined =>
+    loadRuntimeTemplateDescriptors({ ...options, automaticOnly: true }).get(template)?.mark_classes;
+
+  it('derives mark classes from the resolved bookmark mark semantics', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-complete-mark-'));
+    try {
+      const packagedBar = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/ranking-ordered-bar.tbm'),
+        'utf8',
+      );
+      vi.stubEnv('TEMPLATES_DIR', root);
+      writeFileSync(join(root, 'ranking-ordered-bar.tbm'), packagedBar);
+      expect(markClasses('ranking-ordered-bar')).toEqual(['Automatic']);
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace("<mark class='Automatic'", "<mark class='Circle'"),
+      );
+      expect(markClasses('ranking-ordered-bar')).toEqual(['Circle']);
+      expect(markClasses('ranking-ordered-bar', { includeExternal: false })).toEqual(['Automatic']);
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace(
+          "<mark class='Automatic' />",
+          "<mark class='Bar' /><mark class='Circle' />",
+        ),
+      );
+      expect(markClasses('ranking-ordered-bar')).toEqual(['Bar', 'Circle']);
+
+      writeFileSync(
+        join(root, 'ranking-ordered-bar.tbm'),
+        packagedBar.replace(
+          "<mark class='Automatic' />",
+          "<mark class='Bar' /><mark class='Bar' />",
+        ),
+      );
+      expect(markClasses('ranking-ordered-bar')).toEqual(['Bar', 'Bar']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('derives mark classes for custom templates from the active external catalog', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-complete-custom-'));
+    try {
+      const packagedBar = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/ranking-ordered-bar.tbm'),
+        'utf8',
+      );
+      vi.stubEnv('TEMPLATES_DIR', root);
+      writeFileSync(join(root, 'custom-bar.tbm'), packagedBar);
+
+      expect(markClasses('custom-bar')).toEqual(['Automatic']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('treats identical native line bookmarks alike under distinct template names', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-line-alias-'));
+    try {
+      const bookmark = readFileSync(
+        join(process.cwd(), 'src/desktop/data/templates/trend-line-chart.tbm'),
+        'utf8',
+      );
+      vi.stubEnv('TEMPLATES_DIR', root);
+      writeFileSync(join(root, 'trend-line-chart.tbm'), bookmark);
+      writeFileSync(join(root, 'trend-custom-line.tbm'), bookmark);
+      const catalog = loadRuntimeTemplateCatalogSnapshots({
+        includeProtected: false,
+        completeRequestLineColorOptional: true,
+      });
+      const original = catalog.get('trend-line-chart')?.descriptor;
+      const renamed = catalog.get('trend-custom-line')?.descriptor;
+      expect(original).toBeDefined();
+      expect(renamed).toBeDefined();
+      expect(renamed?.slots.map((slot) => ({ role: slot.role, required: slot.required }))).toEqual(
+        original?.slots.map((slot) => ({ role: slot.role, required: slot.required })),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves automatic templates before reading extended siblings and keeps exact lookup available', () => {
+    const read = vi.spyOn(templatePath, 'readBookmarkFromCatalogEntry');
+    const extended = 'ranking__ordered-bar__show-order-when-rank-matters-more-than-value';
+
+    const automatic = loadRuntimeTemplateCatalogSnapshots({
+      automaticOnly: true,
+      includeExternal: false,
+    });
+
+    expect([...automatic.keys()].some((template) => template.includes('__'))).toBe(false);
+    expect(
+      read.mock.calls.map(([entry]) => entry.template).some((template) => template.includes('__')),
+    ).toBe(false);
+
+    const automaticReadCount = read.mock.calls.length;
+    const selected = loadRuntimeTemplateCatalogSnapshots({
+      additionalTemplates: [extended],
+      automaticOnly: true,
+      includeExternal: false,
+    });
+
+    expect(selected.get(extended)?.snapshot.template).toBe(extended);
+    expect(
+      read.mock.calls
+        .slice(automaticReadCount)
+        .map(([entry]) => entry.template)
+        .filter((template) => template.includes('__')),
+    ).toEqual([extended]);
+  });
+
+  it('pins descriptor and applied XML to the same TBM bytes when the source changes later', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-template-'));
+    try {
+      vi.stubEnv('TEMPLATES_DIR', root);
+      const path = join(root, 'ranking-ordered-bar.tbm');
+      writeFileSync(path, BOOKMARK);
+      const expected = createTemplateRuntimeSnapshot('ranking-ordered-bar', BOOKMARK);
+
+      const pinned = loadRuntimeTemplateCatalogSnapshots().get('ranking-ordered-bar');
+      writeFileSync(path, BOOKMARK.replace('[Value]', '[Changed Value]'));
+
+      expect(pinned?.snapshot.sourceHash).toBe(expected.sourceHash);
+      expect(pinned?.snapshot.xml).toBe(expected.xml);
+      expect(pinned?.descriptor.slots).toEqual(expected.descriptor.slots);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('isolates an unsupported external winner without exposing its lower-precedence fallback', () => {
+    const root = mkdtempSync(join(process.cwd(), 'tmp-runtime-template-repository-'));
+    try {
+      const custom = join(root, 'Tableau Agent', 'templates');
+      const overridable = join(custom, '.vendored', 'overridable');
+      mkdirSync(custom, { recursive: true });
+      mkdirSync(overridable, { recursive: true });
+      writeFileSync(join(overridable, 'ranking-ordered-bar.tbm'), BOOKMARK);
+      writeFileSync(join(custom, 'ranking-ordered-bar.tbm'), UNSUPPORTED_BOOKMARK);
+      writeFileSync(join(custom, 'custom-valid-sibling.tbm'), BOOKMARK);
+
+      expect(() =>
+        createTemplateRuntimeSnapshot('ranking-ordered-bar', UNSUPPORTED_BOOKMARK),
+      ).toThrow(
+        "Calculated field dependency 'Missing Input' is missing from the column dictionary.",
+      );
+
+      const options = { repositoryRoot: root, includeProtected: false };
+      const snapshots = loadRuntimeTemplateCatalogSnapshots(options);
+      const descriptors = loadRuntimeTemplateDescriptors(options);
+
+      expect(snapshots.has('ranking-ordered-bar')).toBe(false);
+      expect(descriptors.has('ranking-ordered-bar')).toBe(false);
+      expect(getRuntimeTemplateSnapshot('ranking-ordered-bar', options)).toBeNull();
+      expect(snapshots.get('custom-valid-sibling')?.snapshot.template).toBe('custom-valid-sibling');
+      expect(descriptors.has('custom-valid-sibling')).toBe(true);
+      expect(
+        getRuntimeTemplateSnapshot('trend-line-chart', {
+          includeExternal: false,
+        }),
+      ).not.toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

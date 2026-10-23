@@ -12,6 +12,7 @@ import {
 import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
+import * as loggerModule from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import {
@@ -48,6 +49,10 @@ function basePayload(overrides: Record<string, unknown> = {}): Record<string, un
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('TableauAccessTokenValidator', () => {
   let validator: TableauAccessTokenValidator;
@@ -642,6 +647,8 @@ describe('ExternalAccessTokenValidator', () => {
   }
 
   function captureLogs(): () => string[] {
+    // The file-level beforeEach mocks log; these tests read what the real logger writes.
+    vi.mocked(loggerModule.log).mockRestore();
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     return () => [...consoleSpy.mock.calls, ...stderrSpy.mock.calls].flat().map(String);

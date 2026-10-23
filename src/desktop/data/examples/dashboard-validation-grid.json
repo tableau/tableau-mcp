@@ -1,0 +1,93 @@
+{
+  "_description": "Multi-row before/after validation grid (3 rows × 2 cols of worksheets) using nested layout-flow row zones with explicit per-child coordinates in 100000-based percentages. Pattern extracted from a working production workbook ('Validation Comparison' dashboard). Use this when you want before/after side-by-side bar charts proving a datasource refactor preserved totals.",
+  "_feature": "dashboard",
+  "_when_to_use": "Need to lay out N pairs of worksheets in a tall grid where left column = 'before' and right column = 'after'. For simple side-by-side without rows, use dashboard-tiled.json instead.",
+  "dashboard": {
+    "type": "dashboard",
+    "attrs": { "enable-sort-zone-taborder": "true", "name": "Before vs After Validation" },
+    "children": [
+      { "type": "style" },
+      {
+        "type": "size",
+        "attrs": {
+          "sizing-mode": "fixed",
+          "minwidth": "1400",  "maxwidth": "1400",
+          "minheight": "1200", "maxheight": "1200"
+        }
+      },
+      {
+        "type": "zones",
+        "children": [
+          {
+            "_comment": "Outer layout-basic with full 100000x100000 percentage grid. All children use percentages, NOT pixels.",
+            "type": "zone",
+            "attrs": { "id": 200, "x": 0, "y": 0, "w": 100000, "h": 100000, "type-v2": "layout-basic" },
+            "children": [
+              {
+                "type": "zone",
+                "attrs": { "id": 201, "x": 0, "y": 0, "w": 100000, "h": 5000, "is-fixed": "true", "type-v2": "title" }
+              },
+              {
+                "_comment": "Outer vertical flow holding the rows.",
+                "type": "zone",
+                "attrs": { "id": 202, "x": 0, "y": 5000, "w": 100000, "h": 95000, "type-v2": "layout-flow", "param": "vert" },
+                "children": [
+                  {
+                    "_comment": "Row 1: horizontal flow with two sheet zones (Sales · Before | Sales · After).",
+                    "type": "zone",
+                    "attrs": { "id": 210, "x": 0, "y": 5000, "w": 100000, "h": 31666, "type-v2": "layout-flow", "param": "horz" },
+                    "children": [
+                      { "type": "zone", "attrs": { "id": 211, "name": "Validate Sales · Before", "x": 0,     "y": 5000, "w": 50000, "h": 31666 } },
+                      { "type": "zone", "attrs": { "id": 212, "name": "Validate Sales · After",  "x": 50000, "y": 5000, "w": 50000, "h": 31666 } }
+                    ]
+                  },
+                  {
+                    "type": "zone",
+                    "attrs": { "id": 220, "x": 0, "y": 36666, "w": 100000, "h": 31667, "type-v2": "layout-flow", "param": "horz" },
+                    "children": [
+                      { "type": "zone", "attrs": { "id": 221, "name": "Validate Quantity · Before", "x": 0,     "y": 36666, "w": 50000, "h": 31667 } },
+                      { "type": "zone", "attrs": { "id": 222, "name": "Validate Quantity · After",  "x": 50000, "y": 36666, "w": 50000, "h": 31667 } }
+                    ]
+                  },
+                  {
+                    "type": "zone",
+                    "attrs": { "id": 230, "x": 0, "y": 68333, "w": 100000, "h": 31667, "type-v2": "layout-flow", "param": "horz" },
+                    "children": [
+                      { "type": "zone", "attrs": { "id": 231, "name": "Validate Profit · Before", "x": 0,     "y": 68333, "w": 50000, "h": 31667 } },
+                      { "type": "zone", "attrs": { "id": 232, "name": "Validate Profit · After",  "x": 50000, "y": 68333, "w": 50000, "h": 31667 } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "window": {
+    "type": "window",
+    "attrs": { "name": "Before vs After Validation", "class": "dashboard", "maximized": "true" },
+    "children": [
+      {
+        "type": "viewpoints",
+        "children": [
+          { "type": "viewpoint", "attrs": { "name": "Validate Sales · Before" } },
+          { "type": "viewpoint", "attrs": { "name": "Validate Sales · After" } },
+          { "type": "viewpoint", "attrs": { "name": "Validate Quantity · Before" } },
+          { "type": "viewpoint", "attrs": { "name": "Validate Quantity · After" } },
+          { "type": "viewpoint", "attrs": { "name": "Validate Profit · Before" } },
+          { "type": "viewpoint", "attrs": { "name": "Validate Profit · After" } }
+        ]
+      },
+      { "type": "active", "attrs": { "id": "-1" } }
+    ]
+  },
+  "notes": {
+    "coordinate_system": "Inside row-wrapping layout-flow zones, child x/y/w/h use the 100000-based percentage coordinate system (h='31666' = 31.666% of parent height). The reference 'Validation Comparison' dashboard in the agentdemo finished workbook uses this convention. Pixel coords also work in flat layout-basic dashboards (see dashboard-tiled.json), but inside layout-flow rows, mismatched coordinate systems cause silent zone drops.",
+    "row_height_distribution": "Three equal rows of 31666/31667/31667 sum to 95000 to fit under the 5000-tall title. The 1-unit asymmetry handles 95000 not being divisible by 3.",
+    "fixed_sizing_requires_equal_min_max": "Same constraint as dashboard-tiled.json: for sizing-mode='fixed', min == max for both width and height.",
+    "viewpoint_per_sheet": "<window class='dashboard'> needs one <viewpoint name='X' /> per included worksheet. Bare leaves only — never nest <window> elements.",
+    "verify_post_apply": "After tableau-apply-workbook, re-fetch with tableau-get-dashboard and count zones. If zones went down, your layout structure was rejected silently."
+  }
+}

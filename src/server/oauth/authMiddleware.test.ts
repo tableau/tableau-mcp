@@ -1,6 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../logging/logger.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import { OAUTH_AUTH_CHALLENGE_GUIDANCE } from '../../utils/authErrorMessage.js';
 import { AccessTokenValidator, ExternalAccessTokenValidator } from './accessTokenValidator.js';
@@ -45,6 +46,10 @@ function makeRes(): any {
 function makeValidator(result: Ok<any> | Err<string>): AccessTokenValidator {
   return { validate: vi.fn().mockResolvedValue(result) } as unknown as AccessTokenValidator;
 }
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('authMiddleware auth-error wording (W-23757363)', () => {
   beforeEach(() => {

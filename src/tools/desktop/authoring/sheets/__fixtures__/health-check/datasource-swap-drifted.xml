@@ -1,0 +1,53 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<workbook original-version='18.1' source-build='2025.1.0 (20251.25.0808.1832)' version='18.1'>
+  <preferences />
+  <datasources>
+    <datasource inline='true' name='Superstore Lite' version='18.1'>
+      <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+      <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+      <column datatype='string' name='[Order Stamp]' role='dimension' type='nominal' />
+    </datasource>
+    <datasource inline='true' name='Mega Warehouse' version='18.1'>
+      <column datatype='string' name='[SKU]' role='dimension' type='nominal' />
+      <column datatype='string' name='[Warehouse]' role='dimension' type='nominal' />
+      <column datatype='real' name='[Units]' role='measure' type='quantitative' />
+      <column datatype='real' name='[Cost]' role='measure' type='quantitative' />
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name='Sales Trend'>
+      <table>
+        <view>
+          <datasources>
+            <datasource name='Superstore Lite' />
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+    <worksheet name='Region Count'>
+      <table>
+        <view>
+          <datasources>
+            <datasource name='Superstore Lite' />
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Health Dash'>
+      <size maxheight='800' maxwidth='1200' minheight='800' minwidth='1200' />
+      <zones>
+        <zone h='100000' id='3' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='98000' id='4' name='Sales Trend' w='49000' x='500' y='1000' />
+          <zone h='98000' id='5' name='Region Count' w='49000' x='50500' y='1000' />
+        </zone>
+      </zones>
+    </dashboard>
+  </dashboards>
+  <windows source-height='30'>
+    <window class='worksheet' name='Sales Trend' />
+    <window class='worksheet' name='Region Count' />
+    <window class='dashboard' maximized='true' name='Health Dash' />
+  </windows>
+</workbook>

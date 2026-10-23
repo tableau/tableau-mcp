@@ -55,6 +55,91 @@ OPENAI_API_KEY=<your OpenAI API key>
 5. Run `npm run test:eval` or select the `vitest.config.eval.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
+## Desktop remove-field recovery evals
+
+`tests/eval/removeField.test.ts` covers W-24252809 with eight model-driven cases: stale Rows and
+Columns assumptions, recovery after a wrong-shelf error, an already-removed field, missing Size and
+Angle encodings, preservation of pending edits, and Detail/lod removal. The model receives the built
+Desktop tool schemas and the current implementation's error diagnostics and success response. Tool
+execution uses in-memory worksheet fixtures; no Tableau session, site, or workbook changes are
+needed.
+
+Successful removals report the removed reference and resulting draft placements. The fixture uses
+the same result formatter as production and matches the SDK's single-content tool output; offline
+checks cover that parity and reject invalid combinations of read selectors.
+
+The deterministic grader checks inspection before removal, correct final placements, preservation of
+unrelated fields, and absence of redundant retries or live refreshes of pending drafts. It grades
+tool behavior rather than the wording of the final answer. These are focused recovery evals, not
+end-to-end Desktop or full-tool-catalog discovery tests.
+
+Build Desktop and run only this model suite with `OPENAI_API_KEY`, `OPENAI_BASE_URL` (for a
+gateway), and optionally `EVAL_TEST_MODEL` configured in your environment or `tests/eval/.env`:
+
+```sh
+npm run build:desktop
+npm run test:eval -- run tests/eval/removeField.test.ts
+```
+
+Use a Desktop bundle built from the same checkout as the tests: schemas come from the bundle, while
+removal diagnostics and the shared success formatter come from the source. Comparing revisions
+requires both to match.
+
+Set `ENABLE_LOGGING=true` to log each scenario's tool sequence, model-turn boundaries, call IDs, and
+final response. Call IDs are also logged as tools start, so a timeout retains partial execution
+evidence. A failed grade includes the tool sequence in its assertion output. Every case is bounded
+to eight agent turns. Identical call IDs across repeated runs can indicate gateway response caching;
+do not count cached repeats as independent model samples. This suite disables SDK trace export;
+model requests use the configured gateway.
+
+The fixture, grading, and tool-isolation checks run without a model credential, Desktop build, or
+network access:
+
+```sh
+npm run test:eval -- run tests/eval/removeFieldScenario.test.ts tests/eval/base.test.ts
+```
+
+## Desktop dashboard apply evals
+
+`tests/eval/dashboardApply.test.ts` covers W-24366364 with ten model-driven cases: adding an already
+registered worksheet to an empty dashboard, replacing membership while retaining view settings,
+removing the final worksheet, ordinary layout edits, recovery from unsupported worksheet zone types
+in desktop and Phone layouts, rejection of a genuinely blank worksheet, and safe refusal of missing
+registrations in both empty and populated dashboards, preserving concurrent Desktop edits, and
+repairing unsafe zone types already present in the live dashboard. Known crash hazards cannot be
+grandfathered from the live baseline. Existing-dashboard edits use the surgical dashboard endpoint.
+Desktop builds advertising External Client API 0.2.22 or later create missing worksheet views
+during surgical dashboard apply. The MCP planner permits automatic completion on those builds,
+after every worksheet has been populated, and apply verifies the registrations in live readback.
+Older or unknown API versions still require manual registration in Desktop. A whole-workbook
+replacement is never a fallback for missing registrations.
+
+The model uses the built Desktop tool schemas. Cache files and the External API are in-memory
+fixtures, while applies run the production `loadDashboardXml` implementation, validation, and
+response formatters. The fake API preserves the distinction between dashboard layout updates and
+workbook view registrations, and models additive workbook actions. The independent grader checks the
+final layouts, required registrations (allowing retained unused viewpoints), retained view settings,
+unrelated worksheets/data sources/actions, apply route, readback, and redundant retries. It grades
+tool behavior, not final-answer wording.
+
+No Tableau session or workbook is accessed. These focused evals do not replace live rendering or
+native zone-removal validation. Build the Desktop bundle from the same checkout as the tests and
+configure model credentials as described above, then run:
+
+```sh
+npm run build:desktop
+npm run test:eval -- run tests/eval/dashboardApply.test.ts
+```
+
+Each case allows ten agent turns and two minutes. `ENABLE_LOGGING=true` records tool calls, call
+IDs, model turns, and final responses; SDK trace export is disabled. The fixture and grader checks
+run offline, including negative controls for the original missing-registration bug, duplicate
+actions, incomplete Phone repairs, discarded draft changes, and omitted readback:
+
+```sh
+npm run test:eval -- run tests/eval/dashboardApplyScenario.test.ts tests/eval/base.test.ts
+```
+
 ## Environment Variables
 
 The following environment variables are used by the Eval tests:

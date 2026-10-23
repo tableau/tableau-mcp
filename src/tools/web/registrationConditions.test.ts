@@ -222,6 +222,7 @@ describe('checkRegistrationConditions', () => {
       expect(result).toEqual({
         registrationConditionsMet: false,
         failingCondition: 'RequiresKnowledge',
+        indeterminate: true,
       });
       expect(context.isKnowledgeAvailable).toBe(false);
       expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
@@ -322,6 +323,7 @@ describe('checkRegistrationConditions', () => {
       expect(result).toEqual({
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulse',
+        indeterminate: true,
       });
       expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
       // Memoized so the failure is not re-probed for every remaining Pulse tool.
@@ -359,6 +361,7 @@ describe('checkRegistrationConditions', () => {
       expect(result).toEqual({
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulse',
+        indeterminate: true,
       });
       expect(mocks.useRestApi).toHaveBeenCalledTimes(MAX_API_RETRY_ATTEMPTS + 1);
     });
@@ -480,6 +483,7 @@ describe('checkRegistrationConditions', () => {
       expect(result).toEqual({
         registrationConditionsMet: false,
         failingCondition: 'RequiresPulsePremium',
+        indeterminate: true,
       });
       expect(context.hasPulsePremium).toBe(false);
     });

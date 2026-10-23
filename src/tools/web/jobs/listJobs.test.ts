@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -43,11 +44,14 @@ vi.mock('../../../features/init.js', () => ({
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listJobsTool', () => {
   beforeEach(() => {

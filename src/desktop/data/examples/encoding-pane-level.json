@@ -1,0 +1,32 @@
+{
+  "_description": "Correct pane-level encoding placement for color, text, size, shape, lod. Encodings go in pane > encodings (NOT inside pane > view > mark — mark-level encodings get stripped by loadMetadataFromXml).",
+  "_feature": "encoding,color,mark,pane",
+  "full_pane_structure": {
+    "_description": "Complete pane showing correct encoding placement",
+    "type": "pane",
+    "attrs": { "id": "2", "selection-relaxation-option": "selection-relaxation-disallow" },
+    "children": [
+      {
+        "type": "view",
+        "children": [{ "type": "breakdown", "attrs": { "value": "auto" } }]
+      },
+      { "type": "mark", "attrs": { "class": "Bar" } },
+      {
+        "type": "encodings",
+        "children": [
+          { "type": "color", "attrs": { "column": "[federated.XXXX].[none:Category:nk]" } },
+          { "type": "size", "attrs": { "column": "[federated.XXXX].[sum:Profit:qk]" } },
+          { "type": "text", "attrs": { "column": "[federated.XXXX].[sum:Sales:qk]" } },
+          { "type": "lod", "attrs": { "column": "[federated.XXXX].[none:Region:nk]" } }
+        ]
+      }
+    ]
+  },
+  "notes": {
+    "encoding_types": ["color", "size", "text", "shape", "lod", "tooltip", "path", "angle"],
+    "mark_class_values": ["Automatic", "Text", "Shape", "Bar", "GanttBar", "Line", "Area", "Circle", "Square", "Pie", "Polygon", "Heatmap", "Multipolygon"],
+    "schema_path": "PaneSpecification-G > PaneSpecification-MarkEncodings-G",
+    "WRONG_placement": "pane > view > mark > encoding — gets STRIPPED by loadMetadataFromXml",
+    "CORRECT_placement": "pane > encodings > [color|size|text|shape|lod|tooltip]"
+  }
+}

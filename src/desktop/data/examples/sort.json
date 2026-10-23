@@ -1,0 +1,25 @@
+{
+  "_description": "Sort a dimension by a measure using a view-level sort node. This is the ONLY reliable sort method — CDP tabdoc:sort is unreliable and datasource-level sorts get stripped.",
+  "_feature": "sort,sort-computed",
+  "sort_node": {
+    "_placement": "Direct child of worksheet > table > view (sibling to datasources, filter, slices)",
+    "type": "sort",
+    "attrs": {
+      "column": "[federated.XXXX].[none:Sub-Category:nk]",
+      "using": "[federated.XXXX].[sum:Sales:qk]",
+      "class": "computed",
+      "direction": "DESC"
+    }
+  },
+  "notes": {
+    "column": "The dimension column-instance being sorted",
+    "using": "The measure column-instance to sort by",
+    "class_values_Sort-G": ["computed", "manual", "natural", "alphabetic"],
+    "direction_values_SortDirection-ST": ["ASC", "DESC"],
+    "WRONG_placements": [
+      "Inside column node in datasource-dependencies — stripped by loadMetadataFromXml",
+      "shelf-sort-deltas at table level — stripped by loadMetadataFromXml"
+    ],
+    "CDP_sort_command": "tabdoc:sort is unreliable — use workbook JSON view-level sort instead"
+  }
+}

@@ -6,6 +6,7 @@ import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
+import { loadProviderModule } from '../utils/loadProviderModule.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import type { TelemetryProvider } from './telemetryProvider.js';
 
@@ -150,8 +151,7 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
-    const module = require(resolvedPath);
+    const module = loadProviderModule(resolvedPath, require);
 
     // Look for default export or named export "TelemetryProvider"
     const ProviderClass = module.default || module.TelemetryProvider;

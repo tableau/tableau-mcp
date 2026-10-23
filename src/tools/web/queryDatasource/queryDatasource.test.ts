@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { McpToolError, WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { Query, queryOutputSchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
@@ -82,6 +83,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('queryDatasourceTool', () => {
   const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
@@ -611,8 +616,8 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_QUERY_VALIDATION_REQUESTS environment variable is true', async () => {
-      process.env.DISABLE_QUERY_VALIDATION_REQUESTS = 'true';
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS environment variable is true', async () => {
+      vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'true');
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
@@ -630,10 +635,9 @@ describe('queryDatasourceTool', () => {
             fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
-                field: { fieldCaption: 'Sales' },
-                filterType: 'QUANTITATIVE_NUMERICAL',
-                quantitativeFilterType: 'MIN',
-                min: 1000,
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['East', 'Wast'],
               },
             ],
           },

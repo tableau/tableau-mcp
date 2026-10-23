@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -53,6 +54,10 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 const emptyWorkbookLineage = { data: { workbooksConnection: { nodes: [] } } };
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getWorkbookTool', () => {
   beforeEach(() => {

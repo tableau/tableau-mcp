@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
 
+import * as loggerModule from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -80,6 +81,10 @@ const validLocalArgs = {
   name: 'My New Workbook',
   projectId: 'target-project-id',
 };
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('publishWorkbookTool', () => {
   beforeEach(() => {

@@ -1,0 +1,97 @@
+{
+  "_description": "Top N per partition using Rank on Rows pattern. Uses INDEX() as both the row axis (discrete/ordinal) and filter (continuous/quantitative). Each partition (e.g., month) independently ranks its items. Native Top N filters (class=function) are unreliable through loadMetadataFromXml.",
+  "_feature": "filter,topn,table-calc,rank",
+  "step1_calc_field": {
+    "_description": "Define INDEX() calc field in datasource columns — serves as both rank display and filter",
+    "_placement": "Inside datasource > column definitions",
+    "type": "column",
+    "attrs": {
+      "caption": "Rank",
+      "datatype": "integer",
+      "name": "[Calculation_Rank]",
+      "role": "measure",
+      "type": "ordinal"
+    },
+    "children": [
+      {
+        "type": "calculation",
+        "attrs": {
+          "class": "tableau",
+          "formula": "INDEX()"
+        }
+      }
+    ]
+  },
+  "step2a_column_instance_discrete": {
+    "_description": "Discrete (ordinal) column-instance for Rows shelf — creates rank partitions 1, 2, 3...",
+    "_placement": "Inside worksheet > table > view > datasource-dependencies",
+    "type": "column-instance",
+    "attrs": {
+      "name": "[usr:Calculation_Rank:ok:1]",
+      "column": "[Calculation_Rank]",
+      "pivot": "key",
+      "type": "ordinal",
+      "derivation": "User"
+    },
+    "children": [
+      {
+        "type": "table-calc",
+        "attrs": {
+          "ordering-type": "Field",
+          "level-address": "[DatasourceName].[none:Sub-Category:nk]"
+        }
+      }
+    ]
+  },
+  "step2b_column_instance_continuous": {
+    "_description": "Continuous (quantitative) column-instance for Filter shelf — allows range filtering (max: 10)",
+    "_placement": "Inside worksheet > table > view > datasource-dependencies",
+    "type": "column-instance",
+    "attrs": {
+      "name": "[usr:Calculation_Rank:qk]",
+      "column": "[Calculation_Rank]",
+      "pivot": "key",
+      "type": "quantitative",
+      "derivation": "User"
+    },
+    "children": [
+      {
+        "type": "table-calc",
+        "attrs": {
+          "ordering-type": "Field",
+          "level-address": "[DatasourceName].[none:Sub-Category:nk]"
+        }
+      }
+    ]
+  },
+  "step3_rows": {
+    "_description": "Put the discrete Rank on Rows, the dimension on Label encoding (NOT on Rows)",
+    "rows": "[DatasourceName].[usr:Calculation_Rank:ok:1]",
+    "label_encoding": {
+      "type": "text",
+      "attrs": { "column": "[DatasourceName].[none:Sub-Category:nk]" }
+    }
+  },
+  "step4_filter": {
+    "_description": "Quantitative range filter on the continuous Rank CI — keeps ranks 1 through N",
+    "_placement": "Inside worksheet > table > view (sibling to datasources, datasource-dependencies)",
+    "type": "filter",
+    "attrs": {
+      "column": "[DatasourceName].[usr:Calculation_Rank:qk]",
+      "class": "quantitative",
+      "included-values": "in-range"
+    },
+    "children": [
+      { "type": "max", "content": "10" }
+    ]
+  },
+  "notes": {
+    "why_two_column_instances": "The same INDEX() field needs two forms: discrete (ordinal, :ok:) on Rows creates partitions; continuous (quantitative, :qk) on Filter allows range comparisons. A quantitative filter on an ordinal CI is INVALID.",
+    "why_not_dimension_on_rows": "Putting the dimension (e.g., Sub-Category) on a shared Rows axis creates a union of all partitions' top N — not independent top N per partition. With Rank on Rows, each partition column independently fills rank positions.",
+    "why_not_boolean_index_le_10": "A separate INDEX() <= 10 boolean calc is unnecessary. The Rank field itself serves as both the display axis and the filter target. Using a separate boolean calc risks misaligned compute-using configs between the two INDEX() calculations.",
+    "level_address_vs_ordering_field": "Use level-address (not ordering-field) for Specific Dimensions mode. Maps to 'At the level' in the Table Calculation dialog.",
+    "filter_ci_suffix": "The filter CI may have no numeric suffix (just :qk). Tableau assigns suffixes; don't assume :2.",
+    "order_of_operations": "Table calc filters compute at step 9 (after sorts, FIXED LODs, dimension filters)",
+    "change_N": "To change the number of results, modify the max content value in the filter (e.g., '20' for top 20)"
+  }
+}
