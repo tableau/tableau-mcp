@@ -38,12 +38,18 @@ export function dashboardWorksheetNames(dashboardXml: string): string[] {
   return worksheetNamesIn(doc.documentElement!);
 }
 
+/** The worksheet a zone shows, or undefined for containers, filters, text and other non-worksheet zones. */
+export function worksheetZoneName(zone: Element): string | undefined {
+  const name = zone.getAttribute('name');
+  const type = zone.getAttribute('type-v2');
+  return name && (!type || type === 'visual') ? name : undefined;
+}
+
 function worksheetNamesIn(dashboard: Element): string[] {
   const names = new Map<string, string>();
   for (const zone of Array.from(dashboard.getElementsByTagName('zone'))) {
-    const name = zone.getAttribute('name');
-    const type = zone.getAttribute('type-v2');
-    if (name && (!type || type === 'visual')) names.set(normalizeParsedXmlName(name), name);
+    const name = worksheetZoneName(zone);
+    if (name) names.set(normalizeParsedXmlName(name), name);
   }
   return [...names.values()];
 }

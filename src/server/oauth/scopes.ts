@@ -8,6 +8,7 @@
 import { getConfig } from '../../config.js';
 import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
+import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
 import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
@@ -21,6 +22,7 @@ import type { WebToolName } from '../../tools/web/toolName.js';
 export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
+  | 'tableau:mcp:datasource:create'
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
@@ -72,6 +74,7 @@ export type TableauApiScope =
   | 'tableau:datasource_tags:update'
   | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
+  | 'tableau:datasources:create'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
@@ -89,6 +92,7 @@ export type TableauApiScope =
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
   'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
@@ -278,6 +282,14 @@ const toolScopeMap: Record<
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
     api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+  },
+  'request-datasource-upload': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
+  'publish-datasource': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set(['tableau:datasources:create', 'tableau:file_uploads:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -545,8 +557,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const authoringToolsEnabled =
     (await featureGate.isFeatureEnabled('authoring-tools')) &&
     (await isAuthoringAllowedForClient(clientId));
-  const flowToolsEnabled =
-    config.flowToolsEnabled && (await featureGate.isFeatureEnabled('flow-tools'));
+  const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
+  const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
   const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
   const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
@@ -575,10 +587,9 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools require both FLOW_TOOLS_ENABLED and the flow-tools feature flag. When disabled they
-  // are not registered, so their scopes must not be advertised or enforced either — otherwise a
-  // client could be asked to hold scopes for tools that don't exist.
-  if (!flowToolsEnabled) {
+  // Disabled Flow tools are not registered, so their scopes must not be advertised or enforced
+  // either — otherwise a client could be asked to hold scopes for tools that don't exist.
+  if (!flowReadToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
@@ -587,8 +598,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('get-flow-task');
   }
 
-  // Requires the base flow gate (static + dynamic) and the write opt-in.
-  if (!flowToolsEnabled || !config.flowWriteToolsEnabled) {
+  if (!flowWriteToolsEnabled) {
     enabledTools.delete('run-flow');
     enabledTools.delete('run-flow-task');
     enabledTools.delete('cancel-flow-run');
@@ -605,6 +615,8 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('request-datasource-upload');
+    enabledTools.delete('publish-datasource');
     enabledTools.delete('download-workbook');
   }
 
