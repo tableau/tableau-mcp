@@ -34,7 +34,7 @@ export const getSetDataSourcePageActiveTool = (
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     paramsSchema,
     callback: async ({ session, isDataSourcePageActive }, extra): Promise<CallToolResult> => {

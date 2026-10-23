@@ -42,7 +42,7 @@ describe('setDataSourcePageActiveTool', () => {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     });
   });
 

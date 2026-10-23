@@ -18,6 +18,7 @@ export const getListOperationsTool = (
   const tool = new DesktopTool({
     server,
     name: 'list-operations',
+    minApiVersion: '0.2.0',
     title,
     description:
       'List in-flight and recent Tableau Desktop operations (id, kind, state, timestamps, and the error with its code and tableauErrorCode when failed), plus any blocking or progress windows. Use get-operation to read one by id.',

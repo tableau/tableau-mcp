@@ -33,7 +33,11 @@ describe('reload-extensions', () => {
   it('declares its api floor and annotations', () => {
     const tool = getReloadExtensionsTool(new DesktopMcpServer());
     expect(tool.minApiVersion).toBe('0.2.25');
-    expect(tool.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
+    expect(tool.annotations).toMatchObject({
+      readOnlyHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    });
   });
 
   it('POSTs the worksheet :reloadExtension route body-less', async () => {

@@ -32,7 +32,7 @@ export const getReloadExtensionsTool = (
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     paramsSchema,
     callback: async ({ session, sheet }, extra): Promise<CallToolResult> => {

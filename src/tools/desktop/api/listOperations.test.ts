@@ -38,6 +38,7 @@ describe('list-operations tool', () => {
     const tool = getListOperationsTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('list-operations');
+    expect(tool.minApiVersion).toBe('0.2.0');
     expect(tool.description).toContain('tableauErrorCode');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toEqual({

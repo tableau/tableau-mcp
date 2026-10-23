@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync, rmSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -8,6 +9,7 @@ import {
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance, OperationEnvelope } from '../../../desktop/externalApi/types.js';
+import { REDACTED_CREDENTIAL_SENTINEL } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -25,6 +27,12 @@ const runningOperation = {
   progressWindows: [],
 };
 
+const succeededOperation = {
+  id: 'op-1',
+  kind: 'workbook.getDocument',
+  state: 'SUCCEEDED',
+};
+
 describe('get-operation tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,6 +43,7 @@ describe('get-operation tool', () => {
     const tool = getOperationTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-operation');
+    expect(tool.minApiVersion).toBe('0.2.0');
     expect(tool.description).toContain('progressWindows');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -73,6 +82,68 @@ describe('get-operation tool', () => {
     }
   });
 
+  it('returns a small document result inline without credential values', async () => {
+    const harness = await startHarness();
+    harness.server.setOperation('op-1', {
+      poll: [
+        {
+          ...succeededOperation,
+          result: {
+            document:
+              '<workbook><datasource name="Sales"><connection password="must-not-appear" server="db"/></datasource></workbook>',
+            payloadVersion: '2026.3',
+          },
+        },
+      ],
+    });
+
+    try {
+      const result = await harness.callTool({ session: undefined, operationId: 'op-1' });
+
+      const document = parseResult(result).result?.document;
+      expect(document).toContain(REDACTED_CREDENTIAL_SENTINEL);
+      expect(document).toContain('server="db"');
+      expect(document).not.toContain('must-not-appear');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('moves an oversized document result to a redacted cache file', async () => {
+    const harness = await startHarness({ capBytes: 16 });
+    harness.server.setOperation('op-1', {
+      poll: [
+        {
+          ...succeededOperation,
+          result: {
+            document: '<workbook><connection password="must-not-appear"/></workbook>',
+            payloadVersion: '2026.3',
+          },
+        },
+      ],
+    });
+
+    try {
+      const result = await harness.callTool({ session: undefined, operationId: 'op-1' });
+
+      const operation = parseResult(result);
+      const documentFile = operation.result?.documentFile;
+      invariant(typeof documentFile === 'string');
+      try {
+        expect(operation.result).not.toHaveProperty('document');
+        expect(operation.result?.payloadVersion).toBe('2026.3');
+        expect(operation.result?.documentMessage).toContain('16-byte inline cap');
+        const cached = readFileSync(documentFile, 'utf-8');
+        expect(cached).toContain(REDACTED_CREDENTIAL_SENTINEL);
+        expect(cached).not.toContain('must-not-appear');
+      } finally {
+        rmSync(documentFile, { force: true });
+      }
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('returns an error for an unknown operation id', async () => {
     const harness = await startHarness();
 
@@ -91,7 +162,7 @@ function parseResult(result: CallToolResult): OperationEnvelope {
   return JSON.parse(result.content[0].text) as OperationEnvelope;
 }
 
-async function startHarness(): Promise<{
+async function startHarness({ capBytes }: { capBytes?: number } = {}): Promise<{
   server: MockExternalApiServer;
   callTool: (args: { session: string | undefined; operationId: string }) => Promise<CallToolResult>;
   close: () => Promise<void>;
@@ -101,8 +172,10 @@ async function startHarness(): Promise<{
   await executor.start();
   const tool = getOperationTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
+  const base = getMockRequestHandlerExtra();
   const extra = {
-    ...getMockRequestHandlerExtra(),
+    ...base,
+    ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
     getExecutor: vi.fn().mockResolvedValue(executor),
   };
 
