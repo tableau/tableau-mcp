@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -168,6 +168,17 @@ describe('createDataAppWorkspace', () => {
         // Starter app.js left untouched with its authoring marker.
         const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
         expect(appJs).toContain('AUTHOR YOUR APP HERE');
+
+        // Data/ ships empty except its placeholder, for datasource files the workbook embeds.
+        expect(readdirSync(join(root, 'Data'))).toEqual(['.gitkeep']);
+
+        // Resources/.agents/ ships the agent-docs README, which carries no identity tokens.
+        const agentsReadme = await readFile(
+          join(root, 'Resources', '.agents', 'README.md'),
+          'utf8',
+        );
+        expect(agentsReadme).toContain('# Resources/.agents/');
+        expect(agentsReadme).not.toContain('TODO');
       } finally {
         await rm(extractDir, { recursive: true, force: true });
       }
