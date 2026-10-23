@@ -63,11 +63,8 @@ import { getSearchWorkbookFieldsTool } from './authoring/fields/searchWorkbookFi
 import { getComposeStoryTool } from './authoring/sheets/composeStory.js';
 import { getRefineWorksheetTool } from './authoring/sheets/refineWorksheet.js';
 import { getRunDashboardBatchTool } from './authoring/sheets/runDashboardBatch.js';
-import { getApplyWorkbookStyleTool } from './authoring/style/applyWorkbookStyle.js';
-import { getExportCustomThemeTool } from './authoring/style/exportCustomTheme.js';
 import { getFormatDashboardZonesTool } from './authoring/style/formatDashboardZones.js';
 import { getFormatWorksheetsTool } from './authoring/style/formatWorksheets.js';
-import { getInspectCustomThemeTool } from './authoring/style/inspectCustomTheme.js';
 import { getSetMemberColorsTool } from './authoring/style/setMemberColors.js';
 import { getBuildWorksheetsFromTemplatesTool } from './authoring/templates/buildWorksheetsFromTemplates.js';
 import { getAskUserTool } from './local/askUser.js';
@@ -124,9 +121,6 @@ export const desktopToolFactories = [
   getAddFieldTool,
   getRemoveFieldTool,
   getResolveFieldTool,
-  getApplyWorkbookStyleTool,
-  getInspectCustomThemeTool,
-  getExportCustomThemeTool,
   getSearchWorkbookFieldsTool,
   getSearchCommandsTool,
   getExecuteTableauCommandTool,

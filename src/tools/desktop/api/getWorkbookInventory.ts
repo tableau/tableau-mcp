@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { runExternalApiReadTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
-import { workbookTargetFingerprint } from './workbookTargetFingerprint.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -53,7 +52,6 @@ export const getWorkbookInventoryTool = (
             worksheets: result.value.worksheets ?? [],
             dashboards: result.value.dashboards ?? [],
             storyboards: result.value.storyboards ?? [],
-            targetFingerprint: workbookTargetFingerprint(result.value),
           });
         },
       });
