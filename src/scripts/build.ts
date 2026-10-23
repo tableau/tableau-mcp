@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-import { build, BuildOptions, context } from 'esbuild';
+import { build, BuildOptions, context, Metafile } from 'esbuild';
 import { cpSync } from 'fs';
 import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
@@ -8,6 +8,7 @@ import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from './buildTemplateZip.js';
+import { findDesktopSources } from './desktopSources.js';
 import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
 import { isVariant, variants } from './variants.js';
 
@@ -26,6 +27,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   BUILD_VARIANT: variant,
 };
 
+const checkNoDesktopSources = variant === 'default';
+
 (async () => {
   if (!dirty) {
     await rm('./build', { recursive: true, force: true });
@@ -40,6 +43,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     minify: !dev,
     packages: dev ? 'external' : 'bundle',
     sourcemap: true,
+    metafile: checkNoDesktopSources,
     logLevel: dev ? 'debug' : 'info',
     logOverride: {
       'empty-import-meta': 'silent',
@@ -65,6 +69,10 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     console.log(`⚠️ ${warning.text}`);
   }
 
+  if (checkNoDesktopSources) {
+    await exitOnDesktopSources(result.metafile, buildOptions.outfile);
+  }
+
   if (variant === 'desktop' || variant === 'combined') {
     copyDirectory('./resources/desktop', './build/resources/desktop');
     // NOTE: desktop data is NOT copied here. It is staged below through the AUTHORITATIVE
@@ -74,6 +82,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   console.log('🏗️ Building telemetry/tracing.js...');
   await mkdir('./build/telemetry', { recursive: true });
+  const tracingOutfile = './build/telemetry/tracing.js';
   const tracingResult = await build({
     entryPoints: ['./src/telemetry/tracing.ts'],
     bundle: true,
@@ -82,7 +91,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     minify: !dev,
     packages: 'external',
     sourcemap: true,
-    outfile: './build/telemetry/tracing.js',
+    metafile: checkNoDesktopSources,
+    outfile: tracingOutfile,
   });
 
   for (const error of tracingResult.errors) {
@@ -91,6 +101,10 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   for (const warning of tracingResult.warnings) {
     console.log(`⚠️ ${warning.text}`);
+  }
+
+  if (checkNoDesktopSources) {
+    await exitOnDesktopSources(tracingResult.metafile, tracingOutfile);
   }
 
   await chmod(buildOptions.outfile, '755');
@@ -232,6 +246,25 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     );
   }
 })();
+
+async function exitOnDesktopSources(
+  metafile: Metafile | undefined,
+  outfile: string,
+): Promise<void> {
+  if (!metafile) {
+    throw new Error(`metafile is required to check ${outfile} for Desktop source`);
+  }
+  const desktopSources = findDesktopSources(Object.keys(metafile.inputs));
+  if (desktopSources.length === 0) {
+    return;
+  }
+  await rm(outfile, { force: true });
+  await rm(`${outfile}.map`, { force: true });
+  console.error(
+    `❌ ${outfile} must not contain Desktop source, but it bundled:\n${desktopSources.map((path) => `  ${path}`).join('\n')}`,
+  );
+  process.exit(1);
+}
 
 function copyDirectory(source: string, destination: string): void {
   console.log(`🏗️ Copying ${source} to ${destination}...`);
