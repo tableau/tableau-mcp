@@ -34,11 +34,12 @@ export function qualifyColumnFields(
       };
     }
     if (datasources.length > 1) {
+      const options = datasources
+        .map((datasource) => qualifyDatasourceColumn(apiVersion, datasource, column))
+        .join(', ');
       return {
         ok: false,
-        reason:
-          `the worksheet uses multiple datasources (${datasources.map(({ caption }) => caption).join(', ')}), so "${column}" is ambiguous — ` +
-          'pass the field as [datasource].[field]',
+        reason: `the worksheet uses multiple datasources, so "${column}" is ambiguous — pass one of: ${options}`,
       };
     }
     qualified.push(qualifyDatasourceColumn(apiVersion, datasources[0], column));
