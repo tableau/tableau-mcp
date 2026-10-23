@@ -153,15 +153,13 @@ describe('parseCustomThemeJson', () => {
     const parsed = parseCustomThemeJson(themeJson, expectedSha256);
 
     expect(parsed.value).toEqual(theme);
-    expect(parsed.themeJson).toBe(themeJson);
     expect(parsed.sha256).toBe(expectedSha256);
-    expect(parsed.commandFileName).toBe(`studio-theme-${expectedSha256.slice(0, 12)}`);
   });
 
   it('accepts an exact 64 KiB UTF-8 multibyte theme', () => {
     const themeJson = multibyteThemeJson(64 * 1024);
 
-    expect(parseWithSourceDigest(themeJson).themeJson).toBe(themeJson);
+    expect(parseWithSourceDigest(themeJson).sha256).toBe(sha256(themeJson));
   });
 
   it('rejects a 64 KiB plus one UTF-8 multibyte theme without echoing it', () => {
@@ -204,8 +202,8 @@ describe('parseCustomThemeJson', () => {
 
     expect(leftParsed.value).toEqual(rightParsed.value);
     expect(leftParsed.sha256).not.toBe(rightParsed.sha256);
-    expect(leftParsed.themeJson).toBe(leftJson);
-    expect(rightParsed.themeJson).toBe(rightJson);
+    expect(leftParsed.sha256).toBe(sha256(leftJson));
+    expect(rightParsed.sha256).toBe(sha256(rightJson));
   });
 
   it('hashes whitespace and key-order differences without canonicalization', () => {
@@ -229,7 +227,6 @@ describe('parseCustomThemeJson', () => {
     const message = thrownMessage(() => parseWithSourceDigest(themeJson));
 
     expect(message).toMatch(/Custom Theme JSON/i);
-    expect(message).not.toContain('studio-theme-');
     expect(message).not.toContain(themeJson);
   });
 
@@ -251,7 +248,6 @@ describe('parseCustomThemeJson', () => {
     const message = thrownMessage(() => parseWithSourceDigest(themeJson));
 
     expect(message).toBe('Custom Theme JSON contains a duplicate property');
-    expect(message).not.toContain('studio-theme-');
   });
 
   it.each(['version', 'base-theme', 'styles'])('rejects a missing required %s key', (key) => {
@@ -328,11 +324,10 @@ describe('parseCustomThemeJson', () => {
     ['wrong digest', '0'.repeat(64)],
     ['uppercase digest', sha256(JSON.stringify(sparseTheme)).toUpperCase()],
     ['short digest', '0'.repeat(63)],
-  ])('rejects a correct theme paired with a %s before naming the command', (_case, digest) => {
+  ])('rejects a correct theme paired with a %s', (_case, digest) => {
     const message = thrownMessage(() => parseCustomThemeJson(JSON.stringify(sparseTheme), digest));
 
     expect(message).toMatch(/SHA-256/i);
-    expect(message).not.toContain('studio-theme-');
   });
 
   it.each([

@@ -23,9 +23,7 @@ const validateCustomTheme = ajv.compile(customThemeSchema as AnySchema);
 
 export type ParsedCustomTheme = {
   readonly value: Record<string, unknown>;
-  readonly themeJson: string;
   readonly sha256: string;
-  readonly commandFileName: string;
 };
 
 function assertBoundedJsonNesting(themeJson: string): void {
@@ -162,10 +160,5 @@ export function parseCustomThemeJson(themeJson: string, expectedSha256: string):
     throw new Error('Custom Theme SHA-256 does not match the exact UTF-8 source');
   }
 
-  return {
-    value,
-    themeJson,
-    sha256,
-    commandFileName: `studio-theme-${sha256.slice(0, 12)}`,
-  };
+  return { value, sha256 };
 }
