@@ -25,7 +25,9 @@ Cancellation is **asynchronous**:
   status may be Completed or Failed rather than Cancelled. Cancellation does **not** undo writes.
 - It does **not** alter the flow definition or its schedule — it requests cancellation for one run.
 
-Only registered when both `FLOW_TOOLS_ENABLED=true` and `FLOW_WRITE_TOOLS_ENABLED=true`.
+Enabled by default. Set
+[`FLOW_WRITE_TOOLS_ENABLED=false`](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled)
+to disable the mutating flow tools.
 
 ## Two-phase confirmation
 

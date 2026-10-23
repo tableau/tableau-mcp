@@ -51,7 +51,7 @@ This tool requires no input — it operates on the token already associated with
     annotations: {
       title: 'Reset Consent',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     },

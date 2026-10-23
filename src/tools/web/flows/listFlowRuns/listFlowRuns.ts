@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
 import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../../features/init.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
@@ -131,10 +131,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     server,
     name: 'list-flow-runs',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    disabled: new Provider(
-      async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
-    ),
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Retrieves the run history (executions) of Tableau Prep flows on a site. Each flow run records one execution attempt with its \`status\` (Pending, InProgress, Success, Failed, Cancelled), \`startedAt\`/\`completedAt\` timestamps, \`progress\`, the \`flowId\` it belongs to, the \`backgroundJobId\`, and — on \`Failed\` runs, REST API 3.30+ — a \`failureReason\` giving the cause. Use this tool to answer questions about flow execution outcomes — e.g. "why did my flow fail", "which flows failed recently and why", "show the run history for flow X", "what's still running".
 

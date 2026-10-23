@@ -183,7 +183,7 @@ describe('tryApplyViaPerSheetRoute', () => {
       listValue: { storyboards: [{ id: 'story-1', name: 'Renamed story' }] },
     },
   ])(
-    'retitles a stale $kind fragment to the current live name before posting by id',
+    'refuses a $kind fragment whose name differs from the live name, with a hash and zero applies',
     async ({
       kind,
       sheetName,
@@ -191,14 +191,15 @@ describe('tryApplyViaPerSheetRoute', () => {
       listMethod,
       listValue,
       applyMethod,
-      id,
+      getMethod,
       currentName,
+      id,
     }) => {
-      const apply = vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+      const apply = vi.fn();
+      const liveXml = fragmentXml.replace(/name='[^']*'/, `name='${currentName}'`);
       const executor = makeExecutorMock({
         [listMethod]: vi.fn().mockResolvedValue(Ok(listValue)),
+        [getMethod]: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
         [applyMethod]: apply,
       });
 
@@ -206,35 +207,67 @@ describe('tryApplyViaPerSheetRoute', () => {
         kind,
         sheetName,
         fragmentXml,
+        expectedSourceHash: sourceSha256(liveXml),
         focus: NO_FOCUS,
         executor,
         signal: mockSignal,
       });
 
-      expect(result.isOk()).toBe(true);
-      expect(apply).toHaveBeenCalledTimes(1);
-      const [postedId, postedXml] = apply.mock.calls[0];
-      expect(postedId).toBe(id);
-      expect(postedXml).toContain(`name='${currentName}'`);
-      expect(postedXml).toContain(`uuid='${id}'`);
+      expect(result.unwrap()).toEqual({
+        type: 'name-differs',
+        submittedName: fragmentXml.match(/name='([^']*)'/)?.[1],
+        liveName: currentName,
+      });
+      expect(id).toBeTruthy();
+      expect(apply).not.toHaveBeenCalled();
     },
   );
 
-  it('changes only the root name when a stale fragment contains numeric entities', async () => {
-    const fragmentXml =
-      "<worksheet name='Old worksheet'>" +
-      '<column formula="real:&#13; literal:&amp;#13;" />' +
-      "<simple-id uuid='sheet-1' />" +
-      '</worksheet>';
-    const applyWorksheetDocument = vi
-      .fn()
-      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+  it.each([
+    { label: 'by id', ref: 'sheet-1' },
+    { label: 'by name', ref: 'Renamed worksheet' },
+  ])('refuses a renamed worksheet with no hash, resolved $label', async ({ ref }) => {
+    const applyWorksheetDocument = vi.fn();
     const executor = makeExecutorMock({
       listWorksheets: vi
         .fn()
         .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: 'Renamed worksheet' }] })),
       applyWorksheetDocument,
     });
+
+    const result = await tryApplyViaPerSheetRoute({
+      kind: 'worksheet',
+      sheetName: ref,
+      fragmentXml:
+        "<worksheet name='Old worksheet'><column formula=\"real:&#13;\" /><simple-id uuid='sheet-1' /></worksheet>",
+      focus: NO_FOCUS,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.unwrap()).toEqual({
+      type: 'name-differs',
+      submittedName: 'Old worksheet',
+      liveName: 'Renamed worksheet',
+    });
+    expect(applyWorksheetDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'NFD vs NFC', fragment: 'Cafe\u0301', live: 'Caf\u00e9' },
+    { label: 'trailing space', fragment: 'Sales ', live: 'Sales' },
+    { label: 'numeric entity vs decoded name', fragment: 'Caf&#233;', live: 'Caf\u00e9' },
+  ])('applies unchanged when names differ only by $label', async ({ fragment, live }) => {
+    const apply = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+    const executor = makeExecutorMock({
+      listWorksheets: vi
+        .fn()
+        .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: live }] })),
+      applyWorksheetDocument: apply,
+    });
+    const fragmentXml = `<worksheet name='${fragment}'><simple-id uuid='sheet-1' /></worksheet>`;
 
     const result = await tryApplyViaPerSheetRoute({
       kind: 'worksheet',
@@ -245,12 +278,8 @@ describe('tryApplyViaPerSheetRoute', () => {
       signal: mockSignal,
     });
 
-    expect(result.isOk()).toBe(true);
-    expect(applyWorksheetDocument).toHaveBeenCalledWith(
-      'sheet-1',
-      fragmentXml.replace("name='Old worksheet'", "name='Renamed worksheet'"),
-      mockSignal,
-    );
+    expect(result.unwrap()).toMatchObject({ status: 'applied' });
+    expect(apply).toHaveBeenCalledWith('sheet-1', fragmentXml, mockSignal);
   });
 
   it('accepts an unchanged preexisting blocker using one live target GET', async () => {
@@ -731,11 +760,9 @@ describe('tryApplyViaPerSheetRoute', () => {
   });
 });
 
-describe('retitleFragment entity-like names', () => {
-  it('retitles a fragment named literally `A &amp; B` onto the live sheet `A & B`', async () => {
-    const apply = vi
-      .fn()
-      .mockResolvedValue(Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }));
+describe('root name comparison for entity-like names', () => {
+  it('refuses a fragment named literally `A &amp; B` for the live sheet `A & B`', async () => {
+    const apply = vi.fn();
     const executor = makeExecutorMock({
       listWorksheets: vi
         .fn()
@@ -752,7 +779,11 @@ describe('retitleFragment entity-like names', () => {
       signal: new AbortController().signal,
     });
 
-    expect(result.isOk()).toBe(true);
-    expect(apply.mock.calls[0][1]).toContain("name='A &amp; B'");
+    expect(result.unwrap()).toEqual({
+      type: 'name-differs',
+      submittedName: 'A &amp; B',
+      liveName: 'A & B',
+    });
+    expect(apply).not.toHaveBeenCalled();
   });
 });

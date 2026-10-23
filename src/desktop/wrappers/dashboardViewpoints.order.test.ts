@@ -146,7 +146,7 @@ describe('dashboard readback stays strict inside the identity-matched parents', 
   it('fails a column that appears twice in Desktop', () => {
     const actual = desktopWith(dependencies(column + column + instance));
     expect(diagnose(sections(dependencies(column + instance)), actual)).toBe(
-      '<datasource-dependencies> has 3 child elements in Desktop, 2 submitted',
+      '<datasource-dependencies> has 2 <column> children in Desktop, 1 submitted',
     );
     expect(diagnose(sections(dependencies(column + column)), actual)).toBe(
       '<column> "[product_line]" appears 2 times in Desktop',
@@ -155,7 +155,7 @@ describe('dashboard readback stays strict inside the identity-matched parents', 
 
   it('fails a submitted column twice against one in Desktop', () => {
     expect(diagnose(sections(dependencies(column + column + instance)))).toBe(
-      '<datasource-dependencies> has 2 child elements in Desktop, 3 submitted',
+      '<datasource-dependencies> has 1 <column> children in Desktop, 2 submitted',
     );
   });
 
@@ -174,7 +174,7 @@ describe('dashboard readback stays strict inside the identity-matched parents', 
   it('fails a dependencies block that Desktop has twice', () => {
     const actual = desktopWith(dependencies(column + instance) + dependencies(column + instance));
     expect(diagnose(sections(dependencies(column + instance)), actual)).toBe(
-      '<dashboard> "Dashboard 1" has 6 child elements in Desktop, 5 submitted',
+      '<dashboard> "Dashboard 1" has 2 <datasource-dependencies> children in Desktop, 1 submitted',
     );
   });
 
@@ -191,7 +191,7 @@ describe('dashboard readback stays strict inside the identity-matched parents', 
       dependencies(column + instance + column.replace('[product_line]', '[extra]')),
     );
     expect(diagnose(sections(dependencies(column + instance)), actual)).toBe(
-      '<datasource-dependencies> has 3 child elements in Desktop, 2 submitted',
+      '<datasource-dependencies> has 2 <column> children in Desktop, 1 submitted',
     );
   });
 
