@@ -18,6 +18,31 @@ import {
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
 const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
+
+it('does not skip session-fatal worksheet readback or attempt field verification', async () => {
+  const executor = makeExecutorMock({
+    listWorksheets: vi.fn().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      }),
+    ),
+  });
+  await expect(
+    verifyPostApplyWorksheetReadback(
+      'Sheet 1',
+      '<worksheet name="Sheet 1"/>',
+      executor,
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    type: 'desktop-session-fatal',
+    message: expect.stringContaining('including reads'),
+  });
+  expect(executor.listWorksheets).toHaveBeenCalledOnce();
+  expect(executor.getWorksheetDocument).not.toHaveBeenCalled();
+  expect(executor.getWorksheetDiagnostics).not.toHaveBeenCalled();
+});
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
     | undefined
@@ -40,6 +65,48 @@ vi.mock('../metadata/sheets.js', async (importOriginal) => {
 });
 
 describe('loadWorksheetXml (External Client API transport)', () => {
+  it('does not skip a session-fatal artifact workbook readback after dispatch', async () => {
+    const baseline = liveWorkbook(['Sheet 1']);
+    const dispatchState = { attempted: false };
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'instance',
+      getWorkbookDocument: vi
+        .fn()
+        .mockResolvedValueOnce(
+          Ok({ xml: baseline, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        )
+        .mockResolvedValue(
+          Err({
+            type: 'command-failed',
+            error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+          }),
+        ),
+      applyWorkbookDocument: vi.fn<ExternalApiToolExecutor['applyWorkbookDocument']>(
+        async (_xml, _signal, options) => {
+          options?.onDispatch?.();
+          return Ok({ command_id: 'apply', status: 'completed' as const, submitted_at: '' });
+        },
+      ),
+    });
+    await expect(
+      loadWorksheetXml({
+        worksheetName,
+        xml: validXml,
+        executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        artifactApply: {
+          windowXml: '<window class="worksheet" name="Sheet 1"/>',
+          expectedTargetState: captureTargetWorksheetState(baseline, worksheetName, validXml),
+          expectedInstanceId: 'instance',
+          dispatchState,
+        },
+      }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(dispatchState.attempted).toBe(true);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executor.getWorksheetDiagnostics).not.toHaveBeenCalled();
+  });
   const mockSignal = new AbortController().signal;
   const worksheetName = 'Sheet 1';
   const validXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;

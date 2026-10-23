@@ -1,6 +1,19 @@
 import { classifySessionFatalError, isSessionFatalError } from './sessionFatalError.js';
 
 describe('session-fatal error classification', () => {
+  it('recognizes executor, wrapper, and already classified tool errors', () => {
+    const error = { code: 'E71AE512', message: 'Internal Error', recoverable: false };
+    expect(isSessionFatalError({ type: 'command-failed', error })).toBe(true);
+    expect(
+      isSessionFatalError({
+        type: 'execute-command-error',
+        error: { type: 'command-failed', error },
+      }),
+    ).toBe(true);
+    expect(isSessionFatalError({ type: 'desktop-session-fatal' })).toBe(true);
+    expect(isSessionFatalError(new Error('E71AE512'))).toBe(false);
+    expect(isSessionFatalError({ type: 'unknown', error })).toBe(false);
+  });
   it.each(['E71AE512', '0xE71AE512', 'e71ae512', ' 0xe71ae512 '])(
     'recognizes the exact structured Tableau code %s',
     (code) => {

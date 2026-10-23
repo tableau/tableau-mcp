@@ -1963,6 +1963,31 @@ describe('applyWorksheetTool', () => {
     expect(store.reserve('artifact-1', '12345')).toEqual({ ok: false, reason: 'consumed' });
   });
 
+  it.each(['artifactId', 'templatePlan'] as const)(
+    'surfaces session-fatal %s failures without a retry next-action',
+    async (mode) => {
+      vi.mocked(loadWorksheetXmlModule.loadWorksheetXml).mockResolvedValueOnce(
+        Err({
+          type: 'execute-command-error',
+          error: {
+            type: 'command-failed',
+            error: {
+              code: 'E71AE512',
+              message: 'Internal Error',
+              recoverable: false,
+            },
+          },
+        }),
+      );
+      const result = await getArtifactModeToolResult(mode, artifactStore());
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('restart Tableau Desktop');
+      expect(JSON.stringify(result)).not.toContain('retrySafe');
+      expect(result.structuredContent).toBeUndefined();
+      expect(loadWorksheetXmlModule.loadWorksheetXml).toHaveBeenCalledOnce();
+    },
+  );
+
   it('consumes an artifact after any possibly dispatched failure', async () => {
     const store = artifactStore();
     vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockImplementation(async (args) => {

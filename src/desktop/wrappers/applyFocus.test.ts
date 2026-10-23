@@ -6,6 +6,36 @@ import type { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 
 describe('dispatchApplyFocus Start Page hide', () => {
+  it('propagates session-fatal confirmation reads without issuing a second navigation', async () => {
+    const { executor } = recordingExecutor();
+    const original = vi.mocked(executor.getWorkbookDocument).getMockImplementation()!;
+    vi.mocked(executor.getWorkbookDocument).mockImplementation(async (...args) =>
+      vi.mocked(executor.goToSheet).mock.calls.length > 0
+        ? Err({
+            type: 'command-failed',
+            error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+          })
+        : original(...args),
+    );
+    await expect(
+      dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(executor.goToSheet).toHaveBeenCalledOnce();
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+  it('stops focus reads when hiding the Start Page reports a session-fatal error', async () => {
+    const { executor, calls } = recordingExecutor({
+      setStartPageVisibility: async () =>
+        Err({
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        }),
+    });
+    await expect(
+      dispatch(executor, { navigate: 'artifact', sheetName: 'Sheet 2' }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(calls).toEqual(['start-page:false']);
+  });
   const signal = new AbortController().signal;
 
   function workbookDoc(maximized: string | undefined): string {

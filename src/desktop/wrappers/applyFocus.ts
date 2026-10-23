@@ -1,3 +1,4 @@
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import { log } from '../../logging/logger.js';
 import { apiVersionAtLeast, START_PAGE_MIN_API_VERSION } from '../externalApi/apiVersion.js';
 import type { WithExecutorAndAbortSignal } from '../externalApi/executorTypes.js';
@@ -76,18 +77,21 @@ export async function hideStartPage({
   try {
     const result = await executor.setStartPageVisibility(false, signal);
     if (result.isErr()) {
+      throwIfSessionFatalError(result.error);
       logFocusEvent('', 'Start Page hide failed; the apply itself remains successful', {
         error: result.error,
       });
     }
   } catch (error) {
+    throwIfSessionFatalError(error);
     logFocusEvent('', 'Start Page hide threw; the apply itself remains successful', { error });
   }
 }
 
 /**
  * Move the view after a completed whole-document write. Best-effort by construction: the
- * apply already landed, so nothing here can fail the caller's result. The name is validated
+ * apply already landed, so ordinary navigation failures do not fail the result. Session-fatal
+ * errors propagate. The name is validated
  * against a fresh read and resolved to a sheet id before dispatch.
  */
 export async function dispatchApplyFocus({
@@ -120,7 +124,12 @@ export async function dispatchApplyFocus({
         // goto landed, the already-active check skips and this costs one read; if it did not,
         // the same pass reissues. No sleep — 12 of 12 zero-sleep apply/goto/readback trials
         // came back settled, so Desktop serialises this for us.
-        await activateSheetValidated({ sheetName: target, executor, signal });
+        {
+          const confirmed = await activateSheetValidated({ sheetName: target, executor, signal });
+          if (confirmed.status === 'read-failed' || confirmed.status === 'command-failed') {
+            throwIfSessionFatalError(confirmed.error);
+          }
+        }
         return;
       case 'already-active':
         return;
@@ -135,17 +144,20 @@ export async function dispatchApplyFocus({
         });
         return;
       case 'read-failed':
+        throwIfSessionFatalError(activation.error);
         logFocusEvent(target, 'Focus skipped; could not re-read the applied workbook', {
           error: activation.error,
         });
         return;
       case 'command-failed':
+        throwIfSessionFatalError(activation.error);
         logFocusEvent(target, 'goToSheet failed; the apply itself remains successful', {
           error: activation.error,
         });
         return;
     }
   } catch (error) {
+    throwIfSessionFatalError(error);
     logFocusEvent(target, 'Focus threw; the apply itself remains successful', { error });
   }
 }

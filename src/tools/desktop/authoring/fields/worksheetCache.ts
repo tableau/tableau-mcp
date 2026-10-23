@@ -10,6 +10,7 @@ import { listWorksheets } from '../../../../desktop/wrappers/listWorksheets.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
+  throwIfSessionFatalError,
 } from '../../../../errors/mcpToolError.desktop.js';
 import {
   McpToolError,
@@ -36,8 +37,8 @@ export function distinctCacheId(rawName: string, session: string): string {
 /**
  * Resolve a caller's worksheet reference (id or display name) to the sheet's stable
  * `<simple-id uuid>` — the id the edit buffer keys on and the External Client API
- * addresses the sheet by. Best-effort: returns undefined (never throws) when the sheet
- * cannot be listed or matched.
+ * addresses the sheet by. Ordinary listing or matching failures return undefined;
+ * session-fatal errors propagate.
  */
 export async function resolveWorksheetSimpleId({
   worksheetRef,
@@ -56,11 +57,13 @@ export async function resolveWorksheetSimpleId({
     const executor = await extra.getExecutor(resolvedSession);
     const listed = await listWorksheets({ executor, signal: extra.signal });
     if (listed.isErr()) {
+      throwIfSessionFatalError(listed.error);
       return undefined;
     }
     const resolved = resolveItemByNameOrId('Worksheet', trimmed, listed.value.worksheets);
     return resolved.isOk() ? resolved.value.id : undefined;
-  } catch {
+  } catch (error) {
+    throwIfSessionFatalError(error);
     return undefined;
   }
 }

@@ -371,6 +371,54 @@ function successfulSimpleExecutor(): ReturnType<typeof successfulExecutor> {
 }
 
 describe('applyRoundedStackedBar', () => {
+  it.each(['getWorksheetDocument', 'getWorkbookDocument', 'getWorksheetSummaryData'] as const)(
+    'propagates session-fatal %s readback after a single dispatch',
+    async (method) => {
+      const { planned, executor } = successfulExecutor();
+      const original = vi.mocked(executor[method]).getMockImplementation()!;
+      vi.mocked(executor[method]).mockImplementation(async (...args: any[]) =>
+        vi.mocked(executor.applyWorksheetDocument).mock.calls.length > 0
+          ? Err({
+              type: 'command-failed',
+              error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+            })
+          : (original as (...args: any[]) => any)(...args),
+      );
+      await expect(
+        applyRoundedStackedBar({
+          sourceWorksheetXml: sourceWorksheet(),
+          intendedWorksheetXml: planned.xml,
+          contract: planned.semanticContract,
+          focus: NO_FOCUS,
+          executor,
+          signal: SIGNAL,
+        }),
+      ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+      expect(executor.applyWorksheetDocument).toHaveBeenCalledOnce();
+    },
+  );
+  it('propagates a session-fatal preflight read without allowing another Desktop call', async () => {
+    const { planned, executor, getWorksheetDocument } = successfulExecutor();
+    getWorksheetDocument.mockReset().mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      }),
+    );
+    await expect(
+      applyRoundedStackedBar({
+        sourceWorksheetXml: sourceWorksheet(),
+        intendedWorksheetXml: planned.xml,
+        contract: planned.semanticContract,
+        focus: NO_FOCUS,
+        executor,
+        signal: SIGNAL,
+      }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(getWorksheetDocument).toHaveBeenCalledOnce();
+    expect(executor.getWorksheetSummaryData).not.toHaveBeenCalled();
+    expect(executor.applyWorksheetDocument).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
   });

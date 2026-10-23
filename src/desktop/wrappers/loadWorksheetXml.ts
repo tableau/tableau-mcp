@@ -1,5 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
 import {
@@ -97,9 +98,8 @@ type LoadWorksheetXmlResult = Result<
 
 /**
  * Post-apply readback verification. Re-reads the just-applied worksheet and compares
- * intent-bearing structures against the authored XML. Never throws and never fails the
- * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
- * (returns no findings) so telemetry can never mask a real apply.
+ * intent-bearing structures against the authored XML. Ordinary re-read misses skip verification;
+ * session-fatal errors propagate so no further Desktop calls run against the dead session.
  */
 export function publicReadbackVerificationResult(
   result: PostApplyWorksheetReadbackVerification,
@@ -215,6 +215,7 @@ export async function verifyPostApplyWorksheetReadback(
     });
 
     if (!polled.ok) {
+      throwIfSessionFatalError(polled.error);
       const message =
         polled.error.type === 'get-worksheet-xml-error'
           ? polled.error.error.message
@@ -238,6 +239,7 @@ export async function verifyPostApplyWorksheetReadback(
     }
     return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
+    throwIfSessionFatalError(error);
     const message = error instanceof Error ? error.message : String(error);
     log({
       level: 'warning',
@@ -267,6 +269,7 @@ async function verifyPostApplyArtifactReadback(
       signal,
     });
     if (!polled.ok) {
+      throwIfSessionFatalError(polled.error);
       return {
         ok: true,
         status: 'skipped',
@@ -294,6 +297,7 @@ async function verifyPostApplyArtifactReadback(
     }
     return { ok: true, status: 'passed', findings: [], worksheetId };
   } catch (error) {
+    throwIfSessionFatalError(error);
     return {
       ok: true,
       status: 'skipped',
