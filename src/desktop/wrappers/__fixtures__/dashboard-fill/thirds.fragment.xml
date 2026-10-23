@@ -1,0 +1,14 @@
+<dashboard enable-sort-zone-taborder='true' name='Dashboard 1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <style />
+  <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />
+  <zones>
+    <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
+      <zone h='100000' id='3' param='horz' type-v2='layout-flow' w='100000' x='0' y='0'>
+        <zone h='100000' id='5' name='Total Revenue' w='33333' x='0' y='0' fixed-size='333' is-fixed='true' />
+        <zone h='100000' id='6' name='Revenue by Product per Period' w='33333' x='33333' y='0' fixed-size='333' is-fixed='true' />
+        <zone fixed-size='334' h='100000' id='7' is-fixed='true' type-v2='empty' w='33334' x='66666' y='0' />
+      </zone>
+    </zone>
+  </zones>
+  <simple-id uuid='{3E10023F-0A27-4D25-BD30-DDDCB6A79777}' />
+</dashboard>

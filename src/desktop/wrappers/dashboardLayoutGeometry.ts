@@ -91,9 +91,29 @@ export function canOmitDefaultStrategy(expected: Element, actual: Element): bool
   );
 }
 
+function flowFullyModeled(parent: Element): boolean {
+  const axis = parent.getAttribute('param') === 'horz' ? 0 : 1;
+  return elements(parent)
+    .filter((child) => child.tagName === 'zone' && !hidden(child))
+    .every((child) => {
+      const metric = primaryMetric(child, axis);
+      return metric !== null && metric !== undefined;
+    });
+}
+
 export function hasDesktopManagedGeometry(zone: Element): boolean {
-  if (isTrue(zone.getAttribute('is-fixed')) || zone.hasAttribute('fixed-size')) return false;
   const parent = parentZone(zone);
+  if (isTrue(zone.getAttribute('is-fixed')) || zone.hasAttribute('fixed-size')) {
+    // Desktop rewrites a pin's w/h to fixed-size plus margins; the flow check judges the pins.
+    return (
+      zone.getAttribute('is-fixed') === 'true' &&
+      !!parent &&
+      !strategyHidden(parent) &&
+      isFlow(parent) &&
+      !hidden(zone) &&
+      flowFullyModeled(parent)
+    );
+  }
   if (!parent || strategyHidden(parent)) return false;
   // BasicStrategy transforms every direct child, even a user-hidden one. Flow
   // skips hidden children; a hidden container's own descendants are not laid out.
