@@ -204,7 +204,7 @@ it. A missing visual document indicates dashboard-window registration, not works
 3. **Positions must add up**: x + w should not exceed parent width, y + h should not exceed parent
    height
 4. **Keep UUIDs**: Don't change existing `<simple-id uuid="..."/>` unless creating new dashboards
-5. **Zone IDs**: Each zone needs a unique `id` attribute (use sequential integers)
+5. **Zone IDs**: Every zone needs a unique `id`; on an existing dashboard keep each zone's id with its worksheet or content, and give a new zone an id no other zone uses
 6. **Worksheet zones**: To reference a worksheet, use the `name` attribute directly on the zone
    element (NOT a child `<zone-pane>` element)
 7. **Zone styling**: Worksheet zones should include `<zone-style>` with border and margin formatting
