@@ -102,6 +102,27 @@ it. A missing visual document indicates dashboard-window registration, not works
 </zone>
 ```
 
+### Sizing zones in a container
+
+In a `layout-flow` container (`param="horz"` or `param="vert"`), Desktop sizes worksheet zones from
+their content and ignores `w` and `h`. To split the container, pin every child with
+`is-fixed="true"` and a `fixed-size` in pixels. A child's outer width (or height) is its
+`fixed-size` plus its margins, and these must add up to the container. Pinning one child is not
+enough. Desktop rewrites each pinned child's `w` (or `h`) to its outer size in dashboard units,
+`round((fixed-size + margins) × 100000 / dashboard width (or height) in px)`, and apply-dashboard's
+check compares the `w` you sent. Send that value, with `x` (or `y`) as the running total. On a
+1366px wide dashboard, a 410px child gets `w="30015"`. Children of a `layout-basic` container keep
+their `x`, `y`, `w` and `h`. Desktop writes `layout-cache`, so don't author it.
+
+Example: a 30/70 split on a 1000px wide dashboard, with no margins:
+
+```xml
+<zone id="3" h="100000" w="100000" x="0" y="0" type-v2="layout-flow" param="horz">
+  <zone id="5" h="100000" w="30000" x="0" y="0" name="Sheet 1" is-fixed="true" fixed-size="300"/>
+  <zone id="6" h="100000" w="70000" x="30000" y="0" name="Sheet 2" is-fixed="true" fixed-size="700"/>
+</zone>
+```
+
 ## Common Patterns
 
 ### Full-Width Header with Two Worksheets Below
