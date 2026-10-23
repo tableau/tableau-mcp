@@ -44,7 +44,6 @@ const NON_TOOL_VOCABULARY = [
   'border-color',
   'border-style',
   'border-width',
-  'byte-order',
   'calc-dependency-unmet',
   'calculation-caption',
   'calculation-formula',

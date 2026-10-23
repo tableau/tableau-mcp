@@ -30,7 +30,6 @@ export const desktopToolNames = [
   'add-field',
   'remove-field',
   'resolve-field',
-  'inspect-custom-theme',
   'search-workbook-fields',
   'search-commands',
   'execute-tableau-command',

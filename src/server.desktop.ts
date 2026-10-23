@@ -124,7 +124,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'apply-dashboard',
     'apply-storyboard',
     'apply-workbook',
-    'inspect-custom-theme',
     'run-dashboard-batch',
     'execute-tableau-command',
     'search-commands',
