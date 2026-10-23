@@ -25,7 +25,6 @@ import {
 import {
   ExternalTokenClaims,
   externalTokenClaimsSchema,
-  introspectionResponseSchema,
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
   openIdConfigurationSchema,
@@ -345,8 +344,8 @@ function usernameFromClaim(value: unknown): string | undefined {
 /**
  * Validates tokens from an external OAuth/OIDC authorization server: JWT access tokens (RFC 9068)
  * or OpenID Connect ID tokens against its JWKS (configured, or read from its OpenID Connect
- * discovery document), or opaque tokens through token introspection (RFC 7662). The configured
- * claim becomes the Tableau username; outbound Tableau auth stays direct-trust or UAT.
+ * discovery document). The configured claim becomes the Tableau username; outbound Tableau auth
+ * stays direct-trust or UAT.
  */
 export class ExternalAccessTokenValidator extends AccessTokenValidator {
   private readonly external: NonNullable<Config['oauth']['external']>;
@@ -372,9 +371,7 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
 
   async validate(token: string): Promise<AccessTokenValidatorResult> {
     try {
-      const claims = this.external.introspectionUri
-        ? await this.introspect(token)
-        : await this.verifyJwt(token);
+      const claims = await this.verifyJwt(token);
       if (claims.isErr()) {
         return this.reject(claims.error);
       }
@@ -474,61 +471,6 @@ export class ExternalAccessTokenValidator extends AccessTokenValidator {
     }
 
     return createRemoteJWKSet(jwksUrl, { [customFetch]: this.fetch });
-  }
-
-  private async introspect(token: string): Promise<Result<ExternalTokenClaims, string>> {
-    const { introspectionUri, introspectionClientId, introspectionClientSecret } = this.external;
-    // RFC 6749 section 2.3.1: form-encode the client credentials before base64.
-    const credentials = Buffer.from(
-      `${encodeURIComponent(introspectionClientId)}:${encodeURIComponent(introspectionClientSecret)}`,
-    ).toString('base64');
-
-    const response = await this.fetch(introspectionUri, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ token, token_type_hint: 'access_token' }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(EXTERNAL_REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      return Err(`introspection endpoint returned HTTP ${response.status}`);
-    }
-
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      // JSON.parse errors quote the start of the body, which may echo the token.
-      return Err('introspection response is not valid JSON');
-    }
-
-    const parsed = introspectionResponseSchema.safeParse(body);
-    if (!parsed.success) {
-      return Err(`invalid introspection response: ${fromError(parsed.error).toString()}`);
-    }
-
-    const { active, tokenType, ...claims } = parsed.data;
-    if (!active) {
-      return Err('token is not active');
-    }
-
-    if (tokenType && /refresh/i.test(tokenType)) {
-      return Err('token_type is a refresh token');
-    }
-
-    if (claims.iss !== undefined && claims.iss !== this.config.oauth.issuer) {
-      return Err('unexpected iss');
-    }
-
-    if (claims.exp !== undefined && claims.exp < Math.floor(Date.now() / 1000)) {
-      return Err('token is expired');
-    }
-
-    return Ok(claims);
   }
 
   private toAuthInfo(token: string, claims: ExternalTokenClaims): AccessTokenValidatorResult {

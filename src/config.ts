@@ -88,9 +88,6 @@ export class Config extends BaseConfig {
     advertiseApiScopes: boolean;
     external: {
       jwksUri: string;
-      introspectionUri: string;
-      introspectionClientId: string;
-      introspectionClientSecret: string;
       discovery: boolean;
       usernameClaimName: string;
     } | null;
@@ -172,9 +169,6 @@ export class Config extends BaseConfig {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       OAUTH_EXTERNAL_JWKS_URI: oauthExternalJwksUri,
-      OAUTH_EXTERNAL_INTROSPECTION_URI: oauthExternalIntrospectionUri,
-      OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID: oauthExternalIntrospectionClientId,
-      OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET: oauthExternalIntrospectionClientSecret,
       OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
       OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
@@ -305,17 +299,11 @@ export class Config extends BaseConfig {
       advertiseApiScopes: advertiseApiScopes === 'true',
       external: [
         oauthExternalJwksUri,
-        oauthExternalIntrospectionUri,
-        oauthExternalIntrospectionClientId,
-        oauthExternalIntrospectionClientSecret,
         oauthExternalDiscovery === 'true',
         oauthExternalUsernameClaimName,
       ].some(Boolean)
         ? {
             jwksUri: oauthExternalJwksUri ?? '',
-            introspectionUri: oauthExternalIntrospectionUri ?? '',
-            introspectionClientId: oauthExternalIntrospectionClientId ?? '',
-            introspectionClientSecret: oauthExternalIntrospectionClientSecret ?? '',
             discovery: oauthExternalDiscovery === 'true',
             usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
           }
@@ -619,13 +607,7 @@ function validateServer(server: string): void {
 function validateOAuthExternal({
   auth,
   oauth: { enabled, embeddedAuthzServer, issuer },
-  external: {
-    jwksUri,
-    introspectionUri,
-    introspectionClientId,
-    introspectionClientSecret,
-    discovery,
-  },
+  external: { jwksUri, discovery },
   usernameTemplate,
 }: {
   auth: AuthType;
@@ -639,15 +621,9 @@ function validateOAuthExternal({
     );
   }
 
-  if ([jwksUri, introspectionUri, discovery].filter(Boolean).length !== 1) {
+  if ([jwksUri, discovery].filter(Boolean).length !== 1) {
     throw new Error(
-      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set',
-    );
-  }
-
-  if (introspectionUri && (!introspectionClientId || !introspectionClientSecret)) {
-    throw new Error(
-      'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID and OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET must be set when OAUTH_EXTERNAL_INTROSPECTION_URI is set',
+      'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set',
     );
   }
 
@@ -661,15 +637,12 @@ function validateOAuthExternal({
       );
     }
   } else {
-    validateHttpsOrLoopbackUri(
-      jwksUri ? 'OAUTH_EXTERNAL_JWKS_URI' : 'OAUTH_EXTERNAL_INTROSPECTION_URI',
-      jwksUri || introspectionUri,
-    );
+    validateHttpsOrLoopbackUri('OAUTH_EXTERNAL_JWKS_URI', jwksUri);
   }
 
   if (auth !== 'direct-trust' && auth !== 'uat') {
     throw new Error(
-      'When OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"',
+      'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"',
     );
   }
 

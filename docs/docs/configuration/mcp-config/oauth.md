@@ -58,7 +58,6 @@ To set it up:
     your IdP's OpenID Connect discovery document).
   - [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) (JWTs: access tokens or OpenID Connect ID
     tokens).
-  - [`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) (opaque tokens).
 - Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`, or to `uat` with
   `{OAUTH_USERNAME}` in `UAT_USERNAME_CLAIM`.
 - Have your IdP set the token's `aud` to this server's resource identifier: the
@@ -413,11 +412,9 @@ or [your own identity provider](#use-your-own-identity-provider-self-hosted-only
 
 The JWKS URL of your identity provider. When set, the MCP server accepts JWTs signed by a key from
 this URL: access tokens ([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
-[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set only one of this,
-[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery), or
-[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri). Must use `https` unless the
-host is loopback. See
-[Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
+[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). Set only one of this or
+[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery). Must use `https` unless the host is
+loopback. See [Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
 
 - Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
 - `exp` and `nbf` allow 5 seconds of clock skew.
@@ -432,9 +429,8 @@ When `true`, the MCP server reads your identity provider's
 [OpenID Connect discovery document](https://openid.net/specs/openid-connect-discovery-1_0.html) at
 `OAUTH_ISSUER` + `/.well-known/openid-configuration` (without a doubled `/` if the issuer ends in
 one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with the same checks as
-[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). Set only one of this,
-[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), or
-[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri). See
+[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). Set only one of this or
+[`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri). See
 [Accept OpenID Connect ID tokens](#accept-openid-connect-id-tokens).
 
 - Default: `false`. Any value other than `true` leaves it off.
@@ -451,45 +447,12 @@ one). It then accepts JWTs signed by a key from the document's `jwks_uri`, with 
 
 <hr />
 
-### `OAUTH_EXTERNAL_INTROSPECTION_URI`
-
-The token introspection endpoint ([RFC 7662](https://www.rfc-editor.org/rfc/rfc7662)) of your
-identity provider. When set, the MCP server sends each access token to this endpoint to check it.
-Set only one of this, [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), or
-[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery). Must use `https` unless the host is
-loopback.
-
-The MCP server calls this endpoint for every request that carries a bearer token, valid or not, and
-does not cache the result. Each call adds a round trip (up to 5 seconds) and load on your identity
-provider, and anyone who can reach the MCP server can trigger one with a made-up token. If your
-provider issues JWT access tokens, use [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) or
-[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) instead, which verify signatures locally
-against cached keys. Otherwise, rate-limit requests in front of the MCP server.
-
-<hr />
-
-### `OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID`
-
-The client ID the MCP server uses to call
-[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) with HTTP Basic auth.
-Required when that variable is set.
-
-<hr />
-
-### `OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET`
-
-The client secret for
-[`OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID`](#oauth_external_introspection_client_id). Required when
-[`OAUTH_EXTERNAL_INTROSPECTION_URI`](#oauth_external_introspection_uri) is set.
-
-<hr />
-
 ### `OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`
 
 The name of the token claim to use as the Tableau username. The claim's value must be a non-empty
-string, or a whole number from 0 to 9007199254740991, which is used as its decimal string. In a JWT,
-`sub` itself must be a non-empty string, so a number works only in a custom username claim.
-Surrounding spaces in the name are trimmed, and an empty name falls back to `sub`.
+string, or a whole number from 0 to 9007199254740991, which is used as its decimal string. `sub`
+itself must be a non-empty string, so a number works only in a custom username claim. Surrounding
+spaces in the name are trimmed, and an empty name falls back to `sub`.
 
 - Default: `sub`
 

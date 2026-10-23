@@ -141,24 +141,11 @@ const externalTokenClaimsObjectSchema = z
 
 /** Claims of a verified JWT (RFC 9068 access token or OIDC ID token) from an external IdP. */
 export const externalTokenClaimsSchema = externalTokenClaimsObjectSchema
-  // A refine, not a typed field, so introspection output (where sub is optional) still fits the type.
   .refine(({ sub }) => typeof sub === 'string' && sub.length > 0, {
     message: 'sub must be a non-empty string',
     path: ['sub'],
   })
   .transform(({ client_id, ...claims }) => ({ ...claims, clientId: client_id }));
-
-/** RFC 7662 token introspection response from an external authorization server. */
-export const introspectionResponseSchema = externalTokenClaimsObjectSchema
-  .extend({
-    active: z.boolean(),
-    token_type: z.string().optional(),
-  })
-  .transform(({ client_id, token_type, ...claims }) => ({
-    ...claims,
-    clientId: client_id,
-    tokenType: token_type,
-  }));
 
 /** OpenID Connect Discovery 1.0 provider metadata (only the fields token validation needs). */
 export const openIdConfigurationSchema = z

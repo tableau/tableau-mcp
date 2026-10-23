@@ -933,14 +933,6 @@ describe('Config', () => {
         vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'secret-value');
       }
 
-      function stubIntrospectionEnvVars(): void {
-        stubExternalEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', '');
-        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_URI', 'https://idp.example.com/introspect');
-        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID', 'mcp-resource-server');
-        vi.stubEnv('OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET', 'introspection-secret');
-      }
-
       function stubDiscoveryEnvVars(): void {
         stubExternalEnvVars();
         vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', '');
@@ -950,34 +942,17 @@ describe('Config', () => {
       const enableError =
         'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"';
       const authError =
-        'When OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"';
+        'When OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust" or "uat"';
       const exactlyOneError =
-        'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI, OAUTH_EXTERNAL_INTROSPECTION_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set';
+        'Exactly one of the environment variables: OAUTH_EXTERNAL_JWKS_URI or OAUTH_EXTERNAL_DISCOVERY="true" must be set';
 
       it('parses a JWKS configuration with the default username claim', () => {
         stubExternalEnvVars();
 
         expect(new Config().oauth.external).toEqual({
           jwksUri: 'https://idp.example.com/keys',
-          introspectionUri: '',
-          introspectionClientId: '',
-          introspectionClientSecret: '',
           discovery: false,
           usernameClaimName: 'sub',
-        });
-      });
-
-      it('parses an introspection configuration with a custom username claim', () => {
-        stubIntrospectionEnvVars();
-        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
-
-        expect(new Config().oauth.external).toEqual({
-          jwksUri: '',
-          introspectionUri: 'https://idp.example.com/introspect',
-          introspectionClientId: 'mcp-resource-server',
-          introspectionClientSecret: 'introspection-secret',
-          discovery: false,
-          usernameClaimName: 'tableau_username',
         });
       });
 
@@ -986,9 +961,6 @@ describe('Config', () => {
 
         expect(new Config().oauth.external).toEqual({
           jwksUri: '',
-          introspectionUri: '',
-          introspectionClientId: '',
-          introspectionClientSecret: '',
           discovery: true,
           usernameClaimName: 'sub',
         });
@@ -1096,22 +1068,10 @@ describe('Config', () => {
 
       it.each([
         [
-          'neither URI is set',
+          'neither OAUTH_EXTERNAL_JWKS_URI nor discovery is set',
           { OAUTH_EXTERNAL_JWKS_URI: '', OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: 'sub' },
         ],
-        [
-          'both URIs are set',
-          { OAUTH_EXTERNAL_INTROSPECTION_URI: 'https://idp.example.com/introspect' },
-        ],
         ['discovery and OAUTH_EXTERNAL_JWKS_URI are set', { OAUTH_EXTERNAL_DISCOVERY: 'true' }],
-        [
-          'discovery and OAUTH_EXTERNAL_INTROSPECTION_URI are set',
-          {
-            OAUTH_EXTERNAL_JWKS_URI: '',
-            OAUTH_EXTERNAL_INTROSPECTION_URI: 'https://idp.example.com/introspect',
-            OAUTH_EXTERNAL_DISCOVERY: 'true',
-          },
-        ],
       ])('throws when %s', (_, env) => {
         stubExternalEnvVars();
         Object.entries(env).forEach(([name, value]) => vi.stubEnv(name, value));
@@ -1119,27 +1079,12 @@ describe('Config', () => {
         expect(() => new Config()).toThrow(exactlyOneError);
       });
 
-      it.each([
-        'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID',
-        'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET',
-      ])('throws when %s is missing for introspection', (name) => {
-        stubIntrospectionEnvVars();
-        vi.stubEnv(name, '');
+      it('throws when OAUTH_EXTERNAL_JWKS_URI uses http on a non-loopback host', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_JWKS_URI', 'http://idp.example.com/endpoint');
 
         expect(() => new Config()).toThrow(
-          'OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID and OAUTH_EXTERNAL_INTROSPECTION_CLIENT_SECRET must be set when OAUTH_EXTERNAL_INTROSPECTION_URI is set',
-        );
-      });
-
-      it.each([
-        ['OAUTH_EXTERNAL_JWKS_URI', stubExternalEnvVars],
-        ['OAUTH_EXTERNAL_INTROSPECTION_URI', stubIntrospectionEnvVars],
-      ])('throws when %s uses http on a non-loopback host', (name, stub) => {
-        stub();
-        vi.stubEnv(name, 'http://idp.example.com/endpoint');
-
-        expect(() => new Config()).toThrow(
-          `The environment variable ${name} must use https unless its host is loopback`,
+          'The environment variable OAUTH_EXTERNAL_JWKS_URI must use https unless its host is loopback',
         );
       });
 
