@@ -142,7 +142,7 @@ describe('PublishingMethods', () => {
       expect(firstChunkBody.byteLength - secondChunkBody.byteLength).toBe(maxChunkBytes - 10);
     });
 
-    it('appends every byte in order in chunks of at most chunkBytes', async () => {
+    it('appends every byte in order in chunks of at most maxChunkBytes', async () => {
       const { publishingMethods, mockPost } = createWithMockedAxios();
       const appendSpy = vi.spyOn(publishingMethods, 'appendToFileUpload');
 
@@ -151,7 +151,7 @@ describe('PublishingMethods', () => {
         filename: 'superstore.twbx',
         content: streamOf('ab', 'cdefg', '', 'h', 'ijklmnopq', 'r'),
         maxBytes: 18,
-        chunkBytes: 4,
+        maxChunkBytes: 4,
       });
 
       expect(mockPost).toHaveBeenCalledTimes(1);
