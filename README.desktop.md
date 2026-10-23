@@ -2,7 +2,7 @@
 
 The `@tableau/mcp-server` npm package is Web-only. This repository's **desktop** build variant
 exposes a **local authoring** tool surface that drives a running **Tableau Desktop** instance —
-inspect a workbook, list/inject chart templates, and bind fields into worksheets — over MCP
+inspect a workbook, list chart templates, and bind fields into worksheets — over MCP
 (stdio).
 
 Use the Desktop server from a source build or a standalone Desktop executable. This document
