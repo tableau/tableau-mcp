@@ -949,7 +949,9 @@ describe('applyWorksheetTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('does not match the <worksheet name> in the XML');
+    expect(result.content[0].text).toContain(
+      'does not match <worksheet name="Real Name"> in the file',
+    );
     expect(mockLoadWorksheetXml).not.toHaveBeenCalled();
   });
 

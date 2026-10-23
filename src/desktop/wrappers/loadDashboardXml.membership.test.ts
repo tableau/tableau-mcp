@@ -17,8 +17,10 @@ import { loadDashboardXml } from './loadDashboardXml.js';
 
 const focus = { navigate: 'none', reason: 'intermediate-leg' } as const;
 const signal = new AbortController().signal;
+const zoneIds: Record<string, number> = { A: 1, B: 2, C: 3 };
+const zoneId = (name: string, i: number): number => zoneIds[name] ?? 100 + i;
 const fragment = (names: string[]): string =>
-  `<dashboard name="D"><zones>${names.map((name, i) => `<zone id="${i}" name="${name}"/>`).join('')}</zones><simple-id uuid="dash-1"/></dashboard>`;
+  `<dashboard name="D"><zones>${names.map((name, i) => `<zone id="${zoneId(name, i)}" name="${name}"/>`).join('')}</zones><simple-id uuid="dash-1"/></dashboard>`;
 
 function fixture(
   names: string[] = [],
@@ -587,7 +589,7 @@ describe('dashboard membership apply', () => {
     const { executor } = fixture(['A']);
     const result = await loadDashboardXml({
       dashboardName: 'D',
-      xml: fragment(['A']).replace('id="0"', 'id="7"'),
+      xml: fragment(['A']).replace('id="1"', 'id="7"'),
       requireExistingSheet: true,
       focus,
       executor,

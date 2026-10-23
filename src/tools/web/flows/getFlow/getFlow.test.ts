@@ -62,7 +62,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -89,26 +88,24 @@ describe('getFlowTool', () => {
     expect(getFlowTool.paramsSchema).toMatchObject({ flowId: expect.any(Object) });
   });
 
-  it('should be enabled when flow tools are turned on', async () => {
-    const getFlowTool = getGetFlowTool(new WebMcpServer());
-    expect(await Provider.from(getFlowTool.disabled)).toBe(false);
-  });
-
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const getFlowTool = getGetFlowTool(new WebMcpServer());
-    expect(await Provider.from(getFlowTool.disabled)).toBe(true);
-  });
-
-  it('should be disabled when the flow-tools feature flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const getFlowTool = getGetFlowTool(new WebMcpServer());
-    expect(await Provider.from(getFlowTool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getGetFlowTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('should fetch flow with all sidecars by default', async () => {
     mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });

@@ -87,7 +87,7 @@ describe('requestStagedWorkbookUpload', () => {
         fileName: 'workbook.xml',
         config,
       }),
-    ).rejects.toThrow('filename must end in .twb or .twbx');
+    ).rejects.toThrow('Workbook upload filename must end in .twb or .twbx.');
   });
 });
 
@@ -142,13 +142,13 @@ describe('resolveStagedWorkbookUpload', () => {
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).rejects.toThrow('Workbook upload not found');
+    ).rejects.toThrow('Workbook upload not found. Upload the workbook bytes before publishing.');
   });
 
   it('rejects invalid workbook upload ids', async () => {
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: '../not-safe', config }),
-    ).rejects.toThrow('upload id is invalid');
+    ).rejects.toThrow('Workbook upload id is invalid.');
   });
 
   it('rejects empty uploaded workbook bytes', async () => {
@@ -156,7 +156,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, config }),
-    ).rejects.toThrow('must not be empty');
+    ).rejects.toThrow('Workbook upload bytes must not be empty.');
   });
 });
 
