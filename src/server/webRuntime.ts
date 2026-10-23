@@ -1,4 +1,5 @@
 import { closeActivityLog, initializeActivityLog } from '../activityLog/init.js';
+import { initializeBlobStorageProvider } from '../blobStorage/init.js';
 import type { Config } from '../config.js';
 import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
@@ -56,6 +57,7 @@ export async function initializeWebRuntime(
   initializeSessionStore();
   await connectSessionStore();
   registerSessionStoreShutdown();
+  initializeBlobStorageProvider();
 
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({

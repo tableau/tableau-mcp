@@ -33,6 +33,12 @@ vi.mock('../activityLog/init.js', () => ({
   }),
 }));
 
+vi.mock('../blobStorage/init.js', () => ({
+  initializeBlobStorageProvider: vi.fn(() => {
+    runtimeState.events.push('blob storage');
+  }),
+}));
+
 vi.mock('../features/init.js', () => ({
   initializeFeatureGate: vi.fn(() => {
     runtimeState.events.push('feature gate');
@@ -144,6 +150,7 @@ describe('initializeWebRuntime', () => {
       'activity log init',
       'session store init',
       'session store connect',
+      'blob storage',
       'server info',
     ]);
     expect(processOnceSpy).toHaveBeenCalledTimes(2);

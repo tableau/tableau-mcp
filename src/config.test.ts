@@ -1262,4 +1262,38 @@ describe('Config', () => {
       expect(config.activityLog.provider).toBe('noop');
     });
   });
+
+  describe('Blob storage provider configuration', () => {
+    it('should leave blob storage unset when BLOB_STORAGE_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.blobStorage).toBeUndefined();
+    });
+
+    it('should use "custom" when BLOB_STORAGE_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('BLOB_STORAGE_PROVIDER', 'custom');
+      vi.stubEnv('BLOB_STORAGE_PROVIDER_CONFIG', '{"module":"./my-blob-storage.js"}');
+
+      const config = new Config();
+      expect(config.blobStorage).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './my-blob-storage.js' },
+      });
+    });
+
+    it('should throw error when BLOB_STORAGE_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('BLOB_STORAGE_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'BLOB_STORAGE_PROVIDER_CONFIG is required when BLOB_STORAGE_PROVIDER is "custom"',
+      );
+    });
+
+    it.each(['invalid', 'noop'])('should throw when BLOB_STORAGE_PROVIDER is "%s"', (value) => {
+      vi.stubEnv('BLOB_STORAGE_PROVIDER', value);
+
+      expect(() => new Config()).toThrow(
+        `BLOB_STORAGE_PROVIDER must be one of: custom. Got: ${value}`,
+      );
+    });
+  });
 });

@@ -32,6 +32,9 @@
     },
     "./sessionStore/sessionStore": {
       "types": "./build/sessionStore/sessionStore.d.ts"
+    },
+    "./blobStorage/blobStorageProvider": {
+      "types": "./build/blobStorage/blobStorageProvider.d.ts"
     }
   },
   "scripts": {

@@ -6,6 +6,12 @@ import {
   isActivityLogProvider,
   providerConfigSchema as activityLogProviderConfigSchema,
 } from './activityLog/types.js';
+import {
+  BlobStorageConfig,
+  blobStorageProviderSchema,
+  isBlobStorageProviderType,
+  providerConfigSchema as blobStorageProviderConfigSchema,
+} from './blobStorage/types.js';
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   FeatureGateConfig,
@@ -111,6 +117,8 @@ export class Config extends BaseConfig {
     keyPrefix: string;
     presignTtlSeconds: number;
   };
+  // undefined when BLOB_STORAGE_PROVIDER is unset (no blob storage)
+  blobStorage: BlobStorageConfig | undefined;
 
   constructor() {
     super();
@@ -187,6 +195,8 @@ export class Config extends BaseConfig {
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
       FILE_TTL: bucketS3PresignTtlSeconds,
+      BLOB_STORAGE_PROVIDER: blobStorageProvider,
+      BLOB_STORAGE_PROVIDER_CONFIG: blobStorageProviderConfig,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -434,6 +444,31 @@ export class Config extends BaseConfig {
         maxValue: 900,
       }),
     };
+
+    // Blob storage provider configuration. Bring-your-own-infra: when configured with a custom
+    // provider, tools that need to offload large payloads (rendered images, exported data)
+    // upload/download via BlobStorageProvider instead of inlining base64/text.
+    // Unlike the providers above, an invalid value throws: unset is a real mode (no storage), so
+    // silently falling back would hide the misconfig.
+    if (!blobStorageProvider) {
+      this.blobStorage = undefined;
+    } else if (!isBlobStorageProviderType(blobStorageProvider)) {
+      throw new Error(
+        `BLOB_STORAGE_PROVIDER must be one of: ${blobStorageProviderSchema.options.join(', ')}. Got: ${blobStorageProvider}`,
+      );
+    } else {
+      if (!blobStorageProviderConfig) {
+        throw new Error(
+          'BLOB_STORAGE_PROVIDER_CONFIG is required when BLOB_STORAGE_PROVIDER is "custom"',
+        );
+      }
+      this.blobStorage = {
+        provider: blobStorageProvider,
+        providerConfig: blobStorageProviderConfigSchema.parse(
+          JSON.parse(blobStorageProviderConfig),
+        ),
+      };
+    }
 
     this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
