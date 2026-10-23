@@ -8,6 +8,7 @@ import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
+import { sourceSha256 } from './cacheFingerprint.js';
 import { synchronizeDashboardViewpoints } from './dashboardViewpoints.js';
 import { loadDashboardXml, loadStoryboardXml } from './loadDashboardXml.js';
 
@@ -1327,39 +1328,249 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
-  it('accepts a dashboard id and retitles a stale fragment before per-dashboard apply', async () => {
+  describe('refuses to rename (apply-dashboard / apply-storyboard never change the submitted name)', () => {
     const dashboardId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
-    const fragment = `<dashboard name='Old Dashboard'><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
-    const applyDashboardDocument = vi
-      .fn()
-      .mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
-      );
-    const executor = makeExecutorMock({
-      listDashboards: vi.fn().mockResolvedValue(
-        Ok({
-          dashboards: [{ id: dashboardId, name: 'Renamed Dashboard', hidden: false }],
-        }),
-      ),
-      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
-      applyDashboardDocument,
-    });
+    const doc = (name: string, kind: 'dashboard' | 'storyboard' = 'dashboard'): string =>
+      `<dashboard name='${name}'${kind === 'storyboard' ? " type='storyboard'" : ''}><zones /><simple-id uuid='${dashboardId}' /></dashboard>`;
+    const okApply = (): ReturnType<typeof vi.fn> =>
+      vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
 
-    const result = await loadDashboardXml({
-      dashboardName: dashboardId,
-      xml: fragment,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
+    type Fixture = {
+      executor: ReturnType<typeof makeExecutorMock>;
+      applyDashboardDocument: ReturnType<typeof vi.fn>;
+      applyStoryboardDocument: ReturnType<typeof vi.fn>;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    };
+    function executorFor(
+      liveName: string,
+      liveXml: string,
+      kind: 'dashboard' | 'storyboard',
+    ): Fixture {
+      const applyDashboardDocument = okApply();
+      const applyStoryboardDocument = okApply();
+      const applyWorkbookDocument = okApply();
+      const item = { id: dashboardId, name: liveName, hidden: false };
+      const executor = makeExecutorMock({
+        listDashboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ dashboards: kind === 'dashboard' ? [item] : [] })),
+        listStoryboards: vi
+          .fn()
+          .mockResolvedValue(Ok({ storyboards: kind === 'storyboard' ? [item] : [] })),
+        getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        getStoryboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        applyDashboardDocument,
+        applyStoryboardDocument,
+        applyWorkbookDocument,
+      });
+      return { executor, applyDashboardDocument, applyStoryboardDocument, applyWorkbookDocument };
+    }
 
-    expect(result.isOk()).toBe(true);
-    expect(applyDashboardDocument).toHaveBeenCalledWith(
-      dashboardId,
-      expect.stringContaining("name='Renamed Dashboard'"),
-      mockSignal,
+    function expectNoApply(e: Fixture): void {
+      expect(e.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(e.applyStoryboardDocument).not.toHaveBeenCalled();
+      expect(e.applyWorkbookDocument).not.toHaveBeenCalled();
+    }
+
+    function nameMismatchMessage(result: Awaited<ReturnType<typeof loadDashboardXml>>): string {
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      return result.error.error.message;
+    }
+
+    it.each([
+      { label: 'id, with a hash', ref: dashboardId, hash: true },
+      { label: 'the renamed name, with a hash', ref: 'Renamed Dashboard', hash: true },
+      { label: 'id, with no hash', ref: dashboardId, hash: false },
+    ])(
+      'refuses a renamed dashboard fragment resolved by $label, with zero applies',
+      async ({ ref, hash }) => {
+        const live = doc('Dashboard 1');
+        const fragment = doc('Renamed Dashboard');
+        const e = executorFor('Dashboard 1', live, 'dashboard');
+
+        const result = await loadDashboardXml({
+          dashboardName: ref === dashboardId ? dashboardId : ref,
+          xml: fragment,
+          executor: e.executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet: true,
+          expectedSourceHash: hash ? sourceSha256(live) : undefined,
+        });
+
+        if (ref === 'Renamed Dashboard') {
+          // The gate passes (name matches the file); the live-name check is what refuses.
+          const message = nameMismatchMessage(result);
+          expect(message).toContain(
+            'The file names this dashboard "Renamed Dashboard", but in Desktop it is "Dashboard 1"',
+          );
+          expect(message).toContain('apply-dashboard cannot rename a dashboard');
+          expect(message).toContain('call rename-sheet');
+          expect(message).toContain('If the file is older');
+          expect(message).toContain('No changes were sent to Tableau.');
+        } else {
+          expect(nameMismatchMessage(result)).toContain('The file names this dashboard');
+        }
+        expectNoApply(e);
+      },
     );
+
+    it('refuses a renamed storyboard fragment with storyboard wording and zero applies', async () => {
+      const live = doc('Story 1', 'storyboard');
+      const e = executorFor('Story 1', live, 'storyboard');
+
+      const result = await loadStoryboardXml({
+        storyboardName: dashboardId,
+        xml: doc('Renamed Story', 'storyboard'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      const message = nameMismatchMessage(result);
+      expect(message).toContain(
+        'The file names this storyboard "Renamed Story", but in Desktop it is "Story 1"',
+      );
+      expect(message).toContain('apply-storyboard cannot rename a storyboard');
+      expect(message).toContain('get-storyboard-xml');
+      expect(message).not.toContain('back to');
+      expectNoApply(e);
+    });
+
+    it('refuses a renamed dashboard whose worksheet zones would need native registration, before any apply', async () => {
+      const live = `<dashboard name='Dashboard 1'><zones><zone name='Sheet 1' /></zones><simple-id uuid='${dashboardId}' /></dashboard>`;
+      const fragment = live.replace("name='Dashboard 1'", "name='Renamed Dashboard'");
+      const e = executorFor('Dashboard 1', live, 'dashboard');
+      vi.mocked(e.executor.getWorkbookDocument).mockResolvedValue(
+        Ok({
+          xml: "<?xml version='1.0'?><workbook><worksheets><worksheet name='Sheet 1'><table><rows /><cols /></table></worksheet></worksheets><dashboards /><windows><window class='dashboard' name='Dashboard 1'/></windows></workbook>",
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      );
+
+      const result = await loadDashboardXml({
+        dashboardName: dashboardId,
+        xml: fragment,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      expect(nameMismatchMessage(result)).toContain('apply-dashboard cannot rename a dashboard');
+      expectNoApply(e);
+    });
+
+    it('refuses a rename-sheet race at the gate, then reports source-drift for an edit made against the old cache', async () => {
+      // Cache was read as "Old Name"; rename-sheet then renamed the live dashboard to "Renamed".
+      const oldDoc = doc('Old Name');
+      const liveDoc = doc('Renamed');
+      const e = executorFor('Renamed', liveDoc, 'dashboard');
+
+      const gate = await loadDashboardXml({
+        dashboardName: 'Renamed',
+        xml: oldDoc,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(oldDoc),
+      });
+      const gateMessage = nameMismatchMessage(gate);
+      expect(gateMessage).toContain(
+        'dashboardName "Renamed" does not match <dashboard name="Old Name"> in the file',
+      );
+      expect(gateMessage).toContain('with list-dashboards');
+      expect(gateMessage).toContain('pass "Old Name" as dashboardName');
+      expect(gateMessage).toContain('get-dashboard-xml');
+      expect(gateMessage).not.toContain('Retry with');
+
+      const drift = await loadDashboardXml({
+        dashboardName: 'Renamed',
+        xml: liveDoc.replace('<zones />', '<zones><zone /></zones>'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(oldDoc),
+      });
+      invariant(drift.isErr());
+      invariant(drift.error.type === 'load-dashboard-xml-error');
+      expect(drift.error.error.type).toBe('source-drift');
+      expectNoApply(e);
+    });
+
+    it('reports source-drift before name-differs when the live sheet was renamed and the hash is stale', async () => {
+      const live = doc('Renamed');
+      const e = executorFor('Renamed', live, 'dashboard');
+
+      const result = await loadDashboardXml({
+        dashboardName: dashboardId,
+        xml: doc('Old Name'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(doc('Old Name')),
+      });
+
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      expect(result.error.error.type).toBe('source-drift');
+      expectNoApply(e);
+    });
+
+    it('uses storyboard wording at the gate', async () => {
+      const e = executorFor('Renamed', doc('Renamed', 'storyboard'), 'storyboard');
+      const result = await loadStoryboardXml({
+        storyboardName: 'Renamed',
+        xml: doc('Old Name', 'storyboard'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+      const message = nameMismatchMessage(result);
+      expect(message).toContain(
+        'storyboardName "Renamed" does not match <storyboard name="Old Name">',
+      );
+      expect(message).toContain('get-storyboard-xml');
+      expect(message).toContain('pass "Old Name" as storyboardName');
+      expect(message).not.toContain('list-');
+      expect(message).not.toContain('Retry with');
+      expectNoApply(e);
+    });
+
+    it.each([
+      { label: 'id', ref: dashboardId },
+      { label: 'name', ref: 'Dashboard 1' },
+    ])('still applies when the names are equal, targeted by $label', async ({ ref }) => {
+      const live = doc('Dashboard 1');
+      const e = executorFor('Dashboard 1', live, 'dashboard');
+
+      const result = await loadDashboardXml({
+        dashboardName: ref,
+        xml: live,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(e.applyDashboardDocument).toHaveBeenCalledWith(dashboardId, live, mockSignal);
+    });
   });
 
   it('should return invalid-xml error when xml is empty', async () => {
