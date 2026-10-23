@@ -11,10 +11,15 @@
 /**
  * Blob storage provider interface for "bring your own infra" upload/download of
  * tool result payloads (e.g. rendered images, exported data) too large to inline.
+ *
+ * Keys are relative, `/`-delimited paths chosen by the server, and later looked up by the same
+ * key. Providers may prepend their own base path but must otherwise store each key as given.
  */
 export interface BlobStorageProvider {
   /**
-   * Upload data and return a URL the caller can use to retrieve it.
+   * Upload data and return a URL the caller can use to retrieve it. The URL is handed to the MCP
+   * client as-is, so it must be fetchable without credentials and should be short-lived (e.g. a
+   * presigned GET).
    *
    * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) are never held in
    * memory whole. It can only be assumed to be iterable once. Providers must consume `data` to
@@ -37,6 +42,9 @@ export interface BlobStorageProvider {
   /**
    * Get a presigned URL the caller can upload directly to, without proxying
    * bytes through this process.
+   *
+   * `requiredHeaders` is passed to the client unchanged and must include every header the URL is
+   * signed against, including `Content-Type` (set to `contentType`).
    *
    * @param params.key - Storage key/path for the blob
    * @param params.contentType - MIME type the upload must be sent as
