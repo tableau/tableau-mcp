@@ -4,7 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { findMissingPackageTargets } from './packedPackageTargets.js';
+import {
+  allowedPackageRootFiles,
+  findMissingPackageTargets,
+  findUnexpectedNonBuildFiles,
+} from './packedPackageTargets.js';
 
 interface PackFile {
   path: string;
@@ -77,17 +81,17 @@ if (JSON.stringify(actualBuildFiles) !== JSON.stringify(expectedBuildFiles)) {
 }
 
 const packedPaths = new Set(files.map(({ path }) => path));
-for (const requiredPath of [
-  'CODE_OF_CONDUCT.md',
-  'CONTRIBUTING.md',
-  'LICENSE.txt',
-  'README.md',
-  'SECURITY.md',
-  'package.json',
-]) {
+for (const requiredPath of allowedPackageRootFiles) {
   if (!packedPaths.has(requiredPath)) {
     fail(`required package file is missing: ${requiredPath}`);
   }
+}
+
+const unexpectedRootFiles = findUnexpectedNonBuildFiles(packedPaths);
+if (unexpectedRootFiles.length > 0) {
+  fail(
+    `unexpected non-build files in the tarball: ${unexpectedRootFiles.join(', ')}. npm always packs root README*/LICENSE*/COPYING* files, so keep variant READMEs out of the repo root`,
+  );
 }
 
 let packedPackage: PackedPackage;

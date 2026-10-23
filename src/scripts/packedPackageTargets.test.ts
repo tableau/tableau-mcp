@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { findMissingPackageTargets, getPackageTargets } from './packedPackageTargets.js';
+import {
+  allowedPackageRootFiles,
+  findMissingPackageTargets,
+  findUnexpectedNonBuildFiles,
+  getPackageTargets,
+} from './packedPackageTargets.js';
 
 describe('packedPackageTargets', () => {
   it('collects main, types, bin and nested exports targets without ./', () => {
@@ -45,5 +50,31 @@ describe('packedPackageTargets', () => {
   it('passes when every target is packed', () => {
     const pkg = { main: './build/index.js', bin: { x: './build/index.js' } };
     expect(findMissingPackageTargets(pkg, new Set(['build/index.js']))).toEqual([]);
+  });
+
+  describe('findUnexpectedNonBuildFiles', () => {
+    const allowed = [...allowedPackageRootFiles];
+
+    it('accepts the allowed root files and ignores build files', () => {
+      expect(findUnexpectedNonBuildFiles([...allowed, 'build/index.js'])).toEqual([]);
+    });
+
+    it('rejects README.desktop.md', () => {
+      expect(findUnexpectedNonBuildFiles([...allowed, 'README.desktop.md'])).toEqual([
+        'README.desktop.md',
+      ]);
+    });
+
+    it('rejects nested non-build paths', () => {
+      expect(findUnexpectedNonBuildFiles([...allowed, 'resources/desktop/x.json'])).toEqual([
+        'resources/desktop/x.json',
+      ]);
+    });
+
+    it('rejects README.combined.md', () => {
+      expect(findUnexpectedNonBuildFiles([...allowed, 'README.combined.md'])).toEqual([
+        'README.combined.md',
+      ]);
+    });
   });
 });
