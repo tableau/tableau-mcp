@@ -1,3 +1,4 @@
+import { Readable } from 'stream';
 import { describe, expect, it } from 'vitest';
 
 import { sanitizeForNotification } from './sanitizeNotification.js';
@@ -20,6 +21,19 @@ describe('sanitizeForNotification', () => {
       },
     });
     expect(JSON.stringify(sanitized)).not.toContain('"0":137');
+  });
+
+  it('redacts streamed payloads without walking their internals (e.g. the request auth header)', () => {
+    const stream = Readable.from([Buffer.from('bytes')]);
+    Object.assign(stream, { req: { _header: 'X-Tableau-Auth: secret-token' } });
+
+    const sanitized = sanitizeForNotification({ type: 'response', data: stream });
+
+    expect(sanitized).toEqual({
+      type: 'response',
+      data: { redacted: true, reason: 'stream-payload', message: '[redacted stream payload]' },
+    });
+    expect(JSON.stringify(sanitized)).not.toContain('secret-token');
   });
 
   it('redacts Uint8Array payloads before JSON serialization can expand byte indexes', () => {

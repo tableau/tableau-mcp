@@ -21,6 +21,12 @@ export function sanitizeValue(
     return getBinaryRedaction(value);
   }
 
+  // Streamed response bodies (e.g. a Node `IncomingMessage`) carry socket/request internals,
+  // including the outgoing auth header, so never walk them.
+  if (isAsyncIterable(value)) {
+    return { redacted: true, reason: 'stream-payload', message: '[redacted stream payload]' };
+  }
+
   if (!value || typeof value !== 'object') {
     return value;
   }
@@ -90,6 +96,14 @@ function sanitizeString(value: string, maxStringLength: number): unknown {
 
 function isBinaryLike(value: unknown): value is BinaryLike {
   return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+}
+
+export function isAsyncIterable(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as Record<symbol, unknown>)[Symbol.asyncIterator] === 'function'
+  );
 }
 
 function getBinaryRedaction(value: BinaryLike): Record<string, unknown> {

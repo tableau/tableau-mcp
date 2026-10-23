@@ -1,3 +1,4 @@
+import { Readable } from 'stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getConfig } from './config.js';
@@ -422,6 +423,51 @@ describe('restApiInstance', () => {
         }),
       );
     });
+
+    it.each([
+      ['success', 'false'],
+      ['success', 'true'],
+      ['error', 'false'],
+      ['error', 'true'],
+    ])(
+      'redacts a streamed body from the %s interceptor without touching the stream (DISABLE_LOG_MASKING=%s)',
+      async (kind, disableLogMasking) => {
+        vi.stubEnv('DISABLE_LOG_MASKING', disableLogMasking);
+        const server = new WebMcpServer();
+        const stream = Readable.from([Buffer.from('workbook bytes')]);
+        const response = {
+          status: kind === 'success' ? 200 : 500,
+          url: '/api/test',
+          baseUrl: mockHost,
+          params: {},
+          headers: {},
+          data: stream,
+          config: {},
+        };
+
+        if (kind === 'success') {
+          expect(getResponseInterceptor(server, mockRequestId)(response)).toBe(response);
+        } else {
+          getResponseErrorInterceptor(server, mockRequestId)(
+            { isAxiosError: true, response },
+            mockHost,
+          );
+        }
+
+        expect(notifier.info).toHaveBeenCalledWith(
+          server.mcpServer,
+          expect.objectContaining({
+            type: 'response',
+            data: { redacted: true, reason: 'stream-payload' },
+          }),
+          expect.anything(),
+        );
+        expect(response.data).toBe(stream);
+        expect(stream.readableFlowing).toBeNull();
+        expect(stream.destroyed).toBe(false);
+        expect(Buffer.concat(await stream.toArray()).toString()).toBe('workbook bytes');
+      },
+    );
   });
 
   describe('Error Handling', () => {
