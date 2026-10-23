@@ -14,6 +14,10 @@ import { dashboardFragmentSimpleId } from '../metadata/dashboards.js';
 import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { ParsedDashboard } from '../metadata/types.js';
 import {
+  dashboardDatasourceRefusal,
+  hasDashboardDatasources,
+} from '../validation/dashboardDatasources.js';
+import {
   alwaysBlockingValidationIssues,
   blockingValidationIssues,
   runValidation,
@@ -51,6 +55,8 @@ export type LoadDashboardXmlError =
   | { type: 'source-drift'; message: string }
   | { type: 'verification-failed'; message: string }
   | { type: 'registration-required'; message: string; worksheetNames: string[] }
+  // The fragment's <datasources> entry differs from the workbook's; Desktop would open a modal dialog.
+  | { type: 'datasource-mismatch'; message: string }
   // All dashboard callers require an existing sheet; no whole-workbook fallback is safe here.
   | { type: 'sheet-absent'; message: string }
   // The Desktop build lacks the per-sheet document endpoint; nothing was sent.
@@ -224,11 +230,17 @@ export async function loadDashboardXml({
   // The lock serializes MCP snapshot/check/apply, not Desktop user edits.
   // A snapshot read failure fails closed; no workbook replacement or creation fallback is safe.
   let verifiedWorksheetNames: string[] | undefined;
+  const hasDatasourceBlock = hasDashboardDatasources(xml);
   const targetRef = dashboardFragmentSimpleId(xml) ?? canonicalName;
   const perSheetResult = await withApplyLock(
     async (): Promise<Result<PerSheetApplyOutcome, SnapshotOrApplyError>> => {
       let snapshot: WorkbookDocument | null = null;
-      if (dashboardWorksheetNames(xml).length > 0 || verifyReadback || worksheetNames.length > 0) {
+      if (
+        dashboardWorksheetNames(xml).length > 0 ||
+        verifyReadback ||
+        worksheetNames.length > 0 ||
+        hasDatasourceBlock
+      ) {
         const workbook = await executor.getWorkbookDocument(signal);
         if (workbook.isErr()) {
           return Err({ type: 'execute-command-error', error: workbook.error });
@@ -252,6 +264,20 @@ export async function loadDashboardXml({
         return Ok(prepared.value);
       }
       const checked = prepared.value;
+      if (snapshot !== null && hasDatasourceBlock) {
+        let refusal: string | undefined;
+        try {
+          refusal = dashboardDatasourceRefusal(checked.fragmentXml, snapshot.xml);
+        } catch (error) {
+          return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+        }
+        if (refusal !== undefined) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: { type: 'datasource-mismatch', message: refusal },
+          });
+        }
+      }
       const referencedNames = dashboardWorksheetNames(checked.fragmentXml);
       const names = [...new Set([...referencedNames, ...worksheetNames])];
       const supportsRegistration = supportsDashboardVisualRegistration(executor.desktopApiVersion);

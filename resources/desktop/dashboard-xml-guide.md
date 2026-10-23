@@ -38,6 +38,8 @@ NOTE: Worksheet view registration belongs to the dashboard window, not the dashb
 Desktop API 0.2.22 and newer repairs registration for submitted worksheet zones during dashboard
 apply. See "Critical: Viewpoints" below for older-build safeguards.
 
+NOTE: A `<datasources>` entry in the dashboard must copy the workbook's own entry (same `name` and `caption`), or leave the block out and Tableau adds it; any other entry is refused.
+
 ## Key Concepts
 
 ### Positioning System
