@@ -86,7 +86,6 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
               filename,
               resourceId: workbookId,
               toolName: downloadWorkbookTool.name,
-              keyPrefixSegment: 'workbook-files/',
             }),
           );
         },

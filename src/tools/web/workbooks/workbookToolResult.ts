@@ -25,7 +25,6 @@ type BuildWorkbookToolResultParams = {
   filename: string;
   resourceId: string;
   toolName: string;
-  keyPrefixSegment: string;
   maxBytes?: number;
 };
 
@@ -52,7 +51,6 @@ async function buildWorkbookToolResultInner({
   filename,
   resourceId,
   toolName,
-  keyPrefixSegment,
   maxBytes = MAX_STAGED_WORKBOOK_BYTES,
 }: BuildWorkbookToolResultParams): Promise<WorkbookToolResult> {
   if (contentLength !== undefined && contentLength > maxBytes) {
@@ -69,9 +67,8 @@ async function buildWorkbookToolResultInner({
   let url: string;
   try {
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
-    const key = `${keyPrefixSegment}${resourceId}/${randomUUID()}.${ext}`;
     ({ url } = await getBlobStorageProvider().upload({
-      key,
+      key: buildWorkbookKey(resourceId, ext),
       data: capped,
       contentType: mimeType,
       contentLength,
@@ -103,6 +100,11 @@ async function buildWorkbookToolResultInner({
     throw new Error('Blob storage provider returned without reading the upload data.');
   }
   return { kind: 'url', url, mimeType, filename };
+}
+
+/** Builds the blob storage key for a workbook; any base path is the provider's concern. */
+function buildWorkbookKey(resourceId: string, ext: 'twb' | 'twbx'): string {
+  return `workbook-files/${resourceId}/${randomUUID()}.${ext}`;
 }
 
 export function workbookToolResultToCallToolResult(result: WorkbookToolResult): CallToolResult {

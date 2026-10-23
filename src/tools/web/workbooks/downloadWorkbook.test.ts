@@ -200,7 +200,9 @@ describe('downloadWorkbookTool', () => {
     expect(result.content[0].name).toBe('Superstore.twb');
     expect(result.content[0].mimeType).toBe('application/xml');
     expect(mocks.mockUpload).toHaveBeenCalledWith({
-      key: expect.stringMatching(/^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/.+\.twb$/),
+      key: expect.stringMatching(
+        /^workbook-files\/96a43833-27db-40b6-aa80-751efc776b9a\/[0-9a-f-]+\.twb$/,
+      ),
       data: expect.anything(),
       contentLength: workbookBytes.byteLength,
       contentType: 'application/xml',
