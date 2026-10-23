@@ -8,6 +8,7 @@ import {
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
+import { readSheetNames } from '../guards/workbookDocumentGuard.js';
 import {
   blockingValidationIssues,
   introducedBlockingValidationIssues,
@@ -23,6 +24,9 @@ export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
   | { type: 'workbook-drift'; message?: string }
+  // The document leaves out sheets Desktop would delete.
+  | { type: 'sheets-removed'; sheetNames: string[]; message: string }
+  | { type: 'sheet-check-failed'; message: string }
   // The workbook document POST reported transport-level completion, but Tableau
   // rejected the actual document load (e.g. "Qualified Name Parse Error").
   // `message` carries Desktop's own error text.
@@ -37,7 +41,12 @@ export interface LoadWorkbookXmlOk {
 
 export function describeLoadWorkbookXmlError(error: LoadWorkbookXmlError): string {
   if (error.type === 'workbook-drift') return 'The workbook changed before the authoring write.';
-  if (error.type === 'load-rejected') return error.message;
+  if (
+    error.type === 'load-rejected' ||
+    error.type === 'sheets-removed' ||
+    error.type === 'sheet-check-failed'
+  )
+    return error.message;
   if (error.type === 'validation-failed') {
     return error.issues.map((issue) => issue.message).join('; ');
   }
@@ -133,6 +142,11 @@ export async function loadWorkbookXml({
         });
       }
 
+      if (cachedLiveRelative) {
+        const sheetsRemoved = rejectRemovedSheets(xml, currentWorkbook.value.xml);
+        if (sheetsRemoved !== undefined) return sheetsRemoved;
+      }
+
       if (cachedLiveRelative && !skipValidation) {
         validation = runValidation(xml, 'workbook');
         const blockingIssues = introducedBlockingValidationIssues(
@@ -156,6 +170,67 @@ export async function loadWorkbookXml({
     // Preflight warnings ride along so apply responses can compute the host
     // verification receipt (W-23447506) without re-running validation.
     return Ok({ validationWarnings: validation.issues, ...result.value });
+  });
+}
+
+const MAX_LISTED_SHEETS = 10;
+
+function sheetCheckFailed(which: 'edited' | 'open', error: unknown): LoadWorkbookXmlResult {
+  log({
+    level: 'error',
+    message: `Sheet check could not parse the ${which} workbook document — XML not sent to Tableau`,
+    logger: 'workbookCommands',
+    data: { error: error instanceof Error ? error.message : String(error) },
+  });
+  return Err({
+    type: 'load-workbook-xml-error',
+    error: {
+      type: 'sheet-check-failed',
+      message:
+        which === 'edited'
+          ? 'The sheet check could not read the edited workbook document, so nothing was sent to Tableau. ' +
+            'Re-read the workbook with get-workbook-xml, redo the edit on the new cache file, then retry apply-workbook. ' +
+            'If it fails again, report that instead of retrying.'
+          : 'The sheet check could not read the open workbook, so nothing was sent to Tableau. ' +
+            'Retrying will not help; report this to the user.',
+    },
+  });
+}
+
+function rejectRemovedSheets(xml: string, liveXml: string): LoadWorkbookXmlResult | undefined {
+  let submittedNames: string[];
+  try {
+    submittedNames = readSheetNames(xml);
+  } catch (error) {
+    return sheetCheckFailed('edited', error);
+  }
+  let liveNames: string[];
+  try {
+    liveNames = readSheetNames(liveXml);
+  } catch (error) {
+    return sheetCheckFailed('open', error);
+  }
+  const submitted = new Set(submittedNames);
+  const names = [...new Set(liveNames)].filter((name) => !submitted.has(name));
+  if (names.length === 0) return undefined;
+
+  const listed = names
+    .slice(0, MAX_LISTED_SHEETS)
+    .map((name) => `'${name}'`)
+    .join(', ');
+  const more =
+    names.length > MAX_LISTED_SHEETS ? ` and ${names.length - MAX_LISTED_SHEETS} more` : '';
+  return Err({
+    type: 'load-workbook-xml-error',
+    error: {
+      type: 'sheets-removed',
+      sheetNames: names,
+      message:
+        `This apply would delete ${names.length} sheet(s) that are in the open workbook: ${listed}${more}. ` +
+        'Desktop deletes every sheet the document leaves out, so nothing was sent to Tableau. ' +
+        'To rename or delete a sheet, use rename-sheet or delete-sheet if this session has them, or ask the user to do it in Tableau. ' +
+        'For any other edit, re-read the workbook with get-workbook-xml, redo the edit on the new cache file keeping every sheet, and retry apply-workbook.',
+    },
   });
 }
 

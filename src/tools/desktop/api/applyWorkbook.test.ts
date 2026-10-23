@@ -491,6 +491,26 @@ describe('applyWorkbookTool', () => {
     expect(result.content[0].text).toBe(new WorkbookXmlLoadFailedError(error.error).message);
   });
 
+  it('surfaces the sheets-removed refusal text and reports isError', async () => {
+    const message = "This apply would delete 1 sheet(s) that are in the open workbook: 'Sales'.";
+    const error = {
+      type: 'load-workbook-xml-error' as const,
+      error: { type: 'sheets-removed' as const, sheetNames: ['Sales'], message },
+    };
+
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
+
+    const result = await getToolResult({
+      session: '12345',
+      workbookXml: '<?xml version="1.0"?><workbook></workbook>',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(message);
+  });
+
   it('reports actionable failure text when Desktop rejected the load', async () => {
     // Bug 1 (P0): apply must not lie. When loadWorkbookXml surfaces Desktop's actual
     // load rejection, the tool must return isError with that error text — never the
