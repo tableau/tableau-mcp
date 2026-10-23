@@ -45,6 +45,22 @@ settings, and metric context.
 - `now`: Optional current time in 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD' format
 - `time_zone`: Optional timezone for date/time calculations
 
+### Measurement period options
+
+Each metric in `metric_group_context` uses the same `measurement_period` fields as the
+[insight bundle](./generate-pulse-metric-value-insight-bundle.md#measurement-period-options):
+`specific_period` and `last_x_period`. The brief runs the same checks on each one. An error starts
+with the metric's index, for example `metric_group_context[0]: `. With more than one message it also
+starts with the message index, for example `messages[1]: `.
+
+- `specific_period` and `last_x_period` need `range` set to `RANGE_BY_CONFIG`.
+- They cannot both be set.
+- A day-based `last_x_period` needs `granularity` `GRANULARITY_BY_DAY`. The trailing-year one needs
+  `GRANULARITY_BY_MONTH`.
+
+The brief has no `options.now`. Its `now` is a top-level field of `briefRequest`, and the tool does
+not check it against `specific_period` or `last_x_period`.
+
 ### Message Structure
 
 Each message in the `messages` array contains:

@@ -315,6 +315,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TOOL_PROFILE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tool Profile',
+    description:
+      'This Web bundle registers tools eagerly; TOOL_PROFILE does not change its tool surface.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
@@ -396,6 +405,15 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Log Masking',
     description: 'Disable masking of credentials in logs. For debug purposes only.',
+    required: false,
+    sensitive: false,
+  },
+  NOTIFICATION_PAYLOAD_MAX_BYTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Notification Payload Max Bytes',
+    description:
+      'The maximum string length included in MCP client notifications and server logs before large payloads are redacted or truncated.',
     required: false,
     sensitive: false,
   },
@@ -619,6 +637,23 @@ const envVars = {
     title: 'Latency Metric Name',
     description:
       'The histogram metric name used to record HTTP request latency for tool calls. Defaults to "http_server_1agg1_request_duration".',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events',
+    description: 'Set to "on" to emit Desktop eval episode JSONL events. Defaults to off.',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS_DIR: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events Directory',
+    description:
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY. Files persist until an operator removes them; use a dedicated directory with external retention.',
     required: false,
     sensitive: false,
   },

@@ -1,5 +1,9 @@
+import './networkGuard.js';
+import '../../../src/testTelemetryGuard.js';
+
 import { Ok } from 'ts-results-es';
 
+import { closeLoopbackServer, startLoopbackServer } from '../../../src/testLoopbackRequest.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { mockDatasources } from '../../../src/tools/web/datasources/mockDatasources.js';
 
@@ -57,3 +61,6 @@ vi.mock('../../../src/features/init.js', async (importOriginal) => {
     },
   };
 });
+
+beforeEach(startLoopbackServer);
+afterEach(closeLoopbackServer);

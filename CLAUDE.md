@@ -22,7 +22,8 @@ npm run start:http:docker     # Run via Docker container
 
 ### Testing
 ```bash
-npm test                      # Unit tests (src/**/*.test.ts)
+npm test                      # Web + Desktop unit tests (src/**/*.test.ts); watch mode in an interactive terminal; use the one-shot command below in scripts
+npx vitest run --config ./vitest.config.ts   # One-shot, CI-safe unit run
 npm run test:e2e              # End-to-end tests
 npm run test:eval             # Evaluation tests
 npm run test:oauth:embedded   # OAuth embedded tests
@@ -92,9 +93,14 @@ Configured via `AUTH` env var (see `src/config.ts`):
   - MCP StreamableHTTPServerTransport
 
 #### Desktop Server (`src/server.desktop.ts`)
-- Desktop variant uses `@modelcontextprotocol/ext-apps` for discovery
-- Integrates with `DesktopDiscoverer` to find local Tableau Desktop instances
-- Tools are proxied to desktop via `DesktopToolExecutor`
+- Talks to local Tableau Desktop exclusively through the External Client API
+  (`src/desktop/externalApi/` — see its README for the layer layout and the
+  add-an-endpoint recipe)
+- Instances are found via per-instance discovery files
+  (`src/desktop/externalApi/discovery.ts`); sessions resolve to an
+  `ExternalApiToolExecutor` through `SessionManager`
+- Wrappers around API calls (workbook read gateway, XML load/apply, command
+  guard, read harness) live in `src/desktop/wrappers/`
 
 ### Tool Architecture
 
@@ -113,7 +119,18 @@ Key tools include:
 - `adminInsights`: Admin insights queries
 
 #### Desktop Tools (`src/tools/desktop/`)
-Desktop-specific tools that interact with local Tableau Desktop instances.
+Tools for local Tableau Desktop, organized by how they use the External Client API:
+- `api/`: thin tools over one or two API endpoints (reads, applies, exports,
+  undo/redo, execute-tableau-command)
+- `authoring/`: multi-step orchestration (`binder/`, `fields/`, `templates/`,
+  `sheets/`, `datasource/`)
+- `local/`: tools that make no API call (knowledge, search, cached-XML editing,
+  guides, interaction)
+- Root: `tool.ts` base class, `tools.ts` + `toolName.ts` registration, shared
+  helpers, and the cross-tool invariant tests
+
+#### Web/Desktop boundary
+Web and shared code must not import Desktop code at runtime (`src/desktop/**`, `src/tools/desktop/**`, `resources/desktop/**`, `*.desktop.ts`, `index.combined.ts`). Lint catches static imports and re-exports (type-only imports are allowed); the Web build test (`src/scripts/desktopSources.test.ts`) catches anything bundled, including dynamic imports.
 
 #### Tool Context (`src/tools/web/toolContext.ts`)
 `TableauWebRequestHandlerExtra` provides:
@@ -218,7 +235,7 @@ Key variables (see `env.example.list` and `.env`):
 ### Unit Tests (`vitest.config.ts`)
 - Located in `src/` alongside source files
 - Coverage excludes: scripts, SDKs, server
-- Run with `npm test`
+- Run with `npx vitest run --config ./vitest.config.ts` (`npm test` watches in an interactive terminal)
 
 ### E2E Tests (`vitest.config.e2e.ts`)
 - Located in `tests/e2e/`
@@ -282,10 +299,15 @@ Feature flags gate in-development features and are internal: customers don't kno
 
 ## NPM Package
 
-Published as `@tableau/mcp-server` with:
+Published as the Web-only `@tableau/mcp-server` package. Keep the Desktop entry point and Desktop
+data out of its tarball. The package has:
 - Binary: `tableau-mcp-server` → `build/index.js`
 - Exports: main entry + `./tracing` for APM
 - Requires Node.js >= 22.7.5
+
+Desktop remains available through `npm run build:desktop` from a clone and through the standalone
+Desktop executable from a source build (`npm run build:sea:desktop`); release archives carry the
+Web executable only.
 
 ## Documentation
 
@@ -295,3 +317,12 @@ npm run docs:start   # Start dev server
 ```
 
 Official docs: https://tableau.github.io/tableau-mcp/
+
+## Writing PRs, commits, and comments for humans
+
+Reviewers approve what they can read. When you write a PR title, PR body, commit subject, or review comment:
+
+- **Title:** keep the `type(scope):` prefix, then say plainly what the change does. No invented compound nouns, no slogans, no version number in the title.
+- **Body — decision first:** open with the one thing the reviewer must accept, and say whether it is a rule the codebase now keeps or a one-off for this case. Don't make the reviewer infer the policy from the diff.
+- **One PR, one decision:** if the title needs "and" to join two independent changes, it is probably two PRs.
+- Prefer short words, active voice, and cutting every word you can. Break a rule before writing something unreadable.

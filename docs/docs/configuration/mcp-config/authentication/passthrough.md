@@ -9,13 +9,18 @@ Tableau REST APIs. The same
 [`X-Tableau-Auth` header](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_auth.htm#using_auth_token)
 used to authenticate to the Tableau REST APIs can also be used to authenticate to the MCP server.
 
-When a request is made to the MCP server, the `X-Tableau-Auth` header is read.
+When a request is made to the MCP server, the token is read from the `X-Tableau-Auth` header, or,
+when that header is absent, from the `workgroup_session_id` cookie.
 
-- When the header is present, the value will be "passed through" and re-used during MCP tool calls
-  when they authenticate to the Tableau REST APIs.
-- When absent, normal authentication will resume as defined by the [`AUTH`](../env-vars.md#auth)
-  environment variable. This allows clients that do not provide the `X-Tableau-Auth` header to still
-  authenticate to the MCP server.
+- When a token is present in either place, the value will be "passed through" and re-used during MCP
+  tool calls when they authenticate to the Tableau REST APIs.
+- When neither is present, behavior depends on how passthrough was enabled:
+  - With [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) set to `true`, normal authentication
+    resumes as defined by the [`AUTH`](../env-vars.md#auth) environment variable. This allows clients
+    that provide neither the `X-Tableau-Auth` header nor the `workgroup_session_id` cookie to still
+    authenticate to the MCP server.
+  - With [`AUTH`](../env-vars.md#auth) set to `passthrough`, there is no fallback to another `AUTH`
+    method: the request is rejected with `401 invalid_token`.
 
 ## Warnings
 
@@ -28,6 +33,21 @@ credential for the `X-Tableau-Auth` header and managing its lifecycle. The MCP s
 automatically terminate the Tableau session associated with the credential after its use nor will it
 refresh it after it expires. Providing an invalid or expired credential will result in downstream
 authentication failures.
+
+:::
+
+### Site
+
+:::warning
+
+With `AUTH=passthrough`, [`SITE_NAME`](../env-vars.md#site_name) does not restrict which site a token
+may belong to, and a request without a token is rejected. REST calls and per-site state, such as
+[site settings](../site-settings.md), use the site part of the token. Site settings are cached under that site only when it matches the
+session site Tableau validated. The server does not compare the token's site to `SITE_NAME`.
+
+`SITE_NAME` applies only to requests with no auth info: PAT, UAT, and direct-trust over HTTP, an
+embedded-OAuth `X-Tableau-Auth` request with no access token, and stdio. When `ENABLE_PASSTHROUGH_AUTH` is set beside [OAuth](oauth.md), a request without a
+passthrough token uses the site of its OAuth token.
 
 :::
 
@@ -49,11 +69,14 @@ In versions of Tableau older than 2026.2, the JWT must also contain the `tableau
 
 :::warning
 
-If [`OAuth`](oauth.md) is enabled, **all** requests to the MCP server must include the
-`X-Tableau-Auth` header, otherwise the client will be considered unauthorized and will be forced to
-authenticate using OAuth. This even includes MCP lifecycle requests like the
+When passthrough is enabled as an option with `ENABLE_PASSTHROUGH_AUTH` and [`OAuth`](oauth.md) is
+the primary `AUTH` method, **all** requests to the MCP server must include the `X-Tableau-Auth`
+header or authenticate using OAuth. This includes MCP lifecycle requests like the
 [Initialization request](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization),
 even though it does not make any downstream Tableau REST API calls.
+
+With `AUTH=passthrough`, OAuth is disabled and there is no OAuth fallback, even if `OAUTH_ISSUER`
+remains set from another deployment.
 
 :::
 
@@ -72,10 +95,26 @@ for more details.
 
 ## Environment Variables
 
+### AUTH
+
+- Setting [`AUTH`](../env-vars.md#auth) to `passthrough` enables passthrough authentication and makes
+  it the only accepted method: every request must carry a token in the `X-Tableau-Auth` header or the
+  `workgroup_session_id` cookie, and requests without one are rejected with `401 invalid_token`.
+- Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
+- Requires [`TRANSPORT`](../env-vars.md#transport) to be `http`; the server refuses to start with
+  `stdio`.
+- Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the token is
+  absent.
+- Does not require `OAUTH_ISSUER` or `DANGEROUSLY_DISABLE_OAUTH`; a configured `OAUTH_ISSUER` does
+  not enable OAuth in this mode.
+
+<hr />
+
 ### ENABLE_PASSTHROUGH_AUTH
 
 - Default: `false`
-- When `true`, passthrough authentication is enabled.
+- When `true`, passthrough authentication is enabled, falling back to the [`AUTH`](../env-vars.md#auth)
+  method when the `X-Tableau-Auth` header is absent.
 - Only applies when [`TRANSPORT`](../env-vars.md#transport) is `http`.
 
 <hr />

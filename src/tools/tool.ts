@@ -14,6 +14,9 @@ import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
 
+type ToolAnnotationsWithOptionalTitle = Omit<Required<ToolAnnotations>, 'title'> &
+  Pick<ToolAnnotations, 'title'>;
+
 /**
  * The parameters for creating a tool instance
  *
@@ -42,7 +45,7 @@ export type ToolParams<
   paramsSchema: TypeOrProvider<Args>;
 
   // The annotations of the tool
-  annotations: TypeOrProvider<Required<ToolAnnotations>>;
+  annotations: TypeOrProvider<ToolAnnotationsWithOptionalTitle>;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TCallback>;
@@ -98,7 +101,7 @@ export abstract class Tool<
   title?: TypeOrProvider<string>;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
-  annotations: TypeOrProvider<Required<ToolAnnotations>>;
+  annotations: TypeOrProvider<ToolAnnotationsWithOptionalTitle>;
   callback: TypeOrProvider<TCallback>;
   disabled: TypeOrProvider<boolean>;
 

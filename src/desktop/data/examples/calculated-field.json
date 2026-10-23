@@ -1,0 +1,36 @@
+{
+  "_description": "Add a calculated field (measure) to a datasource",
+  "_feature": "calculated-field",
+  "_usage": "Insert this node as a child of the target datasource node. Change name, caption, formula, role, type, and datatype to match your field.",
+  "example": {
+    "type": "column",
+    "attrs": {
+      "name": "[Calculation_20260303120000_001]",
+      "caption": "Profit Ratio",
+      "role": "measure",
+      "type": "quantitative",
+      "datatype": "real"
+    },
+    "children": [
+      {
+        "type": "calculation",
+        "attrs": {
+          "formula": "SUM([Profit]) / SUM([Sales])",
+          "class": "tableau"
+        }
+      }
+    ]
+  },
+  "notes": {
+    "name_format": "[Calculation_YYYYMMDDHHMMSS_NNN] — must be unique within the datasource",
+    "role_values": ["dimension", "measure"],
+    "type_values": ["nominal", "ordinal", "quantitative"],
+    "datatype_values": ["string", "integer", "real", "boolean", "date", "datetime"],
+    "dimension_example": {
+      "role": "dimension",
+      "type": "nominal",
+      "datatype": "string",
+      "formula_example": "IF [Profit] > 0 THEN 'Profitable' ELSE 'Unprofitable' END"
+    }
+  }
+}

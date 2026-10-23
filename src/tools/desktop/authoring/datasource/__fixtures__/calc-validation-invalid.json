@@ -1,0 +1,20 @@
+{
+  "state": "SUCCEEDED",
+  "result": {
+    "userCalculationDetails": {
+      "calculationFormula": "SUM( IF [bYearOrderDate] = YEAR([calcuAnchor]) AND DATEPART('dayofyear',[Order Date]) <= DATEPART('dayofyear', [calcuAnchor]) THEN [Profit] END ) / SUM( IF YEAR([Order Date]) = YEAR([calcuAnchor]) AND DATEPART('dayofyear',[Order Date]) <= DATEPART('dayofyear', [calcuAnchor]) THEN [Sales] END )",
+      "calculationCaption": "depend",
+      "errorMsgs": [
+        "Cannot mix aggregate and non-aggregate arguments with this function.",
+        "Cannot mix aggregate and non-aggregate arguments with this function.",
+        "Cannot mix aggregate and non-aggregate comparisons or results in 'IF' expressions",
+        "Cannot mix aggregate and non-aggregate arguments with this function.",
+        "Cannot mix aggregate and non-aggregate arguments with this function.",
+        "Cannot mix aggregate and non-aggregate comparisons or results in 'IF' expressions"
+      ],
+      "errorInds": [25, 86, 0, 175, 236, 0]
+    }
+  },
+  "warnings": [],
+  "operationId": "op_6d1e1ad8-06eb-4f48-88e8-289f7ac6d014"
+}

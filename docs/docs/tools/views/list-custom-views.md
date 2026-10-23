@@ -72,7 +72,7 @@ See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_re
     },
     "owner": {
       "id": "bbdee366-4a50-4c2c-a5c8-746da5b64483",
-      "name": "andrew.young@tableau.com"
+      "name": "jane.doe@example.com"
     }
   }
 ]

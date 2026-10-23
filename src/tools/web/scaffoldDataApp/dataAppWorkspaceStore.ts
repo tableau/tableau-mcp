@@ -3,7 +3,8 @@
  */
 
 import { existsSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { Ok, Result } from 'ts-results-es';
 
@@ -11,6 +12,7 @@ import { Config } from '../../../config.js';
 import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/mcpToolError.js';
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 import {
   buildPostUnzipPlan,
@@ -57,6 +59,67 @@ function resolveTemplateZip(): string | undefined {
   return undefined;
 }
 
+const SEA_TEMPLATE_ASSET_KEY = `templates/${TEMPLATE_ZIP_FILENAME}`;
+
+type TemplateSource = { path: string } | { bytes: Buffer };
+
+function resolveTemplateSource(): TemplateSource | undefined {
+  if (runningAsSea()) {
+    const bytes = readSeaAssetBytes(SEA_TEMPLATE_ASSET_KEY);
+    if (bytes) {
+      return { bytes };
+    }
+  }
+  const path = resolveTemplateZip();
+  return path ? { path } : undefined;
+}
+
+let seaTemplatePath: Promise<string> | undefined;
+
+// WHY: the client may still be reading this file after we return, so it is not deleted on exit.
+async function materializeSeaTemplate(bytes: Buffer): Promise<string> {
+  if (seaTemplatePath) {
+    const cached = seaTemplatePath;
+    try {
+      const path = await cached;
+      await access(path);
+      return path;
+    } catch {
+      // Gone (tmp reaper, manual cleanup) or the earlier write failed: write a fresh copy below.
+      if (seaTemplatePath === cached) {
+        seaTemplatePath = undefined;
+      }
+      if (seaTemplatePath) {
+        return materializeSeaTemplate(bytes);
+      }
+    }
+  }
+  const pending = (async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tableau-mcp-template-'));
+    const path = join(dir, TEMPLATE_ZIP_FILENAME);
+    try {
+      await writeFile(path, bytes, { flag: 'wx', mode: 0o600 });
+    } catch (error) {
+      await rm(dir, { recursive: true, force: true });
+      throw error;
+    }
+    return path;
+  })();
+  seaTemplatePath = pending;
+  pending.catch(() => {
+    if (seaTemplatePath === pending) {
+      seaTemplatePath = undefined;
+    }
+  });
+  return pending;
+}
+
+export const exportedForTesting = {
+  resetSeaTemplatePath: (): void => {
+    seaTemplatePath = undefined;
+  },
+};
+
 export async function createDataAppWorkspace({
   datappName,
   allowedOrigins,
@@ -69,18 +132,28 @@ export async function createDataAppWorkspace({
   const identity = deriveIdentity(datappName);
 
   // Both output modes serve the same static, un-substituted template zip — the artifact built at
-  // `npm run build` time and resolved on disk here. If it isn't present in this deployment, both
-  // modes are unavailable for the same reason.
-  const zipPath = resolveTemplateZip();
-  if (!zipPath) {
+  // `npm run build` time, resolved on disk or, inside a SEA, from the embedded asset. If it isn't
+  // present in this deployment, both modes are unavailable for the same reason.
+  const source = resolveTemplateSource();
+  if (!source) {
     return new DataAppTemplateUnavailableError(
       'The data app template is not available in this deployment.',
     ).toErr();
   }
 
-  return config.bucketS3.enabled
-    ? await createS3Workspace({ datappName, allowedOrigins, identity, config, zipPath })
-    : createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
+  if (config.bucketS3.enabled) {
+    return await createS3Workspace({ datappName, allowedOrigins, identity, config, source });
+  }
+
+  let zipPath: string;
+  try {
+    zipPath = 'path' in source ? source.path : await materializeSeaTemplate(source.bytes);
+  } catch (error) {
+    return new DataAppTemplateUnavailableError(
+      `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
+    ).toErr();
+  }
+  return createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
 }
 
 async function createS3Workspace({
@@ -88,13 +161,13 @@ async function createS3Workspace({
   allowedOrigins,
   identity,
   config,
-  zipPath,
+  source,
 }: {
   datappName: string;
   allowedOrigins: string[];
   identity: DataAppIdentity;
   config: Config;
-  zipPath: string;
+  source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   // Upload the template zip to S3 fresh on every call, then presign a GET URL for exactly those
   // bytes. The uploaded content is identical regardless of `datappName` (only `postUnzip` varies),
@@ -107,7 +180,7 @@ async function createS3Workspace({
   // guarantees the object matches this instance's on-disk template.
   let s3URL: string;
   try {
-    const buffer = await readFile(zipPath);
+    const buffer = 'path' in source ? await readFile(source.path) : source.bytes;
     const key = `${joinS3Prefix(config.bucketS3.keyPrefix, 'data-app-templates')}${TEMPLATE_ZIP_FILENAME}`;
     s3URL = await uploadBufferToS3(buffer, {
       key,
