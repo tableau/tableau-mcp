@@ -47,16 +47,23 @@ export const SkillsListRequestSchema = z.object({
   params: z.object({}).passthrough().optional(),
 });
 
-export type SkillsListResult = {
-  resultType: 'complete';
-  skills: SkillEntry[];
-};
+export const SkillsListResultSchema = z.object({
+  resultType: z.literal('complete'),
+  skills: z.array(SkillEntrySchema),
+});
+
+export type SkillsListResult = z.infer<typeof SkillsListResultSchema>;
 
 /** `skills/get` looks up a skill by its catalog SKILL.md URI. */
 export const SkillsGetRequestSchema = z.object({
   method: z.literal('skills/get'),
   params: z.object({ uri: z.string() }).passthrough(),
 });
+
+// Defer params validation to the handler so invalid params return -32602 instead of -32603.
+export const SkillsGetHandlerRequestSchema = SkillsGetRequestSchema.omit({
+  params: true,
+}).passthrough();
 
 export const SkillsGetResultSchema = z.object({
   resultType: z.literal('complete'),

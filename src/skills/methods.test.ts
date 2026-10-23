@@ -1,11 +1,16 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ErrorCode, type Result, ResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, type Result } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import { registerSkillMethodHandlers } from './methods.js';
 import { type SkillRegistry } from './registry.js';
-import { type SkillEntry, SkillsGetRequestSchema, SkillsGetResultSchema } from './types.js';
+import {
+  type SkillEntry,
+  SkillsGetRequestSchema,
+  SkillsGetResultSchema,
+  SkillsListResultSchema,
+} from './types.js';
 
 const SKILL: SkillEntry = {
   uri: 'skill://test-skill/SKILL.md',
@@ -47,7 +52,7 @@ async function requestSkills(
   try {
     return await client.request(
       { method, params },
-      method === 'skills/get' ? SkillsGetResultSchema : ResultSchema,
+      method === 'skills/get' ? SkillsGetResultSchema : SkillsListResultSchema,
     );
   } finally {
     await client.close();

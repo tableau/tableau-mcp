@@ -3,6 +3,7 @@ import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import { type SkillRegistry } from './registry.js';
 import {
+  SkillsGetHandlerRequestSchema,
   SkillsGetRequestSchema,
   type SkillsGetResult,
   SkillsListRequestSchema,
@@ -23,9 +24,7 @@ export function registerSkillMethodHandlers(mcp: McpServer, registry: SkillRegis
   );
 
   mcp.server.setRequestHandler(
-    // The SDK maps schema parse failures to InternalError. Validate inside the handler
-    // so malformed skills/get params produce the JSON-RPC InvalidParams error instead.
-    SkillsGetRequestSchema.omit({ params: true }).passthrough(),
+    SkillsGetHandlerRequestSchema,
     async (request): Promise<SkillsGetResult> => {
       const parsed = SkillsGetRequestSchema.safeParse(request);
       if (!parsed.success) {
