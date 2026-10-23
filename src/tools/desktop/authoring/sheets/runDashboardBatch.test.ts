@@ -15,7 +15,11 @@ import {
   type TemplateWorksheetArtifact,
 } from '../../../../desktop/templates/templateArtifactStore.js';
 import * as loggerModule from '../../../../logging/logger.js';
-import { DesktopMcpServer, getDesktopToolListEntry } from '../../../../server.desktop.js';
+import {
+  DesktopMcpServer,
+  getDesktopToolListEntry,
+  getModelFacingToolEntry,
+} from '../../../../server.desktop.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { Tool } from '../../../tool.js';
@@ -142,7 +146,8 @@ describe('runDashboardBatchTool', () => {
     expect(entry.inputSchema.required).not.toContain('existingWorksheetNames');
     expect(entry.inputSchema.required).not.toContain('replaceExisting');
     expect(entry.inputSchema.properties).not.toHaveProperty('tasks');
-    expect(JSON.stringify(entry).length).toBe(1_302);
+    expect(entry._meta).toEqual({ 'anthropic/alwaysLoad': true });
+    expect(JSON.stringify(getModelFacingToolEntry(entry)).length).toBe(1_302);
   });
 
   it('records bounded success telemetry without workbook identifiers', async () => {
