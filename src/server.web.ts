@@ -204,8 +204,10 @@ export class WebMcpServer extends Server {
     if (config.toolProfile === 'combined-lean' && sharedStatefulServer) {
       this._registerLoadWebToolsTool();
     } else {
+      // Read once per pass so a mid-loop flag flip cannot split one session's tools.
+      const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
       for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
-        await this._registerWebTool(tool);
+        await this._registerWebTool(tool, mcpAppsEnabled);
       }
     }
 
@@ -272,9 +274,10 @@ export class WebMcpServer extends Server {
         requestedToolNames.has(tool.name) && !this._registeredLazyWebToolNames.has(tool.name),
     );
 
+    const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
     for (const tool of toolsToRegister) {
       try {
-        if (await this._registerWebTool(tool)) {
+        if (await this._registerWebTool(tool, mcpAppsEnabled)) {
           this._registeredLazyWebToolNames.add(tool.name);
         }
       } catch (error) {
@@ -333,9 +336,11 @@ export class WebMcpServer extends Server {
     );
   };
 
-  private _registerWebTool = async (tool: WebTool<any>): Promise<boolean> => {
+  private _registerWebTool = async (
+    tool: WebTool<any>,
+    mcpAppsEnabled: boolean,
+  ): Promise<boolean> => {
     const config = getConfig();
-    const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
     const isKnownIncompatibleClient = getClientDisplayName(this.clientId) === 'Claude';
 
     const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
