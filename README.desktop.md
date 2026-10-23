@@ -6,9 +6,8 @@ inspect a workbook, list/inject chart templates, and bind fields into worksheets
 (stdio).
 
 Use the Desktop server from a source build or a standalone Desktop executable. This document
-covers the source path. For a published GitHub Release, the `upload-binaries` workflow is configured
-to put the Web and Desktop executables in each platform archive; releases that predate that workflow
-may not have those archives.
+covers the source path. GitHub Release archives carry the Web executable only; build the Desktop
+executable from source (`npm run build:sea:desktop`). Desktop builds are distributed separately.
 
 ## The template tool surface
 

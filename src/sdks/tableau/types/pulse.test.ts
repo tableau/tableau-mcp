@@ -43,6 +43,59 @@ describe('PulseMetric schema', () => {
     expect(() => pulseMetricSchema.parse(data)).toThrow();
   });
 
+  it('keeps a last_x_period outside the request-supported shapes in a response', () => {
+    const lastXPeriod = {
+      period: 6,
+      period_type: 'GRANULARITY_BY_MONTH',
+      include_current_period: true,
+    };
+    const data = createValidPulseMetric();
+    data.specification.measurement_period = {
+      ...data.specification.measurement_period,
+      last_x_period: lastXPeriod,
+    };
+    const parsed = pulseMetricSchema.parse(data);
+    expect(parsed.specification.measurement_period.last_x_period).toEqual(lastXPeriod);
+  });
+
+  it('keeps a specific_period outside the request-supported shapes in a response', () => {
+    const specificPeriod = { date: '2026-01-01T00:00:00', end_date: '2025-12-01T00:00:00' };
+    const data = createValidPulseMetric();
+    data.specification.measurement_period = {
+      ...data.specification.measurement_period,
+      specific_period: specificPeriod,
+    };
+    const parsed = pulseMetricSchema.parse(data);
+    expect(parsed.specification.measurement_period.specific_period).toEqual(specificPeriod);
+  });
+
+  it.each([
+    ['null last_x_period', { last_x_period: null }],
+    ['null specific_period', { specific_period: null }],
+    [
+      'last_x_period without include_current_period',
+      { last_x_period: { period: 1, period_type: 'GRANULARITY_BY_YEAR' } },
+    ],
+    [
+      'last_x_period with a string period',
+      {
+        last_x_period: {
+          period: '6',
+          period_type: 'GRANULARITY_BY_MONTH',
+          include_current_period: true,
+        },
+      },
+    ],
+  ])('keeps a loosely shaped response value as given: %s', (_name, extra) => {
+    const data = createValidPulseMetric();
+    data.specification.measurement_period = {
+      ...data.specification.measurement_period,
+      ...extra,
+    } as PulseMetric['specification']['measurement_period'];
+    const parsed = pulseMetricSchema.parse(data);
+    expect(parsed.specification.measurement_period).toMatchObject(extra);
+  });
+
   it('rejects a PulseMetric with non-boolean is_default', () => {
     // @ts-expect-error - is_default should be boolean
     const data = createValidPulseMetric({ is_default: 'yes' });
@@ -208,6 +261,25 @@ describe('pulseBundleRequestSchema optionality', () => {
       },
     };
   }
+
+  it('still rejects response-only specific_period and last_x_period shapes in a request', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({ specificPeriod: { date: '2026-01-01T00:00:00' } }),
+      ),
+    ).toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({
+          lastXPeriod: {
+            period: 6,
+            period_type: 'GRANULARITY_BY_MONTH',
+            include_current_period: true,
+          },
+        }),
+      ),
+    ).toThrow();
+  });
 
   it('accepts a valid now (date and datetime) and empty string', () => {
     expect(() =>
