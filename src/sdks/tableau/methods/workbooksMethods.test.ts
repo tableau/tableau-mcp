@@ -564,8 +564,7 @@ describe('WorkbooksMethods', () => {
     it('leaves contentLength undefined when Content-Length is missing or malformed', async () => {
       const cases: Array<Record<string, string>> = [
         {},
-        { 'content-length': 'abc' },
-        { 'content-length': '' },
+        ...['abc', '', '1e3', '0x10', '-5', '12.5', ' 12'].map((v) => ({ 'content-length': v })),
       ];
       for (const headers of cases) {
         const { workbooksMethods } = setup(headers);

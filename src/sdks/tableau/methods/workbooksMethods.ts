@@ -186,11 +186,9 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       throw error;
     }
 
-    const contentLength = getHeader(response.headers, 'content-length');
     return {
       content: response.data,
-      contentLength:
-        contentLength && /^\d+$/.test(contentLength) ? Number(contentLength) : undefined,
+      contentLength: parseContentLength(getHeader(response.headers, 'content-length')),
       contentType: getHeader(response.headers, 'content-type'),
       filename: getFilenameFromContentDisposition(
         getHeader(response.headers, 'content-disposition'),
@@ -477,6 +475,12 @@ function getHeader(headers: Record<string, unknown>, name: string): string | und
     return typeof first === 'string' ? first : undefined;
   }
   return typeof value === 'string' ? value : undefined;
+}
+
+// Strict digits-only: Number() would accept '1e3', '0x10', ' 12 ', and an untrusted header must not
+// yield a wrong exact byte count.
+function parseContentLength(header: string | undefined): number | undefined {
+  return header && /^\d+$/.test(header) ? Number(header) : undefined;
 }
 
 function getFilenameFromContentDisposition(
