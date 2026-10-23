@@ -63,8 +63,9 @@ type PackageJson = z.infer<typeof packageJsonSchema>;
   const packageJson = { ...(await readPackageJson()), ...overrides };
   await writePackageJson(packageJson);
 
-  if (existsSync(join(repoRoot, `README.${variant}.md`))) {
-    await copyFile(join(repoRoot, `README.${variant}.md`), join(repoRoot, 'README.md'));
+  const variantReadme = join(repoRoot, 'docs', `README.${variant}.md`);
+  if (existsSync(variantReadme)) {
+    await copyFile(variantReadme, join(repoRoot, 'README.md'));
   }
 })().catch((error: unknown) => {
   console.error(error);

@@ -32,3 +32,17 @@ export function findMissingPackageTargets(
 ): string[] {
   return getPackageTargets(pkg).filter((target) => !packedPaths.has(target));
 }
+
+export const allowedPackageRootFiles = [
+  'CODE_OF_CONDUCT.md',
+  'CONTRIBUTING.md',
+  'LICENSE.txt',
+  'README.md',
+  'SECURITY.md',
+  'package.json',
+] as const;
+
+export function findUnexpectedNonBuildFiles(packedPaths: Iterable<string>): string[] {
+  const allowed: readonly string[] = allowedPackageRootFiles;
+  return [...packedPaths].filter((path) => !path.startsWith('build/') && !allowed.includes(path));
+}

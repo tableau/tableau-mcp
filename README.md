@@ -55,59 +55,18 @@ For Docker, building from source, and other self-hosted options, see the [Gettin
 
 ### Tableau Desktop Authoring Server
 
-Desktop is not installed through the npm package. The **desktop** build variant exposes a local
-authoring tool surface that drives a running Tableau Desktop instance over MCP stdio. It can inspect
-workbooks, list chart templates, bind fields into worksheets, and work with dashboards.
-
-Build it from a clone with Node.js 22.7.5 or later:
-
-```bash
-npm run build:desktop
-```
-
-Point an MCP client at the desktop entry:
-
-```json
-{
-  "mcpServers": {
-    "tableau-desktop": {
-      "command": "node",
-      "args": ["/absolute/path/to/tableau-mcp/build/index.desktop.js"]
-    }
-  }
-}
-```
-
-The Desktop build stages its reference data under `build/desktop/data/`. Headless reference tools
-such as `list-templates` read that data. Tools that inspect or mutate a workbook require a running
-Tableau Desktop instance; use `list-instances` and pass the returned `session` id to those calls.
-
-See [`README.desktop.md`](README.desktop.md) for the full desktop authoring quickstart.
+The npm package is Web-only. The Desktop authoring server is a separate build from this repo; see
+[`docs/README.desktop.md`](docs/README.desktop.md) for the quickstart.
 
 ## Standalone Binaries (SEA)
 
 The server can be packaged as a [Node.js Single Executable Application](https://tableau.github.io/tableau-mcp/docs/extras/node-sea)
-so it runs without a Node.js install. Build them locally with:
-
-```bash
-npm run build:sea            # default (web) + desktop variants, host platform
-npm run build:sea:desktop    # desktop variant only
-
-# Pick variants/platforms explicitly:
-npm run build:sea -- --variant desktop --platform macos-arm64 macos-x64 win-x64
-```
-
-Output lands in `build/sea/<variant>/<platform>/`. Platforms: `macos-arm64`, `macos-x64`,
-`linux-x64`, `linux-arm64`, `win-x64`. macOS binaries are ad-hoc codesigned when built on a
-macOS host. Each binary is fully self-contained: the desktop variant's knowledge, data,
-templates, and examples are embedded into the executable as SEA assets, so it can be
-distributed and run as a single file with no sibling folders.
+so it runs without a Node.js install. `npm run build:sea -- --variant default` builds the Web
+executable into `build/sea/default/<platform>/`.
 
 For a published GitHub Release, the `upload-binaries` workflow is configured to attach one archive
 per supported release platform. Each archive contains the Web executable (`tableau-mcp`; `.exe` on
-Windows) only. The Desktop executable is not in release archives: build it from source
-(`npm run build:sea:desktop`); Desktop builds are distributed separately. Releases that predate the
-archives may not have them.
+Windows) only. Releases that predate the archives may not have them.
 
 ## Deploy to Heroku
 
