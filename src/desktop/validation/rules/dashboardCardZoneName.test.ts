@@ -116,7 +116,7 @@ describe('dashboard-card-zone-name', () => {
 
   it('passes a storyboard document', () => {
     const xml =
-      '<dashboard name="Story" type-v2="storyboard"><zones><zone type-v2="flipboard"><flipboard active-id="1" nav-type="caption"><flipboard-zone id="7" /></flipboard></zone><zone story-point-id="1" /><zone flipboard-zone-id="7" /></zones></dashboard>';
+      '<dashboard name="Story" type="storyboard"><zones><zone type-v2="flipboard"><flipboard active-id="1" nav-type="caption"><flipboard-zone id="7" /></flipboard></zone><zone story-point-id="1" /><zone flipboard-zone-id="7" /></zones></dashboard>';
     expect(dashboardCardZoneNameRule.validate(xml)).toEqual([]);
   });
 

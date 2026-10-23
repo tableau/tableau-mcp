@@ -73,6 +73,14 @@ function refusalMessage(result: LoadResult): string {
   return error.error.issues.map((issue) => issue.message).join('\n');
 }
 
+function ruleIds(result: LoadResult): string[] {
+  const error = result.isErr() ? result.error : undefined;
+  if (error?.type !== 'load-dashboard-xml-error' || error.error.type !== 'validation-failed') {
+    return [];
+  }
+  return error.error.issues.map((issue) => issue.ruleId);
+}
+
 const phone = (zones: string): string =>
   `<devicelayouts><devicelayout name="Phone"><zones>${zones}</zones></devicelayout></devicelayouts>`;
 
@@ -106,13 +114,21 @@ describe('apply-dashboard refuses an existing zone id that changes worksheets (W
       label: '(i) duplicate ids, swap listed first',
       xml: dashboard(ws(10, BY_PRODUCT) + ws(10, TOTAL) + ws(11, TOTAL, 50000)),
       refused: true,
-      match: ['Zone 10'],
+      duplicate: true,
+      match: [
+        'has 2 zones with id="10"',
+        'Desktop keeps only one zone per id and drops the others without an error.',
+      ],
     },
     {
       label: '(i2) duplicate ids, swap listed last',
       xml: dashboard(ws(10, TOTAL) + ws(10, BY_PRODUCT) + ws(11, TOTAL, 50000)),
       refused: true,
-      match: ['Zone 10'],
+      duplicate: true,
+      match: [
+        'has 2 zones with id="10"',
+        'Desktop keeps only one zone per id and drops the others without an error.',
+      ],
     },
     {
       label: '(j) pure replace: zone 10 goes from A to C and A is gone',
@@ -164,21 +180,49 @@ describe('apply-dashboard refuses an existing zone id that changes worksheets (W
       xml: dashboard(ws(10, TOTAL) + ws(11, BY_PRODUCT, 50000) + ws(13, 'Other', 0)),
       refused: false,
     },
-  ])('$label', async ({ xml, refused, match }) => {
+  ])('$label', async ({ xml, refused, match, duplicate }) => {
     const { result, executor } = await run(xml);
     if (refused) {
       expect(result.isErr()).toBe(true);
       const message = refusalMessage(result);
       for (const part of match ?? []) expect(message).toContain(part);
-      expect(message).toContain('move their whole <zone> elements');
-      expect(message).not.toContain('swap their x');
-      expect(message).toContain('No changes were sent to Tableau.');
+      if (duplicate) {
+        // The duplicate-id rule refuses before the swap check runs.
+        expect(ruleIds(result)).toEqual(['dashboard-zone-id-unique']);
+        expect(message).not.toContain('move their whole <zone> elements');
+      } else {
+        expect(message).toContain('move their whole <zone> elements');
+        expect(message).not.toContain('swap their x');
+        expect(message).toContain('No changes were sent to Tableau.');
+      }
       expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
       expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
     } else {
       expect(refusalMessage(result)).toBe('');
       expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('(i3) a live duplicate the edit leaves alone does not hide a worksheet swap', async () => {
+    const pair =
+      '<zone id="20" type-v2="layout-flow" param="vert"/><zone id="20" type-v2="layout-flow" param="vert"/>';
+    const liveWithPair = dashboard(ws(10, TOTAL) + ws(11, BY_PRODUCT, 50000) + pair);
+    const executor = executorFor(liveWithPair, [TOTAL, BY_PRODUCT]);
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: dashboard(ws(10, BY_PRODUCT) + ws(11, TOTAL, 50000) + pair),
+      requireExistingSheet: true,
+      verifyReadback: false,
+      focus,
+      executor,
+      signal,
+    });
+    expect(ruleIds(result)).not.toContain('dashboard-zone-id-unique');
+    expect(refusalMessage(result)).toContain(`Zone 10 shows "${TOTAL}"`);
+    expect(refusalMessage(result)).toContain('move their whole <zone> elements');
+    expect(refusalMessage(result)).toContain('No changes were sent to Tableau.');
+    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+    expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('(f2) names compare after normalization: NFD Café is the live NFC Café', async () => {

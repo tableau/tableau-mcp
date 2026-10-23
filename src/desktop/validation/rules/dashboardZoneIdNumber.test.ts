@@ -47,7 +47,7 @@ describe('dashboard-zone-id-number', () => {
 
   it('checks storyboards', () => {
     const storyboard = (id: string): string =>
-      `<dashboard name="S" type-v2="storyboard"><zones>${zone(id)}</zones></dashboard>`;
+      `<dashboard name="S" type="storyboard"><zones>${zone(id)}</zones></dashboard>`;
     expect(dashboardZoneIdNumberRule.validate(storyboard('5'))).toEqual([]);
     expect(dashboardZoneIdNumberRule.validate(storyboard('05'))).toHaveLength(1);
   });
@@ -82,7 +82,7 @@ describe('dashboard-zone-id-number', () => {
 
   it.each([
     ['5 and 05', zone('5', 'A') + zone('05', 'B'), 'id="6"', 1],
-    ['05 and 005', zone('05', 'A') + zone('005', 'B'), 'id="1"', 2],
+    ['05 and 005', zone('05', 'A') + zone('005', 'B'), 'id="6"', 2],
   ])(
     'falls back to the next free number when the canonical id is taken: %s',
     (_l, zones, hint, count) => {
@@ -91,6 +91,11 @@ describe('dashboard-zone-id-number', () => {
       for (const issue of issues) expect(issue.suggestion).toContain(`such as ${hint}`);
     },
   );
+
+  it('skips a taken non-plain id when it falls back to the next free number', () => {
+    const xml = dashboard('D', zone('a') + zone('7', 'B') + zone('08', 'C'));
+    expect(dashboardZoneIdNumberRule.validate(xml)[0].suggestion).toContain('such as id="9"');
+  });
 
   it('scopes the collision check to one layout', () => {
     const xml = dashboard(

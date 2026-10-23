@@ -258,3 +258,86 @@ describe('non-waivable zone id spelling crash guard', () => {
     },
   );
 });
+
+describe('duplicate dashboard zone id guard', () => {
+  const sheet = (name: string): string =>
+    `<worksheet name="${name}"><table><rows>[Superstore].[sum:Sales:qk]</rows><cols/></table></worksheet>`;
+  const dash = (zones: string): string =>
+    `<dashboard name="D"><zones>${zones}</zones><simple-id uuid="dash-1"/></dashboard>`;
+  const workbookWith = (fragment: string): string =>
+    `<workbook><worksheets>${sheet('A')}${sheet('B')}</worksheets><dashboards>${fragment}</dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/><viewpoint name="B"/></viewpoints></window></windows></workbook>`;
+
+  function build(liveFragment: string): ReturnType<typeof makeExecutorMock> {
+    return makeExecutorMock({
+      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: workbookWith(liveFragment) })),
+      listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveFragment })),
+      applyDashboardDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+    });
+  }
+
+  const apply = (
+    executor: ReturnType<typeof makeExecutorMock>,
+    xml: string,
+    mode: (typeof modes)[number],
+  ): ReturnType<typeof loadDashboardXml> =>
+    loadDashboardXml({
+      dashboardName: 'D',
+      xml,
+      worksheetNames: ['A', 'B'],
+      ...mode,
+      focus,
+      executor,
+      signal,
+    });
+
+  it.each(modes)(
+    'refuses two new worksheet zones that share an id before dispatch: %j',
+    async (mode) => {
+      const executor = build(dash('<zone id="3" type-v2="layout-flow" param="vert"/>'));
+      const result = await apply(
+        executor,
+        dash('<zone id="7" name="A"/><zone id="7" name="B"/>'),
+        mode,
+      );
+      expect(result).toMatchObject({
+        error: {
+          type: 'load-dashboard-xml-error',
+          error: {
+            type: 'validation-failed',
+            issues: [expect.objectContaining({ ruleId: 'dashboard-zone-id-unique' })],
+          },
+        },
+      });
+      expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+      expect(executor.executeCommand).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not refuse a live duplicate container id that the edit leaves alone (cached)', async () => {
+    const liveZones =
+      '<zone id="7" type-v2="layout-flow" param="horz"/><zone id="7" type-v2="layout-flow" param="vert"/>';
+    const executor = build(dash(liveZones));
+    const result = await apply(executor, dash(`${liveZones}<zone id="9" name="A"/>`), modes[0]);
+    expect(result.isErr() ? result.error : undefined).toBeUndefined();
+    expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+  });
+
+  it('refuses an edit that adds a second copy of a live id (cached)', async () => {
+    const liveZones = '<zone id="7" name="A"/>';
+    const executor = build(dash(liveZones));
+    const result = await apply(executor, dash(`${liveZones}<zone id="7" name="B"/>`), modes[0]);
+    expect(result).toMatchObject({
+      error: {
+        error: {
+          type: 'validation-failed',
+          issues: [expect.objectContaining({ ruleId: 'dashboard-zone-id-unique' })],
+        },
+      },
+    });
+    expect(executor.applyDashboardDocument).not.toHaveBeenCalled();
+  });
+});

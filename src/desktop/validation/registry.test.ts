@@ -69,6 +69,16 @@ describe('validation framework', () => {
       expect(introducedBlockingValidationIssues([], [bad], 'workbook')).toEqual([bad]);
     });
 
+    it.each(['dashboard', 'workbook'] as const)(
+      'waives an unchanged duplicate zone id and returns an introduced one in %s context',
+      (context) => {
+        const dup = issue({ ruleId: 'dashboard-zone-id-unique' });
+        expect(introducedBlockingValidationIssues([dup], [dup], context)).toEqual([]);
+        expect(introducedBlockingValidationIssues([dup], [dup, dup], context)).toEqual([dup]);
+        expect(introducedBlockingValidationIssues([], [dup], context)).toEqual([dup]);
+      },
+    );
+
     it('returns a newly introduced blocking issue', () => {
       const introduced = issue({ xpath: '//worksheet[@name="New"]' });
 
@@ -129,6 +139,18 @@ describe('validation framework', () => {
       ]);
       expect(runAlwaysBlockingValidation(idXml, 'workbook').issues).toEqual([]);
     });
+
+    it.each(['dashboard', 'workbook'] as const)(
+      'does not run the duplicate zone id rule as always-blocking in %s context',
+      (context) => {
+        const dupXml =
+          '<dashboard name="D"><zones><zone id="7" name="A"/><zone id="7" name="B"/></zones></dashboard>';
+        expect(runValidation(dupXml, context).issues).toEqual([
+          expect.objectContaining({ ruleId: 'dashboard-zone-id-unique' }),
+        ]);
+        expect(runAlwaysBlockingValidation(dupXml, context).issues).toEqual([]);
+      },
+    );
 
     it('filters always-blocking issues by context', () => {
       const card = { ruleId: 'dashboard-card-zone-name', severity: 'error' as const, message: 'm' };
