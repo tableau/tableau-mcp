@@ -146,7 +146,7 @@ describe('downloadWorkbookTool', () => {
   it('should stream workbook bytes to a temp path when blob storage is not configured', async () => {
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('<work', 'book/>'),
+      fileStream: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -177,7 +177,7 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('<work', 'book/>'),
+      fileStream: streamOf('<work', 'book/>'),
       contentLength: workbookBytes.byteLength,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
@@ -214,7 +214,7 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('<work', 'book/>'),
+      fileStream: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -243,7 +243,7 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const workbookBytes = Buffer.from('<workbook/>', 'utf-8');
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('<work', 'book/>'),
+      fileStream: streamOf('<work', 'book/>'),
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -287,7 +287,7 @@ describe('downloadWorkbookTool', () => {
     async ({ error, reason }) => {
       mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
       mocks.mockDownloadWorkbook.mockResolvedValue({
-        content: streamOf('<work', 'book/>'),
+        fileStream: streamOf('<work', 'book/>'),
         contentType: 'application/xml',
         filename: 'Superstore.twb',
       });
@@ -313,9 +313,9 @@ describe('downloadWorkbookTool', () => {
     vi.stubEnv('TMPDIR', tempRoot);
     try {
       mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
-      const content = Readable.from([Buffer.from('<workbook/>')]);
+      const fileStream = Readable.from([Buffer.from('<workbook/>')]);
       mocks.mockDownloadWorkbook.mockResolvedValue({
-        content,
+        fileStream,
         contentType: 'application/xml',
         filename: 'Superstore.twb',
       });
@@ -328,7 +328,7 @@ describe('downloadWorkbookTool', () => {
       expect(result.content[0].text).toContain(
         'Blob storage provider returned without reading the upload data',
       );
-      await vi.waitFor(() => expect(content.destroyed).toBe(true));
+      await vi.waitFor(() => expect(fileStream.destroyed).toBe(true));
       expect(mocks.mockLog).not.toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
       await expect(readdir(tempRoot)).resolves.toEqual([]);
     } finally {
@@ -344,9 +344,9 @@ describe('downloadWorkbookTool', () => {
       }
       return flag !== 'authoring-with-slack';
     });
-    const content = Readable.from([Buffer.from('<workbook/>')]);
+    const fileStream = Readable.from([Buffer.from('<workbook/>')]);
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content,
+      fileStream,
       contentType: 'application/xml',
       filename: 'Superstore.twb',
     });
@@ -356,7 +356,7 @@ describe('downloadWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('gate unavailable');
-    await vi.waitFor(() => expect(content.destroyed).toBe(true));
+    await vi.waitFor(() => expect(fileStream.destroyed).toBe(true));
     expect(mocks.mockUpload).not.toHaveBeenCalled();
   });
 
@@ -366,9 +366,9 @@ describe('downloadWorkbookTool', () => {
     try {
       // A file where the temp directory should be makes `mkdir` reject.
       await writeFile(join(tempRoot, 'tableau-mcp-workbooks'), '');
-      const content = Readable.from([Buffer.from('<workbook/>')]);
+      const fileStream = Readable.from([Buffer.from('<workbook/>')]);
       mocks.mockDownloadWorkbook.mockResolvedValue({
-        content,
+        fileStream,
         contentType: 'application/xml',
         filename: 'Superstore.twb',
       });
@@ -376,7 +376,7 @@ describe('downloadWorkbookTool', () => {
       const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
 
       expect(result.isError).toBe(true);
-      await vi.waitFor(() => expect(content.destroyed).toBe(true));
+      await vi.waitFor(() => expect(fileStream.destroyed).toBe(true));
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
@@ -385,7 +385,7 @@ describe('downloadWorkbookTool', () => {
   it('should return a blob storage resource link for an empty workbook the provider drained', async () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf(),
+      fileStream: streamOf(),
       contentLength: 0,
       contentType: 'application/xml',
       filename: 'Empty.twb',
@@ -408,7 +408,7 @@ describe('downloadWorkbookTool', () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     let read = false;
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: (async function* () {
+      fileStream: (async function* () {
         read = true;
         yield Buffer.from('x');
       })(),
@@ -430,7 +430,7 @@ describe('downloadWorkbookTool', () => {
   it('should fail the upload when the stream exceeds the cap mid-read', async () => {
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockDownloadWorkbook.mockResolvedValue({
-      content: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
+      fileStream: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
       contentType: 'application/octet-stream',
     });
     mocks.mockUpload.mockImplementation(async ({ data }) => {
@@ -452,7 +452,7 @@ describe('downloadWorkbookTool', () => {
     vi.stubEnv('TMPDIR', tempRoot);
     try {
       mocks.mockDownloadWorkbook.mockResolvedValueOnce({
-        content: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
+        fileStream: streamOf('a'.repeat(TEST_MAX_BYTES), 'b'),
         contentType: 'application/octet-stream',
       });
       const overCap = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
@@ -461,7 +461,7 @@ describe('downloadWorkbookTool', () => {
       expect(overCap.content[0].text).toContain('exceeds the maximum allowed size');
 
       mocks.mockDownloadWorkbook.mockResolvedValueOnce({
-        content: (async function* () {
+        fileStream: (async function* () {
           yield Buffer.from('partial');
           throw new Error('socket hang up');
         })(),

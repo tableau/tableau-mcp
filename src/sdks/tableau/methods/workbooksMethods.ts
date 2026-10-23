@@ -148,7 +148,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * @param siteId - The Tableau site ID
    * @param includeExtract - Whether to include the extract in the workbook.
    * @returns The workbook bytes as a stream (never buffered whole) plus its headers. The caller
-   *   must consume `content`, or destroy it if it is a Node `Readable`.
+   *   must consume `fileStream`, or destroy it if it is a Node `Readable`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
    */
   downloadWorkbook = async ({
@@ -173,7 +173,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
         {
           params: { includeExtract },
           // Axios decompresses but keeps the compressed Content-Length, so ask for identity encoding
-          // to keep `contentLength` the exact byte count of `content`.
+          // to keep `contentLength` the exact byte count of `fileStream`.
           headers: { ...this.authHeader.headers, 'Accept-Encoding': 'identity' },
           responseType: 'stream',
         },
@@ -187,7 +187,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     }
 
     return {
-      content: response.data,
+      fileStream: response.data,
       contentLength: parseContentLength(getHeader(response.headers, 'content-length')),
       contentType: getHeader(response.headers, 'content-type'),
       filename: getFilenameFromContentDisposition(

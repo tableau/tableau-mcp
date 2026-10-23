@@ -109,12 +109,12 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 
   it('returns the staged workbook stream from the .twb key when it exists', async () => {
-    const content = streamOf('<workbook />');
-    mocks.download.mockResolvedValue(content);
+    const fileStream = streamOf('<workbook />');
+    mocks.download.mockResolvedValue(fileStream);
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twb`,
-      content,
+      fileStream,
     });
     expect(mocks.download).toHaveBeenCalledWith({
       key: `workbook-uploads/${uploadId}/workbook.twb`,
@@ -124,13 +124,13 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 
   it('falls back to the .twbx key when the .twb key does not exist', async () => {
-    const content = streamOf('PK\x03\x04');
+    const fileStream = streamOf('PK\x03\x04');
     mocks.download.mockResolvedValueOnce(undefined);
-    mocks.download.mockResolvedValueOnce(content);
+    mocks.download.mockResolvedValueOnce(fileStream);
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
-      content,
+      fileStream,
     });
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${uploadId}/workbook.twb`,

@@ -113,7 +113,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
    *
    * @param siteId - The Tableau site ID
    * @param filename - The filename presented to Tableau for each chunk
-   * @param content - The file contents as a stream of byte pieces
+   * @param fileStream - The file contents as a stream of byte pieces
    * @param maxBytes - Maximum total size; throws as soon as the stream exceeds it
    * @param maxChunkBytes - Chunk size; defaults to (and must not exceed) Tableau's 64 MB limit
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_publish.htm
@@ -121,13 +121,13 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
   uploadFileInChunks = async ({
     siteId,
     filename,
-    content,
+    fileStream,
     maxBytes,
     maxChunkBytes = MAX_FILE_UPLOAD_CHUNK_BYTES,
   }: {
     siteId: string;
     filename: string;
-    content: AsyncIterable<Uint8Array>;
+    fileStream: AsyncIterable<Uint8Array>;
     maxBytes: number;
     maxChunkBytes?: number;
   }): Promise<string> => {
@@ -144,7 +144,7 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     let totalBytes = 0;
     // Each pass awaits the next piece of the stream (64 KB from disk, arbitrary sizes from S3), so
     // the whole file is never in memory at once.
-    for await (const piece of content) {
+    for await (const piece of fileStream) {
       totalBytes += piece.byteLength;
       if (totalBytes > maxBytes) {
         throw new Error(`File content exceeds the maximum allowed size of ${maxBytes} bytes.`);

@@ -107,7 +107,7 @@ describe('PublishingMethods', () => {
       const uploadSessionId = await publishingMethods.uploadFileInChunks({
         siteId: 'site-1',
         filename: 'superstore.twbx',
-        content: streamOf('small file content'),
+        fileStream: streamOf('small file content'),
         maxBytes: 1024,
       });
 
@@ -125,7 +125,7 @@ describe('PublishingMethods', () => {
       const uploadSessionId = await publishingMethods.uploadFileInChunks({
         siteId: 'site-1',
         filename: 'superstore.twbx',
-        content: streamOf(
+        fileStream: streamOf(
           content.subarray(0, maxChunkBytes - 3),
           content.subarray(maxChunkBytes - 3, maxChunkBytes + 4),
           content.subarray(maxChunkBytes + 4),
@@ -149,7 +149,7 @@ describe('PublishingMethods', () => {
       await publishingMethods.uploadFileInChunks({
         siteId: 'site-1',
         filename: 'superstore.twbx',
-        content: streamOf('ab', 'cdefg', '', 'h', 'ijklmnopq', 'r'),
+        fileStream: streamOf('ab', 'cdefg', '', 'h', 'ijklmnopq', 'r'),
         maxBytes: 18,
         maxChunkBytes: 4,
       });
@@ -185,7 +185,7 @@ describe('PublishingMethods', () => {
         publishingMethods.uploadFileInChunks({
           siteId: 'site-1',
           filename: 'superstore.twbx',
-          content: trackedStream(),
+          fileStream: trackedStream(),
           maxBytes: 5,
         }),
       ).rejects.toThrow('File content exceeds the maximum allowed size of 5 bytes.');
@@ -199,7 +199,7 @@ describe('PublishingMethods', () => {
         publishingMethods.uploadFileInChunks({
           siteId: 'site-1',
           filename: 'superstore.twbx',
-          content: streamOf('', new Uint8Array(0)),
+          fileStream: streamOf('', new Uint8Array(0)),
           maxBytes: 1024,
         }),
       ).rejects.toThrow('File content must not be empty.');

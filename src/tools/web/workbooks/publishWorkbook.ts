@@ -346,7 +346,7 @@ async function validateAndUploadTwb({
   const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
     siteId: restApi.siteId,
     filename: resolvedWorkbookFile.fileName,
-    workbook: await readTwbForValidation(resolvedWorkbookFile.content),
+    workbook: await readTwbForValidation(resolvedWorkbookFile.fileStream),
   });
 
   const errors = (validation.errors ?? []).map(toValidationFinding);
@@ -366,10 +366,10 @@ async function validateAndUploadTwb({
 }
 
 /** Collects a TWB stream for the single-request validate endpoint, capped at its size limit. */
-async function readTwbForValidation(content: AsyncIterable<Uint8Array>): Promise<Buffer> {
+async function readTwbForValidation(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
   const pieces: Uint8Array[] = [];
   let totalBytes = 0;
-  for await (const piece of content) {
+  for await (const piece of fileStream) {
     totalBytes += piece.byteLength;
     if (totalBytes > MAX_TWB_VALIDATE_BYTES) {
       throw new ArgsValidationError(
@@ -399,7 +399,7 @@ async function uploadTwbx({
   const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
     siteId: restApi.siteId,
     filename: resolvedWorkbookFile.fileName,
-    content: resolvedWorkbookFile.content,
+    fileStream: resolvedWorkbookFile.fileStream,
     maxBytes: MAX_STAGED_WORKBOOK_BYTES,
   });
 
@@ -449,7 +449,7 @@ async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<Resol
     throw new ArgsValidationError('workbookFilePath must not point to an empty workbook file.');
   }
 
-  return { fileName, content: createReadStream(workbookFilePath) };
+  return { fileName, fileStream: createReadStream(workbookFilePath) };
 }
 
 function assertMinimumRestApiVersionSupported(): void {

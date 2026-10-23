@@ -19,7 +19,7 @@ export type WorkbookToolResult =
   | { kind: 'path'; path: string; mimeType: string; filename: string };
 
 type BuildWorkbookToolResultParams = {
-  content: AsyncIterable<Uint8Array>;
+  fileStream: AsyncIterable<Uint8Array>;
   contentLength?: number;
   mimeType: string;
   filename: string;
@@ -39,13 +39,13 @@ export async function buildWorkbookToolResult(
     return await buildWorkbookToolResultInner(params);
   } catch (error) {
     // Release the source on every failure path; a no-op if it was already consumed or destroyed.
-    discard(params.content);
+    discard(params.fileStream);
     throw error;
   }
 }
 
 async function buildWorkbookToolResultInner({
-  content,
+  fileStream,
   contentLength,
   mimeType,
   filename,
@@ -58,10 +58,10 @@ async function buildWorkbookToolResultInner({
   }
 
   let started = false;
-  const capped = capBytes(content, maxBytes, () => (started = true));
+  const capped = capBytes(fileStream, maxBytes, () => (started = true));
 
   if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
-    return await persistWorkbookToTempPath({ content: capped, mimeType, filename });
+    return await persistWorkbookToTempPath({ fileStream: capped, mimeType, filename });
   }
 
   let url: string;
@@ -89,7 +89,7 @@ async function buildWorkbookToolResultInner({
     });
     // Fresh wrapper: the provider may have closed `capped` without reading the source.
     return await persistWorkbookToTempPath({
-      content: capBytes(content, maxBytes, () => undefined),
+      fileStream: capBytes(fileStream, maxBytes, () => undefined),
       mimeType,
       filename,
     });
@@ -139,11 +139,11 @@ export function workbookToolResultToCallToolResult(result: WorkbookToolResult): 
 }
 
 async function persistWorkbookToTempPath({
-  content,
+  fileStream,
   mimeType,
   filename,
 }: {
-  content: AsyncIterable<Uint8Array>;
+  fileStream: AsyncIterable<Uint8Array>;
   mimeType: string;
   filename: string;
 }): Promise<WorkbookToolResult> {
@@ -153,7 +153,7 @@ async function persistWorkbookToTempPath({
   const outputPath = join(tempDir, `${randomUUID()}-${sanitizeFileName(filename, extension)}`);
   const file = createWriteStream(outputPath);
   try {
-    await pipeline(content, file);
+    await pipeline(fileStream, file);
   } catch (error) {
     // pipeline can reject while the destroyed file stream is still opening; wait for it to close
     // so the removal can't race the open that creates the file.
@@ -167,13 +167,13 @@ async function persistWorkbookToTempPath({
 }
 
 async function* capBytes(
-  content: AsyncIterable<Uint8Array>,
+  fileStream: AsyncIterable<Uint8Array>,
   maxBytes: number,
   onStart: () => void,
 ): AsyncGenerator<Uint8Array> {
   onStart();
   let totalBytes = 0;
-  for await (const piece of content) {
+  for await (const piece of fileStream) {
     totalBytes += piece.byteLength;
     if (totalBytes > maxBytes) {
       throw tooLargeError(maxBytes);
@@ -209,13 +209,13 @@ function tooLargeError(maxBytes: number): Error {
 }
 
 /** Best-effort release of a stream that won't be read to the end (destroys a Node `Readable`). */
-function discard(content: AsyncIterable<Uint8Array>): void {
+function discard(fileStream: AsyncIterable<Uint8Array>): void {
   // `return()` on a fresh, unstarted Readable iterator is a no-op, so destroy it directly.
-  if (content instanceof Readable) {
-    content.destroy();
+  if (fileStream instanceof Readable) {
+    fileStream.destroy();
     return;
   }
-  Promise.resolve(content[Symbol.asyncIterator]().return?.()).catch(() => undefined);
+  Promise.resolve(fileStream[Symbol.asyncIterator]().return?.()).catch(() => undefined);
 }
 
 function sanitizeFileName(filename: string, fallbackExtension: 'twb' | 'twbx'): string {

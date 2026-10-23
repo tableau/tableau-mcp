@@ -547,7 +547,7 @@ describe('WorkbooksMethods', () => {
       });
 
       expect(result).toEqual({
-        content: stream,
+        fileStream: stream,
         contentLength: 12,
         contentType: 'application/xml',
         filename: 'Superstore.twb',
