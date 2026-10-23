@@ -104,9 +104,10 @@ templates, and examples are embedded into the executable as SEA assets, so it ca
 distributed and run as a single file with no sibling folders.
 
 For a published GitHub Release, the `upload-binaries` workflow is configured to attach one archive
-per supported release platform. Each archive contains the Web executable (`tableau-mcp`) and the
-Desktop executable (`tableau-mcp-desktop`; `.exe` on Windows). This is the release workflow
-contract; releases that predate it may not have these archives.
+per supported release platform. Each archive contains the Web executable (`tableau-mcp`; `.exe` on
+Windows) only. The Desktop executable is not in release archives: build it from source
+(`npm run build:sea:desktop`); Desktop builds are distributed separately. Releases that predate the
+archives may not have them.
 
 ## Deploy to Heroku
 

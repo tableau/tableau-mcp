@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      web_only:
+        description: Build and package the Web executable only, as a release does
+        type: boolean
+        default: false
   pull_request:
     paths:
       - .github/workflows/upload-binaries.yml
@@ -32,6 +37,9 @@ on:
 permissions:
   contents: read
 
+env:
+  WITH_DESKTOP: ${{ github.event_name != 'release' && !inputs.web_only }}
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -47,10 +55,13 @@ jobs:
       - name: Generate SEA
         run: |
           npm ci
-          npm run build:sea -- --platform linux-x64
+          npm run build:sea -- --platform linux-x64 --variant ${{ env.WITH_DESKTOP == 'true' && 'default desktop' || 'default' }}
           cp build/sea/default/linux-x64/tableau-mcp tableau-mcp
-          cp build/sea/desktop/linux-x64/tableau-mcp-desktop tableau-mcp-desktop
+      - name: Copy Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
+        run: cp build/sea/desktop/linux-x64/tableau-mcp-desktop tableau-mcp-desktop
       - name: Test cache path containment
+        if: env.WITH_DESKTOP == 'true'
         run: >-
           npx --no-install vitest run
           src/desktop/cachePath.test.ts
@@ -59,6 +70,7 @@ jobs:
           src/tools/desktop/local/cache/cacheContainment.integration.test.ts
           --maxWorkers=2
       - name: Smoke Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
         if: github.event_name != 'pull_request'
@@ -71,7 +83,11 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
-      - name: Package archive
+      - name: Package archive (Web only)
+        if: env.WITH_DESKTOP != 'true'
+        run: tar -czf tableau-mcp.tar.gz tableau-mcp
+      - name: Package archive (Web and Desktop)
+        if: env.WITH_DESKTOP == 'true'
         run: tar -czf tableau-mcp.tar.gz tableau-mcp tableau-mcp-desktop
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
@@ -95,10 +111,14 @@ jobs:
         shell: pwsh
         run: |
           npm ci
-          npm run build:sea -- --platform win-x64
+          npm run build:sea -- --platform win-x64 --variant ${{ env.WITH_DESKTOP == 'true' && 'default desktop' || 'default' }}
           Copy-Item -Path .\build\sea\default\win-x64\tableau-mcp.exe -Destination .\tableau-mcp.exe
-          Copy-Item -Path .\build\sea\desktop\win-x64\tableau-mcp-desktop.exe -Destination .\tableau-mcp-desktop.exe
+      - name: Copy Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
+        shell: pwsh
+        run: Copy-Item -Path .\build\sea\desktop\win-x64\tableau-mcp-desktop.exe -Destination .\tableau-mcp-desktop.exe
       - name: Test cache path containment
+        if: env.WITH_DESKTOP == 'true'
         shell: pwsh
         run: |
           npx --no-install vitest run src/desktop/cachePath.test.ts src/tools/desktop/local/cache/readCachedXml.test.ts src/tools/desktop/local/cache/writeCachedXml.test.ts src/tools/desktop/local/cache/cacheContainment.integration.test.ts --maxWorkers=2
@@ -107,6 +127,7 @@ jobs:
             exit $testExitCode
           }
       - name: Smoke Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
         shell: pwsh
         run: |
           npx tsx src/scripts/seaSmoke.ts .\tableau-mcp-desktop.exe --require-tool bind-template
@@ -129,7 +150,12 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
-      - name: Package archive
+      - name: Package archive (Web only)
+        if: env.WITH_DESKTOP != 'true'
+        shell: pwsh
+        run: Compress-Archive -Path tableau-mcp.exe -DestinationPath tableau-mcp.zip
+      - name: Package archive (Web and Desktop)
+        if: env.WITH_DESKTOP == 'true'
         shell: pwsh
         run: Compress-Archive -Path tableau-mcp.exe, tableau-mcp-desktop.exe -DestinationPath tableau-mcp.zip
       - name: Upload workflow artifact
@@ -162,11 +188,16 @@ jobs:
       - name: Generate SEA
         run: |
           npm ci
-          npm run build:sea -- --platform "${{ matrix.platform }}"
+          npm run build:sea -- --platform "${{ matrix.platform }}" --variant ${{ env.WITH_DESKTOP == 'true' && 'default desktop' || 'default' }}
           cp "build/sea/default/${{ matrix.platform }}/tableau-mcp" tableau-mcp
+          chmod +x tableau-mcp
+      - name: Copy Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
+        run: |
           cp "build/sea/desktop/${{ matrix.platform }}/tableau-mcp-desktop" tableau-mcp-desktop
-          chmod +x tableau-mcp tableau-mcp-desktop
+          chmod +x tableau-mcp-desktop
       - name: Test cache path containment
+        if: env.WITH_DESKTOP == 'true'
         run: >-
           npx --no-install vitest run
           src/desktop/cachePath.test.ts
@@ -175,6 +206,7 @@ jobs:
           src/tools/desktop/local/cache/cacheContainment.integration.test.ts
           --maxWorkers=2
       - name: Smoke Desktop SEA
+        if: env.WITH_DESKTOP == 'true'
         run: npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
       - name: Smoke web SEA
         if: github.event_name != 'pull_request'
@@ -187,7 +219,11 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
-      - name: Package archive
+      - name: Package archive (Web only)
+        if: env.WITH_DESKTOP != 'true'
+        run: tar -czf "${{ matrix.archive }}" tableau-mcp
+      - name: Package archive (Web and Desktop)
+        if: env.WITH_DESKTOP == 'true'
         run: tar -czf "${{ matrix.archive }}" tableau-mcp tableau-mcp-desktop
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
