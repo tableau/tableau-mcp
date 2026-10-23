@@ -1,6 +1,5 @@
-import { BucketS3Config } from '../s3Client.js';
 import {
-  buildStagedUploadS3Key,
+  buildStagedUploadKey,
   getStagedFileType,
   MAX_STAGED_UPLOAD_BYTES,
   requestStagedUpload,
@@ -28,49 +27,42 @@ export type ResolvedDatasource = ResolvedStagedFile;
 export type RequestDatasourceUploadResult = {
   datasourceUploadId: string;
   uploadUrl: string;
-  expiresAt: string;
+  expiresAt?: string;
   maxSizeBytes: number;
   requiredHeaders: Record<string, string>;
 };
 
 export async function requestStagedDatasourceUpload({
   fileName,
-  config,
 }: {
   fileName: string;
-  config: BucketS3Config;
 }): Promise<RequestDatasourceUploadResult> {
   const { uploadId, ...rest } = await requestStagedUpload({
     kind: datasourceKind,
     fileName,
-    config,
   });
   return { datasourceUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedDatasourceUpload({
   datasourceUploadId,
-  config,
   maxBytes,
 }: {
   datasourceUploadId: string;
-  config: BucketS3Config;
   maxBytes?: number;
 }): Promise<ResolvedDatasource> {
   return await resolveStagedUpload({
     kind: datasourceKind,
     uploadId: datasourceUploadId,
-    config,
     maxBytes,
   });
 }
 
-export function buildDatasourceUploadS3Key(
-  keyPrefix: string,
+export function buildDatasourceUploadKey(
   datasourceUploadId: string,
   fileType: DatasourceFileType,
 ): string {
-  return buildStagedUploadS3Key(datasourceKind, keyPrefix, datasourceUploadId, fileType);
+  return buildStagedUploadKey(datasourceKind, datasourceUploadId, fileType);
 }
 
 export function getDatasourceFileType(fileName: string): DatasourceFileType | undefined {

@@ -3,7 +3,7 @@
  * (package id / display name) and for describing how the committed
  * placeholder template becomes a named workspace.
  *
- * Both output paths (local disk and S3) serve the same static, un-substituted
+ * Both output paths (local disk and blob storage) serve the same static, un-substituted
  * template zip and return the identical `postUnzip` plan (see
  * `buildPostUnzipPlan`) describing the edits/renames for the client to apply
  * after unzipping. They differ only in transport, not in how substitution

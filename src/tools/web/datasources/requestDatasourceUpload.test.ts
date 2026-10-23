@@ -10,11 +10,16 @@ import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
   mockRequestStagedDatasourceUpload: vi.fn(),
 }));
 
 vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
+}));
+
+vi.mock('../../../blobStorage/init.js', () => ({
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('./stagedDatasourceUpload.js', async (importOriginal) => ({
@@ -28,9 +33,10 @@ describe('requestDatasourceUploadTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockRequestStagedDatasourceUpload.mockResolvedValue({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
@@ -104,7 +110,7 @@ describe('requestDatasourceUploadTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('returns a staged upload URL when S3 is configured', async () => {
+  it('returns a staged upload URL when blob storage is configured', async () => {
     const result = await getToolResult({
       fileName: 'Superstore.tds',
     });
@@ -113,25 +119,20 @@ describe('requestDatasourceUploadTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/xml' },
     });
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tds',
-      config: expect.objectContaining({
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-      }),
     });
   });
 
   it('returns a staged upload URL for a .tdsx filename', async () => {
     mocks.mockRequestStagedDatasourceUpload.mockResolvedValue({
       datasourceUploadId: '123e4567-e89b-42d3-a456-426614174000',
-      uploadUrl: 'https://s3.example.com/signed-put',
+      uploadUrl: 'https://blob.example.com/signed-put',
       expiresAt: '2026-08-12T18:05:00.000Z',
       maxSizeBytes: MAX_STAGED_DATASOURCE_BYTES,
       requiredHeaders: { 'Content-Type': 'application/octet-stream' },
@@ -144,30 +145,19 @@ describe('requestDatasourceUploadTool', () => {
     expect(result.isError).toBe(false);
     expect(mocks.mockRequestStagedDatasourceUpload).toHaveBeenCalledWith({
       fileName: 'Superstore.tdsx',
-      config: expect.objectContaining({ enabled: true }),
     });
   });
 
-  it('returns an error when S3 is not configured', async () => {
-    const result = await getToolResult(
-      { fileName: 'Superstore.tds' },
-      {
-        config: {
-          ...getMockRequestHandlerExtra().config,
-          bucketS3: {
-            enabled: false,
-            bucket: '',
-            region: '',
-            keyPrefix: '',
-            presignTtlSeconds: 60,
-          },
-        },
-      },
-    );
+  it('returns an error when blob storage is not configured', async () => {
+    mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
+
+    const result = await getToolResult({ fileName: 'Superstore.tds' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('MCP_S3_BUCKET must be configured');
+    expect(result.content[0].text).toContain(
+      'Blob storage provider must be configured before requesting staged data source uploads.',
+    );
     expect(mocks.mockRequestStagedDatasourceUpload).not.toHaveBeenCalled();
   });
 
@@ -215,16 +205,5 @@ function getMockExtra(
   return {
     ...extra,
     ...overrides,
-    config: {
-      ...extra.config,
-      bucketS3: {
-        enabled: true,
-        bucket: 'tableau-workbooks',
-        region: 'us-east-1',
-        keyPrefix: 'mcp/',
-        presignTtlSeconds: 300,
-      },
-      ...overrides.config,
-    },
   };
 }

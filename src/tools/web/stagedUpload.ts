@@ -1,18 +1,14 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
-import {
-  BucketS3Config,
-  createPresignedPutUrlToS3,
-  downloadObjectFromS3IfExists,
-  joinS3Prefix,
-} from './s3Client.js';
+import { getBlobStorageProvider } from '../../blobStorage/init.js';
 
-// Intentionally decimal GB (not GiB) to leave headroom under S3's 5GB single-PUT ceiling.
+// Intentionally decimal GB (not GiB) to leave headroom under common blob storage
+// single-PUT ceilings (e.g. S3's 5GB limit).
 export const MAX_STAGED_UPLOAD_BYTES = 5 * 1000 * 1000 * 1000;
 
 export type StagedUploadKind<FileType extends string> = {
-  // Keys are `<prefix>/<prefixSegment>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
+  // Keys are `<prefixSegment>/<uuid>/<objectStem>.<fileType>`; changing them orphans in-flight uploads.
   prefixSegment: string;
   objectStem: string;
   label: string;
@@ -29,15 +25,13 @@ export type ResolvedStagedFile = {
 export async function requestStagedUpload<FileType extends string>({
   kind,
   fileName,
-  config,
 }: {
   kind: StagedUploadKind<FileType>;
   fileName: string;
-  config: BucketS3Config;
 }): Promise<{
   uploadId: string;
   uploadUrl: string;
-  expiresAt: string;
+  expiresAt?: string;
   maxSizeBytes: number;
   requiredHeaders: Record<string, string>;
 }> {
@@ -50,48 +44,43 @@ export async function requestStagedUpload<FileType extends string>({
   const uploadId = randomUUID();
   const contentType =
     fileType === kind.xmlFileType ? 'application/xml' : 'application/octet-stream';
-  const uploadUrl = await createPresignedPutUrlToS3({
-    key: buildStagedUploadS3Key(kind, config.keyPrefix, uploadId, fileType),
-    contentType,
-    bucket: config.bucket,
-    region: config.region,
-    presignTtlSeconds: config.presignTtlSeconds,
-  });
+  const { uploadUrl, requiredHeaders, expiresAt } =
+    await getBlobStorageProvider().getPresignedUploadUrl({
+      key: buildStagedUploadKey(kind, uploadId, fileType),
+      contentType,
+    });
 
   return {
     uploadId,
     uploadUrl,
-    expiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000).toISOString(),
+    expiresAt,
     maxSizeBytes: MAX_STAGED_UPLOAD_BYTES,
-    requiredHeaders: { 'Content-Type': contentType },
+    requiredHeaders,
   };
 }
 
 export async function resolveStagedUpload<FileType extends string>({
   kind,
   uploadId,
-  config,
   maxBytes = MAX_STAGED_UPLOAD_BYTES,
 }: {
   kind: StagedUploadKind<FileType>;
   uploadId: string;
-  config: BucketS3Config;
   maxBytes?: number;
 }): Promise<ResolvedStagedFile> {
   assertStagedUploadId(kind, uploadId);
 
   for (const fileType of kind.fileTypes) {
-    const bytes = await downloadObjectFromS3IfExists({
-      key: buildStagedUploadS3Key(kind, config.keyPrefix, uploadId, fileType),
-      bucket: config.bucket,
-      region: config.region,
+    const stream = await getBlobStorageProvider().download({
+      key: buildStagedUploadKey(kind, uploadId, fileType),
       maxBytes,
     });
 
-    if (bytes === undefined) {
+    if (stream === undefined) {
       continue;
     }
 
+    const bytes = await collectBytes(kind, stream, maxBytes);
     if (bytes.byteLength === 0) {
       throw new Error(`${kind.label} upload bytes must not be empty.`);
     }
@@ -104,14 +93,33 @@ export async function resolveStagedUpload<FileType extends string>({
   );
 }
 
-export function buildStagedUploadS3Key<FileType extends string>(
+/** Buffers a provider download stream, throwing once it exceeds `maxBytes`. */
+async function collectBytes(
+  kind: StagedUploadKind<string>,
+  stream: AsyncIterable<Uint8Array>,
+  maxBytes: number,
+): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  let totalBytes = 0;
+  for await (const piece of stream) {
+    totalBytes += piece.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new Error(
+        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
+      );
+    }
+    pieces.push(piece);
+  }
+  return Buffer.concat(pieces, totalBytes);
+}
+
+export function buildStagedUploadKey<FileType extends string>(
   kind: StagedUploadKind<FileType>,
-  keyPrefix: string,
   uploadId: string,
   fileType: FileType,
 ): string {
   assertStagedUploadId(kind, uploadId);
-  return `${joinS3Prefix(keyPrefix, kind.prefixSegment)}${uploadId}/${kind.objectStem}.${fileType}`;
+  return `${kind.prefixSegment}/${uploadId}/${kind.objectStem}.${fileType}`;
 }
 
 export function getStagedFileType<FileType extends string>(

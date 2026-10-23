@@ -110,13 +110,6 @@ export class Config extends BaseConfig {
   flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  bucketS3: {
-    enabled: boolean;
-    bucket: string;
-    region: string;
-    keyPrefix: string;
-    presignTtlSeconds: number;
-  };
   // undefined when BLOB_STORAGE_PROVIDER is unset (no blob storage)
   blobStorage: BlobStorageConfig | undefined;
 
@@ -191,10 +184,6 @@ export class Config extends BaseConfig {
       FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      MCP_S3_BUCKET: bucketS3Bucket,
-      AWS_DEFAULT_REGION: awsDefaultRegion,
-      MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
-      FILE_TTL: bucketS3PresignTtlSeconds,
       BLOB_STORAGE_PROVIDER: blobStorageProvider,
       BLOB_STORAGE_PROVIDER_CONFIG: blobStorageProviderConfig,
     } = cleansedVars;
@@ -420,30 +409,6 @@ export class Config extends BaseConfig {
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-
-    // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
-    // upload the payload (rendered image or CSV) to S3 and return a short-lived
-    // presigned URL instead of inlining base64/text. AWS credentials are
-    // resolved via the default AWS SDK credential chain (IAM role / instance
-    // profile / standard AWS_* env vars), so no credentials are read here. When
-    // unset, the tools fall back to returning the payload inline (unchanged
-    // behavior).
-    //
-    // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each tool
-    // appends its own segment (e.g. `view-images/`, `view-data/`), so an unset
-    // base falls back to the per-tool default rather than a global one.
-    const bucketS3BucketValue = bucketS3Bucket?.trim() ?? '';
-    this.bucketS3 = {
-      enabled: !!bucketS3BucketValue,
-      bucket: bucketS3BucketValue,
-      region: awsDefaultRegion?.trim() || '',
-      keyPrefix: bucketS3KeyPrefix?.trim() || '',
-      presignTtlSeconds: parseNumber(bucketS3PresignTtlSeconds, {
-        defaultValue: 60,
-        minValue: 5,
-        maxValue: 900,
-      }),
-    };
 
     // Blob storage provider configuration. Bring-your-own-infra: when configured with a custom
     // provider, tools that need to offload large payloads (rendered images, exported data)

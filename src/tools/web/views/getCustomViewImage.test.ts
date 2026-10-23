@@ -1,3 +1,5 @@
+import { buffer } from 'node:stream/consumers';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
@@ -35,9 +37,10 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
   mockGetCustomViewImage: vi.fn(),
-  mockUploadImageToS3: vi.fn(),
+  mockUpload: vi.fn(),
   mockLog: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
+  mockIsBlobStorageEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -53,9 +56,9 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadImageToS3.js', async (importActual) => ({
-  ...(await importActual<typeof import('../uploadImageToS3.js')>()),
-  uploadImageToS3: mocks.mockUploadImageToS3,
+vi.mock('../../../blobStorage/init.js', () => ({
+  getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
+  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../features/init.js', () => ({
@@ -300,16 +303,17 @@ describe('getCustomViewImageTool', () => {
     );
   });
 
-  describe('S3 image offload', () => {
+  describe('blob storage image offload', () => {
     beforeEach(() => {
-      // The S3-offload path is gated behind the `view-file-mode` feature flag.
+      // The offload path is gated behind the `view-file-mode` feature flag and
+      // an enabled (successfully-loaded custom) blob storage provider.
       mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     });
 
-    it('should return a resource_link (no base64) when MCP_S3_BUCKET is configured', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+    it('should return a resource_link (no base64) when blob storage is enabled', async () => {
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
+      mocks.mockUpload.mockResolvedValue({ url: 'https://blob.example.com/signed-url' });
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
 
@@ -317,39 +321,30 @@ describe('getCustomViewImageTool', () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toMatchObject({
         type: 'resource_link',
-        uri: 'https://s3.example.com/signed-url',
+        uri: 'https://blob.example.com/signed-url',
         name: 'view-image.png',
         mimeType: 'image/png',
       });
       expect(result.content.some((c) => c.type === 'image')).toBe(false);
 
-      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(mockPngData, {
-        format: 'PNG',
-        resourceId: mockCustomView.id,
-        config: expect.objectContaining({
-          bucket: 'tableau-images',
-          keyPrefix: 'custom-view-images/',
-        }),
+      expect(mocks.mockUpload).toHaveBeenCalledWith({
+        key: expect.stringMatching(new RegExp(`^images/${mockCustomView.id}/[0-9a-f-]{36}\\.png$`)),
+        data: expect.anything(),
+        contentLength: Buffer.from(mockPngData).byteLength,
+        contentType: 'image/png',
       });
-    });
-
-    it('prefixes the S3 key with the base prefix followed by the custom-view-images segment', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
-      vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
-      mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
-
-      await getToolResult({ customViewId: mockCustomView.id });
-
-      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(
-        mockPngData,
-        expect.objectContaining({
-          config: expect.objectContaining({ keyPrefix: 'tableau/custom-view-images/' }),
-        }),
+      await expect(buffer(mocks.mockUpload.mock.calls[0][0].data)).resolves.toEqual(
+        Buffer.from(mockPngData),
       );
+
+      // Keys are unique per call so concurrent/cross-user renders never share an object.
+      const firstKey = mocks.mockUpload.mock.calls.at(-1)?.[0].key;
+      await getToolResult({ customViewId: mockCustomView.id });
+      expect(mocks.mockUpload.mock.calls.at(-1)?.[0].key).not.toBe(firstKey);
     });
 
-    it('should return inline base64 when MCP_S3_BUCKET is not configured', async () => {
+    it('should return inline base64 when blob storage is not enabled', async () => {
+      mocks.mockIsBlobStorageEnabled.mockReturnValue(false);
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
@@ -360,13 +355,12 @@ describe('getCustomViewImageTool', () => {
         data: base64PngData,
         mimeType: 'image/png',
       });
-      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
 
-    it('should fall back to inline base64 and warn when the S3 upload fails', async () => {
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+    it('should fall back to inline base64 and warn when the blob storage upload fails', async () => {
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
-      mocks.mockUploadImageToS3.mockRejectedValue(new Error('access denied'));
+      mocks.mockUpload.mockRejectedValue(new Error('access denied'));
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
 
@@ -384,9 +378,8 @@ describe('getCustomViewImageTool', () => {
       );
     });
 
-    it('should return inline base64 (no S3 upload) when view-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
+    it('should return inline base64 (no upload) when view-file-mode is disabled even if blob storage is enabled', async () => {
       mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
@@ -397,7 +390,7 @@ describe('getCustomViewImageTool', () => {
         data: base64PngData,
         mimeType: 'image/png',
       });
-      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+      expect(mocks.mockUpload).not.toHaveBeenCalled();
     });
   });
 });
