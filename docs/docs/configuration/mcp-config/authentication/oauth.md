@@ -33,7 +33,10 @@ All Tableau auth modes are *site scoped*. If you are a multi-site user, and you 
 ### Self-hosted Tableau MCP
 
 Tableau Cloud customers can self-host Tableau MCP. A full guide can be found at
-[Tableau MCP Deployment Guide for Tableau Cloud Customers](../../../enterprise/tableau-cloud.md).
+[Tableau MCP Deployment Guide for Tableau Cloud Customers](../../../enterprise/tableau-cloud.md). A
+self-hosted MCP server can also accept tokens from
+[your own identity provider](../oauth.md#use-your-own-identity-provider-self-hosted-only) and sign
+in to Tableau Cloud with Direct Trust or UAT.
 
 ### Local Tableau MCP
 

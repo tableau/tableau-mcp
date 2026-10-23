@@ -459,6 +459,13 @@ Set only one of this, [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri), or
 [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery). Must use `https` unless the host is
 loopback.
 
+The MCP server calls this endpoint for every request that carries a bearer token, valid or not, and
+does not cache the result. Each call adds a round trip (up to 5 seconds) and load on your identity
+provider, and anyone who can reach the MCP server can trigger one with a made-up token. If your
+provider issues JWT access tokens, use [`OAUTH_EXTERNAL_JWKS_URI`](#oauth_external_jwks_uri) or
+[`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) instead, which verify signatures locally
+against cached keys. Otherwise, rate-limit requests in front of the MCP server.
+
 <hr />
 
 ### `OAUTH_EXTERNAL_INTROSPECTION_CLIENT_ID`

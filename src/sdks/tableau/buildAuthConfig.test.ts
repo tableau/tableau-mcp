@@ -363,4 +363,25 @@ describe('buildAuthConfig {OAUTH_USERNAME} substitution is literal', () => {
       expect(result.additionalPayload).toEqual({ email: username, role: 'editor' });
     }
   });
+
+  it('throws instead of adding payload keys for a bare placeholder with an injection attempt', () => {
+    expect(() =>
+      buildDirectTrust({
+        username: '1,"scp":["tableau:content:*"]',
+        jwtAdditionalPayload: '{"n":{OAUTH_USERNAME}}',
+      }),
+    ).toThrow(SyntaxError);
+  });
+
+  it('substitutes a numeric username into a bare placeholder as a number', () => {
+    const result = buildDirectTrust({
+      username: '123',
+      jwtAdditionalPayload: '{"n":{OAUTH_USERNAME}}',
+    });
+
+    expect(result?.type).toBe('direct-trust');
+    if (result?.type === 'direct-trust') {
+      expect(result.additionalPayload).toEqual({ n: 123 });
+    }
+  });
 });
