@@ -130,4 +130,19 @@ describe('non-waivable dashboard worksheet-zone crash guard', () => {
       new XMLSerializer().serializeToString(before),
     );
   });
+
+  it('does not claim a readback on the in-place path when every worksheet view is registered', async () => {
+    const { executor, fragment } = fixture(false, false);
+    const result = await loadDashboardXml({
+      dashboardName: 'D',
+      xml: fragment.replace(' type-v2="worksheet"', ''),
+      requireExistingSheet: true,
+      focus,
+      executor,
+      signal,
+    });
+    expect(result.isOk()).toBe(true);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledOnce();
+    expect(result.unwrap().verifiedWorksheetNames).toBeUndefined();
+  });
 });
