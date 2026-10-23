@@ -360,6 +360,7 @@ function textAround(value: string, other: string): string {
  * Compare authored attributes, ordered layout nodes, styles and text. Allow Desktop
  * to reflow automatic tiled geometry and add defaults/metadata that were not authored.
  * Never allow added/removed/reordered zones or device layouts inside authored collections.
+ * Dashboard sections and dependency children match by identity, not position.
  * Returns the first difference in plain words, or undefined when the actual element contains it.
  */
 function authoredContentDifference(expected: Element, actual: Element): string | undefined {
@@ -428,11 +429,48 @@ function authoredContentDifference(expected: Element, actual: Element): string |
     return `${label} has ${actualChildren.length} child ${expected.tagName === 'zone' || expected.tagName === 'zones' ? 'zones' : 'elements'} in Desktop, ${expectedChildren.length} submitted`;
   const geometry = layoutGeometryDifference(expected, actual);
   if (geometry) return geometry;
+  const claimed = new Set<Element>();
   for (const [index, child] of expectedChildren.entries()) {
-    const difference = authoredContentDifference(child, actualChildren[index]);
+    let counterpart = actualChildren[index];
+    if (DESKTOP_ORDERED_PARENTS.has(localTag(expected))) {
+      const matches = actualChildren.filter((other) => sameIdentity(child, other));
+      if (matches.length !== 1)
+        return `${identityLabel(child)} ${matches.length === 0 ? 'is missing in Desktop' : `appears ${matches.length} times in Desktop`}`;
+      if (claimed.has(matches[0])) return `${identityLabel(child)} is submitted more than once`;
+      claimed.add(matches[0]);
+      counterpart = matches[0];
+    }
+    const difference = authoredContentDifference(child, counterpart);
     if (difference) return difference;
   }
   return undefined;
+}
+
+// Desktop rewrites these parents' child order on save; adding a parent needs readback evidence.
+const DESKTOP_ORDERED_PARENTS = new Set(['dashboard', 'datasource-dependencies']);
+const IDENTITY_KEY: Record<string, string> = {
+  column: 'name',
+  'column-instance': 'name',
+  'datasource-dependencies': 'datasource',
+};
+
+function localTag(element: Element): string {
+  return element.localName ?? element.tagName;
+}
+
+function sameIdentity(expected: Element, actual: Element): boolean {
+  if (expandedName(expected) !== expandedName(actual)) return false;
+  const key = IDENTITY_KEY[localTag(expected)];
+  if (!key) return true;
+  const [a, b] = [expected.getAttribute(key), actual.getAttribute(key)];
+  if (a === null || b === null) return a === b;
+  return key === 'name' ? parsedXmlNamesEqual(a, b) : a === b;
+}
+
+function identityLabel(element: Element): string {
+  const key = IDENTITY_KEY[localTag(element)];
+  const value = key ? element.getAttribute(key) : null;
+  return `<${element.tagName}>${value === null ? '' : ` ${quoted(value)}`}`;
 }
 
 /** Registrations observed in the snapshot, before any native repair during apply. */
