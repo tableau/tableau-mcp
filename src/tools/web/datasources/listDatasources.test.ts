@@ -290,6 +290,43 @@ describe('listDatasourcesTool', () => {
     });
   });
 
+  describe('INCLUDE_TAGS server-side filter', () => {
+    function extraWithTags(tags: Set<string> | null): TableauWebRequestHandlerExtra {
+      const extra = getMockRequestHandlerExtra();
+      const stubConfig = new OverridableConfig({});
+      stubConfig.boundedContext = { ...stubConfig.boundedContext, tags };
+      vi.mocked(extra.getConfigWithOverrides).mockResolvedValue(stubConfig);
+      return extra;
+    }
+
+    it('injects the allowed tag when the caller supplies no filter', async () => {
+      mocks.mockListDatasources.mockResolvedValue(mockDatasources);
+      await getToolResult({ filter: '' }, extraWithTags(new Set(['Finance'])));
+      expect(mocks.mockListDatasources).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Finance' }),
+      );
+    });
+
+    it('appends the allowed tags onto the caller filter', async () => {
+      mocks.mockListDatasources.mockResolvedValue(mockDatasources);
+      await getToolResult(
+        { filter: 'name:eq:Superstore' },
+        extraWithTags(new Set(['Finance', 'HR'])),
+      );
+      expect(mocks.mockListDatasources).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'name:eq:Superstore,tags:in:[Finance,HR]' }),
+      );
+    });
+
+    it('leaves a caller-supplied tags filter untouched', async () => {
+      mocks.mockListDatasources.mockResolvedValue(mockDatasources);
+      await getToolResult({ filter: 'tags:eq:Other' }, extraWithTags(new Set(['Finance'])));
+      expect(mocks.mockListDatasources).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'tags:eq:Other' }),
+      );
+    });
+  });
+
   describe('constrainDatasources', () => {
     it('should return empty result when no datasources are found', () => {
       const result = constrainDatasources({

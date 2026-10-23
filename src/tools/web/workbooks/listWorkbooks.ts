@@ -24,6 +24,7 @@ import {
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
+import { appendBoundedContextTagsFilter } from '../utils/boundedContextUtils.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
@@ -107,6 +108,11 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
+      // appending filter expression based on bounded context
+      const serverFilter = appendBoundedContextTagsFilter(
+        validatedFilter,
+        configWithOverrides.boundedContext.tags,
+      );
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listWorkbooksTool.name);
 
       return await listWorkbooksTool.logAndExecute<ListWorkbooksResult>({
@@ -134,7 +140,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                     const { pagination, workbooks: data } =
                       await restApi.workbooksMethods.queryWorkbooksForSite({
                         siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
+                        filter: serverFilter,
                         pageSize,
                         pageNumber,
                       });

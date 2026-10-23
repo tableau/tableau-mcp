@@ -26,6 +26,7 @@ import {
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
+import { appendBoundedContextTagsFilter } from '../utils/boundedContextUtils.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
@@ -150,6 +151,11 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     }),
                   });
                 } else {
+                  // appending filter expression based on bounded context
+                  const serverFilter = appendBoundedContextTagsFilter(
+                    validatedFilter,
+                    configWithOverrides.boundedContext.tags,
+                  );
                   page = await getPage({
                     pageNumber,
                     limit,
@@ -158,7 +164,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                       const { pagination, views: data } =
                         await restApi.viewsMethods.queryViewsForSite({
                           siteId: restApi.siteId,
-                          filter: validatedFilter ?? '',
+                          filter: serverFilter,
                           includeUsageStatistics: true,
                           pageSize,
                           pageNumber,

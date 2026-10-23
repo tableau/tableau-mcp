@@ -17,6 +17,7 @@ import {
 import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
+import { appendBoundedContextTagsFilter } from '../utils/boundedContextUtils.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
@@ -115,6 +116,11 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
+      // appending filter expression based on bounded context
+      const serverFilter = appendBoundedContextTagsFilter(
+        validatedFilter,
+        configWithOverrides.boundedContext.tags,
+      );
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listDatasourcesTool.name);
       return await listDatasourcesTool.logAndExecute<ListDatasourcesResult>({
         extra,
@@ -141,7 +147,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
                     const { pagination, datasources: data } =
                       await restApi.datasourcesMethods.listDatasources({
                         siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
+                        filter: serverFilter,
                         pageSize,
                         pageNumber,
                       });

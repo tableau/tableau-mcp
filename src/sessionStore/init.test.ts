@@ -27,7 +27,9 @@ const REJECTING_LIFECYCLE_STORE_MODULE =
 // record their configureNamespace / init / close calls here on globalThis for the test to assert.
 declare global {
   var __configureNamespaceCalls: Array<{ namespace: string; options: unknown }> | undefined;
+
   var __initCalls: number | undefined;
+
   var __closeCalls: number | undefined;
 }
 
