@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
-import { getFeatureGate } from '../../../../features/init.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { Flow } from '../../../../sdks/tableau/types/flow.js';
@@ -81,10 +81,7 @@ export const getListFlowsTool = (server: WebMcpServer): WebTool<typeof paramsSch
     server,
     name: 'list-flows',
     minRequiredRole: SiteRole.VIEWER,
-    disabled: new Provider(
-      async () =>
-        !config.flowToolsEnabled || !(await getFeatureGate().isFeatureEnabled('flow-tools')),
-    ),
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Retrieves a list of published Tableau Prep flows on a Tableau site, including each flow's metadata such as name, description, owner, project, tags, and timestamps. Flow drafts are excluded, so Tableau's flow page may show a higher count. Supports optional filtering via field:operator:value expressions (e.g., name:eq:DailySalesCleanup) and sorting (e.g., createdAt:desc) for precise discovery. Use this tool when a user requests to list, search, or filter Tableau Prep flows on a site.
 

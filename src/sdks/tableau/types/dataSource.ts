@@ -42,3 +42,13 @@ export type DataSource = z.infer<typeof dataSourceSchema>;
 export function isEmbeddedDatasource(datasource: DataSource): boolean {
   return datasource.parentType === 'Workbook' || !datasource.project;
 }
+
+// The Publish Data Source response always carries a `project`, may omit `<tags>` for an untagged
+// data source, and may include a `webpageUrl` for its page in the Tableau web UI.
+export const publishedDataSourceResponseSchema = dataSourceSchema.extend({
+  project: projectSchema,
+  tags: tagsSchema.optional(),
+  webpageUrl: z.string().optional(),
+});
+
+export type PublishedDataSourceResponse = z.infer<typeof publishedDataSourceResponseSchema>;

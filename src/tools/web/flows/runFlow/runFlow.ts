@@ -10,7 +10,7 @@ import {
   McpToolError,
   PreviewNotRunError,
 } from '../../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../../features/init.js';
+import { isFlowWriteToolsEnabled } from '../../../../features/flowTools.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { luidSchema } from '../../../../sdks/routeSafety/ids.js';
 import { RestApi } from '../../../../sdks/tableau/restApi.js';
@@ -60,13 +60,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     server,
     name: 'run-flow',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
-    // Requires the base flow gate, write opt-in, and flow-tools feature flag.
-    disabled: new Provider(
-      async () =>
-        !config.flowToolsEnabled ||
-        !config.flowWriteToolsEnabled ||
-        !(await getFeatureGate().isFeatureEnabled('flow-tools')),
-    ),
+    disabled: new Provider(async () => !(await isFlowWriteToolsEnabled(config))),
     description: `
   Runs a Tableau Prep flow **on demand** ("Run Now") through a required two-phase confirmation. The preview describes the run without enqueuing it; the confirmed call enqueues the flow and returns immediately with an async job. The flow executes its output steps (all of them unless you pass \`outputStepIds\`), writing to its configured outputs.
 
