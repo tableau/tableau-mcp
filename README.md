@@ -57,7 +57,7 @@ For Docker, building from source, and other self-hosted options, see the [Gettin
 
 Desktop is not installed through the npm package. The **desktop** build variant exposes a local
 authoring tool surface that drives a running Tableau Desktop instance over MCP stdio. It can inspect
-workbooks, list/inject chart templates, bind fields into worksheets, and work with dashboards.
+workbooks, list chart templates, bind fields into worksheets, and work with dashboards.
 
 Build it from a clone with Node.js 22.7.5 or later:
 
