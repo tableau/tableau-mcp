@@ -89,7 +89,9 @@ type LoadDashboardXmlResult = Result<
 function resolveCanonicalDashboardName(
   dashboardName: string,
   xml: string,
+  kind: LoadDashboardKind,
 ): Result<string, Extract<LoadDashboardXmlError, { type: 'name-mismatch' }>> {
+  const param = kind === 'storyboard' ? 'storyboardName' : 'dashboardName';
   const callerRef = dashboardName.trim();
   let xmlName = '';
   let xmlId = '';
@@ -124,10 +126,10 @@ function resolveCanonicalDashboardName(
     return Err({
       type: 'name-mismatch',
       message:
-        `dashboard_name "${dashboardName}" does not match the <dashboard name> in the XML ("${xmlName}")` +
-        `${xmlId ? ` or its id ("${xmlId}")` : ''}. FIX: Retry with dashboard_name set to the XML's ` +
-        `name "${xmlName}"${xmlId ? ` or id "${xmlId}"` : ''} — or update the <dashboard name> attribute ` +
-        `in the XML to "${dashboardName}" if the caller name is intended.`,
+        `${param} "${dashboardName}" does not match <${kind} name="${xmlName}"> in the file, and apply-${kind} cannot rename a ${kind}. ` +
+        `FIX: check the ${kind}'s name in Desktop${kind === 'dashboard' ? ' with list-dashboards' : ''}. If it is "${xmlName}", pass "${xmlName}" as ${param}. ` +
+        `If it is "${dashboardName}", set the name in the file to "${dashboardName}" and apply; to rename the ${kind}, call rename-sheet afterwards. ` +
+        `If it is neither, re-read the ${kind} with get-${kind}-xml and redo your edit in that file. No changes were sent to Tableau.`,
     });
   }
 
@@ -207,7 +209,7 @@ export async function loadDashboardXml({
 
   // Require the caller's dashboard_name to agree with the XML root name before apply, then
   // thread the validated canonical name through the load.
-  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml);
+  const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml, kind);
   if (canonicalNameResult.isErr()) {
     log({
       level: 'error',
@@ -380,6 +382,18 @@ export async function loadDashboardXml({
       error: { type: 'validation-failed', issues: outcome.issues },
     });
   }
+  if (typeof outcome === 'object' && outcome.type === 'name-differs') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'name-mismatch',
+        message:
+          `The file names this ${kind} "${outcome.submittedName}", but in Desktop it is "${outcome.liveName}", and apply-${kind} cannot rename a ${kind}. ` +
+          `FIX: if you edited the name to rename it, set it to "${outcome.liveName}" in the file, apply, then call rename-sheet. ` +
+          `If the file is older than the ${kind} in Desktop, re-read it with get-${kind}-xml and redo your edit. No changes were sent to Tableau.`,
+      },
+    });
+  }
   if (outcome === 'source-drift') {
     return Err({
       type: 'load-dashboard-xml-error',
@@ -402,10 +416,24 @@ export async function loadDashboardXml({
       },
     });
   }
-  return Err({
-    type: 'load-dashboard-xml-error',
-    error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
-  });
+  if (outcome === 'sheet-absent') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'sheet-absent', message: sheetAbsentMessage(kind, canonicalName) },
+    });
+  }
+  // Worksheet-only outcome: the dashboard routes never produce it, so it is not a sheet-absent case.
+  if (outcome.type === 'dashboard-member-blank-transition') {
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: {
+        type: 'load-rejected',
+        message: `Unexpected worksheet-only outcome while applying ${kind} "${canonicalName}". No changes were sent to Tableau.`,
+      },
+    });
+  }
+  const unmapped: never = outcome;
+  return unmapped;
 }
 
 /**
