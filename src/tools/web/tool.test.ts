@@ -42,6 +42,10 @@ vi.mock('../../activityLog/init.js', () => ({
   recordToolCall: mockRecordToolCall,
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 
@@ -416,8 +420,6 @@ describe('Tool', () => {
           session_id: '',
           site_luid: 'test-site-luid',
           user_luid: 'test-user-luid',
-          podname: 'https://my-tableau-server.com',
-          is_hyperforce: false,
           success: true,
           error_code: '',
           error_message: '',
@@ -440,7 +442,6 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          is_hyperforce: false,
           success: false,
           error_code: '500',
           error_message: 'requestId: 2, error: Callback failed',
@@ -465,7 +466,6 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          is_hyperforce: false,
           success: false,
           error_code: '401',
         }),
@@ -485,7 +485,6 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          is_hyperforce: false,
           success: false,
           error_code: '',
         }),
@@ -505,7 +504,6 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          is_hyperforce: false,
           success: true,
           error_code: '',
         }),

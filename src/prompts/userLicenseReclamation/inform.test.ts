@@ -9,11 +9,6 @@ vi.mock('../../features/init.js', () => ({
   getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
 }));
 
-afterEach(() => {
-  delete process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
-  delete process.env.LICENSE_RECLAIM_ROLES;
-});
-
 describe('user-license-reclamation-inform prompt', () => {
   it('registers under the documented name', () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
@@ -285,7 +280,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env when no arg provided', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
@@ -297,7 +292,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_ROLES from env when no arg provided', async () => {
-    process.env.LICENSE_RECLAIM_ROLES = 'Viewer,Creator';
+    vi.stubEnv('LICENSE_RECLAIM_ROLES', 'Viewer,Creator');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
@@ -308,7 +303,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('arg overrides env var for inactiveDays', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({ inactiveDays: '120' });
     if (result.messages[0].content.type !== 'text') {
@@ -333,7 +328,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('falls back to default when env var is invalid', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = 'not-a-number';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', 'not-a-number');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {

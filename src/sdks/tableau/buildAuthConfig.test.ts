@@ -235,6 +235,19 @@ describe('buildAuthConfig', () => {
       expect(result.username).toBe('prefix-');
     }
   });
+
+  it('returns null for passthrough mode', () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.config.auth = 'passthrough';
+
+    const result = buildAuthConfig({
+      config: extra.config,
+      tableauAuthInfo: undefined,
+      scopes: new Set(['tableau:content:read']),
+    });
+
+    expect(result).toBeNull();
+  });
 });
 
 describe('buildAuthConfig uat outer-token username', () => {

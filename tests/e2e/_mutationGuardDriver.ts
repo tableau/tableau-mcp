@@ -29,6 +29,7 @@ function fullEnv(): Record<string, string> {
     if (typeof v === 'string') env[k] = v;
   }
   env.TRANSPORT = 'stdio';
+  env.PRODUCT_TELEMETRY_ENABLED = 'false';
   env.ADMIN_TOOLS_ENABLED = 'true';
   env.FEATURE_GATE_PROVIDER = 'custom';
   env.FEATURE_GATE_PROVIDER_CONFIG = JSON.stringify({

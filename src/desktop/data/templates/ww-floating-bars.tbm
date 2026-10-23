@@ -1,0 +1,84 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='ww-floating-bars'>
+      <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+      <viewpoint>
+        <zoom type='entire-view' />
+      </viewpoint>
+      <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+    </window>
+<table>
+        <view>
+          <datasources>
+            <datasource name='Sample - Superstore' />
+          </datasources>
+          <datasource-dependencies datasource='Sample - Superstore'>
+            <column caption='Actual Score' datatype='integer' name='[Calculation_ActualScore]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='INT( SPLIT( TRIM( SPLIT( [Product Name], &quot;-&quot;, 1 ) ), &quot; &quot;, 2 ) ) + INT( TRIM( SPLIT( [Product Name], &quot;-&quot;, 2 ) ) )' />
+            </column>
+            <column caption='Gantt Size' datatype='real' name='[Calculation_GanttSize]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='[Calculation_ActualScore] - [Profit]' />
+            </column>
+            <column caption='Over Under' datatype='integer' name='[Calculation_OverUnder]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='SIGN([Calculation_ActualScore] - [Profit])' />
+            </column>
+            <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />
+            <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+            <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+            <column-instance column='[Calculation_GanttSize]' derivation='Min' name='[min:Calculation_GanttSize:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Calculation_OverUnder]' derivation='Sum' name='[sum:Calculation_OverUnder:ok]' pivot='key' type='ordinal' />
+            <column-instance column='[Profit]' derivation='Min' name='[min:Profit:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style>
+          <style-rule element='axis'>
+            <format attr='title' value='Points' />
+          </style-rule>
+          <style-rule element='mark'>
+            <encoding attr='color' field='[Sample - Superstore].[sum:Calculation_OverUnder:ok]' type='palette'>
+              <map to='#76b7b2'>
+                <bucket>1</bucket>
+              </map>
+              <map to='#e15759'>
+                <bucket>-1</bucket>
+              </map>
+            </encoding>
+          </style-rule>
+        </style>
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='GanttBar' />
+            <encodings>
+              <color column='[Sample - Superstore].[sum:Calculation_OverUnder:ok]' />
+              <size column='[Sample - Superstore].[min:Calculation_GanttSize:qk]' />
+            </encodings>
+          </pane>
+        </panes>
+        <rows>[Sample - Superstore].[none:Customer Name:nk]</rows>
+        <cols>[Sample - Superstore].[min:Profit:qk]</cols>
+      </table>
+</bookmark>

@@ -1,6 +1,7 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
 import { Config } from '../../src/config.js';
+import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
@@ -219,7 +220,10 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = [...desktopToolNames];
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -349,7 +353,11 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
       }
 
-      const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
+      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedDesktopToolNames).toContain('bind-template');
+      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../../config.js';
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../../logging/logger.js';
 import type { PulseMetricSubscription } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -38,6 +39,10 @@ vi.mock('../../../../restApiInstance.js', () => ({
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('listPulseMetricSubscriptionsTool', () => {
   beforeEach(() => {
