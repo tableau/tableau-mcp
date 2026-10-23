@@ -144,11 +144,11 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    *
    * Required scopes (Tableau Cloud): `tableau:workbooks:download`
    *
-   * @param workbookId - The ID of the workbook to delete.
+   * @param workbookId - The ID of the workbook to download.
    * @param siteId - The Tableau site ID
    * @param includeExtract - Whether to include the extract in the workbook.
    * @returns The workbook bytes as a stream (never buffered whole) plus its headers. The caller
-   *   must consume or destroy `content`.
+   *   must consume `content`, or destroy it if it is a Node `Readable`.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
    */
   downloadWorkbook = async ({

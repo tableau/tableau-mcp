@@ -573,19 +573,38 @@ describe('WorkbooksMethods', () => {
       }
     });
 
-    it('destroys the stream body of a non-2xx response and rethrows the same error', async () => {
+    it.each([
+      ['RFC 5987 encoded', "attachment; filename*=UTF-8''Sales%20%E2%82%AC.twbx", 'Sales €.twbx'],
+      ['invalid percent-encoding', "attachment; filename*=UTF-8''Bad%E2.twbx", 'Bad%E2.twbx'],
+      ['unquoted', 'attachment; filename=Superstore.twbx', 'Superstore.twbx'],
+      ['missing filename', 'attachment', undefined],
+    ])('parses a %s Content-Disposition filename', async (_case, disposition, filename) => {
+      const { workbooksMethods } = setup({ 'content-disposition': disposition });
+      const result = await workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId });
+      expect(result.filename).toBe(filename);
+    });
+
+    it.each([
+      ['a stream body (destroyed)', Readable.from([Buffer.from('{}')])],
+      ['a non-stream body', { error: { code: '403000' } }],
+      ['no response (network error)', undefined],
+    ])('rethrows the same error for a failed request with %s', async (_case, data) => {
       const { workbooksMethods, mockGet } = setup({});
-      const errorStream = Readable.from([Buffer.from('{}')]);
-      const axiosError = new AxiosError('Request failed with status code 403', '403');
-      // @ts-expect-error - Minimal response for the test
-      axiosError.response = { status: 403, data: errorStream, headers: {} };
+      const axiosError = new AxiosError('Request failed', 'ERR');
+      if (data !== undefined) {
+        // @ts-expect-error - Minimal response for the test
+        axiosError.response = { status: 403, data, headers: {} };
+      }
       mockGet.mockRejectedValue(axiosError);
 
       await expect(
         workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId }),
       ).rejects.toBe(axiosError);
-      expect(axiosError.response?.status).toBe(403);
-      expect(errorStream.destroyed).toBe(true);
+      if (data instanceof Readable) {
+        expect(data.destroyed).toBe(true);
+      } else {
+        expect(axiosError.response?.data).toEqual(data);
+      }
     });
   });
 
