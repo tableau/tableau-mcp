@@ -809,5 +809,5 @@ export function layoutGeometryDifference(expected: Element, actual: Element): st
 
 function describeAttribute(element: Element, name: string): string {
   const value = element.getAttribute(name);
-  return value === null || !element.hasAttribute(name) ? 'missing' : quoted(value);
+  return value === null ? 'missing' : quoted(value);
 }

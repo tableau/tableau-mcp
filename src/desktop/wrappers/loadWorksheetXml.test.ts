@@ -9,6 +9,7 @@ import { normalizeArray, parseXML } from '../metadata/parser.js';
 import { captureTargetWorksheetState } from '../metadata/targetWorksheetState.js';
 import type { ParsedWindow } from '../metadata/types.js';
 import * as validationRegistry from '../validation/registry.js';
+import { sourceSha256 } from './cacheFingerprint.js';
 import {
   loadWorksheetXml,
   resolveCanonicalWorksheetName,
@@ -1190,46 +1191,134 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
-  it('targets the per-sheet route by the fragment simple-id, so an apply lands after a live rename', async () => {
+  describe('refuses to rename', () => {
     const sheetId = '{5804EDA1-BF3C-4000-96FF-E266A3A0FA44}';
-    const fragment = `<worksheet name='${worksheetName}'><simple-id uuid='${sheetId}' /><table><rows /></table></worksheet>`;
-    const applyWorksheetDocument = vi
-      .fn()
-      .mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
-      );
-    const executor = makeExecutorMock({
-      // The live sheet kept its id but was renamed after the fragment was read: only the id matches.
-      listWorksheets: vi
+    const doc = (name: string): string =>
+      `<worksheet name='${name}'><simple-id uuid='${sheetId}' /><table><rows /></table></worksheet>`;
+
+    function executorFor(
+      liveName: string,
+      liveXml: string,
+    ): {
+      executor: ReturnType<typeof makeExecutorMock>;
+      applyWorksheetDocument: ReturnType<typeof vi.fn>;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    } {
+      const applyWorksheetDocument = vi
         .fn()
         .mockResolvedValue(
-          Ok({ worksheets: [{ id: sheetId, name: 'Renamed Live', hidden: false }] }),
-        ),
-      getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment })),
-      applyWorksheetDocument,
-    });
-
-    const result = await loadWorksheetXml({
-      worksheetName,
-      xml: fragment,
-      executor,
-      signal: mockSignal,
-      focus: NO_FOCUS,
-      requireExistingSheet: true,
-    });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.appliedName).toBe('Renamed Live');
+          Ok({ command_id: 'cmd-apply', status: 'completed' as const, submitted_at: '' }),
+        );
+      const applyWorkbookDocument = vi.fn();
+      const executor = makeExecutorMock({
+        listWorksheets: vi
+          .fn()
+          .mockResolvedValue(Ok({ worksheets: [{ id: sheetId, name: liveName, hidden: false }] })),
+        getWorksheetDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        applyWorksheetDocument,
+        applyWorkbookDocument,
+      });
+      return { executor, applyWorksheetDocument, applyWorkbookDocument };
     }
-    // Had it targeted by the fragment name ('Sheet 1' ≠ the live 'Renamed Live'), the route would
-    // have resolved to sheet-absent. Desktop also requires the posted fragment's root name to match
-    // the current live name even when the route is addressed by id.
-    expect(applyWorksheetDocument).toHaveBeenCalledWith(
-      sheetId,
-      expect.stringContaining("name='Renamed Live'"),
-      mockSignal,
+
+    function nameMismatchMessage(result: Awaited<ReturnType<typeof loadWorksheetXml>>): string {
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      return result.error.error.message;
+    }
+
+    it.each([
+      { label: 'with a hash', hash: true },
+      { label: 'with no hash', hash: false },
+    ])(
+      'refuses a renamed worksheet fragment resolved by simple-id $label, with zero applies',
+      async ({ hash }) => {
+        const live = doc('Live Sheet');
+        const e = executorFor('Live Sheet', live);
+
+        const result = await loadWorksheetXml({
+          worksheetName: sheetId,
+          xml: doc('Renamed Sheet'),
+          executor: e.executor,
+          signal: mockSignal,
+          focus: NO_FOCUS,
+          requireExistingSheet: true,
+          expectedSourceHash: hash ? sourceSha256(live) : undefined,
+        });
+
+        const message = nameMismatchMessage(result);
+        expect(message).toContain(
+          'The file names this worksheet "Renamed Sheet", but in Desktop it is "Live Sheet"',
+        );
+        expect(message).toContain('apply-worksheet cannot rename a worksheet');
+        expect(message).toContain('call rename-sheet');
+        expect(message).toContain('get-worksheet-xml');
+        expect(message).not.toContain('back to');
+        expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
+        expect(e.applyWorkbookDocument).not.toHaveBeenCalled();
+      },
     );
+
+    it('refuses a rename-sheet race at the gate with get-worksheet-xml guidance', async () => {
+      const e = executorFor('Renamed', doc('Renamed'));
+
+      const result = await loadWorksheetXml({
+        worksheetName: 'Renamed',
+        xml: doc('Old Name'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+      });
+
+      const message = nameMismatchMessage(result);
+      expect(message).toContain(
+        'worksheetName "Renamed" does not match <worksheet name="Old Name"> in the file',
+      );
+      expect(message).toContain('with list-worksheets');
+      expect(message).toContain('pass "Old Name" as worksheetName');
+      expect(message).toContain('get-worksheet-xml');
+      expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
+    });
+
+    it('reports source-drift before name-differs when the live sheet was renamed and the hash is stale', async () => {
+      const e = executorFor('Renamed', doc('Renamed'));
+
+      const result = await loadWorksheetXml({
+        worksheetName: sheetId,
+        xml: doc('Old Name'),
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(doc('Old Name')),
+      });
+
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('source-drift');
+      expect(e.applyWorksheetDocument).not.toHaveBeenCalled();
+      expect(e.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('still applies when the names are equal, targeted by id', async () => {
+      const live = doc('Live Sheet');
+      const e = executorFor('Live Sheet', live);
+
+      const result = await loadWorksheetXml({
+        worksheetName: sheetId,
+        xml: live,
+        executor: e.executor,
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        requireExistingSheet: true,
+        expectedSourceHash: sourceSha256(live),
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(e.applyWorksheetDocument).toHaveBeenCalledWith(sheetId, live, mockSignal);
+    });
   });
 
   it('should return execute-command-error when the workbook fetch fails', async () => {

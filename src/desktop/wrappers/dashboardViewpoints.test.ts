@@ -1,6 +1,7 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 import {
+  createDashboardReadbackVerifier,
   readbackReflowDashboard,
   REFLOW_DASHBOARD_NAME,
   reflowWorkbook,
@@ -8,7 +9,6 @@ import {
 } from './dashboardReflowFixtures.js';
 import {
   composeDashboardWorkbook,
-  createDashboardReadbackVerifier,
   dashboardMembershipMatches,
   dashboardWorksheetNames,
   synchronizeDashboardViewpoints,
