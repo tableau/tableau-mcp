@@ -61,7 +61,8 @@ export const getWorksheetUnderlyingDataTool = (
             callback: async (executor, _signal, read) => {
               const listResult = await read(
                 'worksheet list',
-                async (executor, signal) => await executor.listWorksheets(signal),
+                async (activeExecutor, activeSignal) =>
+                  await activeExecutor.listWorksheets(activeSignal),
               );
               if (listResult.isErr()) {
                 return listResult;
@@ -79,8 +80,8 @@ export const getWorksheetUnderlyingDataTool = (
 
               const tablesResult = await read(
                 'worksheet logical tables',
-                async (executor, signal) =>
-                  await executor.listWorksheetLogicalTables(worksheetId, signal),
+                async (activeExecutor, activeSignal) =>
+                  await activeExecutor.listWorksheetLogicalTables(worksheetId, activeSignal),
               );
               if (tablesResult.isErr()) {
                 return tablesResult;
@@ -99,8 +100,8 @@ export const getWorksheetUnderlyingDataTool = (
               if (columns && columns.length > 0) {
                 const document = await read(
                   'worksheet document',
-                  async (executor, signal) =>
-                    await executor.getWorksheetDocument(worksheetId, signal),
+                  async (activeExecutor, activeSignal) =>
+                    await activeExecutor.getWorksheetDocument(worksheetId, activeSignal),
                 );
                 if (document.isErr()) {
                   return document;
@@ -126,12 +127,12 @@ export const getWorksheetUnderlyingDataTool = (
 
               return await read(
                 'worksheet underlying data',
-                async (executor, signal) =>
-                  await executor.getWorksheetUnderlyingData(
+                async (activeExecutor, activeSignal) =>
+                  await activeExecutor.getWorksheetUnderlyingData(
                     worksheetId,
                     logicalTableId,
                     query,
-                    signal,
+                    activeSignal,
                   ),
               );
             },

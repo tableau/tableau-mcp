@@ -313,9 +313,8 @@ const TOOL_CASES: Record<string, ToolCase> = {
     make: getReloadExtensionsTool,
     args: { sheet: 'Sales' },
     clean: {
-      reloaded: true,
       sheet: { id: 'ws1', kind: 'worksheet', name: 'Sales' },
-      message: 'Reloaded extensions for worksheet "Sales".',
+      message: 'Requested reload of extensions for worksheet "Sales".',
     },
   },
   'workbook-export-as': {

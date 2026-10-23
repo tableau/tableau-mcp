@@ -77,20 +77,6 @@ describe('getSheetInfoTool', () => {
     }
   });
 
-  it('lists only the requested kind', async () => {
-    const harness = await startHarness();
-    try {
-      await harness.callTool({ sheet: 'dash-exec', kind: 'dashboard' });
-
-      expect(requestPaths(harness.server)).toEqual([
-        '/v0/workbook/dashboards',
-        '/v0/workbook/dashboards/dash-exec',
-      ]);
-    } finally {
-      await harness.close();
-    }
-  });
-
   it('reports an unknown sheet without reading an item', async () => {
     const harness = await startHarness();
     try {

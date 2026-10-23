@@ -7,6 +7,8 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { artifactNameParam, sessionParam } from '../params.js';
 import { DesktopTool } from '../tool.js';
 
+const title = 'Validate Calculated Field';
+
 const paramsSchema = {
   session: sessionParam(),
   worksheetName: artifactNameParam('worksheet', { min: 1 }),
@@ -20,7 +22,7 @@ export const getValidateCalculatedFieldTool = (
     server,
     name: 'validate-calculated-field',
     minApiVersion: '0.2.16',
-    title: 'Validate Calculated Field',
+    title,
     description:
       'Check a calculated field formula against a worksheet without changing the workbook. Returns isValid and errors (position, length, message).',
     paramsSchema,

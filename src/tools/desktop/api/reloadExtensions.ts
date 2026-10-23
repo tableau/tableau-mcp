@@ -72,12 +72,11 @@ export const getReloadExtensionsTool = (
 
           const subject =
             result.value.status === 'completed'
-              ? `Reloaded extensions for ${ref.kind} "${previousName}"`
-              : `Requested reloading extensions for ${ref.kind} "${previousName}"; Desktop is still applying it`;
+              ? `Requested reload of extensions for ${ref.kind} "${previousName}"`
+              : `Requested reload of extensions for ${ref.kind} "${previousName}"; Desktop is still applying it`;
           return new Ok(
             commandOk(
               {
-                reloaded: result.value.status === 'completed',
                 sheet: { id: ref.id, kind: ref.kind, name: previousName },
                 message: `${subject}.`,
               },

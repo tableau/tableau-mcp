@@ -49,7 +49,9 @@ describe('reload-extensions', () => {
       expect(posted).toHaveLength(1);
       expect(posted[0].body).toBe('');
       invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).reloaded).toBe(true);
+      expect(JSON.parse(result.content[0].text).message).toBe(
+        `Requested reload of extensions for worksheet "${WORKSHEET_NAME}".`,
+      );
     } finally {
       await harness.close();
     }
