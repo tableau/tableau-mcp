@@ -1,10 +1,23 @@
 import { generateKeyPairSync } from 'crypto';
-import { CompactEncrypt } from 'jose';
+import {
+  CompactEncrypt,
+  createLocalJWKSet,
+  exportJWK,
+  generateKeyPair,
+  JSONWebKeySet,
+  JWTVerifyGetKey,
+  SignJWT,
+  UnsecuredJWT,
+} from 'jose';
 import { Err, Ok } from 'ts-results-es';
 
+import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   EmbeddedAccessTokenValidator,
+  ExternalAccessTokenValidator,
+  matchAudience,
   TableauAccessTokenValidator,
 } from './accessTokenValidator.js';
 
@@ -562,6 +575,835 @@ describe('EmbeddedAccessTokenValidator site binding', () => {
       const token = await oauthToken({ tableauServer: 'https://10az.online.tableau.com' });
       const result = await new EmbeddedAccessTokenValidator(privateKey).validate(token);
       expect(result.isErr()).toBe(true);
+    });
+  });
+});
+
+describe('matchAudience', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  it('lists the normalized resource identifier and global resource URIs', () => {
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', `${MOCK_GLOBAL_RESOURCE_URI}/`);
+
+    expect(matchAudience({ aud: EXPECTED_AUD, config: getConfig() })).toEqual({
+      allowedAudiences: [EXPECTED_AUD, MOCK_GLOBAL_RESOURCE_URI],
+      matches: true,
+    });
+  });
+
+  it.each([
+    [[EXPECTED_AUD], true],
+    [['https://other.example.com', `${MOCK_GLOBAL_RESOURCE_URI}/`], true],
+    [['https://other.example.com', 'my-client-id'], false],
+    [[], false],
+    ['https://other-pod.example.com/tableau-mcp', false],
+  ])('matches aud %j: %s', (aud, matches) => {
+    expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
+  });
+
+  it.each([
+    ['my-client-id', true],
+    ['my-client-id-2', false],
+  ])('matches a client ID global resource value exactly (aud %j: %s)', (aud, matches) => {
+    vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', 'my-client-id');
+
+    expect(matchAudience({ aud, config: getConfig() }).matches).toBe(matches);
+  });
+});
+
+describe('ExternalAccessTokenValidator', () => {
+  const EXTERNAL_ISSUER = 'https://idp.example.com';
+  const EXTERNAL_CLIENT_ID = 'mcp-client';
+  const INVALID_TOKEN_ERROR = 'Invalid or expired access token';
+  const now = Math.floor(Date.now() / 1000);
+  const tableauAuthInfo = (username: string): Record<string, unknown> => ({
+    type: 'X-Tableau-Auth',
+    username,
+    server: 'https://my-tableau-server.com',
+    siteName: 'tc25',
+  });
+
+  function withoutUndefined(claims: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(claims).filter(([, value]) => value !== undefined));
+  }
+
+  function errorOf(result: Awaited<ReturnType<ExternalAccessTokenValidator['validate']>>): string {
+    return result.isErr() ? result.error : 'not an error';
+  }
+
+  function captureLogs(): () => string[] {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    return () => [...consoleSpy.mock.calls, ...stderrSpy.mock.calls].flat().map(String);
+  }
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    vi.stubEnv('AUTH', 'direct-trust');
+    vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+    vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'connected-app-client-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_ID', 'connected-app-secret-id');
+    vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'connected-app-secret-value');
+    vi.stubEnv('OAUTH_ISSUER', EXTERNAL_ISSUER);
+    vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  describe('JWT access tokens (RFC 9068)', () => {
+    let privateKey: CryptoKey;
+    let otherPrivateKey: CryptoKey;
+    let getKey: JWTVerifyGetKey;
+
+    beforeAll(async () => {
+      const keyPair = await generateKeyPair('RS256');
+      privateKey = keyPair.privateKey;
+      otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
+      getKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg: 'RS256', kid: 'key-1' }],
+      });
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+    });
+
+    function rfc9068Claims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        exp: now + 3600,
+        aud: EXPECTED_AUD,
+        sub: 'jdoe@example.com',
+        client_id: EXTERNAL_CLIENT_ID,
+        iat: now,
+        jti: 'dbe39bf3a3ba4238a513f51d6e1691c4',
+        scope: 'tableau:mcp:datasource:read tableau:mcp:view:read',
+        ...overrides,
+      });
+    }
+
+    async function sign(claims: Record<string, unknown>, key = privateKey): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', typ: 'at+jwt', kid: 'key-1' })
+        .sign(key);
+    }
+
+    it('maps a verified token to an X-Tableau-Auth identity', async () => {
+      const token = await sign(rfc9068Claims());
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: EXTERNAL_CLIENT_ID,
+        scopes: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('jdoe@example.com'),
+      });
+    });
+
+    it('reads scp array scopes, azp, an aud array, and a custom username claim', async () => {
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
+      const token = await sign(
+        rfc9068Claims({
+          aud: ['https://other.example.com', EXPECTED_AUD],
+          azp: 'azp-client',
+          client_id: undefined,
+          scope: undefined,
+          scp: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+          tableau_username: 'jdoe',
+        }),
+      );
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toMatchObject({
+        clientId: 'azp-client',
+        scopes: ['tableau:mcp:datasource:read', 'tableau:mcp:view:read'],
+        extra: tableauAuthInfo('jdoe'),
+      });
+    });
+
+    it('rejects a token signed by another key', async () => {
+      const token = await sign(rfc9068Claims(), otherPrivateKey);
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects a token with a forged signature without trusting its claims', async () => {
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(
+        makeBearer(rfc9068Claims()),
+      );
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each<[string, Record<string, unknown>]>([
+      ['iss is wrong', { iss: 'https://evil.example.com' }],
+      ['exp has passed', { exp: now - 60 }],
+      ['exp is missing', { exp: undefined }],
+      ['the username claim is missing', { sub: undefined }],
+      ['the username claim is blank', { sub: '   ' }],
+      ['the username claim has a control character', { sub: 'jdoe\nadmin' }],
+      ['iat is missing', { iat: undefined }],
+      ['iat is not a number', { iat: 'yesterday' }],
+      ['aud is missing', { aud: undefined }],
+      ['sub is not a string', { sub: 42 }],
+      ['sub is empty', { sub: '' }],
+    ])('rejects the token when %s', async (_, overrides) => {
+      const token = await sign(rfc9068Claims(overrides));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each([
+      ['another resource', 'https://other-pod.example.com/tableau-mcp'],
+      ['the client ID', EXTERNAL_CLIENT_ID],
+    ])('rejects the token when aud is %s', async (_, aud) => {
+      const token = await sign(rfc9068Claims({ aud }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each([undefined, ''])(
+      'rejects a token with sub %j even when the custom username claim is present',
+      async (sub) => {
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'tableau_username');
+        const token = await sign(rfc9068Claims({ sub, tableau_username: 'jdoe' }));
+
+        const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+        expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+      },
+    );
+
+    it('rejects an HS256 token even if the key resolver returns a shared secret', async () => {
+      const secret = new TextEncoder().encode('a-shared-secret-of-at-least-32-bytes');
+      const token = await new SignJWT(rfc9068Claims())
+        .setProtectedHeader({ alg: 'HS256', typ: 'at+jwt' })
+        .sign(secret);
+      const getSecret: JWTVerifyGetKey = async () => secret;
+
+      const result = await new ExternalAccessTokenValidator({ getKey: getSecret }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an unsigned token (alg none)', async () => {
+      const token = new UnsecuredJWT(rfc9068Claims()).encode();
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it.each(['ES256', 'PS256', 'EdDSA'])('accepts a token signed with %s', async (alg) => {
+      const keyPair = await generateKeyPair(alg);
+      const algGetKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg, kid: 'alg-key' }],
+      });
+      const token = await new SignJWT(rfc9068Claims())
+        .setProtectedHeader({ alg, typ: 'at+jwt', kid: 'alg-key' })
+        .sign(keyPair.privateKey);
+
+      const result = await new ExternalAccessTokenValidator({ getKey: algGetKey }).validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    describe('clock skew', () => {
+      const FIXED_NOW = 1_800_000_000;
+
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(FIXED_NOW * 1000);
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it.each<[string, Record<string, unknown>, boolean]>([
+        ['exp passed 3 s ago', { exp: FIXED_NOW - 3 }, true],
+        ['exp passed 6 s ago', { exp: FIXED_NOW - 6 }, false],
+        ['nbf is 3 s ahead', { nbf: FIXED_NOW + 3 }, true],
+        ['nbf is 6 s ahead', { nbf: FIXED_NOW + 6 }, false],
+      ])('when %s, accepts the token: %s', async (_, overrides, accepted) => {
+        const token = await sign(
+          rfc9068Claims({ iat: FIXED_NOW, exp: FIXED_NOW + 3600, ...overrides }),
+        );
+
+        const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+        expect(result.isOk()).toBe(accepted);
+      });
+    });
+
+    it('writes one audit record per rejection, even at LOG_LEVEL=emergency, without the token', async () => {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+      const tokens = [
+        await sign(rfc9068Claims({ aud: 'https://other-pod.example.com/tableau-mcp' })),
+        await sign(rfc9068Claims(), otherPrivateKey),
+      ];
+
+      for (const token of tokens) {
+        await new ExternalAccessTokenValidator({ getKey }).validate(token);
+      }
+
+      const lines = capturedLines();
+      expect(lines.map((line) => JSON.parse(line))).toEqual([
+        expect.objectContaining({
+          logger: 'audit',
+          message: 'external-token-rejected',
+          data: { reason: expect.stringContaining('audience mismatch') },
+        }),
+        expect.objectContaining({
+          logger: 'audit',
+          message: 'external-token-rejected',
+          data: { reason: expect.any(String) },
+        }),
+      ]);
+      const output = lines.join();
+      for (const token of tokens) {
+        const [, payload, signature] = token.split('.');
+        expect(output).not.toContain(token);
+        expect(output).not.toContain(payload);
+        expect(output).not.toContain(signature);
+      }
+    });
+
+    it('truncates a long rejection reason built from the token header', async () => {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+      const encode = (value: unknown): string =>
+        Buffer.from(JSON.stringify(value)).toString('base64url');
+      // jose quotes unknown crit names in its error before it resolves a key.
+      const header = { alg: 'RS256', kid: 'key-1', crit: ['x'.repeat(400)] };
+      const token = `${encode(header)}.${encode(rfc9068Claims())}.c2lnbmF0dXJl`;
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+      const reasons = capturedLines().map((line) => JSON.parse(line).data.reason);
+      expect(reasons).toEqual([expect.stringMatching(/\.\.\. \(truncated\)$/)]);
+      expect(reasons[0].length).toBeLessThanOrEqual(256 + '... (truncated)'.length);
+    });
+  });
+
+  describe('OIDC ID tokens', () => {
+    const OWN_CLIENT_ID = 'tableau-mcp-client';
+    let privateKey: CryptoKey;
+    let getKey: JWTVerifyGetKey;
+
+    beforeAll(async () => {
+      const keyPair = await generateKeyPair('RS256');
+      privateKey = keyPair.privateKey;
+      getKey = createLocalJWKSet({
+        keys: [{ ...(await exportJWK(keyPair.publicKey)), alg: 'RS256', kid: 'id-key-1' }],
+      });
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
+    });
+
+    function idTokenClaims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        sub: 'u-7f3a9c2e-opaque',
+        aud: OWN_CLIENT_ID,
+        iat: now,
+        exp: now + 3600,
+        auth_time: now - 30,
+        nonce: 'n-0S6_WzA2Mj',
+        employee_id: '1234567',
+        ...overrides,
+      });
+    }
+
+    async function signIdToken(claims: Record<string, unknown>): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'id-key-1' })
+        .sign(privateKey);
+    }
+
+    it("accepts an ID token whose aud is this server's own client ID", async () => {
+      const token = await signIdToken(idTokenClaims());
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: '',
+        scopes: [],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('1234567'),
+      });
+    });
+
+    it('uses a numeric username claim as its decimal string', async () => {
+      const token = await signIdToken(idTokenClaims({ employee_id: 1234567 }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(result.unwrap().extra).toEqual(tableauAuthInfo('1234567'));
+    });
+
+    it.each<[string, unknown]>([
+      ['a fraction', 1.5],
+      ['an unsafe integer', 2 ** 53],
+      ['negative', -1],
+      ['a boolean', true],
+      ['an array', ['1234567']],
+      ['an object', {}],
+      ['empty', ''],
+    ])('rejects the token when the username claim is %s', async (_, employeeId) => {
+      const token = await signIdToken(idTokenClaims({ employee_id: employeeId }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an ID token for another client', async () => {
+      const token = await signIdToken(idTokenClaims({ aud: 'other-client' }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+
+    it('rejects an ID token without iat', async () => {
+      const token = await signIdToken(idTokenClaims({ iat: undefined }));
+
+      const result = await new ExternalAccessTokenValidator({ getKey }).validate(token);
+
+      expect(errorOf(result)).toBe(INVALID_TOKEN_ERROR);
+    });
+  });
+
+  describe('OpenID Connect discovery', () => {
+    const OWN_CLIENT_ID = 'tableau-mcp-client';
+    const DISCOVERY_URL = `${EXTERNAL_ISSUER}/.well-known/openid-configuration`;
+    // Another origin than the issuer, as with Google (accounts.google.com -> www.googleapis.com).
+    const JWKS_URI = 'https://keys.idp-cdn.example.com/oauth2/v3/certs';
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    let jwks: JSONWebKeySet;
+
+    beforeAll(async () => {
+      // No alg on the JWK, so the same RSA key can verify RS256 and PS256.
+      jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'disc-key-1', use: 'sig' }] };
+    });
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', OWN_CLIENT_ID);
+      vi.stubEnv('OAUTH_DISABLE_SCOPES', 'true');
+      vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'employee_id');
+    });
+
+    function openIdConfiguration(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        issuer: EXTERNAL_ISSUER,
+        authorization_endpoint: `${EXTERNAL_ISSUER}/authorize`,
+        token_endpoint: `${EXTERNAL_ISSUER}/token`,
+        jwks_uri: JWKS_URI,
+        response_types_supported: ['code', 'id_token'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+        ...overrides,
+      });
+    }
+
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    function discoveryFetch(
+      document: Record<string, unknown> = openIdConfiguration(),
+      discoveryUrl = DISCOVERY_URL,
+    ): ReturnType<typeof vi.fn<typeof globalThis.fetch>> {
+      return vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url === discoveryUrl) {
+          return jsonResponse(document);
+        }
+        if (url === document.jwks_uri) {
+          return jsonResponse(jwks);
+        }
+        return new Response('Not Found', { status: 404 });
+      });
+    }
+
+    function fetchedUrls(fetch: ReturnType<typeof vi.fn<typeof globalThis.fetch>>): string[] {
+      return fetch.mock.calls.map(([url]) => String(url));
+    }
+
+    function idTokenClaims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return withoutUndefined({
+        iss: EXTERNAL_ISSUER,
+        sub: 'u-7f3a9c2e-opaque',
+        aud: OWN_CLIENT_ID,
+        iat: now,
+        exp: now + 3600,
+        auth_time: now - 30,
+        nonce: 'n-0S6_WzA2Mj',
+        employee_id: '1234567',
+        ...overrides,
+      });
+    }
+
+    async function signIdToken({
+      alg = 'RS256',
+      claims = idTokenClaims(),
+    }: { alg?: string; claims?: Record<string, unknown> } = {}): Promise<string> {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg, typ: 'JWT', kid: 'disc-key-1' })
+        .sign(privateKey);
+    }
+
+    async function rejectionReasons(
+      validator: ExternalAccessTokenValidator,
+      token: string,
+    ): Promise<string[]> {
+      vi.stubEnv('LOG_LEVEL', 'emergency');
+      const capturedLines = captureLogs();
+
+      expect(errorOf(await validator.validate(token))).toBe(INVALID_TOKEN_ERROR);
+
+      return capturedLines().map((line) => JSON.parse(line).data.reason);
+    }
+
+    it('reads the document, then its JWKS, and accepts a valid ID token', async () => {
+      const fetch = discoveryFetch();
+      const token = await signIdToken();
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(token);
+
+      expect(result.unwrap()).toEqual({
+        token,
+        clientId: '',
+        scopes: [],
+        expiresAt: now + 3600,
+        extra: tableauAuthInfo('1234567'),
+      });
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+      const [, init] = fetch.mock.calls[0];
+      expect(init).toMatchObject({ redirect: 'error', headers: { Accept: 'application/json' } });
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('reads the document once per validator', async () => {
+      const fetch = discoveryFetch();
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const token = await signIdToken();
+
+      expect((await validator.validate(token)).isOk()).toBe(true);
+      expect((await validator.validate(token)).isOk()).toBe(true);
+
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+    });
+
+    it('makes one document request for concurrent first validations', async () => {
+      const fetch = discoveryFetch();
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const token = await signIdToken();
+
+      const results = await Promise.all([validator.validate(token), validator.validate(token)]);
+
+      expect(results.map((result) => result.isOk())).toEqual([true, true]);
+      expect(fetchedUrls(fetch).filter((url) => url === DISCOVERY_URL)).toHaveLength(1);
+    });
+
+    it('reads the document for an issuer with a trailing slash', async () => {
+      const issuer = `${EXTERNAL_ISSUER}/`;
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(openIdConfiguration({ issuer }));
+      const token = await signIdToken({ claims: idTokenClaims({ iss: issuer }) });
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(token);
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchedUrls(fetch)[0]).toBe(DISCOVERY_URL);
+    });
+
+    it.each([
+      ['another issuer', 'https://evil.example.com'],
+      ['the issuer with an added trailing slash', `${EXTERNAL_ISSUER}/`],
+    ])('rejects the token when the document issuer is %s', async (_, issuer) => {
+      const fetch = discoveryFetch(openIdConfiguration({ issuer }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: issuer mismatch: got '${issuer}'`]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it.each([
+      [
+        'http://keys.idp-cdn.example.com/certs',
+        "jwks_uri must use https unless it and the issuer are both loopback: 'http://keys.idp-cdn.example.com/certs'",
+      ],
+      ['not a url', 'jwks_uri is not a valid URL'],
+    ])('rejects the token when jwks_uri is %s', async (jwksUri, reason) => {
+      const fetch = discoveryFetch(openIdConfiguration({ jwks_uri: jwksUri }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: ${reason}`]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it('accepts an http jwks_uri on a loopback host when the issuer is loopback', async () => {
+      const issuer = 'http://127.0.0.1:8080/realms/mcp';
+      const jwksUri = 'http://127.0.0.1:8080/realms/mcp/certs';
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(
+        openIdConfiguration({ issuer, jwks_uri: jwksUri }),
+        `${issuer}/.well-known/openid-configuration`,
+      );
+
+      const result = await new ExternalAccessTokenValidator({ fetch }).validate(
+        await signIdToken({ claims: idTokenClaims({ iss: issuer }) }),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(fetchedUrls(fetch)).toEqual([`${issuer}/.well-known/openid-configuration`, jwksUri]);
+    });
+
+    it('rejects an http jwks_uri on a remote host from a loopback issuer', async () => {
+      const issuer = 'http://127.0.0.1:8080/realms/mcp';
+      const jwksUri = 'http://keys.idp-cdn.example.com/certs';
+      const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
+      vi.stubEnv('OAUTH_ISSUER', issuer);
+      const fetch = discoveryFetch(
+        openIdConfiguration({ issuer, jwks_uri: jwksUri }),
+        discoveryUrl,
+      );
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(
+        validator,
+        await signIdToken({ claims: idTokenClaims({ iss: issuer }) }),
+      );
+
+      expect(reasons).toEqual([
+        `discovery failed: jwks_uri must use https unless it and the issuer are both loopback: '${jwksUri}'`,
+      ]);
+      expect(fetchedUrls(fetch)).toEqual([discoveryUrl]);
+    });
+
+    it('rejects an http loopback jwks_uri from a remote issuer', async () => {
+      const jwksUri = 'http://127.0.0.1:8080/jwks';
+      const fetch = discoveryFetch(openIdConfiguration({ jwks_uri: jwksUri }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([
+        `discovery failed: jwks_uri must use https unless it and the issuer are both loopback: '${jwksUri}'`,
+      ]);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it.each<[string, Record<string, unknown>, string]>([
+      [
+        'issuer is missing',
+        openIdConfiguration({ issuer: undefined }),
+        'Validation error: Required at "issuer"',
+      ],
+      [
+        'jwks_uri is missing',
+        openIdConfiguration({ jwks_uri: undefined }),
+        'Validation error: Required at "jwks_uri"',
+      ],
+    ])('rejects the token when the document %s', async (_, document, validationError) => {
+      const validator = new ExternalAccessTokenValidator({ fetch: discoveryFetch(document) });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([
+        `discovery failed: invalid openid-configuration: ${validationError}`,
+      ]);
+    });
+
+    it.each<[string, () => Promise<Response>]>([
+      ['returns HTTP 404', async () => new Response('Not Found', { status: 404 })],
+      ['is not valid JSON', async () => new Response('<html>maintenance</html>')],
+      [
+        'request fails',
+        async () => {
+          throw new TypeError('fetch failed');
+        },
+      ],
+    ])(
+      'rejects the token when the document %s, and retries on the next request',
+      async (_, failure) => {
+        const fetch = discoveryFetch();
+        fetch.mockImplementationOnce(failure);
+        const validator = new ExternalAccessTokenValidator({ fetch });
+        const token = await signIdToken();
+
+        expect(errorOf(await validator.validate(token))).toBe(INVALID_TOKEN_ERROR);
+        expect((await validator.validate(token)).isOk()).toBe(true);
+
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, DISCOVERY_URL, JWKS_URI]);
+      },
+    );
+
+    it('accepts access and ID tokens signed with an algorithm the document does not list', async () => {
+      const fetch = discoveryFetch(
+        openIdConfiguration({ id_token_signing_alg_values_supported: ['RS256'] }),
+      );
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      // RFC 9068 access token: the document's id_token_* field does not govern it.
+      const accessToken = await new SignJWT(
+        idTokenClaims({ client_id: 'some-client', jti: 'a-1', scope: 'openid' }),
+      )
+        .setProtectedHeader({ alg: 'PS256', typ: 'at+jwt', kid: 'disc-key-1' })
+        .sign(privateKey);
+
+      expect((await validator.validate(accessToken)).isOk()).toBe(true);
+      expect((await validator.validate(await signIdToken({ alg: 'PS256' }))).isOk()).toBe(true);
+    });
+
+    it('accepts an RS256 token when the document lists only symmetric algorithms', async () => {
+      const validator = new ExternalAccessTokenValidator({
+        fetch: discoveryFetch(
+          openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256'] }),
+        ),
+      });
+
+      expect((await validator.validate(await signIdToken())).isOk()).toBe(true);
+    });
+
+    it('rejects an HS256 token even when the document lists HS256', async () => {
+      const fetch = discoveryFetch(
+        openIdConfiguration({ id_token_signing_alg_values_supported: ['HS256', 'RS256'] }),
+      );
+      const token = await new SignJWT(idTokenClaims())
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+        .sign(new TextEncoder().encode('a-shared-secret-of-at-least-32-bytes'));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, token);
+
+      // jose's allowlist message, not its JWKS resolver's, and no JWKS fetch.
+      expect(reasons).toEqual(['"alg" (Algorithm) Header Parameter value not allowed']);
+      expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL]);
+    });
+
+    it('rejects a bearer that is not a JWT without reading the document', async () => {
+      const fetch = discoveryFetch();
+      fetch.mockResolvedValue(new Response('Not Found', { status: 404 }));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, '2YotnFZFEjr1zCsicMWpAA');
+
+      expect(reasons).toEqual(['Invalid Token or Protected Header formatting']);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('fetches the JWKS again for an unknown kid, at most once per cooldown', async () => {
+      const second = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const rotated: JSONWebKeySet = {
+        keys: [
+          ...jwks.keys,
+          { ...(await exportJWK(second.publicKey)), kid: 'disc-key-2', use: 'sig' },
+        ],
+      };
+      let served = jwks;
+      const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+        const url = String(input);
+        if (url === DISCOVERY_URL) {
+          return jsonResponse(openIdConfiguration());
+        }
+        return url === JWKS_URI ? jsonResponse(served) : new Response('', { status: 404 });
+      });
+      const validator = new ExternalAccessTokenValidator({ fetch });
+      const rotatedToken = await new SignJWT(idTokenClaims())
+        .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'disc-key-2' })
+        .sign(second.privateKey);
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        expect((await validator.validate(await signIdToken())).isOk()).toBe(true);
+
+        served = rotated;
+        expect(errorOf(await validator.validate(rotatedToken))).toBe(INVALID_TOKEN_ERROR);
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI]);
+
+        vi.setSystemTime(Date.now() + 31_000);
+        expect((await validator.validate(rotatedToken)).isOk()).toBe(true);
+        expect(fetchedUrls(fetch)).toEqual([DISCOVERY_URL, JWKS_URI, JWKS_URI]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('skips discovery when a key resolver is injected', async () => {
+      const fetch = discoveryFetch();
+
+      const result = await new ExternalAccessTokenValidator({
+        fetch,
+        getKey: createLocalJWKSet(jwks),
+      }).validate(await signIdToken());
+
+      expect(result.isOk()).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('truncates a long discovery failure reason', async () => {
+      const message = `fetch failed: ${'x'.repeat(300)}`;
+      const fetch = discoveryFetch();
+      fetch.mockRejectedValueOnce(new TypeError(message));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual([`discovery failed: ${message.slice(0, 256)}... (truncated)`]);
+    });
+
+    it('never logs the document body', async () => {
+      const leakCheck = 'leak-check-body';
+      const fetch = discoveryFetch();
+      fetch.mockResolvedValueOnce(new Response(`${leakCheck} not json`));
+      const validator = new ExternalAccessTokenValidator({ fetch });
+
+      const reasons = await rejectionReasons(validator, await signIdToken());
+
+      expect(reasons).toEqual(['discovery failed: openid-configuration is not valid JSON']);
+      expect(reasons.join()).not.toContain(leakCheck.slice(0, 10));
     });
   });
 });
