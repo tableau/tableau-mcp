@@ -102,4 +102,7 @@ Example:
 }
 ```
 
+`{OAUTH_USERNAME}` must sit inside a quoted JSON string value, as in the example. The username is
+JSON-escaped before it is inserted.
+
 [uat]: https://help.tableau.com/current/api/cloud-manager/en-us/docs/unified_access_tokens.html
