@@ -26,6 +26,14 @@ async function* streamOf(...pieces: Array<string | Buffer>): AsyncGenerator<Uint
   }
 }
 
+async function collect(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  for await (const piece of fileStream) {
+    pieces.push(piece);
+  }
+  return Buffer.concat(pieces);
+}
+
 describe('requestStagedDatasourceUpload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -98,11 +106,10 @@ describe('resolveStagedDatasourceUpload', () => {
     };
   }
 
-  it('returns TDS bytes and applies the default download limit without looking up TDSX', async () => {
-    await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).resolves.toEqual({
-      fileName: `${uploadId}.tds`,
-      bytes: Buffer.from('<datasource />'),
-    });
+  it('returns the TDS stream and applies the default download limit without looking up TDSX', async () => {
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    expect(resolved.fileName).toBe(`${uploadId}.tds`);
+    expect(await collect(resolved.fileStream)).toEqual(Buffer.from('<datasource />'));
 
     expect(mocks.download).toHaveBeenCalledExactlyOnceWith(expectedDownload('tds'));
   });
@@ -113,9 +120,12 @@ describe('resolveStagedDatasourceUpload', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ data: streamOf(bytes) });
 
-    await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 4096 }),
-    ).resolves.toEqual({ fileName: `${uploadId}.tdsx`, bytes });
+    const resolved = await resolveStagedDatasourceUpload({
+      datasourceUploadId: uploadId,
+      maxBytes: 4096,
+    });
+    expect(resolved.fileName).toBe(`${uploadId}.tdsx`);
+    expect(await collect(resolved.fileStream)).toEqual(bytes);
 
     expect(mocks.download).toHaveBeenCalledTimes(2);
     expect(mocks.download).toHaveBeenNthCalledWith(1, expectedDownload('tds', 4096));
@@ -133,12 +143,16 @@ describe('resolveStagedDatasourceUpload', () => {
     );
   });
 
-  it('rejects a stream that exceeds maxBytes', async () => {
-    mocks.download.mockResolvedValue({ data: streamOf('1234', '5678') });
+  it('rejects a stream that yields a non-byte chunk when consumed', async () => {
+    async function* stringChunks(): AsyncGenerator<unknown> {
+      yield '1234';
+    }
+    mocks.download.mockResolvedValue({ data: stringChunks() });
 
-    await expect(
-      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 6 }),
-    ).rejects.toThrow('Data source upload exceeds the maximum allowed size of 6 bytes.');
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    await expect(collect(resolved.fileStream)).rejects.toThrow(
+      'Blob storage provider yielded a non-byte chunk.',
+    );
   });
 
   it('throws after both file types are absent', async () => {
@@ -160,21 +174,13 @@ describe('resolveStagedDatasourceUpload', () => {
     },
   );
 
-  it('rejects an empty TDS without falling back to another object', async () => {
+  it('returns an empty TDS stream without falling back; the consumer enforces emptiness', async () => {
     mocks.download.mockResolvedValue({ data: streamOf() });
 
-    await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toThrow(
-      'Data source upload bytes must not be empty.',
-    );
+    const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
+    expect(resolved.fileName).toBe(`${uploadId}.tds`);
+    expect(await collect(resolved.fileStream)).toEqual(Buffer.alloc(0));
     expect(mocks.download).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects empty TDSX bytes after fallback', async () => {
-    mocks.download.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ data: streamOf() });
-
-    await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toThrow(
-      'Data source upload bytes must not be empty.',
-    );
   });
 
   it('propagates provider errors without treating a failed download as a missing object', async () => {
