@@ -22,7 +22,7 @@ const workbookKind: StagedUploadKind<WorkbookFileType> = {
   xmlFileType: 'twb',
 };
 
-export type ResolvedWorkbook = ResolvedStagedFileStream;
+export type ResolvedWorkbook = ResolvedStagedFileStream<WorkbookFileType>;
 
 export type RequestWorkbookUploadResult = {
   workbookUploadId: string;
