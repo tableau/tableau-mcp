@@ -53,11 +53,11 @@ export async function initializeWebRuntime(
   RestApi.host = config.server;
 
   initializeFeatureGate();
+  initializeBlobStorageProvider();
   await initializeActivityLog();
   initializeSessionStore();
   await connectSessionStore();
   registerSessionStoreShutdown();
-  initializeBlobStorageProvider();
 
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({

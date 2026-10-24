@@ -135,6 +135,7 @@ describe('initializeWebRuntime', () => {
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
       'feature gate',
+      'blob storage',
       'activity log init',
       'session store init',
       'session store connect',
@@ -147,10 +148,10 @@ describe('initializeWebRuntime', () => {
 
     expect(runtimeState.events).toEqual([
       'feature gate',
+      'blob storage',
       'activity log init',
       'session store init',
       'session store connect',
-      'blob storage',
       'server info',
     ]);
     expect(processOnceSpy).toHaveBeenCalledTimes(2);
@@ -177,12 +178,13 @@ describe('initializeWebRuntime', () => {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
 
     expect(initializeSessionStore).not.toHaveBeenCalled();
-    expect(runtimeState.events).toEqual(['feature gate']);
+    expect(runtimeState.events).toEqual(['feature gate', 'blob storage']);
 
     activityLogInit.resolve();
     await runtimePromise;
-    expect(runtimeState.events.slice(0, 3)).toEqual([
+    expect(runtimeState.events.slice(0, 4)).toEqual([
       'feature gate',
+      'blob storage',
       'activity log init',
       'session store init',
     ]);
