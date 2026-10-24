@@ -101,6 +101,7 @@ describe('publishDatasourceTool', () => {
     mocks.mockCreateReadStream.mockImplementation(() => streamOf('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tds',
+      fileType: 'tds',
       fileStream: streamOf('<datasource source="new" />'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
@@ -249,6 +250,7 @@ describe('publishDatasourceTool', () => {
   it('uploads and publishes a staged TDSX file', async () => {
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tdsx',
+      fileType: 'tdsx',
       fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
 
@@ -264,6 +266,23 @@ describe('publishDatasourceTool', () => {
     expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
       Buffer.from('PK\x03\x04-fake-zip-bytes'),
     );
+    expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ datasourceType: 'tdsx' }),
+    );
+  });
+
+  it('takes the file type from the resolver, handing the open stream straight to the upload', async () => {
+    const fileStream = streamOf('PK\x03\x04');
+    mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
+      fileName: 'staged-upload',
+      fileType: 'tdsx',
+      fileStream,
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream).toBe(fileStream);
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );

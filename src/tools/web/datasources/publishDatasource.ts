@@ -105,13 +105,10 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              // The resolver supplies the file type, so nothing can throw between opening the
+              // stream and handing it to uploadFileInChunks, which closes it.
               const resolvedDatasourceFile = await loadDatasourceFile(input);
-              const fileType = getDatasourceFileType(resolvedDatasourceFile.fileName);
-              if (!fileType) {
-                throw new UnknownError(
-                  `Resolved data source file "${resolvedDatasourceFile.fileName}" is neither a .tds nor a .tdsx file.`,
-                );
-              }
+              const { fileType } = resolvedDatasourceFile;
 
               const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
                 siteId: restApi.siteId,
@@ -206,7 +203,8 @@ async function loadDatasourceFile(input: DatasourceInput): Promise<ResolvedDatas
 
 async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {
   const fileName = basename(datasourceFilePath);
-  if (!getDatasourceFileType(fileName)) {
+  const fileType = getDatasourceFileType(fileName);
+  if (!fileType) {
     throw new ArgsValidationError('datasourceFilePath must point to a .tds or .tdsx file.');
   }
 
@@ -222,5 +220,5 @@ async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<R
     );
   }
 
-  return { fileName, fileStream: createReadStream(datasourceFilePath) };
+  return { fileName, fileType, fileStream: createReadStream(datasourceFilePath) };
 }

@@ -123,6 +123,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
     const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
     expect(resolved.fileName).toBe(`${uploadId}.twb`);
+    expect(resolved.fileType).toBe('twb');
     expect(resolved.contentLength).toBe(12);
     expect(await collect(resolved.fileStream)).toBe('<workbook />');
     expect(mocks.download).toHaveBeenCalledWith({
@@ -138,6 +139,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
     const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
     expect(resolved.fileName).toBe(`${uploadId}.twbx`);
+    expect(resolved.fileType).toBe('twbx');
     expect(await collect(resolved.fileStream)).toBe('PK\x03\x04');
     expect(mocks.download).toHaveBeenNthCalledWith(1, {
       key: `workbook-uploads/${uploadId}/workbook.twb`,

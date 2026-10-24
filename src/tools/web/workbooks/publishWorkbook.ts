@@ -205,16 +205,13 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
+              // The resolver supplies the file type, so nothing can throw between opening the
+              // stream and handing it to a consumer that closes it.
               const resolvedWorkbookFile = await resolveWorkbookInput({
                 workbookUploadId,
                 workbookFilePath,
               });
-              const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
-              if (!fileType) {
-                throw new UnknownError(
-                  `Resolved workbook file "${resolvedWorkbookFile.fileName}" is neither a .twb nor a .twbx file.`,
-                );
-              }
+              const { fileType } = resolvedWorkbookFile;
 
               const outcome =
                 fileType === 'twb'
@@ -441,7 +438,8 @@ async function resolveWorkbookInput({
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
-  if (!getWorkbookFileType(fileName)) {
+  const fileType = getWorkbookFileType(fileName);
+  if (!fileType) {
     throw new ArgsValidationError('workbookFilePath must point to a .twb or .twbx file.');
   }
 
@@ -455,7 +453,7 @@ async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<Resol
     );
   }
 
-  return { fileName, fileStream: createReadStream(workbookFilePath) };
+  return { fileName, fileType, fileStream: createReadStream(workbookFilePath) };
 }
 
 function assertMinimumRestApiVersionSupported(): void {

@@ -111,6 +111,7 @@ describe('resolveStagedDatasourceUpload', () => {
   it('returns the TDS stream and applies the default download limit without looking up TDSX', async () => {
     const resolved = await resolveStagedDatasourceUpload({ datasourceUploadId: uploadId });
     expect(resolved.fileName).toBe(`${uploadId}.tds`);
+    expect(resolved.fileType).toBe('tds');
     expect(await collect(resolved.fileStream)).toEqual(Buffer.from('<datasource />'));
 
     expect(mocks.download).toHaveBeenCalledExactlyOnceWith(expectedDownload('tds'));
@@ -127,6 +128,7 @@ describe('resolveStagedDatasourceUpload', () => {
       maxBytes: 4096,
     });
     expect(resolved.fileName).toBe(`${uploadId}.tdsx`);
+    expect(resolved.fileType).toBe('tdsx');
     expect(resolved.contentLength).toBe(bytes.byteLength);
     expect(await collect(resolved.fileStream)).toEqual(bytes);
 

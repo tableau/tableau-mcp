@@ -22,7 +22,7 @@ const datasourceKind: StagedUploadKind<DatasourceFileType> = {
   xmlFileType: 'tds',
 };
 
-export type ResolvedDatasource = ResolvedStagedFileStream;
+export type ResolvedDatasource = ResolvedStagedFileStream<DatasourceFileType>;
 
 export type RequestDatasourceUploadResult = {
   datasourceUploadId: string;

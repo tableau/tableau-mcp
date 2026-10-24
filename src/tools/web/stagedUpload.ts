@@ -57,8 +57,9 @@ export async function requestStagedUpload<FileType extends string>({
   };
 }
 
-export type ResolvedStagedFileStream = {
+export type ResolvedStagedFileStream<FileType extends string> = {
   fileName: string;
+  fileType: FileType;
   fileStream: AsyncIterable<Uint8Array>;
   contentLength?: number;
 };
@@ -76,7 +77,7 @@ export async function resolveStagedUploadStream<FileType extends string>({
   kind: StagedUploadKind<FileType>;
   uploadId: string;
   maxBytes?: number;
-}): Promise<ResolvedStagedFileStream> {
+}): Promise<ResolvedStagedFileStream<FileType>> {
   assertStagedUploadId(kind, uploadId);
 
   for (const fileType of kind.fileTypes) {
@@ -99,6 +100,7 @@ export async function resolveStagedUploadStream<FileType extends string>({
 
     return {
       fileName: `${uploadId}.${fileType}`,
+      fileType,
       fileStream: requireByteChunks(download.data),
       contentLength: download.contentLength,
     };

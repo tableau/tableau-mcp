@@ -140,6 +140,7 @@ describe('publishWorkbookTool', () => {
     mocks.mockCreateReadStream.mockImplementation(() => streamOf('<workbook source="local" />'));
     mocks.mockResolveStagedWorkbookUpload.mockImplementation(async () => ({
       fileName: 'source-superstore.twb',
+      fileType: 'twb',
       fileStream: streamOf('<workbook source="new" />'),
     }));
     mocks.mockPublishWorkbook.mockResolvedValue({
@@ -385,6 +386,7 @@ describe('publishWorkbookTool', () => {
   it('uploads and publishes a TWBX file without a separate validation step', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',
+      fileType: 'twbx',
       fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
@@ -421,9 +423,28 @@ describe('publishWorkbookTool', () => {
     });
   });
 
+  it('takes the file type from the resolver, handing the open stream straight to the upload', async () => {
+    const fileStream = streamOf('PK\x03\x04');
+    mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
+      fileName: 'staged-upload',
+      fileType: 'twbx',
+      fileStream,
+    });
+    mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream).toBe(fileStream);
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookType: 'twbx' }),
+    );
+  });
+
   it('returns an error when Tableau rejects an invalid TWBX workbook during publish', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twbx',
+      fileType: 'twbx',
       fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
@@ -678,6 +699,7 @@ describe('publishWorkbookTool', () => {
     const megabyte = Buffer.alloc(1024 * 1024, 'a');
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
+      fileType: 'twb',
       fileStream: streamOf(...Array<Uint8Array>(65).fill(megabyte)),
     });
 
@@ -695,6 +717,7 @@ describe('publishWorkbookTool', () => {
   it('returns an args-validation error without validating when a staged TWB is empty', async () => {
     mocks.mockResolveStagedWorkbookUpload.mockResolvedValue({
       fileName: 'source-superstore.twb',
+      fileType: 'twb',
       fileStream: streamOf(),
     });
 
