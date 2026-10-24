@@ -589,7 +589,7 @@ describe('dashboard membership apply', () => {
     const { executor } = fixture(['A']);
     const result = await loadDashboardXml({
       dashboardName: 'D',
-      xml: fragment(['A']).replace('id="1"', 'id="7"'),
+      xml: fragment(['A']).replace('name="A"', 'name="A" x="5"'),
       requireExistingSheet: true,
       focus,
       executor,
