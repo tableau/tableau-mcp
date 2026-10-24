@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFile } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { basename } from 'path';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
@@ -10,6 +11,7 @@ import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.j
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { MAX_TWB_VALIDATE_BYTES } from '../../../sdks/tableau/methods/workbooksMethods.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { PersonalSpace } from '../../../sdks/tableau/types/personalSpace.js';
@@ -30,6 +32,7 @@ import {
 import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 import {
   getWorkbookFileType,
+  MAX_STAGED_WORKBOOK_BYTES,
   type ResolvedWorkbook,
   resolveStagedWorkbookUpload,
 } from './stagedWorkbookUpload.js';
@@ -202,16 +205,13 @@ export const getPublishWorkbookTool = (
                 personalSpaceTarget = resolvedPersonalSpace.value;
               }
 
+              // The resolver supplies the file type, so nothing can throw between opening the
+              // stream and handing it to a consumer that closes it.
               const resolvedWorkbookFile = await resolveWorkbookInput({
                 workbookUploadId,
                 workbookFilePath,
               });
-              const fileType = getWorkbookFileType(resolvedWorkbookFile.fileName);
-              if (!fileType) {
-                throw new UnknownError(
-                  `Resolved workbook file "${resolvedWorkbookFile.fileName}" is neither a .twb nor a .twbx file.`,
-                );
-              }
+              const { fileType } = resolvedWorkbookFile;
 
               const outcome =
                 fileType === 'twb'
@@ -343,7 +343,7 @@ async function validateAndUploadTwb({
   const validation = await restApi.workbooksMethods.validateWorkbookAndUpload({
     siteId: restApi.siteId,
     filename: resolvedWorkbookFile.fileName,
-    workbook: resolvedWorkbookFile.bytes,
+    workbook: await readTwbForValidation(resolvedWorkbookFile.fileStream),
   });
 
   const errors = (validation.errors ?? []).map(toValidationFinding);
@@ -362,6 +362,25 @@ async function validateAndUploadTwb({
   return { status: 'valid', warnings, uploadSessionId: validation.uploadId };
 }
 
+/** Collects a TWB stream for the single-request validate endpoint, capped at its size limit. */
+async function readTwbForValidation(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  let totalBytes = 0;
+  for await (const piece of fileStream) {
+    totalBytes += piece.byteLength;
+    if (totalBytes > MAX_TWB_VALIDATE_BYTES) {
+      throw new ArgsValidationError(
+        `TWB workbooks larger than ${MAX_TWB_VALIDATE_BYTES / (1024 * 1024)} MB cannot be validated and published. Save the workbook as a packaged .twbx and publish that instead.`,
+      );
+    }
+    pieces.push(piece);
+  }
+  if (totalBytes === 0) {
+    throw new ArgsValidationError('Workbook file must not be empty.');
+  }
+  return Buffer.concat(pieces, totalBytes);
+}
+
 /**
  * Tableau's TWB-only validate endpoint cannot resolve extracts embedded in a TWBX package -
  * it only sees the inner .twb XML, whose data source paths only exist inside the zip. TWBX
@@ -377,7 +396,8 @@ async function uploadTwbx({
   const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
     siteId: restApi.siteId,
     filename: resolvedWorkbookFile.fileName,
-    content: resolvedWorkbookFile.bytes,
+    fileStream: resolvedWorkbookFile.fileStream,
+    maxBytes: MAX_STAGED_WORKBOOK_BYTES,
   });
 
   return { status: 'valid', warnings: [], uploadSessionId };
@@ -418,16 +438,22 @@ async function resolveWorkbookInput({
 
 async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<ResolvedWorkbook> {
   const fileName = basename(workbookFilePath);
-  if (!getWorkbookFileType(fileName)) {
+  const fileType = getWorkbookFileType(fileName);
+  if (!fileType) {
     throw new ArgsValidationError('workbookFilePath must point to a .twb or .twbx file.');
   }
 
-  const bytes = await readFile(workbookFilePath);
-  if (bytes.byteLength === 0) {
+  const { size } = await stat(workbookFilePath);
+  if (size === 0) {
     throw new ArgsValidationError('workbookFilePath must not point to an empty workbook file.');
   }
+  if (size > MAX_STAGED_WORKBOOK_BYTES) {
+    throw new ArgsValidationError(
+      `workbookFilePath must not point to a workbook file larger than ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+    );
+  }
 
-  return { fileName, bytes };
+  return { fileName, fileType, fileStream: createReadStream(workbookFilePath) };
 }
 
 function assertMinimumRestApiVersionSupported(): void {

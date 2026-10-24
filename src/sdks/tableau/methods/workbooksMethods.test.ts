@@ -1,4 +1,5 @@
 import { AxiosError, AxiosInstance } from 'axios';
+import { Readable } from 'stream';
 import { describe, expect, it, vi } from 'vitest';
 
 import WorkbooksMethods from './workbooksMethods.js';
@@ -507,6 +508,103 @@ describe('WorkbooksMethods', () => {
         workbookType: 'twb',
         overwrite: true,
       });
+    });
+  });
+
+  describe('downloadWorkbook', () => {
+    const workbookId = '96a43833-27db-40b6-aa80-751efc776b9a';
+
+    function setup(headers: Record<string, string>): {
+      workbooksMethods: WorkbooksMethods;
+      mockGet: ReturnType<typeof vi.fn>;
+      stream: Readable;
+    } {
+      const stream = Readable.from([Buffer.from('<workbook />')]);
+      const mockGet = vi.fn().mockResolvedValue({ data: stream, headers });
+      const workbooksMethods = new WorkbooksMethods(
+        'http://test',
+        { type: 'Bearer', token: 'test' },
+        {},
+      );
+      // @ts-expect-error - Mocking private property
+      workbooksMethods._apiClient = {
+        axios: { get: mockGet } as unknown as AxiosInstance,
+      };
+      return { workbooksMethods, mockGet, stream };
+    }
+
+    it('returns the response body as a stream with Content-Length, type, and filename', async () => {
+      const { workbooksMethods, mockGet, stream } = setup({
+        'content-length': '12',
+        'content-type': 'application/xml',
+        'content-disposition': 'attachment; filename="Superstore.twb"',
+      });
+
+      const result = await workbooksMethods.downloadWorkbook({
+        siteId: 'site-1',
+        workbookId,
+        includeExtract: true,
+      });
+
+      expect(result).toEqual({
+        fileStream: stream,
+        contentLength: 12,
+        contentType: 'application/xml',
+        filename: 'Superstore.twb',
+      });
+      const [url, config] = mockGet.mock.calls[0];
+      expect(url).toBe(`/sites/site-1/workbooks/${workbookId}/content`);
+      expect(config).toEqual({
+        params: { includeExtract: true },
+        headers: { Authorization: 'Bearer test', 'Accept-Encoding': 'identity' },
+        responseType: 'stream',
+      });
+    });
+
+    it('leaves contentLength undefined when Content-Length is missing or malformed', async () => {
+      const cases: Array<Record<string, string>> = [
+        {},
+        ...['abc', '', '1e3', '0x10', '-5', '12.5', ' 12'].map((v) => ({ 'content-length': v })),
+      ];
+      for (const headers of cases) {
+        const { workbooksMethods } = setup(headers);
+        const result = await workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId });
+        expect(result.contentLength).toBeUndefined();
+      }
+    });
+
+    it.each([
+      ['RFC 5987 encoded', "attachment; filename*=UTF-8''Sales%20%E2%82%AC.twbx", 'Sales €.twbx'],
+      ['invalid percent-encoding', "attachment; filename*=UTF-8''Bad%E2.twbx", 'Bad%E2.twbx'],
+      ['unquoted', 'attachment; filename=Superstore.twbx', 'Superstore.twbx'],
+      ['missing filename', 'attachment', undefined],
+    ])('parses a %s Content-Disposition filename', async (_case, disposition, filename) => {
+      const { workbooksMethods } = setup({ 'content-disposition': disposition });
+      const result = await workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId });
+      expect(result.filename).toBe(filename);
+    });
+
+    it.each([
+      ['a stream body (destroyed)', Readable.from([Buffer.from('{}')])],
+      ['a non-stream body', { error: { code: '403000' } }],
+      ['no response (network error)', undefined],
+    ])('rethrows the same error for a failed request with %s', async (_case, data) => {
+      const { workbooksMethods, mockGet } = setup({});
+      const axiosError = new AxiosError('Request failed', 'ERR');
+      if (data !== undefined) {
+        // @ts-expect-error - Minimal response for the test
+        axiosError.response = { status: 403, data, headers: {} };
+      }
+      mockGet.mockRejectedValue(axiosError);
+
+      await expect(
+        workbooksMethods.downloadWorkbook({ siteId: 'site-1', workbookId }),
+      ).rejects.toBe(axiosError);
+      if (data instanceof Readable) {
+        expect(data.destroyed).toBe(true);
+      } else {
+        expect(axiosError.response?.data).toEqual(data);
+      }
     });
   });
 

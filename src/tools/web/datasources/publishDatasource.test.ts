@@ -1,30 +1,40 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Readable } from 'stream';
 
 import { useRestApi } from '../../../restApiInstance.js';
+import PublishingMethods from '../../../sdks/tableau/methods/publishingMethods.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
+import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
 
 const mocks = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
+  mockStat: vi.fn(),
+  mockCreateReadStream: vi.fn(),
   mockPublishDatasource: vi.fn(),
   mockUploadFileInChunks: vi.fn(),
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockIsBlobStorageEnabled: vi.fn(),
+  mockDownload: vi.fn(),
+}));
+
+vi.mock('fs', () => ({
+  createReadStream: mocks.mockCreateReadStream,
 }));
 
 vi.mock('fs/promises', () => ({
-  readFile: mocks.mockReadFile,
+  stat: mocks.mockStat,
 }));
 
 vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+  getBlobStorageProvider: vi.fn(() => ({ download: mocks.mockDownload })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -81,14 +91,18 @@ describe('publishDatasourceTool', () => {
     mocks.mockPublishDatasource.mockReset();
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedDatasourceUpload.mockReset();
-    mocks.mockReadFile.mockReset();
+    mocks.mockStat.mockReset();
+    mocks.mockCreateReadStream.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockDownload.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockReset();
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('<datasource source="local" />'));
+    mocks.mockStat.mockResolvedValue({ size: 1024 });
+    mocks.mockCreateReadStream.mockImplementation(() => streamOf('<datasource source="local" />'));
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tds',
-      bytes: Buffer.from('<datasource source="new" />'),
+      fileType: 'tds',
+      fileStream: streamOf('<datasource source="new" />'),
     });
     mocks.mockUploadFileInChunks.mockResolvedValue('chunked-upload-session-id');
     mocks.mockPublishDatasource.mockResolvedValue(mockPublishedDatasource);
@@ -147,7 +161,7 @@ describe('publishDatasourceTool', () => {
       expect(rejected.content[0].text).toContain('Input validation error');
       expect(rejected.content[0].text).toContain('must be a Tableau LUID (UUID format)');
       expect(rejected.content[0].text).not.toContain(badProjectId);
-      expect(mocks.mockReadFile).not.toHaveBeenCalled();
+      expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
       expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
       expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
       expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
@@ -217,8 +231,12 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tds',
-      content: Buffer.from('<datasource source="new" />'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('<datasource source="new" />'),
+    );
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       uploadSessionId: 'chunked-upload-session-id',
@@ -232,7 +250,8 @@ describe('publishDatasourceTool', () => {
   it('uploads and publishes a staged TDSX file', async () => {
     mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
       fileName: 'source-superstore.tdsx',
-      bytes: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileType: 'tdsx',
+      fileStream: streamOf('PK\x03\x04-fake-zip-bytes'),
     });
 
     const result = await getToolResult(validArgs);
@@ -241,15 +260,36 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tdsx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
+    expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ datasourceType: 'tdsx' }),
+    );
+  });
+
+  it('takes the file type from the resolver, handing the open stream straight to the upload', async () => {
+    const fileStream = streamOf('PK\x03\x04');
+    mocks.mockResolveStagedDatasourceUpload.mockResolvedValue({
+      fileName: 'staged-upload',
+      fileType: 'tdsx',
+      fileStream,
+    });
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream).toBe(fileStream);
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
   });
 
   it('uploads and publishes a local TDSX data source file path', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from('PK\x03\x04-fake-zip-bytes'));
+    mocks.mockCreateReadStream.mockImplementation(() => streamOf('PK\x03\x04-fake-zip-bytes'));
 
     const result = await getToolResult(
       { ...validLocalArgs, datasourceFilePath: '/tmp/source-superstore.tdsx' },
@@ -257,13 +297,18 @@ describe('publishDatasourceTool', () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.tdsx');
+    expect(mocks.mockStat).toHaveBeenCalledWith('/tmp/source-superstore.tdsx');
+    expect(mocks.mockCreateReadStream).toHaveBeenCalledWith('/tmp/source-superstore.tdsx');
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tdsx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
@@ -273,13 +318,18 @@ describe('publishDatasourceTool', () => {
     const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
 
     expect(result.isError).toBe(false);
-    expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.tds');
+    expect(mocks.mockStat).toHaveBeenCalledWith('/tmp/source-superstore.tds');
+    expect(mocks.mockCreateReadStream).toHaveBeenCalledWith('/tmp/source-superstore.tds');
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tds',
-      content: Buffer.from('<datasource source="local" />'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('<datasource source="local" />'),
+    );
   });
 
   it('defaults overwrite to false when publishing', async () => {
@@ -321,7 +371,7 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'datasourceFilePath is only supported when staged uploads are not configured',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -338,7 +388,7 @@ describe('publishDatasourceTool', () => {
       'datasourceFilePath is only supported when the MCP server runs over stdio. On an HTTP server, stage the file with request-datasource-upload and pass datasourceUploadId; that requires the server to configure a blob storage provider.',
     );
     expect(useRestApi).not.toHaveBeenCalled();
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
     expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
@@ -352,7 +402,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('only supported when the MCP server runs over stdio');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
@@ -377,19 +427,80 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'datasourceFilePath must point to a .tds or .tdsx file',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
 
-  it('returns an args-validation error when local data source file is empty', async () => {
-    mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
+  it.each([
+    {
+      datasourceFilePath: '/tmp/source-superstore.tds',
+      size: 0,
+      error: 'must not point to an empty',
+    },
+    {
+      datasourceFilePath: '/tmp/source-superstore.tdsx',
+      size: MAX_STAGED_DATASOURCE_BYTES + 1,
+      error: `must not point to a data source file larger than ${MAX_STAGED_DATASOURCE_BYTES} bytes`,
+    },
+  ])(
+    'returns an args-validation error before opening a $size-byte local data source file',
+    async ({ datasourceFilePath, size, error }) => {
+      mocks.mockStat.mockResolvedValue({ size });
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+      const result = await getToolResult(
+        { ...validLocalArgs, datasourceFilePath },
+        { blobStorageEnabled: false },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`datasourceFilePath ${error}`);
+      expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a staged TDSX whose reported length exceeds the limit before uploading', async () => {
+    const data = Readable.from([Buffer.from('PK\x03\x04')]);
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data, contentLength: MAX_STAGED_DATASOURCE_BYTES + 1 });
+    await useActualStagedResolver();
+
+    const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('datasourceFilePath must not point to an empty');
+    expect(result.content[0].text).toContain(
+      `Data source upload exceeds the maximum allowed size of ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
+    );
+    expect(data.destroyed).toBe(true);
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty staged TDSX without opening a Tableau upload session', async () => {
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data: streamOf(), contentLength: 0 });
+    await useActualStagedResolver();
+    const publishingMethods = new PublishingMethods(
+      'http://test',
+      { type: 'Bearer', token: 'test' },
+      {},
+    );
+    const initiateFileUpload = vi
+      .spyOn(publishingMethods, 'initiateFileUpload')
+      .mockRejectedValue(new Error('unexpected upload session'));
+    mocks.mockUploadFileInChunks.mockImplementation(publishingMethods.uploadFileInChunks);
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('File content must not be empty.');
+    expect(initiateFileUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
   it('returns an error when both local path and staged upload id are provided', async () => {
@@ -403,7 +514,7 @@ describe('publishDatasourceTool', () => {
     expect(result.content[0].text).toContain(
       'Provide either datasourceFilePath or datasourceUploadId, not both',
     );
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -414,7 +525,7 @@ describe('publishDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Either datasourceFilePath or datasourceUploadId');
-    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedDatasourceUpload).not.toHaveBeenCalled();
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
@@ -461,6 +572,13 @@ describe('publishDatasourceTool', () => {
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
 });
+
+async function useActualStagedResolver(): Promise<void> {
+  const { resolveStagedDatasourceUpload } = await vi.importActual<
+    typeof import('./stagedDatasourceUpload.js')
+  >('./stagedDatasourceUpload.js');
+  mocks.mockResolveStagedDatasourceUpload.mockImplementation(resolveStagedDatasourceUpload);
+}
 
 async function getToolResult(
   params: {
@@ -517,4 +635,18 @@ function getMockExtra({
       transport,
     },
   };
+}
+
+async function* streamOf(...pieces: Array<string | Uint8Array>): AsyncGenerator<Uint8Array> {
+  for (const piece of pieces) {
+    yield typeof piece === 'string' ? Buffer.from(piece) : piece;
+  }
+}
+
+async function collect(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  for await (const piece of fileStream) {
+    pieces.push(piece);
+  }
+  return Buffer.concat(pieces);
 }

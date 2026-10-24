@@ -25,10 +25,9 @@ export interface BlobStorageProvider {
    * client as-is, so it must be fetchable without credentials and should be short-lived (e.g. a
    * presigned GET).
    *
-   * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) can be streamed;
-   * the server currently buffers workbook bytes in memory before handing them over. It can only be
-   * assumed to be iterable once. Implementations must consume `data` to completion before
-   * resolving.
+   * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) are never held in
+   * memory whole; small payloads (e.g. images) arrive as a single piece. It can only be assumed to
+   * be iterable once. Implementations must consume `data` to completion before resolving.
    *
    * @param params.key - Storage key/path for the blob
    * @param params.data - The bytes to store, as an async iterable (e.g. a Node `Readable`)
@@ -65,14 +64,16 @@ export interface BlobStorageProvider {
 
   /**
    * Download a previously stored blob as a stream of byte pieces, so large blobs (e.g. multi-GB
-   * workbooks) can be streamed; the server currently buffers workbook bytes in memory.
+   * workbooks) are never held in memory whole. The exception is a staged `.twb`, which the server
+   * reads into memory (up to 64 MB) to validate it.
    *
    * Providers MUST throw if the object is known to exceed `maxBytes` (e.g. from its content
    * length), MUST NOT truncate, and should return the stream lazily (no bytes read until it is
    * iterated). Core also enforces `maxBytes` while consuming the stream.
    *
    * @param params.key - Storage key/path for the blob
-   * @param params.maxBytes - Size limit for the blob
+   * @param params.maxBytes - Size limit for the blob. The server enforces it while reading, so beyond
+   *   the MUST-throw rule above providers can treat it as a hint.
    * @returns `data`, the blob's bytes as an async iterable (e.g. a Node `Readable` or S3 GetObject
    *   `Body`), plus `contentLength` when the provider knows the exact byte count; or undefined
    *   only if the key was not found

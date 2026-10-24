@@ -156,7 +156,8 @@ proxy: it still counts as stdio, so remote callers could read files on the serve
 use `request-datasource-upload` and pass its staged upload ID, which requires a
 [blob storage provider](env-vars.md#blob_storage_provider). When a blob storage provider is
 configured, the publisher also rejects local paths. Staged datasource uploads retain the **5 GB
-(5000000000 bytes)** limit. Files are buffered in server memory before the chunked Tableau upload.
+(5000000000 bytes)** limit. Files are streamed to Tableau in chunks, never held in server memory
+whole.
 
 ## Data source permissions
 

@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFile } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -19,6 +20,7 @@ import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   getDatasourceFileType,
+  MAX_STAGED_DATASOURCE_BYTES,
   type ResolvedDatasource,
   resolveStagedDatasourceUpload,
 } from './stagedDatasourceUpload.js';
@@ -103,18 +105,16 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              // The resolver supplies the file type, so nothing can throw between opening the
+              // stream and handing it to uploadFileInChunks, which closes it.
               const resolvedDatasourceFile = await loadDatasourceFile(input);
-              const fileType = getDatasourceFileType(resolvedDatasourceFile.fileName);
-              if (!fileType) {
-                throw new UnknownError(
-                  `Resolved data source file "${resolvedDatasourceFile.fileName}" is neither a .tds nor a .tdsx file.`,
-                );
-              }
+              const { fileType } = resolvedDatasourceFile;
 
               const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
                 siteId: restApi.siteId,
                 filename: resolvedDatasourceFile.fileName,
-                content: resolvedDatasourceFile.bytes,
+                fileStream: resolvedDatasourceFile.fileStream,
+                maxBytes: MAX_STAGED_DATASOURCE_BYTES,
               });
 
               const publishedDatasource = await restApi.datasourcesMethods.publishDatasource({
@@ -203,16 +203,22 @@ async function loadDatasourceFile(input: DatasourceInput): Promise<ResolvedDatas
 
 async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<ResolvedDatasource> {
   const fileName = basename(datasourceFilePath);
-  if (!getDatasourceFileType(fileName)) {
+  const fileType = getDatasourceFileType(fileName);
+  if (!fileType) {
     throw new ArgsValidationError('datasourceFilePath must point to a .tds or .tdsx file.');
   }
 
-  const bytes = await readFile(datasourceFilePath);
-  if (bytes.byteLength === 0) {
+  const { size } = await stat(datasourceFilePath);
+  if (size === 0) {
     throw new ArgsValidationError(
       'datasourceFilePath must not point to an empty data source file.',
     );
   }
+  if (size > MAX_STAGED_DATASOURCE_BYTES) {
+    throw new ArgsValidationError(
+      `datasourceFilePath must not point to a data source file larger than ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
+    );
+  }
 
-  return { fileName, bytes };
+  return { fileName, fileType, fileStream: createReadStream(datasourceFilePath) };
 }
