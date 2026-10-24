@@ -6,8 +6,8 @@
  *
  * Schema-decay rule: the model fills NOTHING here. Every field derives from
  * validation issues and readback verification already computed on the apply
- * path. Dashboard/whole-workbook intent is honestly labeled unverified — only
- * worksheet readback proves structural survival.
+ * path. Dashboard/whole-workbook intent is honestly labeled unverified unless a readback ran
+ * and passed (dashboards read back only when they register new worksheet views).
  */
 import type { ExecuteCommandWarning } from '../externalApi/executorTypes.js';
 import {
@@ -133,11 +133,29 @@ export function formatWorkbookPromiseCheck(
   return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}${unverifiedGuard('sheet-level', desktopWarnings)}`;
 }
 
-/** Dashboard applies likewise have no structural readback — honest by construction. */
+/**
+ * Dashboards read back only on the registration path; a passed readback with Desktop warnings
+ * stays unverified.
+ */
 export function formatDashboardPromiseCheck(
   validationWarnings: ValidationIssue[],
   desktopWarnings: readonly ExecuteCommandWarning[],
+  readbackMatched?: { dashboardName: string },
 ): string {
+  const matched = readbackMatched
+    ? `Desktop's readback of "${readbackMatched.dashboardName}" passed the layout and worksheet view check`
+    : undefined;
+  if (matched !== undefined && desktopWarnings.length === 0) {
+    return `\n\nHOST VERIFICATION — verified: ${formatPreflight(validationWarnings)} · ${matched}. It checked the stored layout and views, not rendering; do not report problems without host evidence.`;
+  }
+  if (matched !== undefined) {
+    const parts = [
+      formatPreflight(validationWarnings),
+      matched,
+      ...desktopWarningPart(desktopWarnings),
+    ];
+    return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}; Desktop warnings still need checking. Desktop's warnings are host evidence, so report them to the user.`;
+  }
   const parts = [
     formatPreflight(validationWarnings),
     'apply completed',

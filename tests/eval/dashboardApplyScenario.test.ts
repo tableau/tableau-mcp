@@ -111,6 +111,7 @@ describe('dashboard apply eval fixture and grading (offline)', () => {
         kind: 'dashboard',
         loaded: { appliedName: dashboardName, validationWarnings: [], documentWarnings: [] },
         fallbackName: dashboardName,
+        readbackVerified: false,
       }),
     );
     expect(actual).toEqual(expected.content[0]);

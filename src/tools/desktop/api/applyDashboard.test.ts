@@ -4,7 +4,9 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as cachePathModule from '../../../desktop/cachePath.js';
+import * as episodeEvents from '../../../desktop/episode-events.js';
 import * as cacheFingerprintModule from '../../../desktop/wrappers/cacheFingerprint.js';
+import type { LoadDashboardXmlOk } from '../../../desktop/wrappers/loadDashboardXml.js';
 import * as loadDashboardXmlModule from '../../../desktop/wrappers/loadDashboardXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.desktop.js';
 import { FileReadError } from '../../../errors/mcpToolError.js';
@@ -88,7 +90,7 @@ describe('applyDashboardTool', () => {
       ],
       didNot: [],
       unverified: [
-        'whether the applied dashboard retained its intended layout — no structural readback ran (dashboard applies have none)',
+        'whether the applied dashboard retained its intended layout — no structural readback ran (dashboard applies read back only when they register new worksheet views)',
       ],
     });
   });
@@ -227,6 +229,116 @@ describe('applyDashboardTool', () => {
     expect(mockLoad).toHaveBeenCalledWith(
       expect.objectContaining({ xml: mockXml, signal: customSignal }),
     );
+  });
+
+  describe('readback verification', () => {
+    const xml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
+    const warnings = [{ code: 'dropped-node', message: 'Removed an unsupported zone.' }];
+    const readbackLine =
+      'Desktop\'s readback of "Applied Name" passed the layout and worksheet view check';
+    const residual =
+      'whether the dashboard renders as intended — the readback checked the stored layout and worksheet views, not the rendered sheets';
+
+    async function run(
+      loaded: Pick<LoadDashboardXmlOk, 'verifiedWorksheetNames' | 'documentWarnings'>,
+    ): Promise<{ message: string; outcome: unknown; structured: Record<string, any> }> {
+      const eventSpy = vi.spyOn(episodeEvents, 'emitEpisodeEvent');
+      vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+        Ok({ appliedName: 'Applied Name', validationWarnings: [], ...loaded }),
+      );
+      const result = await getToolResult({ dashboardXml: xml });
+      invariant(result.content[0].type === 'text');
+      const { message } = resultSchema.parse(JSON.parse(result.content[0].text));
+      const applied = eventSpy.mock.calls.find(([, e]) => e.type === 'apply_succeeded');
+      return {
+        message,
+        outcome: (applied?.[1] as { promise_outcome?: unknown } | undefined)?.promise_outcome,
+        structured: result.structuredContent as Record<string, any>,
+      };
+    }
+
+    it.each([[['A']], [[]]])(
+      'says verified with a receipt and promise_outcome verified when the readback ran (names %j)',
+      async (names) => {
+        const { message, outcome, structured } = await run({
+          verifiedWorksheetNames: names,
+          documentWarnings: [],
+        });
+        expect(message).toContain(
+          `HOST VERIFICATION — verified: preflight clean · ${readbackLine}. It checked the stored layout and views, not rendering; do not report problems without host evidence.`,
+        );
+        expect(message).not.toContain('NOT re-verified');
+        expect(message).not.toContain('unverified');
+        expect(message).not.toContain('pixel');
+        expect(outcome).toBe('verified');
+        const { receipt, kind, label } = structured.nextAction;
+        expect(kind).toBe('done');
+        expect(label).toContain('read back, check passed');
+        expect(receipt.did).toContain(
+          'read back the dashboard: layout and worksheet view check passed',
+        );
+        expect(receipt.unverified).toEqual([residual]);
+      },
+    );
+
+    it('keeps warnings and promise_outcome unverified when the readback ran but Desktop warned', async () => {
+      const { message, outcome, structured } = await run({
+        verifiedWorksheetNames: ['A'],
+        documentWarnings: warnings,
+      });
+      expect(message).toContain(
+        'Applied dashboard update for "Applied Name", but Desktop reported 1 warning(s)',
+      );
+      expect(message).toContain('dropped-node: Removed an unsupported zone.');
+      expect(message).toContain('HOST VERIFICATION — unverified');
+      expect(message).toContain(readbackLine);
+      expect(message).toContain('Desktop warnings still need checking');
+      expect(message).not.toContain('HOST VERIFICATION — verified');
+      expect(outcome).toBe('unverified');
+      expect(structured.nextAction.kind).toBe('prefill');
+    });
+
+    it('leaves the no-readback text, receipt and promise_outcome unchanged', async () => {
+      const { message, outcome, structured } = await run({ documentWarnings: [] });
+      expect(message).toContain(
+        'HOST VERIFICATION — unverified: preflight clean · apply completed',
+      );
+      expect(message).toContain('full dashboard intent NOT re-verified');
+      expect(outcome).toBe('unverified');
+      expect(structured.nextAction.label).toContain('layout not re-read');
+      expect(structured.nextAction.receipt).toEqual({
+        did: [
+          'Desktop accepted the dashboard XML apply for "Applied Name"',
+          'preflight validation returned 0 warning(s)',
+        ],
+        didNot: [],
+        unverified: [
+          'whether the applied dashboard retained its intended layout — no structural readback ran (dashboard applies read back only when they register new worksheet views)',
+        ],
+      });
+    });
+
+    it.each([
+      ['readback, clean', { verifiedWorksheetNames: ['A'], documentWarnings: [] }, true],
+      ['empty readback, clean', { verifiedWorksheetNames: [], documentWarnings: [] }, true],
+      ['readback, warned', { verifiedWorksheetNames: ['A'], documentWarnings: warnings }, false],
+      ['no readback, clean', { documentWarnings: [] }, false],
+      ['no readback, warned', { documentWarnings: warnings }, false],
+    ] satisfies [
+      string,
+      Partial<LoadDashboardXmlOk> & Pick<LoadDashboardXmlOk, 'documentWarnings'>,
+      boolean,
+    ][])('footer, receipt and promise_outcome agree: %s', async (_name, loaded, verified) => {
+      const { message, outcome, structured } = await run(loaded);
+      const { receipt, kind } = structured.nextAction;
+      expect(message.includes('HOST VERIFICATION — verified')).toBe(verified);
+      expect(outcome).toBe(verified ? 'verified' : 'unverified');
+      if (verified) {
+        expect(receipt.unverified).toEqual([residual]);
+      } else if (kind === 'done') {
+        expect(receipt.unverified.length).toBeGreaterThan(0);
+      }
+    });
   });
 });
 

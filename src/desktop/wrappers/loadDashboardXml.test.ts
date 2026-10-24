@@ -238,12 +238,14 @@ describe('loadDashboardXml (External Client API transport)', () => {
       vi.mocked(executor.listDashboards).mockResolvedValue(
         Ok({ dashboards: [{ id: 'dash-1', name: dashboardName, hidden: false }] }),
       );
-      vi.mocked(executor.getDashboardDocument).mockResolvedValue(
-        Ok({ xml: validXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      let liveDocument = validXml;
+      vi.mocked(executor.getDashboardDocument).mockImplementation(async () =>
+        Ok({ xml: liveDocument, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       );
-      vi.mocked(executor.applyDashboardDocument).mockResolvedValue(
-        Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' }),
-      );
+      vi.mocked(executor.applyDashboardDocument).mockImplementation(async (_id, xml) => {
+        liveDocument = xml;
+        return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
+      });
 
       const result = await loadDashboardXml({
         dashboardName,

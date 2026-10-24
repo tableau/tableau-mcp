@@ -130,7 +130,8 @@ export function runApplyPreamble({
 type NoReadbackApplyKind = 'dashboard' | 'storyboard' | 'workbook' | 'datasource';
 
 // Per-kind wording for the shared receipt below: what the unverified structure is
-// called, and how the class of applies with no structural readback is named.
+// called, and how the class of applies with no structural readback is named. Dashboards read
+// back only on the registration path, so `readbackVerified` there flips the receipt.
 const NO_READBACK_WORDING: Record<NoReadbackApplyKind, { noun: string; scope: string }> = {
   dashboard: { noun: 'layout', scope: 'dashboard' },
   storyboard: { noun: 'structure', scope: 'storyboard' },
@@ -138,8 +139,18 @@ const NO_READBACK_WORDING: Record<NoReadbackApplyKind, { noun: string; scope: st
   datasource: { noun: 'structure', scope: 'datasource' },
 };
 
+// Only dashboards can read back (loadDashboardXml); the type keeps other kinds from claiming it.
+type ReadbackVariant =
+  | {
+      kind: 'dashboard';
+      /** The structural readback ran and passed; swaps the no-readback unverified entry. */
+      readbackVerified?: boolean;
+    }
+  | { kind: Exclude<NoReadbackApplyKind, 'dashboard'>; readbackVerified?: false };
+
 /**
- * Shared success result for the apply-* tools that have NO structural readback:
+ * Shared success result for the apply-* tools that have NO structural readback (a dashboard
+ * apply may pass `readbackVerified` when loadDashboardXml ran and passed its readback):
  * dispatch, preflight warnings and Desktop's own document warnings were observed; the applied
  * structure was not, so it is listed as unverified rather than claimed. Desktop warnings are a
  * required argument: a clean apply passes `[]`, and any warning keeps the result from being done.
@@ -153,8 +164,8 @@ export function acceptedNoReadbackApplyResult({
   messageSuffix = '',
   additionalUnverified = [],
   verification,
-}: {
-  kind: NoReadbackApplyKind;
+  readbackVerified = false,
+}: ReadbackVariant & {
   /** Sheet name for the per-sheet applies; a whole-workbook apply names none. */
   appliedName?: string;
   /** Preflight validation warnings observed on the load result; omit when no preflight ran. */
@@ -185,7 +196,15 @@ export function acceptedNoReadbackApplyResult({
     ...(verification === undefined ? {} : { verification }),
   };
   const unverified = [
-    `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (${scope} applies have none)`,
+    ...(readbackVerified
+      ? [
+          'whether the dashboard renders as intended — the readback checked the stored layout and worksheet views, not the rendered sheets',
+        ]
+      : [
+          kind === 'dashboard'
+            ? `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (dashboard applies read back only when they register new worksheet views)`
+            : `whether the applied ${kind} retained its intended ${noun} — no structural readback ran (${scope} applies have none)`,
+        ]),
     ...(verification?.status === 'warning'
       ? [`whether the requested member colors took — ${verification.message}`]
       : []),
@@ -209,13 +228,18 @@ export function acceptedNoReadbackApplyResult({
           ...(preflightWarnings === undefined
             ? []
             : [`preflight validation returned ${preflightWarnings.length} warning(s)`]),
+          ...(readbackVerified
+            ? [`read back the ${kind}: ${noun} and worksheet view check passed`]
+            : []),
           ...(colorsMatched
             ? ['read back the datasource document: every requested member color matched']
             : []),
         ],
         unverified,
       }),
-      `${capitalized} apply accepted — ${noun} not re-read`,
+      readbackVerified
+        ? `${capitalized} apply accepted — ${noun} read back, check passed`
+        : `${capitalized} apply accepted — ${noun} not re-read`,
     ),
   );
 }
@@ -252,22 +276,26 @@ export function withDesktopWarnings<T extends { message: string }>(
 
 /** The apply-dashboard / apply-storyboard result for a successful load; eval fixtures compose it too. */
 export function acceptedDashboardLoadResult({
-  kind,
   loaded,
   fallbackName,
-}: {
-  kind: 'dashboard' | 'storyboard';
+  ...variant
+}: (
+  | { kind: 'dashboard'; readbackVerified: boolean }
+  | { kind: 'storyboard'; readbackVerified: false }
+) & {
   loaded: LoadDashboardXmlOk;
   fallbackName: string;
 }): StructuredResult<{ message: string }> {
+  const appliedName = loaded.appliedName ?? fallbackName;
   return acceptedNoReadbackApplyResult({
-    kind,
-    appliedName: loaded.appliedName ?? fallbackName,
+    ...variant,
+    appliedName,
     preflightWarnings: loaded.validationWarnings,
     resultWarnings: loaded.documentWarnings,
     hostVerification: formatDashboardPromiseCheck(
       loaded.validationWarnings,
       loaded.documentWarnings,
+      variant.readbackVerified ? { dashboardName: appliedName } : undefined,
     ),
   });
 }
