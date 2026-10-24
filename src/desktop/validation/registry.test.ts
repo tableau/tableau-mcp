@@ -1,4 +1,9 @@
-import { introducedBlockingValidationIssues, runValidation } from './registry.js';
+import {
+  alwaysBlockingValidationIssues,
+  introducedBlockingValidationIssues,
+  runAlwaysBlockingValidation,
+  runValidation,
+} from './registry.js';
 import type { ValidationIssue, ValidationRule } from './types.js';
 
 describe('validation framework', () => {
@@ -12,47 +17,104 @@ describe('validation framework', () => {
     });
 
     it('ignores an unchanged blocking issue from the baseline workbook', () => {
-      expect(introducedBlockingValidationIssues([issue()], [issue()])).toEqual([]);
+      expect(introducedBlockingValidationIssues([issue()], [issue()], 'workbook')).toEqual([]);
     });
 
-    it('never grandfathers the worksheet-zone crash hazard, including a reduced occurrence count', () => {
-      const crash = issue({ ruleId: 'dashboard-worksheet-zone-type' });
-      expect(introducedBlockingValidationIssues([crash], [crash])).toEqual([crash]);
-      expect(introducedBlockingValidationIssues([crash, crash], [crash])).toEqual([crash]);
-    });
+    it.each(['dashboard', 'workbook'] as const)(
+      'never grandfathers the worksheet-zone crash hazard in %s context, including a reduced occurrence count',
+      (context) => {
+        const crash = issue({ ruleId: 'dashboard-worksheet-zone-type' });
+        expect(introducedBlockingValidationIssues([crash], [crash], context)).toEqual([crash]);
+        expect(introducedBlockingValidationIssues([crash, crash], [crash], context)).toEqual([
+          crash,
+        ]);
+      },
+    );
 
     it('permits a repair that removes the worksheet-zone crash hazard', () => {
       const crash = issue({ ruleId: 'dashboard-worksheet-zone-type' });
-      expect(introducedBlockingValidationIssues([crash, issue()], [issue()])).toEqual([]);
+      expect(introducedBlockingValidationIssues([crash, issue()], [issue()], 'workbook')).toEqual(
+        [],
+      );
+    });
+
+    it('never grandfathers a nameless card zone in dashboard context, including a reduced count', () => {
+      const card = issue({ ruleId: 'dashboard-card-zone-name' });
+      expect(introducedBlockingValidationIssues([card], [card], 'dashboard')).toEqual([card]);
+      expect(introducedBlockingValidationIssues([card, card], [card], 'dashboard')).toEqual([card]);
+      expect(
+        introducedBlockingValidationIssues(
+          [issue({ ruleId: 'dashboard-card-zone-name', occurrenceCount: 3 })],
+          [issue({ ruleId: 'dashboard-card-zone-name', occurrenceCount: 1 })],
+          'dashboard',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('waives an unchanged nameless card zone in workbook context but returns an introduced one', () => {
+      const card = issue({ ruleId: 'dashboard-card-zone-name' });
+      expect(introducedBlockingValidationIssues([card], [card], 'workbook')).toEqual([]);
+      expect(introducedBlockingValidationIssues([card], [card, card], 'workbook')).toEqual([card]);
+      expect(introducedBlockingValidationIssues([], [card], 'workbook')).toEqual([card]);
     });
 
     it('returns a newly introduced blocking issue', () => {
       const introduced = issue({ xpath: '//worksheet[@name="New"]' });
 
-      expect(introducedBlockingValidationIssues([issue()], [issue(), introduced])).toEqual([
-        introduced,
-      ]);
+      expect(
+        introducedBlockingValidationIssues([issue()], [issue(), introduced], 'workbook'),
+      ).toEqual([introduced]);
     });
 
     it('returns an extra duplicate of a baseline blocking issue', () => {
       const duplicate = issue();
 
-      expect(introducedBlockingValidationIssues([issue()], [issue(), duplicate])).toEqual([
-        duplicate,
-      ]);
+      expect(
+        introducedBlockingValidationIssues([issue()], [issue(), duplicate], 'workbook'),
+      ).toEqual([duplicate]);
     });
 
     it('returns an aggregated issue whose occurrence count increased', () => {
       const baseline = issue({ occurrenceCount: 1 });
       const candidate = issue({ occurrenceCount: 2 });
 
-      expect(introducedBlockingValidationIssues([baseline], [candidate])).toEqual([candidate]);
+      expect(introducedBlockingValidationIssues([baseline], [candidate], 'workbook')).toEqual([
+        candidate,
+      ]);
     });
 
     it('ignores warning-only differences', () => {
       const warning = issue({ severity: 'warning', message: 'new warning' });
 
-      expect(introducedBlockingValidationIssues([], [warning])).toEqual([]);
+      expect(introducedBlockingValidationIssues([], [warning], 'workbook')).toEqual([]);
+    });
+  });
+
+  describe('always-blocking contexts', () => {
+    const cardXml =
+      '<dashboard name="D"><zones><zone id="8" type-v2="filter" param="[ds].[none:p:nk]"/></zones></dashboard>';
+    const zoneXml =
+      '<dashboard name="D"><zones><zone id="1" name="A" type-v2="worksheet"/></zones></dashboard>';
+
+    it('runs the card rule for dashboard context only', () => {
+      expect(runAlwaysBlockingValidation(cardXml, 'dashboard').issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-card-zone-name' }),
+      ]);
+      expect(runAlwaysBlockingValidation(cardXml, 'workbook').issues).toEqual([]);
+    });
+
+    it('runs the worksheet-zone rule in dashboard and workbook contexts', () => {
+      for (const context of ['dashboard', 'workbook'] as const) {
+        expect(runAlwaysBlockingValidation(zoneXml, context).issues).toEqual([
+          expect.objectContaining({ ruleId: 'dashboard-worksheet-zone-type' }),
+        ]);
+      }
+    });
+
+    it('filters always-blocking issues by context', () => {
+      const card = { ruleId: 'dashboard-card-zone-name', severity: 'error' as const, message: 'm' };
+      expect(alwaysBlockingValidationIssues([card], 'dashboard')).toEqual([card]);
+      expect(alwaysBlockingValidationIssues([card], 'workbook')).toEqual([]);
     });
   });
 
