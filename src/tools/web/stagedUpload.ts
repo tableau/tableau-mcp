@@ -102,6 +102,11 @@ async function collectBytes(
   const pieces: Uint8Array[] = [];
   let totalBytes = 0;
   for await (const piece of stream) {
+    // A string- or object-mode stream would make byteLength undefined and the total NaN, which
+    // never exceeds maxBytes.
+    if (!(piece instanceof Uint8Array)) {
+      throw new Error('Blob storage provider yielded a non-byte chunk.');
+    }
     totalBytes += piece.byteLength;
     if (totalBytes > maxBytes) {
       throw new Error(

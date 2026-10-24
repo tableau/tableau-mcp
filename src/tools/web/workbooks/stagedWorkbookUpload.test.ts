@@ -171,6 +171,17 @@ describe('resolveStagedWorkbookUpload limits', () => {
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, maxBytes: 6 }),
     ).rejects.toThrow('exceeds the maximum allowed size of 6 bytes');
   });
+
+  it('rejects a stream that yields a non-byte chunk', async () => {
+    async function* stringChunks(): AsyncGenerator<unknown> {
+      yield '1234';
+    }
+    mocks.download.mockResolvedValue(stringChunks());
+
+    await expect(
+      resolveStagedWorkbookUpload({ workbookUploadId: uploadId, maxBytes: 2 }),
+    ).rejects.toThrow('Blob storage provider yielded a non-byte chunk.');
+  });
 });
 
 describe('buildWorkbookUploadKey', () => {
