@@ -110,11 +110,11 @@ In a `layout-flow` container (`param="horz"` or `param="vert"`), Desktop sizes w
 their content and ignores `w` and `h`. To split the container, pin every child with
 `is-fixed="true"` and a `fixed-size` in pixels. A child's outer width (or height) is its
 `fixed-size` plus its margins, and these must add up to the container. Pinning one child is not
-enough. Desktop rewrites each pinned child's `w` (or `h`) to its outer size in dashboard units,
-`round((fixed-size + margins) × 100000 / dashboard width (or height) in px)`, and apply-dashboard's
-check compares the `w` you sent. Send that value, with `x` (or `y`) as the running total. On a
-1366px wide dashboard, a 410px child gets `w="30015"`. Children of a `layout-basic` container keep
-their `x`, `y`, `w` and `h`. Desktop writes `layout-cache`, so don't author it.
+enough. Desktop then rewrites each pinned child's `w` (or `h`) to its outer size in dashboard units,
+`round((fixed-size + margins) × 100000 / dashboard width (or height) in px)`, so on a 1366px wide
+dashboard a 410px child reads back as `w="30015"`. On a fixed-size dashboard, apply-dashboard's
+check judges the pins, not the `w` you sent. Children of a `layout-basic` container keep their `x`,
+`y`, `w` and `h`. Desktop writes `layout-cache`, so don't author it.
 
 Example: a 30/70 split on a 1000px wide dashboard, with no margins:
 
