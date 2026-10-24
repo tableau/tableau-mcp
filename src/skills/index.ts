@@ -23,8 +23,8 @@ function isTextMimeType(mimeType: string): boolean {
 }
 
 /**
- * When skills-over-mcp is enabled, this is called once on startup. Registers the `skills/list`
- * handler and serves every skill file as an individual `resources/read` resource so clients can
+ * When skills-over-mcp is enabled, this is called once on startup. Registers the `skills/list` and `skills/get`
+ * handlers and serves every skill file as an individual `resources/read` resource so clients can
  * fetch `SKILL.md` and its referenced files on demand. If called multiple times, skills are still only registered once.
  */
 export async function registerSkills(server: Server): Promise<void> {
