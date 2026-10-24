@@ -188,7 +188,9 @@ describe('DesktopMcpServer', () => {
         surface: 'desktop',
         profile: 'dynamic-authoring',
         tool_count: listedTools.length,
-        schemas_json_chars: JSON.stringify(listedTools.map(getModelFacingToolEntry)).length,
+        schemas_json_chars: JSON.stringify(
+          listedTools.map(({ _meta, ...modelFacing }) => modelFacing),
+        ).length,
         instructions_chars: instructions.length,
       });
       const event = emitSpy.mock.calls.at(-1)?.[1];
