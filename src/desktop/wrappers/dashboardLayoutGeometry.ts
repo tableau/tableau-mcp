@@ -565,6 +565,77 @@ function singleHorizontalHeight(
   return Math.min(height, client[3] - client[1]);
 }
 
+/** The flow's span in px: Desktop's units are out of 100000 unless the zones are is-pixels. */
+function containerPixels(flow: Element, span: number, axis: number): number | undefined {
+  const owner = owningLayout(flow);
+  if (!owner) return;
+  if (owner.zones.getAttribute('is-pixels') === 'true') return span;
+  const size = layoutSize(owner.layout);
+  if (size?.getAttribute('sizing-mode') === 'automatic') return;
+  const dimension = axis === 0 ? 'width' : 'height';
+  const min = size && integer(size.getAttribute(`min${dimension}`));
+  if (!min || min <= 0 || min !== integer(size.getAttribute(`max${dimension}`))) return;
+  return Math.round((span * min) / 100000);
+}
+
+function spanText(flow: Element, span: number, axis: number): string {
+  if (owningLayout(flow)?.zones.getAttribute('is-pixels') === 'true') return `${span}px`;
+  const px = containerPixels(flow, span, axis);
+  return px === undefined ? `${span} units` : `${span} units (${px}px)`;
+}
+
+/** The pins that make the submitted split stick, or '' unless every value in them is known. */
+function pinFix(
+  flow: Element,
+  before: Element[],
+  after: Element[],
+  submitted: number[],
+  span: number,
+  axis: number,
+): string {
+  const suffix = axis === 0 ? 'w' : 'h';
+  const pinned = before.map((zone) => zone.getAttribute('is-fixed') === 'true');
+  const sizedByContent = before.some(
+    (_, index) =>
+      !pinned[index] &&
+      elements(after[index])
+        .find((child) => child.tagName === 'layout-cache')
+        ?.getAttribute(`type-${suffix}`) === 'fixed',
+  );
+  const px = containerPixels(flow, span, axis);
+  if (!sizedByContent || px === undefined || !flow.getAttribute('id')) return '';
+  const ids = before.map((zone) => zone.getAttribute('id'));
+  if (ids.some((id) => !id)) return '';
+  const margins: number[] = [];
+  for (const zone of before) {
+    const group = spacing(zone)?.[0];
+    if (!group) return '';
+    margins.push(group[axis] + group[axis + 2]);
+  }
+  const requested = before.map((zone) => integer(zone.getAttribute('fixed-size')));
+  const open = before.flatMap((_, index) => (pinned[index] ? [] : [index]));
+  const weight = open.reduce((sum, index) => sum + submitted[index], 0);
+  // A pinned child's footprint is its fixed-size plus its margins; the rest split what remains.
+  let remaining = px;
+  for (const [index, isPinned] of pinned.entries()) {
+    if (!isPinned) continue;
+    if (requested[index] === undefined) return '';
+    remaining -= requested[index] + margins[index];
+  }
+  if (!(weight > 0) || !(remaining > 0)) return '';
+  const pool = remaining;
+  const sizes = before.map((_, index) => {
+    if (pinned[index]) return requested[index]!;
+    const footprint =
+      index === open[open.length - 1] ? remaining : Math.round((submitted[index] / weight) * pool);
+    remaining -= footprint;
+    return footprint - margins[index];
+  });
+  if (sizes.some((size) => !(size >= 1))) return '';
+  const list = ids.map((id, index) => `zone ${id} is-fixed='true' fixed-size='${sizes[index]}'`);
+  return `Desktop sized unpinned zones to their content. FIX: pin every child of zone ${flow.getAttribute('id')}: ${list.join(', ')} (px; each child's margins add to its fixed-size, and the total fills the ${px}px container)`;
+}
+
 export function zoneLabel(zone: Element): string {
   const id = zone.getAttribute('id');
   const name = zone.getAttribute('name') || zone.getAttribute('param');
@@ -572,7 +643,8 @@ export function zoneLabel(zone: Element): string {
 }
 
 const REASON_VALUE_MAX = 80;
-const REASON_MAX = 300;
+// Room for a FIX sentence that lists every child of a flow.
+const REASON_MAX = 1000;
 
 function clipText(value: string, max = REASON_VALUE_MAX): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
@@ -696,12 +768,29 @@ export function layoutGeometryDifference(expected: Element, actual: Element): st
   const axisName = axis === 0 ? 'width' : 'height';
   const sizes = (rects: Array<Bounds | undefined>): string =>
     indices.map((index) => rects[index]![axis + 2] - rects[index]![axis]).join(', ');
+  const span = client[axis + 2] - client[axis];
+  const withFix = (reason: string): string => {
+    const text = pinFix(
+      expected,
+      indices.map((index) => before[index]),
+      indices.map((index) => after[index]),
+      indices.map((index) => oldBounds[index]![axis + 2] - oldBounds[index]![axis]),
+      span,
+      axis,
+    );
+    // capReason would cut a FIX in the middle, so a FIX that does not fit is left out.
+    return text && `${reason}. ${text}`.length <= REASON_MAX ? `${reason}. ${text}` : reason;
+  };
   if (primaryAllocation === false)
-    return `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop, which does not match the allocation of the submitted [${sizes(oldBounds)}] in ${client[axis + 2] - client[axis]}px`;
+    return withFix(
+      `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop, which does not match the allocation of the submitted [${sizes(oldBounds)}] in ${spanText(expected, span, axis)}`,
+    );
   // With incomplete metrics, changed allocations must fill the client except for
   // integer remainders. Unchanged fixed-only flows may retain trailing space.
   if (visible.length > 0 && !primaryUnchanged && primaryAllocation !== true && !fillsClient)
-    return `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop and do not fill the ${client[axis + 2] - client[axis]}px available`;
+    return withFix(
+      `${label}: child ${axisName}s are [${sizes(newBounds)}] in Desktop and do not fill the ${spanText(expected, span, axis)} available`,
+    );
   const off = visible.findIndex(
     (rect, index) =>
       !(

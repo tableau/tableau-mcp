@@ -87,7 +87,9 @@ const desktopWith = (dependencyBlocks: string): string =>
     dependencyBlocks,
   );
 const geometryReason =
-  'zone 3 ("horz"): child widths are [13000, 26200, 16000] in Desktop and do not fill the 100000px available';
+  'zone 3 ("horz"): child widths are [13000, 26200, 16000] in Desktop and do not fill the 100000 units (1000px) available. ' +
+  "Desktop sized unpinned zones to their content. FIX: pin every child of zone 3: zone 5 is-fixed='true' fixed-size='300', zone 6 is-fixed='true' fixed-size='500', zone 7 is-fixed='true' fixed-size='200' " +
+  "(px; each child's margins add to its fixed-size, and the total fills the 1000px container)";
 
 describe('dashboard readback ignores section order that Desktop owns', () => {
   it('reports the real geometry reason for the probe fragment, not section order', () => {
