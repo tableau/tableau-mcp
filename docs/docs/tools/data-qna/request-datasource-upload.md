@@ -36,6 +36,6 @@ via Passthrough auth.
 The content type is `application/xml` for TDS and `application/octet-stream` for TDSX. Staged
 publishing retains the advertised **5 GB (5000000000 bytes)** limit. The signed URL may not
 constrain the PUT size; oversized staged objects are rejected before uploading to Tableau. Configure
-staged-file expiry in your blob storage (e.g. S3 lifecycle rules). Publishing buffers the file in
-server memory; see
+staged-file expiry in your blob storage (e.g. S3 lifecycle rules). Publishing streams the file to
+Tableau; see
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing).
