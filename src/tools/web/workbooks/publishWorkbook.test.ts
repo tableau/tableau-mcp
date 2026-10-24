@@ -2,8 +2,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { AxiosError } from 'axios';
+import { Readable } from 'stream';
 
 import * as loggerModule from '../../../logging/logger.js';
+import PublishingMethods from '../../../sdks/tableau/methods/publishingMethods.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { GranteeCapability } from '../../../sdks/tableau/types/permissions.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -29,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
   mockIsBlobStorageEnabled: vi.fn(),
+  mockDownload: vi.fn(),
 }));
 
 vi.mock('fs', () => ({
@@ -79,6 +82,7 @@ vi.mock('../../../features/init.js', () => ({
 
 vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+  getBlobStorageProvider: vi.fn(() => ({ download: mocks.mockDownload })),
 }));
 
 const validArgs = {
@@ -130,6 +134,7 @@ describe('publishWorkbookTool', () => {
     mocks.useRestApiCalls.length = 0;
     mocks.sessionEvents.length = 0;
     mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockDownload.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockStat.mockResolvedValue({ size: 1024 });
     mocks.mockCreateReadStream.mockImplementation(() => streamOf('<workbook source="local" />'));
@@ -595,16 +600,77 @@ describe('publishWorkbookTool', () => {
     expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
   });
 
-  it('returns an args-validation error when local workbook file is empty', async () => {
-    mocks.mockStat.mockResolvedValue({ size: 0 });
+  it.each([
+    {
+      workbookFilePath: '/tmp/source-superstore.twb',
+      size: 0,
+      error: 'must not point to an empty',
+    },
+    {
+      workbookFilePath: '/tmp/source-superstore.twbx',
+      size: MAX_STAGED_WORKBOOK_BYTES + 1,
+      error: `must not point to a workbook file larger than ${MAX_STAGED_WORKBOOK_BYTES} bytes`,
+    },
+  ])(
+    'returns an args-validation error before opening a $size-byte local workbook file',
+    async ({ workbookFilePath, size, error }) => {
+      mocks.mockStat.mockResolvedValue({ size });
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+      const result = await getToolResult(
+        { ...validLocalArgs, workbookFilePath },
+        { blobStorageEnabled: false },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`workbookFilePath ${error}`);
+      expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
+      expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a staged TWBX whose reported length exceeds the limit before uploading', async () => {
+    const data = Readable.from([Buffer.from('PK\x03\x04')]);
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data, contentLength: MAX_STAGED_WORKBOOK_BYTES + 1 });
+    await useActualStagedResolver();
+
+    const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('workbookFilePath must not point to an empty');
-    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
-    expect(mocks.mockValidateWorkbookAndUpload).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain(
+      `Workbook upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+    );
+    expect(data.destroyed).toBe(true);
+    expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty staged TWBX without opening a Tableau upload session', async () => {
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data: streamOf(), contentLength: 0 });
+    await useActualStagedResolver();
+    const publishingMethods = new PublishingMethods(
+      'http://test',
+      { type: 'Bearer', token: 'test' },
+      {},
+    );
+    const initiateFileUpload = vi
+      .spyOn(publishingMethods, 'initiateFileUpload')
+      .mockRejectedValue(new Error('unexpected upload session'));
+    mocks.mockUploadFileInChunks.mockImplementation(publishingMethods.uploadFileInChunks);
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('File content must not be empty.');
+    expect(initiateFileUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
   });
 
   it('returns an args-validation error without validating when a TWB exceeds the 64 MB validate limit', async () => {
@@ -1334,6 +1400,13 @@ describe('publishWorkbookTool', () => {
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
 });
+
+async function useActualStagedResolver(): Promise<void> {
+  const { resolveStagedWorkbookUpload } = await vi.importActual<
+    typeof import('./stagedWorkbookUpload.js')
+  >('./stagedWorkbookUpload.js');
+  mocks.mockResolveStagedWorkbookUpload.mockImplementation(resolveStagedWorkbookUpload);
+}
 
 async function getToolResult(
   params: {
