@@ -9,6 +9,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getPublishDatasourceTool } from './publishDatasource.js';
+import { MAX_STAGED_DATASOURCE_BYTES } from './stagedDatasourceUpload.js';
 
 const mocks = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
@@ -217,8 +218,12 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tds',
-      content: Buffer.from('<datasource source="new" />'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('<datasource source="new" />'),
+    );
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       uploadSessionId: 'chunked-upload-session-id',
@@ -241,8 +246,12 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tdsx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
@@ -262,8 +271,12 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tdsx',
-      content: Buffer.from('PK\x03\x04-fake-zip-bytes'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('PK\x03\x04-fake-zip-bytes'),
+    );
     expect(mocks.mockPublishDatasource).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceType: 'tdsx' }),
     );
@@ -278,8 +291,12 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filename: 'source-superstore.tds',
-      content: Buffer.from('<datasource source="local" />'),
+      fileStream: expect.anything(),
+      maxBytes: MAX_STAGED_DATASOURCE_BYTES,
     });
+    expect(await collect(mocks.mockUploadFileInChunks.mock.calls[0][0].fileStream)).toEqual(
+      Buffer.from('<datasource source="local" />'),
+    );
   });
 
   it('defaults overwrite to false when publishing', async () => {
@@ -517,4 +534,12 @@ function getMockExtra({
       transport,
     },
   };
+}
+
+async function collect(fileStream: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const pieces: Uint8Array[] = [];
+  for await (const piece of fileStream) {
+    pieces.push(piece);
+  }
+  return Buffer.concat(pieces);
 }

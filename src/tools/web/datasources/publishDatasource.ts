@@ -5,6 +5,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { yieldOnce } from '../../../blobStorage/uploadData.js';
 import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -19,6 +20,7 @@ import { WebTool } from '../tool.js';
 import { assertProjectAllowedByBoundedContext } from '../utils/boundedContextUtils.js';
 import {
   getDatasourceFileType,
+  MAX_STAGED_DATASOURCE_BYTES,
   type ResolvedDatasource,
   resolveStagedDatasourceUpload,
 } from './stagedDatasourceUpload.js';
@@ -114,7 +116,8 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
               const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
                 siteId: restApi.siteId,
                 filename: resolvedDatasourceFile.fileName,
-                content: resolvedDatasourceFile.bytes,
+                fileStream: yieldOnce(resolvedDatasourceFile.bytes),
+                maxBytes: MAX_STAGED_DATASOURCE_BYTES,
               });
 
               const publishedDatasource = await restApi.datasourcesMethods.publishDatasource({
