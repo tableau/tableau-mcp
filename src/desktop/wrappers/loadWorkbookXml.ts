@@ -93,6 +93,7 @@ export async function loadWorkbookXml({
         : introducedBlockingValidationIssues(
             runValidation(baselineXml, 'workbook').issues,
             validation.issues,
+            'workbook',
           );
     const validationError = rejectBlockingValidationIssues(blockingIssues);
     if (validationError !== undefined) return validationError;
@@ -138,6 +139,7 @@ export async function loadWorkbookXml({
         const blockingIssues = introducedBlockingValidationIssues(
           runValidation(currentWorkbook.value.xml, 'workbook').issues,
           validation.issues,
+          'workbook',
         );
         const validationError = rejectBlockingValidationIssues(blockingIssues);
         if (validationError !== undefined) return validationError;

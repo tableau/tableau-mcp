@@ -95,6 +95,94 @@ describe('loadWorkbookXml validation preflight', () => {
     },
   );
 
+  describe('zone id spelling in workbook context', () => {
+    const workbook = (zones: string, tail = ''): string =>
+      `<workbook><worksheets><worksheet name="A"><table><rows>[ds].[none:Region:nk]</rows></table></worksheet></worksheets><dashboards><dashboard name="Old"><zones><zone id="05" name="A"/></zones></dashboard><dashboard name="New"><zones>${zones}</zones></dashboard></dashboards>${tail}</workbook>`;
+
+    it.each([false, true])(
+      'does not block a live workbook whose other dashboard already has id "05" (skipValidation=%s)',
+      async (skipValidation) => {
+        const baselineXml = workbook('<zone id="1" name="A"/>');
+        const executor = makeExecutorMock({
+          applyWorkbookDocument: vi
+            .fn()
+            .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+        });
+        const result = await loadWorkbookXml({
+          xml: workbook('<zone id="1" name="A"/>', '<windows />'),
+          baselineXml,
+          skipValidation,
+          executor,
+          signal: new AbortController().signal,
+          focus: NO_FOCUS,
+        });
+        expect(result.isErr() ? result.error : undefined).toBeUndefined();
+        expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('blocks a candidate that adds a zone with id "06"', async () => {
+      const baselineXml = workbook('<zone id="1" name="A"/>');
+      const executor = makeExecutorMock();
+      const result = await loadWorkbookXml({
+        xml: workbook('<zone id="1" name="A"/><zone id="06" name="A"/>'),
+        baselineXml,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-zone-id-number', severity: 'error' }),
+      ]);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('duplicate zone ids in workbook context', () => {
+    const workbook = (zones: string): string =>
+      `<workbook><worksheets><worksheet name="A"><table><rows>[ds].[none:Region:nk]</rows></table></worksheet></worksheets><dashboards><dashboard name="Old"><zones><zone id="7" name="A"/><zone id="7" name="B"/></zones></dashboard><dashboard name="New"><zones>${zones}</zones></dashboard></dashboards><windows /></workbook>`;
+
+    it('does not block a live workbook whose other dashboard already repeats an id', async () => {
+      const baselineXml = workbook('<zone id="1" name="A"/>');
+      const executor = makeExecutorMock({
+        applyWorkbookDocument: vi
+          .fn()
+          .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+      });
+      const result = await loadWorkbookXml({
+        xml: workbook('<zone id="1" name="A"/><zone id="2" name="A"/>'),
+        baselineXml,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+      expect(result.isErr() ? result.error : undefined).toBeUndefined();
+      expect(executor.applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
+    it('blocks a candidate that adds a repeated id', async () => {
+      const baselineXml = workbook('<zone id="1" name="A"/>');
+      const executor = makeExecutorMock();
+      const result = await loadWorkbookXml({
+        xml: workbook('<zone id="1" name="A"/><zone id="1" name="A"/>'),
+        baselineXml,
+        executor,
+        signal: new AbortController().signal,
+        focus: NO_FOCUS,
+      });
+      invariant(result.isErr());
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({ ruleId: 'dashboard-zone-id-unique', severity: 'error' }),
+      ]);
+      expect(executor.applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+  });
+
   it('World Cup workbook repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
 <workbook>

@@ -118,6 +118,7 @@ export async function preparePerSheetApply({
       const introduced = introducedBlockingValidationIssues(
         runValidation(liveDocumentXml, validationContext).issues,
         runValidation(fragmentXml, validationContext).issues,
+        validationContext,
       );
       if (introduced.length > 0) return Ok({ type: 'validation-failed', issues: introduced });
     }

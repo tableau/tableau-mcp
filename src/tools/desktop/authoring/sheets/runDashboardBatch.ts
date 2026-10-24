@@ -588,6 +588,7 @@ export const getRunDashboardBatchTool = (
               const blockingIssues = introducedBlockingValidationIssues(
                 runValidation(baseXml, 'workbook').issues,
                 runValidation(candidate, 'workbook').issues,
+                'workbook',
               );
               const dashboardIssues = targetDashboardInvariantIssues(
                 candidate,

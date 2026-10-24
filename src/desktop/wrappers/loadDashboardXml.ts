@@ -148,7 +148,7 @@ type SnapshotOrApplyError =
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError };
 
-type ZoneContent = { id: string; zoneType?: string; worksheet?: string };
+type ZoneContent = { id?: string; zoneType?: string; worksheet?: string };
 
 // Device layouts arrange the same worksheets in their own zones; only the main layout's ids matter.
 function dashboardZoneContents(fragmentXml: string): ZoneContent[] | undefined {
@@ -163,10 +163,8 @@ function dashboardZoneContents(fragmentXml: string): ZoneContent[] | undefined {
     for (const child of Array.from(root.childNodes)) {
       if (child.nodeType !== 1 || child.nodeName !== 'zones') continue;
       for (const zone of Array.from((child as Element).getElementsByTagName('zone'))) {
-        const id = zone.getAttribute('id');
-        if (!id) continue;
         contents.push({
-          id,
+          id: zone.getAttribute('id') || undefined,
           zoneType: zone.getAttribute('type-v2') || undefined,
           worksheet: worksheetZoneName(zone),
         });
@@ -176,7 +174,7 @@ function dashboardZoneContents(fragmentXml: string): ZoneContent[] | undefined {
   } catch (error) {
     log({
       level: 'debug',
-      message: 'Zone worksheet swap check skipped: dashboard fragment not parseable',
+      message: 'Zone id checks skipped: dashboard fragment not parseable',
       logger: 'dashboardCommands',
       data: { error: String(error) },
     });
@@ -184,22 +182,21 @@ function dashboardZoneContents(fragmentXml: string): ZoneContent[] | undefined {
   }
 }
 
+const zoneRearrangeFix =
+  'To rearrange worksheets, move their whole <zone> elements into the new order. In a layout-flow container ' +
+  'Desktop places zones in element order, so changing only x, y, w and h does not move them. If ' +
+  'that cannot express the change, ask the user before rebuilding the dashboard with ' +
+  'run-dashboard-batch replaceExisting. No changes were sent to Tableau.';
+
 // W-24619603: Desktop crashes when an existing zone id changes worksheet.
 function findZoneWorksheetSwap(
-  liveXml: string | undefined,
-  submittedXml: string,
+  allLive: ZoneContent[],
+  allSubmitted: ZoneContent[],
 ): string | undefined {
-  if (liveXml === undefined) return undefined;
-  const live = dashboardZoneContents(liveXml);
-  const submitted = dashboardZoneContents(submittedXml);
-  if (!live || !submitted) return undefined;
+  const live = allLive.filter((zone) => zone.id);
+  const submitted = allSubmitted.filter((zone) => zone.id);
+  const fix = `FIX: keep each zone's id and name together, and give any new zone a new id. ${zoneRearrangeFix}`;
   const crash = 'Desktop crashes when worksheets on an existing dashboard trade zone ids.';
-  const fix =
-    "FIX: keep each zone's id and name together, and give any new zone a new id. To rearrange " +
-    'worksheets, move their whole <zone> elements into the new order. In a layout-flow container ' +
-    'Desktop places zones in element order, so changing only x, y, w and h does not move them. If ' +
-    'that cannot express the change, ask the user before rebuilding the dashboard with ' +
-    'run-dashboard-batch replaceExisting. No changes were sent to Tableau.';
   for (const before of live) {
     if (before.worksheet === undefined) continue;
     const shown = JSON.stringify(before.worksheet);
@@ -230,6 +227,28 @@ function findZoneWorksheetSwap(
         return `Zone ${before.id} shows ${shown} in Desktop, but the submitted XML moves ${JSON.stringify(after.worksheet)} into it from zone ${movedIn.id}. ${crash} ${fix}`;
       }
     }
+  }
+  return undefined;
+}
+
+// Live testing: renumbering or dropping a worksheet zone's id in a layout-flow container failed in Desktop.
+function findZoneIdChange(live: ZoneContent[], submitted: ZoneContent[]): string | undefined {
+  for (const before of live) {
+    if (before.id === undefined || before.worksheet === undefined) continue;
+    if (live.filter((zone) => zone.id === before.id).length > 1) continue;
+    const shown = JSON.stringify(before.worksheet);
+    const showing = submitted.filter(
+      (zone) =>
+        zone.worksheet !== undefined && parsedXmlNamesEqual(before.worksheet!, zone.worksheet),
+    );
+    if (showing.length === 0 || showing.some((zone) => zone.id === before.id)) continue;
+    const gives = showing[0].id === undefined ? 'no id' : `id ${showing[0].id}`;
+    return (
+      `Zone ${before.id} shows ${shown} in Desktop, but the submitted XML gives ${shown} ${gives}. ` +
+      "In testing, changing a worksheet's zone id in a layout-flow container made Desktop fail with an internal error and leave the dashboard blank. " +
+      `FIX: keep id="${before.id}" on the ${shown} zone; give only new zones new ids. ` +
+      zoneRearrangeFix
+    );
   }
   return undefined;
 }
@@ -268,7 +287,7 @@ export async function loadDashboardXml({
   const validation = runValidation(xml, 'dashboard');
   const cachedApply = requireExistingSheet;
   const blockingIssues = cachedApply
-    ? alwaysBlockingValidationIssues(validation.issues)
+    ? alwaysBlockingValidationIssues(validation.issues, 'dashboard')
     : blockingValidationIssues(validation.issues);
   if (blockingIssues.length > 0) {
     log({
@@ -355,18 +374,31 @@ export async function loadDashboardXml({
       }
       const checked = prepared.value;
       if (kind === 'dashboard') {
-        const swap = findZoneWorksheetSwap(checked.liveDocumentXml, checked.fragmentXml);
+        const live =
+          checked.liveDocumentXml === undefined
+            ? undefined
+            : dashboardZoneContents(checked.liveDocumentXml);
+        const submitted = live && dashboardZoneContents(checked.fragmentXml);
+        const swap = live && submitted && findZoneWorksheetSwap(live, submitted);
         if (swap) {
           return Err({
             type: 'load-dashboard-xml-error',
             error: {
               type: 'validation-failed',
               issues: [
-                {
-                  ruleId: 'dashboard-zone-worksheet-swap',
-                  severity: 'error',
-                  message: swap,
-                },
+                { ruleId: 'dashboard-zone-worksheet-swap', severity: 'error', message: swap },
+              ],
+            },
+          });
+        }
+        const idChange = live && submitted && findZoneIdChange(live, submitted);
+        if (idChange) {
+          return Err({
+            type: 'load-dashboard-xml-error',
+            error: {
+              type: 'validation-failed',
+              issues: [
+                { ruleId: 'dashboard-zone-id-change', severity: 'error', message: idChange },
               ],
             },
           });
