@@ -13,6 +13,7 @@ import {
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
 import { log } from './logging/logger.js';
+import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -86,6 +87,10 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    external: {
+      discovery: boolean;
+      usernameClaimName: string;
+    } | null;
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
@@ -160,6 +165,8 @@ export class Config extends BaseConfig {
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
+      OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
+      OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
@@ -293,6 +300,12 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
+        ? {
+            discovery: oauthExternalDiscovery === 'true',
+            usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
+          }
+        : null,
     };
 
     if (
@@ -424,6 +437,15 @@ export class Config extends BaseConfig {
 
     this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
+
+    if (this.oauth.external) {
+      validateOAuthExternal({
+        auth: this.auth,
+        oauth: this.oauth,
+        external: this.oauth.external,
+        usernameTemplate: jwtSubClaim,
+      });
+    }
 
     if (
       this.transport === 'http' &&
@@ -583,6 +605,62 @@ function validateServer(server: string): void {
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
     );
   }
+}
+
+function validateOAuthExternal({
+  auth,
+  oauth: { enabled, embeddedAuthzServer, issuer },
+  external: { discovery },
+  usernameTemplate,
+}: {
+  auth: AuthType;
+  oauth: Config['oauth'];
+  external: NonNullable<Config['oauth']['external']>;
+  usernameTemplate: string | undefined;
+}): void {
+  if (!enabled || embeddedAuthzServer) {
+    throw new Error(
+      'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"',
+    );
+  }
+
+  if (!discovery) {
+    throw new Error('OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"');
+  }
+
+  // The issuer becomes the discovery document's fetch target.
+  const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
+  // undici repeats the full URL, password included, in its errors.
+  if (issuerUrl.username || issuerUrl.password) {
+    throw new Error(
+      'The environment variable OAUTH_ISSUER must not contain a username or password',
+    );
+  }
+
+  if (auth !== 'direct-trust') {
+    throw new Error('When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"');
+  }
+
+  if (!usernameTemplate?.includes('{OAUTH_USERNAME}')) {
+    throw new Error(
+      'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
+    );
+  }
+}
+
+function validateHttpsOrLoopbackUri(name: string, uri: string): URL {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    throw new Error(`The environment variable ${name} is not a valid URL`);
+  }
+
+  if (!isHttpsOrLoopbackUrl(url)) {
+    throw new Error(`The environment variable ${name} must use https unless its host is loopback`);
+  }
+
+  return url;
 }
 
 function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {

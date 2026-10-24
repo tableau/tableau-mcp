@@ -20,7 +20,7 @@ import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
+import { createOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { getSessionBinding } from './oauth/siteBinding.js';
 import { AuthenticatedRequest } from './oauth/types.js';
@@ -70,9 +70,7 @@ export async function startExpressServer({
   }
 
   if (config.oauth.enabled) {
-    const oauthProvider = config.oauth.embeddedAuthzServer
-      ? new EmbeddedOAuthProvider()
-      : new TableauOAuthProvider();
+    const oauthProvider = createOAuthProvider(config);
 
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);

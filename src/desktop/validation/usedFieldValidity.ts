@@ -1,3 +1,4 @@
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import {
   apiVersionAtLeast,
   WORKBOOK_DIAGNOSTICS_MIN_API_VERSION,
@@ -78,6 +79,7 @@ export async function checkUsedFieldValidity({
   try {
     result = await executor.getWorksheetDiagnostics(worksheetId, signal, expectedInstanceId);
   } catch (error) {
+    throwIfSessionFatalError(error);
     return {
       status: 'unknown',
       worksheetId,
@@ -86,6 +88,7 @@ export async function checkUsedFieldValidity({
     };
   }
   if (result.isErr()) {
+    throwIfSessionFatalError(result.error);
     return {
       status: 'unknown',
       worksheetId,

@@ -7,7 +7,10 @@ import { resolveSession } from '../../../../desktop/session/sessionResolution.js
 import { withApplyLock } from '../../../../desktop/wrappers/applyMutex.js';
 import { getWorkbookXml } from '../../../../desktop/wrappers/getWorkbookXml.js';
 import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
-import { IncompleteOperationError } from '../../../../errors/mcpToolError.desktop.js';
+import {
+  getSessionFatalError,
+  IncompleteOperationError,
+} from '../../../../errors/mcpToolError.desktop.js';
 import { DesktopMcpServer } from '../../../../server.desktop.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { workbookTargetFingerprint } from '../../api/workbookTargetFingerprint.js';
@@ -96,6 +99,8 @@ export const getApplyWorkbookStyleTool = (
           try {
             executor = await extra.getExecutor(resolvedSession);
           } catch (error) {
+            const fatal = getSessionFatalError(error);
+            if (fatal) return fatal.toErr();
             return preInvocationFailure(themeName, themeSha256, getExceptionMessage(error));
           }
           const expectedInstanceId = executor.desktopInstanceId;
@@ -111,7 +116,9 @@ export const getApplyWorkbookStyleTool = (
             let inventoryResult;
             try {
               inventoryResult = await executor.getWorkbook(extra.signal);
-            } catch {
+            } catch (error) {
+              const fatal = getSessionFatalError(error);
+              if (fatal) return fatal.toErr();
               return preInvocationFailure(
                 themeName,
                 themeSha256,
@@ -120,6 +127,8 @@ export const getApplyWorkbookStyleTool = (
               );
             }
             if (inventoryResult.isErr()) {
+              const fatal = getSessionFatalError(inventoryResult.error);
+              if (fatal) return fatal.toErr();
               return preInvocationFailure(
                 themeName,
                 themeSha256,
@@ -149,6 +158,8 @@ export const getApplyWorkbookStyleTool = (
                 signal: extra.signal,
               });
               if (commandResult.isErr()) {
+                const fatal = getSessionFatalError(commandResult.error);
+                if (fatal) return fatal.toErr();
                 return unknownOutcome(
                   parsedTheme.commandFileName,
                   parsedTheme.sha256,
@@ -162,6 +173,8 @@ export const getApplyWorkbookStyleTool = (
                 signal: extra.signal,
               });
               if (!readback.ok) {
+                const fatal = getSessionFatalError(readback.error);
+                if (fatal) return fatal.toErr();
                 return unknownOutcome(
                   parsedTheme.commandFileName,
                   parsedTheme.sha256,
@@ -220,7 +233,9 @@ export const getApplyWorkbookStyleTool = (
                   ),
                 ),
               );
-            } catch {
+            } catch (error) {
+              const fatal = getSessionFatalError(error);
+              if (fatal) return fatal.toErr();
               return unknownOutcome(
                 parsedTheme.commandFileName,
                 parsedTheme.sha256,

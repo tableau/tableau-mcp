@@ -55,6 +55,7 @@ import {
 } from '../../../../desktop/wrappers/pollReadback.js';
 import {
   DesktopCommandExecutionError,
+  getSessionFatalError,
   GetWorksheetXmlFailedError,
   IncompleteOperationError,
   WorksheetXmlLoadFailedError,
@@ -322,7 +323,9 @@ export const getRefineWorksheetTool = (
                 executor,
                 signal: extra.signal,
               });
-            } catch {
+            } catch (error) {
+              const fatal = getSessionFatalError(error);
+              if (fatal) return fatal.toErr();
               return new IncompleteOperationError({
                 refined: 'unknown' as const,
                 operation,
@@ -334,6 +337,10 @@ export const getRefineWorksheetTool = (
                   'The rounded bar apply path stopped unexpectedly and cannot prove whether Desktop received a write.',
                 guidance: `Inspect the live worksheet and workbook state; do not retry ${operation}.`,
               }).toErr();
+            }
+            if (outcome.state !== 'applied') {
+              const fatal = getSessionFatalError(outcome.error);
+              if (fatal) return fatal.toErr();
             }
             if (outcome.state === 'failed') {
               return refusal(
@@ -522,6 +529,8 @@ export const getRefineWorksheetTool = (
             signal: extra.signal,
           });
           if (!readback.ok) {
+            const fatal = getSessionFatalError(readback.error);
+            if (fatal) return fatal.toErr();
             const { type, error } = readback.error;
             switch (type) {
               case 'get-worksheet-xml-error':

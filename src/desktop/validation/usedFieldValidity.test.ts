@@ -1,6 +1,6 @@
-import { Ok } from 'ts-results-es';
-import { describe, expect, it, vi } from 'vitest';
+import { Err, Ok } from 'ts-results-es';
 
+import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import type { ExternalApiToolExecutor } from '../externalApi/externalApiToolExecutor.js';
 import { classifyWorksheetPromiseOutcome } from './promise-check.js';
 import type { ReadbackVerificationResult } from './readback-verify.js';
@@ -11,6 +11,27 @@ import {
 } from './usedFieldValidity.js';
 
 describe('used-field validity verification', () => {
+  it('propagates a session-fatal diagnostics read rather than reporting validation unknown', async () => {
+    const executor = makeExecutorMock({
+      desktopInstanceId: 'instance',
+      desktopApiVersion: '0.2.16',
+      getWorksheetDiagnostics: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+        }),
+      ),
+    });
+    await expect(
+      checkUsedFieldValidity({
+        executor,
+        worksheetId: 'sheet',
+        expectedInstanceId: 'instance',
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    expect(executor.getWorksheetDiagnostics).toHaveBeenCalledOnce();
+  });
   const scopeNote =
     'Static validation checks fields used by the worksheet; it does not verify query execution or rendering.';
   const structuralWarning: ReadbackVerificationResult = {

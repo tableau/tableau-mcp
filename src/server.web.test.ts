@@ -916,6 +916,39 @@ describe('server', () => {
     },
   );
 
+  describe('mcp-apps flag read', () => {
+    const mcpAppsReads = (): number =>
+      mocks.mockFeatureGate.isFeatureEnabled.mock.calls.filter(
+        ([featureName]) => featureName === 'mcp-apps',
+      ).length;
+
+    it('happens once per eager registration pass regardless of tool count', async () => {
+      const server = getServer();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'get-view-data' }),
+        createMockAppTool({ name: 'query-datasource' }),
+      ]);
+      await server.registerTools();
+      expect(mcpAppsReads()).toBe(1);
+    });
+
+    it('happens once per lazy load pass regardless of tool count', async () => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'confirm-delete-content' }),
+      ]);
+      const result = await server.loadWebTools('content');
+      expect(result.toolNames).toEqual(['delete-content', 'confirm-delete-content']);
+      expect(mcpAppsReads()).toBe(1);
+    });
+  });
+
   it('registers admin instructions, prompts and skills on the combined-lean shared stateful path', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');
     vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');

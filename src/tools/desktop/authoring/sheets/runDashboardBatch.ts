@@ -60,6 +60,7 @@ import { pollReadback } from '../../../../desktop/wrappers/pollReadback.js';
 import { decodeXmlEntities, xmlNamesEqual } from '../../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
+  getSessionFatalError,
   IncompleteOperationError,
 } from '../../../../errors/mcpToolError.desktop.js';
 import { type McpToolError } from '../../../../errors/mcpToolError.js';
@@ -355,6 +356,8 @@ export const getRunDashboardBatchTool = (
 
             const workbookResult = await executor.getWorkbookDocument(extra.signal);
             if (workbookResult.isErr()) {
+              const fatal = getSessionFatalError(workbookResult.error);
+              if (fatal) return fatal.toErr();
               return preflightInputFailure(
                 steps,
                 orderedArtifactIds,
@@ -692,6 +695,8 @@ export const getRunDashboardBatchTool = (
                 );
               }
               if (removed.kind === 'failed') {
+                const fatal = getSessionFatalError(removed.error);
+                if (fatal) return fatal.toErr();
                 // The real applyDocument dispatches before the HTTP call, so a 404 arrives dispatched.
                 const routeMissing = isRouteMissing(removed.error);
                 if (removed.dispatched && !routeMissing) {
@@ -708,6 +713,12 @@ export const getRunDashboardBatchTool = (
                     : describeDesktopError(removed.error),
                   routeMissing ? 'deleteRouteMissing' : 'preDispatchRemoval',
                 );
+              }
+              if (removed.kind === 'unconfirmed') {
+                const fatal = getSessionFatalError(
+                  'readError' in removed ? removed.readError : removed.thrown,
+                );
+                if (fatal) return fatal.toErr();
               }
               const warnings = removalWarningLines(removed.warnings);
               if (removed.kind === 'unconfirmed') {
@@ -783,6 +794,8 @@ export const getRunDashboardBatchTool = (
               },
             });
             if (applyResult.isErr()) {
+              const fatal = getSessionFatalError(applyResult.error);
+              if (fatal) return fatal.toErr();
               const error = describeLoadError(applyResult.error);
               if (dispatchAttempted) return failBatch('apply', error);
               if (replaced) {
@@ -816,6 +829,8 @@ export const getRunDashboardBatchTool = (
               signal: extra.signal,
             });
             if (!polled.ok) {
+              const fatal = getSessionFatalError(polled.error);
+              if (fatal) return fatal.toErr();
               return failBatch(
                 'postApplyRead',
                 new DesktopCommandExecutionError(polled.error).getErrorText(),
@@ -866,11 +881,15 @@ export const getRunDashboardBatchTool = (
             ];
 
             await hideStartPage({ executor, signal: extra.signal });
-            await activateSheetWithValidatedGoto({
+            const activation = await activateSheetWithValidatedGoto({
               sheetName: dashboardName,
               executor,
               signal: extra.signal,
             });
+            if ('error' in activation) {
+              const fatal = getSessionFatalError(activation.error);
+              if (fatal) return fatal.toErr();
+            }
             const successSteps: StepReceipt[] = verification.worksheets.map(
               (
                 { artifactId, title: worksheetTitle, verification: worksheetVerification },
@@ -898,6 +917,8 @@ export const getRunDashboardBatchTool = (
             });
             return Ok({ applied: true, retrySafe: false, steps: successSteps });
           } catch (error) {
+            const fatal = getSessionFatalError(error);
+            if (fatal) return fatal.toErr();
             if (executionStarted) {
               return failBatch('unexpected-error', boundedUnexpectedError(error));
             }
