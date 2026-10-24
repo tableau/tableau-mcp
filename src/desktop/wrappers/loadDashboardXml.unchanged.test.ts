@@ -130,7 +130,10 @@ describe('apply Desktop accepted but did not change', () => {
     expect(message.message).toContain('Desktop may have dropped or recomputed the change');
     expect(message.message).toContain('get-dashboard-xml');
     expect(message.message).toContain('If you changed only x, y, w or h');
-    expect(message.message).toContain('layout-flow and layout-basic containers');
+    expect(message.message).toContain(
+      'most zones in layout-flow containers, so changing them does not move or resize the zones',
+    );
+    expect(message.message).not.toContain('layout-basic');
     expect(message.message).toContain('To reorder zones, move the whole <zone> elements.');
     expect(message.message).toContain(`after ${READBACK_POLL_MAX_ATTEMPTS} reads`);
     expect(postApplyReads()).toBe(READBACK_POLL_MAX_ATTEMPTS);

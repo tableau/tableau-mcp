@@ -537,7 +537,7 @@ export async function loadDashboardXml({
         } else if (!changed.settled) {
           const flowHint =
             kind === 'dashboard'
-              ? ' If you changed only x, y, w or h: Desktop sets those itself for most zones in layout-flow and layout-basic containers, so changing them does not move or resize the zones. To reorder zones, move the whole <zone> elements.'
+              ? ' If you changed only x, y, w or h: Desktop sets those itself for most zones in layout-flow containers, so changing them does not move or resize the zones. To reorder zones, move the whole <zone> elements.'
               : '';
           return Err({
             type: 'load-dashboard-xml-error',
