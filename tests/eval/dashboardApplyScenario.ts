@@ -391,6 +391,7 @@ export class DashboardApplyScenario {
             kind: 'dashboard',
             loaded: result.value,
             fallbackName: dashboardName,
+            readbackVerified: result.value.verifiedWorksheetNames !== undefined,
           }),
         );
         invariant(response.content[0].type === 'text');
