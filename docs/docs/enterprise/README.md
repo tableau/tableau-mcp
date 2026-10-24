@@ -15,3 +15,7 @@ you adapt operations such as telemetry and monitoring to fit your environment.
 ## Tableau Cloud
 
 [Tableau MCP deployment guide for Tableau Cloud customers](./tableau-cloud.md).
+
+## Bring your own infrastructure
+
+[Swap in your own storage, session, telemetry, and feature gate services](./bring-your-own-infrastructure.md).

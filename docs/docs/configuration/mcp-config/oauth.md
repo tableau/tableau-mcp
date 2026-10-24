@@ -443,6 +443,8 @@ The session store provider to use for the embedded OAuth authorization server's 
 Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
 enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
 
+See [Bring your own infrastructure](../../enterprise/bring-your-own-infrastructure.md#session-store) for the interface.
+
 - Default: `memory`
 - Possible values:
   - `memory` - In-memory session store (default). State is process-local and does not survive a
