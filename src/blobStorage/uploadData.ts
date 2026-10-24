@@ -6,6 +6,6 @@ export function toUploadData(payload: Buffer | string): UploadData {
   return { data: yieldOnce(bytes), contentLength: bytes.byteLength };
 }
 
-async function* yieldOnce(bytes: Uint8Array): AsyncIterable<Uint8Array> {
+export async function* yieldOnce(bytes: Uint8Array): AsyncIterable<Uint8Array> {
   yield bytes;
 }
