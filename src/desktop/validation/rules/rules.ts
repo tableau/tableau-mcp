@@ -9,6 +9,7 @@ import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
 import { dashboardCardZoneNameRule } from './dashboardCardZoneName.js';
 import { dashboardWorksheetZoneTypeRule } from './dashboardWorksheetZoneType.js';
 import { dashboardZoneIdNumberRule } from './dashboardZoneIdNumber.js';
+import { dashboardZoneIdUniqueRule } from './dashboardZoneIdUnique.js';
 import { dashboardZonesReferenceIncludedWorksheetsRule } from './dashboardZonesReferenceIncludedWorksheets.js';
 import { dateFieldBoundAsStringRule } from './dateFieldBoundAsString.js';
 import { dateLikeStringOnTimeAxisRule } from './dateLikeStringOnTimeAxis.js';
@@ -50,6 +51,7 @@ export const validationRules = [
   dashboardWorksheetZoneTypeRule,
   dashboardCardZoneNameRule,
   dashboardZoneIdNumberRule,
+  dashboardZoneIdUniqueRule,
   dashboardZonesReferenceIncludedWorksheetsRule,
   qualifiedNameBracketsRule,
   worksheetMissingWindowRule,

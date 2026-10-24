@@ -2,20 +2,16 @@ import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
 import {
+  CANONICAL_ID,
+  canonicalDigits,
   enclosingDashboard,
   enclosingDeviceLayout,
   enclosingDeviceLayoutName,
+  nextFreeId,
 } from './dashboardZoneContext.js';
 import { parseXml } from './parseXml.js';
 
 const ZONE_XPATH = '//dashboard//zone[@id]';
-const CANONICAL_ID = /^(0|[1-9][0-9]*)$/;
-
-function canonicalDigits(id: string): string | undefined {
-  const trimmed = id.trim();
-  const digits = trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
-  return /^[0-9]+$/.test(digits) ? digits.replace(/^0+(?=[0-9])/, '') : undefined;
-}
 
 // Device layouts may reuse main-layout ids, so a collision only counts within one layout scope.
 function takenByAnotherZone(zone: Element, dashboard: Element | undefined, value: string): boolean {
@@ -27,16 +23,6 @@ function takenByAnotherZone(zone: Element, dashboard: Element | undefined, value
       enclosingDeviceLayout(other) === scope &&
       canonicalDigits(other.getAttribute('id')!) === value,
   );
-}
-
-function nextFreeId(dashboard: Element | undefined): number {
-  if (!dashboard) return 1;
-  let max = 0;
-  for (const zone of xpath.select('.//zone[@id]', dashboard as unknown as Node) as Element[]) {
-    const id = zone.getAttribute('id')!;
-    if (CANONICAL_ID.test(id)) max = Math.max(max, Number(id));
-  }
-  return max + 1;
 }
 
 export const dashboardZoneIdNumberRule: ValidationRule = {
