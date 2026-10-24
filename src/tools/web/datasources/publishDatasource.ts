@@ -1,11 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFile } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { basename } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
-import { yieldOnce } from '../../../blobStorage/uploadData.js';
 import { ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -116,7 +116,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
               const uploadSessionId = await restApi.publishingMethods.uploadFileInChunks({
                 siteId: restApi.siteId,
                 filename: resolvedDatasourceFile.fileName,
-                fileStream: yieldOnce(resolvedDatasourceFile.bytes),
+                fileStream: resolvedDatasourceFile.fileStream,
                 maxBytes: MAX_STAGED_DATASOURCE_BYTES,
               });
 
@@ -210,12 +210,11 @@ async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<R
     throw new ArgsValidationError('datasourceFilePath must point to a .tds or .tdsx file.');
   }
 
-  const bytes = await readFile(datasourceFilePath);
-  if (bytes.byteLength === 0) {
+  if ((await stat(datasourceFilePath)).size === 0) {
     throw new ArgsValidationError(
       'datasourceFilePath must not point to an empty data source file.',
     );
   }
 
-  return { fileName, bytes };
+  return { fileName, fileStream: createReadStream(datasourceFilePath) };
 }

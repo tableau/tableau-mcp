@@ -17,11 +17,6 @@ export type StagedUploadKind<FileType extends string> = {
   xmlFileType: FileType;
 };
 
-export type ResolvedStagedFile = {
-  fileName: string;
-  bytes: Buffer;
-};
-
 export async function requestStagedUpload<FileType extends string>({
   kind,
   fileName,
@@ -105,65 +100,6 @@ async function* requireByteChunks(stream: AsyncIterable<Uint8Array>): AsyncGener
     }
     yield piece;
   }
-}
-
-export async function resolveStagedUpload<FileType extends string>({
-  kind,
-  uploadId,
-  maxBytes = MAX_STAGED_UPLOAD_BYTES,
-}: {
-  kind: StagedUploadKind<FileType>;
-  uploadId: string;
-  maxBytes?: number;
-}): Promise<ResolvedStagedFile> {
-  assertStagedUploadId(kind, uploadId);
-
-  for (const fileType of kind.fileTypes) {
-    const download = await getBlobStorageProvider().download({
-      key: buildStagedUploadKey(kind, uploadId, fileType),
-      maxBytes,
-    });
-
-    if (download === undefined) {
-      continue;
-    }
-
-    const bytes = await collectBytes(kind, download.data, maxBytes);
-    if (bytes.byteLength === 0) {
-      throw new Error(`${kind.label} upload bytes must not be empty.`);
-    }
-
-    return { fileName: `${uploadId}.${fileType}`, bytes };
-  }
-
-  throw new Error(
-    `${kind.label} upload not found. Upload the ${kind.noun} bytes before publishing.`,
-  );
-}
-
-/** Buffers a provider download stream, throwing once it exceeds `maxBytes`. */
-async function collectBytes(
-  kind: StagedUploadKind<string>,
-  stream: AsyncIterable<Uint8Array>,
-  maxBytes: number,
-): Promise<Buffer> {
-  const pieces: Uint8Array[] = [];
-  let totalBytes = 0;
-  for await (const piece of stream) {
-    // A string- or object-mode stream would make byteLength undefined and the total NaN, which
-    // never exceeds maxBytes.
-    if (!(piece instanceof Uint8Array)) {
-      throw new Error('Blob storage provider yielded a non-byte chunk.');
-    }
-    totalBytes += piece.byteLength;
-    if (totalBytes > maxBytes) {
-      throw new Error(
-        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
-      );
-    }
-    pieces.push(piece);
-  }
-  return Buffer.concat(pieces, totalBytes);
 }
 
 export function buildStagedUploadKey<FileType extends string>(
