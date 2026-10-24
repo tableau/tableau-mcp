@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
+import { Readable } from 'stream';
 
 import { getBlobStorageProvider } from '../../blobStorage/init.js';
+import { ArgsValidationError } from '../../errors/mcpToolError.js';
 
 // Intentionally decimal GB (not GiB) to leave headroom under common blob storage
 // single-PUT ceilings (e.g. S3's 5GB limit).
@@ -58,11 +60,13 @@ export async function requestStagedUpload<FileType extends string>({
 export type ResolvedStagedFileStream = {
   fileName: string;
   fileStream: AsyncIterable<Uint8Array>;
+  contentLength?: number;
 };
 
 /**
- * Locates a staged upload and returns its bytes as a stream, without buffering. Non-byte chunks
- * are rejected as they are consumed; size and emptiness are enforced by the consumer.
+ * Locates a staged upload and returns its bytes as a stream, without buffering. Rejects up front
+ * when the provider reports a length over `maxBytes`; otherwise non-byte chunks are rejected as
+ * they are consumed, and size and emptiness are enforced by the consumer.
  */
 export async function resolveStagedUploadStream<FileType extends string>({
   kind,
@@ -85,7 +89,19 @@ export async function resolveStagedUploadStream<FileType extends string>({
       continue;
     }
 
-    return { fileName: `${uploadId}.${fileType}`, fileStream: requireByteChunks(download.data) };
+    // Fail before the caller opens a Tableau upload session it would abandon at the cap.
+    if (download.contentLength !== undefined && download.contentLength > maxBytes) {
+      discard(download.data);
+      throw new ArgsValidationError(
+        `${kind.label} upload exceeds the maximum allowed size of ${maxBytes} bytes.`,
+      );
+    }
+
+    return {
+      fileName: `${uploadId}.${fileType}`,
+      fileStream: requireByteChunks(download.data),
+      contentLength: download.contentLength,
+    };
   }
 
   throw new Error(
@@ -100,6 +116,16 @@ async function* requireByteChunks(stream: AsyncIterable<Uint8Array>): AsyncGener
     }
     yield piece;
   }
+}
+
+/** Best-effort release of a provider stream that won't be read (destroys a Node `Readable`). */
+function discard(stream: AsyncIterable<Uint8Array>): void {
+  // `return()` on a fresh, unstarted Readable iterator is a no-op, so destroy it directly.
+  if (stream instanceof Readable) {
+    stream.destroy();
+    return;
+  }
+  Promise.resolve(stream[Symbol.asyncIterator]().return?.()).catch(() => undefined);
 }
 
 export function buildStagedUploadKey<FileType extends string>(

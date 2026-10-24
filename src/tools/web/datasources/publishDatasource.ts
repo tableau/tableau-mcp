@@ -210,9 +210,15 @@ async function resolveLocalDatasourceFile(datasourceFilePath: string): Promise<R
     throw new ArgsValidationError('datasourceFilePath must point to a .tds or .tdsx file.');
   }
 
-  if ((await stat(datasourceFilePath)).size === 0) {
+  const { size } = await stat(datasourceFilePath);
+  if (size === 0) {
     throw new ArgsValidationError(
       'datasourceFilePath must not point to an empty data source file.',
+    );
+  }
+  if (size > MAX_STAGED_DATASOURCE_BYTES) {
+    throw new ArgsValidationError(
+      `datasourceFilePath must not point to a data source file larger than ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
     );
   }
 

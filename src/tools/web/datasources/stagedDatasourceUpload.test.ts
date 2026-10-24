@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import {
   buildDatasourceUploadKey,
   getDatasourceFileType,
@@ -118,13 +120,14 @@ describe('resolveStagedDatasourceUpload', () => {
     const bytes = Buffer.from('PK\x03\x04');
     mocks.download
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ data: streamOf(bytes) });
+      .mockResolvedValueOnce({ data: streamOf(bytes), contentLength: bytes.byteLength });
 
     const resolved = await resolveStagedDatasourceUpload({
       datasourceUploadId: uploadId,
       maxBytes: 4096,
     });
     expect(resolved.fileName).toBe(`${uploadId}.tdsx`);
+    expect(resolved.contentLength).toBe(bytes.byteLength);
     expect(await collect(resolved.fileStream)).toEqual(bytes);
 
     expect(mocks.download).toHaveBeenCalledTimes(2);
@@ -153,6 +156,17 @@ describe('resolveStagedDatasourceUpload', () => {
     await expect(collect(resolved.fileStream)).rejects.toThrow(
       'Blob storage provider yielded a non-byte chunk.',
     );
+  });
+
+  it('rejects and destroys the stream when the provider reports a length over the limit', async () => {
+    const data = Readable.from([Buffer.from('<datasource />')]);
+    mocks.download.mockResolvedValue({ data, contentLength: 4097 });
+
+    await expect(
+      resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 4096 }),
+    ).rejects.toThrow('Data source upload exceeds the maximum allowed size of 4096 bytes.');
+    expect(data.destroyed).toBe(true);
+    expect(mocks.download).toHaveBeenCalledTimes(1);
   });
 
   it('throws after both file types are absent', async () => {

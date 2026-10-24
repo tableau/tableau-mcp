@@ -1,3 +1,5 @@
+import { Readable } from 'stream';
+
 import {
   buildWorkbookUploadKey,
   getWorkbookFileType,
@@ -121,6 +123,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
     const resolved = await resolveStagedWorkbookUpload({ workbookUploadId: uploadId });
     expect(resolved.fileName).toBe(`${uploadId}.twb`);
+    expect(resolved.contentLength).toBe(12);
     expect(await collect(resolved.fileStream)).toBe('<workbook />');
     expect(mocks.download).toHaveBeenCalledWith({
       key: `workbook-uploads/${uploadId}/workbook.twb`,
@@ -144,6 +147,17 @@ describe('resolveStagedWorkbookUpload', () => {
       key: `workbook-uploads/${uploadId}/workbook.twbx`,
       maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
+  });
+
+  it('rejects and destroys the stream when the provider reports a length over the limit', async () => {
+    const data = Readable.from([Buffer.from('PK\x03\x04')]);
+    mocks.download.mockResolvedValueOnce(undefined);
+    mocks.download.mockResolvedValueOnce({ data, contentLength: MAX_STAGED_WORKBOOK_BYTES + 1 });
+
+    await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
+      `Workbook upload exceeds the maximum allowed size of ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+    );
+    expect(data.destroyed).toBe(true);
   });
 
   it('throws when neither the .twb nor .twbx key exists', async () => {

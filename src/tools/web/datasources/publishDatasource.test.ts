@@ -1,8 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Readable } from 'stream';
 
 import { useRestApi } from '../../../restApiInstance.js';
+import PublishingMethods from '../../../sdks/tableau/methods/publishingMethods.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedDatasourceUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockIsBlobStorageEnabled: vi.fn(),
+  mockDownload: vi.fn(),
 }));
 
 vi.mock('fs', () => ({
@@ -31,6 +34,7 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('../../../blobStorage/init.js', () => ({
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
+  getBlobStorageProvider: vi.fn(() => ({ download: mocks.mockDownload })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -90,6 +94,7 @@ describe('publishDatasourceTool', () => {
     mocks.mockStat.mockReset();
     mocks.mockCreateReadStream.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReset();
+    mocks.mockDownload.mockReset();
     mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockStat.mockResolvedValue({ size: 1024 });
@@ -407,16 +412,76 @@ describe('publishDatasourceTool', () => {
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
   });
 
-  it('returns an args-validation error when local data source file is empty', async () => {
-    mocks.mockStat.mockResolvedValue({ size: 0 });
+  it.each([
+    {
+      datasourceFilePath: '/tmp/source-superstore.tds',
+      size: 0,
+      error: 'must not point to an empty',
+    },
+    {
+      datasourceFilePath: '/tmp/source-superstore.tdsx',
+      size: MAX_STAGED_DATASOURCE_BYTES + 1,
+      error: `must not point to a data source file larger than ${MAX_STAGED_DATASOURCE_BYTES} bytes`,
+    },
+  ])(
+    'returns an args-validation error before opening a $size-byte local data source file',
+    async ({ datasourceFilePath, size, error }) => {
+      mocks.mockStat.mockResolvedValue({ size });
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+      const result = await getToolResult(
+        { ...validLocalArgs, datasourceFilePath },
+        { blobStorageEnabled: false },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(`datasourceFilePath ${error}`);
+      expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
+      expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a staged TDSX whose reported length exceeds the limit before uploading', async () => {
+    const data = Readable.from([Buffer.from('PK\x03\x04')]);
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data, contentLength: MAX_STAGED_DATASOURCE_BYTES + 1 });
+    await useActualStagedResolver();
+
+    const result = await getToolResult(validArgs);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('datasourceFilePath must not point to an empty');
-    expect(mocks.mockCreateReadStream).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain(
+      `Data source upload exceeds the maximum allowed size of ${MAX_STAGED_DATASOURCE_BYTES} bytes.`,
+    );
+    expect(data.destroyed).toBe(true);
     expect(mocks.mockUploadFileInChunks).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty staged TDSX without opening a Tableau upload session', async () => {
+    mocks.mockDownload
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data: streamOf(), contentLength: 0 });
+    await useActualStagedResolver();
+    const publishingMethods = new PublishingMethods(
+      'http://test',
+      { type: 'Bearer', token: 'test' },
+      {},
+    );
+    const initiateFileUpload = vi
+      .spyOn(publishingMethods, 'initiateFileUpload')
+      .mockRejectedValue(new Error('unexpected upload session'));
+    mocks.mockUploadFileInChunks.mockImplementation(publishingMethods.uploadFileInChunks);
+
+    const result = await getToolResult(validArgs);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('File content must not be empty.');
+    expect(initiateFileUpload).not.toHaveBeenCalled();
+    expect(mocks.mockPublishDatasource).not.toHaveBeenCalled();
   });
 
   it('returns an error when both local path and staged upload id are provided', async () => {
@@ -488,6 +553,13 @@ describe('publishDatasourceTool', () => {
     expect(JSON.stringify(loggedArgs)).not.toContain('123e4567-e89b-42d3-a456-426614174000');
   });
 });
+
+async function useActualStagedResolver(): Promise<void> {
+  const { resolveStagedDatasourceUpload } = await vi.importActual<
+    typeof import('./stagedDatasourceUpload.js')
+  >('./stagedDatasourceUpload.js');
+  mocks.mockResolveStagedDatasourceUpload.mockImplementation(resolveStagedDatasourceUpload);
+}
 
 async function getToolResult(
   params: {

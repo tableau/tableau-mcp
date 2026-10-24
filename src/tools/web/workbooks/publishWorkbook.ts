@@ -445,8 +445,14 @@ async function resolveLocalWorkbookFile(workbookFilePath: string): Promise<Resol
     throw new ArgsValidationError('workbookFilePath must point to a .twb or .twbx file.');
   }
 
-  if ((await stat(workbookFilePath)).size === 0) {
+  const { size } = await stat(workbookFilePath);
+  if (size === 0) {
     throw new ArgsValidationError('workbookFilePath must not point to an empty workbook file.');
+  }
+  if (size > MAX_STAGED_WORKBOOK_BYTES) {
+    throw new ArgsValidationError(
+      `workbookFilePath must not point to a workbook file larger than ${MAX_STAGED_WORKBOOK_BYTES} bytes.`,
+    );
   }
 
   return { fileName, fileStream: createReadStream(workbookFilePath) };
