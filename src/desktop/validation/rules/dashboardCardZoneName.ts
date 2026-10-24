@@ -1,6 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { enclosingDashboard, enclosingDeviceLayoutName } from './dashboardZoneContext.js';
 import { parseXml } from './parseXml.js';
 
 const CARD_ZONE_XPATH =
@@ -8,26 +9,6 @@ const CARD_ZONE_XPATH =
 
 function isBlank(value: string | null): boolean {
   return value === null || value.trim() === '';
-}
-
-function enclosingDashboard(zone: Element): Element | undefined {
-  let node: Node | null = zone.parentNode;
-  while (node) {
-    if (node.nodeType === 1 && (node as Element).nodeName === 'dashboard') return node as Element;
-    node = node.parentNode;
-  }
-  return undefined;
-}
-
-function enclosingDeviceLayoutName(zone: Element): string | undefined {
-  let node: Node | null = zone.parentNode;
-  while (node) {
-    if (node.nodeType === 1 && (node as Element).nodeName === 'devicelayout') {
-      return (node as Element).getAttribute('name') || '(unnamed)';
-    }
-    node = node.parentNode;
-  }
-  return undefined;
 }
 
 function worksheetZoneNames(dashboard: Element): string[] {
