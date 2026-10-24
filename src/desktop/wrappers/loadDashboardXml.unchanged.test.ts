@@ -38,7 +38,7 @@ const reordered = flow([
 const applyOk = Ok({ command_id: 'apply', status: 'completed' as const, submitted_at: '' });
 
 function setup(
-  reads: Array<string | 'error'>,
+  reads: Array<string | 'error' | 'fatal'>,
   kind: 'dashboard' | 'storyboard' = 'dashboard',
   initial: string = live,
   warnings: Array<{ code: string; message: string }> = [],
@@ -51,6 +51,12 @@ function setup(
   const read = vi.fn().mockImplementation(async () => {
     if (!applied) return Ok({ xml: initial });
     const next = reads[Math.min(postApplyReads++, reads.length - 1)];
+    if (next === 'fatal') {
+      return Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      });
+    }
     return next === 'error'
       ? Err({ type: 'invalid-response', error: new Error('boom') })
       : Ok({ xml: next });
@@ -184,6 +190,23 @@ describe('apply Desktop accepted but did not change', () => {
     expect(postApplyReads()).toBe(1);
   });
 
+  it('surfaces a session-fatal no-change readback instead of warning and succeeding', async () => {
+    const { executor, postApplyReads } = setup(['fatal']);
+    const pending = loadDashboardXml({
+      dashboardName: 'D',
+      xml: moved,
+      executor,
+      signal,
+      focus,
+      requireExistingSheet: true,
+    });
+    const assertion = expect(pending).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(postApplyReads()).toBe(1);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the warnings result, with no post-apply reads, when Desktop dropped part of the submission', async () => {
     const zone = "<zone id='1' type-v2='layout-basic' x='0' y='0' w='100000' h='100000'/>";
     const warned = `<dashboard name='D'><zones>${zone}</zones><simple-id uuid='dash-1'/></dashboard>`;
@@ -238,6 +261,69 @@ describe('apply Desktop accepted but did not change', () => {
     await vi.runAllTimersAsync();
     expect((await pending).isOk()).toBe(true);
     expect(getDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  function reflowVerifyRun(postApplyRead: () => ReturnType<typeof Err> | ReturnType<typeof Ok>): {
+    executor: ReturnType<typeof makeExecutorMock>;
+    pending: ReturnType<typeof loadDashboardXml>;
+  } {
+    const empty = `<dashboard name="${REFLOW_DASHBOARD_NAME}"><zones/><simple-id uuid="${REFLOW_DASHBOARD_ID}"/></dashboard>`;
+    let applied = false;
+    const getWorkbookDocument = vi
+      .fn()
+      .mockImplementation(async () =>
+        applied ? postApplyRead() : Ok({ xml: reflowWorkbook(empty, false) }),
+      );
+    const executor = makeExecutorMock({
+      desktopApiVersion: '0.2.22',
+      listDashboards: vi
+        .fn()
+        .mockResolvedValue(
+          Ok({ dashboards: [{ id: REFLOW_DASHBOARD_ID, name: REFLOW_DASHBOARD_NAME }] }),
+        ),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: empty })),
+      getWorkbookDocument,
+      applyDashboardDocument: vi.fn().mockImplementation(async () => {
+        applied = true;
+        return applyOk;
+      }),
+    });
+    const pending = loadDashboardXml({
+      dashboardName: REFLOW_DASHBOARD_NAME,
+      xml: submittedReflowDashboard,
+      requireExistingSheet: true,
+      verifyReadback: true,
+      focus,
+      executor,
+      signal,
+    });
+    return { executor, pending };
+  }
+
+  it('surfaces a session-fatal verification readback instead of verification-failed', async () => {
+    const { executor, pending } = reflowVerifyRun(() =>
+      Err({
+        type: 'command-failed',
+        error: { code: 'E71AE512', message: 'Internal Error', recoverable: false },
+      }),
+    );
+    const assertion = expect(pending).rejects.toMatchObject({ type: 'desktop-session-fatal' });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executor.applyDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps verification-failed for a non-fatal verification readback error', async () => {
+    const { pending } = reflowVerifyRun(() =>
+      Err({ type: 'invalid-response', error: new Error('boom') }),
+    );
+    await vi.runAllTimersAsync();
+    const error = (await pending).unwrapErr() as { error: { type: string; message: string } };
+    expect(error.error.type).toBe('verification-failed');
+    expect(error.error.message).toContain(
+      'Reading the workbook back from Desktop failed (invalid-response).',
+    );
   });
 
   it('fails when the elements are reordered but Desktop never changes', async () => {

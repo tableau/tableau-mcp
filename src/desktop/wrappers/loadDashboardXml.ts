@@ -1,6 +1,7 @@
 import { DOMParser, type Element } from '@xmldom/xmldom';
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { throwIfSessionFatalError } from '../../errors/mcpToolError.desktop.js';
 import { log } from '../../logging/logger.js';
 import { sanitizeValue } from '../../logging/sanitize.js';
 import { supportsDashboardVisualRegistration } from '../externalApi/apiVersion.js';
@@ -494,6 +495,7 @@ export async function loadDashboardXml({
           },
           signal,
         });
+        if (!readback.ok) throwIfSessionFatalError(readback.error);
         if (!readback.ok || !readback.settled)
           return Err({
             type: 'load-dashboard-xml-error',
@@ -525,6 +527,7 @@ export async function loadDashboardXml({
           signal,
         });
         if (!changed.ok) {
+          throwIfSessionFatalError(changed.error);
           log({
             level: 'warning',
             message: `Could not read the ${kind} back to confirm the apply changed it`,
