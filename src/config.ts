@@ -186,6 +186,9 @@ export class Config extends BaseConfig {
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       BLOB_STORAGE_PROVIDER: blobStorageProvider,
       BLOB_STORAGE_PROVIDER_CONFIG: blobStorageProviderConfig,
+      MCP_S3_BUCKET: removedS3Bucket,
+      MCP_IMAGE_PREFIX: removedImagePrefix,
+      FILE_TTL: removedFileTtl,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -416,6 +419,21 @@ export class Config extends BaseConfig {
     // Unlike the providers above, an invalid value throws: unset is a real mode (no storage), so
     // silently falling back would hide the misconfig.
     if (!blobStorageProvider) {
+      // The removed S3 variables used to enable staged uploads; starting without storage would
+      // silently re-enable server-local file paths in publish/download-workbook.
+      const removedS3Vars = Object.entries({
+        MCP_S3_BUCKET: removedS3Bucket,
+        MCP_IMAGE_PREFIX: removedImagePrefix,
+        FILE_TTL: removedFileTtl,
+      })
+        .filter(([, value]) => !!value?.trim())
+        .map(([name]) => name);
+      if (removedS3Vars.length > 0) {
+        throw new Error(
+          `${removedS3Vars.join(', ')} ${removedS3Vars.length === 1 ? 'is' : 'are'} no longer supported. ` +
+            'Configure blob storage with BLOB_STORAGE_PROVIDER and BLOB_STORAGE_PROVIDER_CONFIG instead.',
+        );
+      }
       this.blobStorage = undefined;
     } else if (!isBlobStorageProviderType(blobStorageProvider)) {
       throw new Error(

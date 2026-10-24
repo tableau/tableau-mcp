@@ -1280,6 +1280,35 @@ describe('Config', () => {
       });
     });
 
+    it.each(['MCP_S3_BUCKET', 'MCP_IMAGE_PREFIX', 'FILE_TTL'])(
+      'should throw when the removed %s is set without BLOB_STORAGE_PROVIDER',
+      (name) => {
+        vi.stubEnv(name, 'secret-value');
+
+        expect(() => new Config()).toThrow(
+          `${name} is no longer supported. Configure blob storage with BLOB_STORAGE_PROVIDER and BLOB_STORAGE_PROVIDER_CONFIG instead.`,
+        );
+        expect(() => new Config()).not.toThrow('secret-value');
+      },
+    );
+
+    it('should name every removed S3 variable that is set', () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'my-bucket');
+      vi.stubEnv('FILE_TTL', '60');
+
+      expect(() => new Config()).toThrow('MCP_S3_BUCKET, FILE_TTL are no longer supported.');
+    });
+
+    it('should ignore removed S3 variables when BLOB_STORAGE_PROVIDER is set', () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'my-bucket');
+      vi.stubEnv('MCP_IMAGE_PREFIX', 'prefix');
+      vi.stubEnv('FILE_TTL', '60');
+      vi.stubEnv('BLOB_STORAGE_PROVIDER', 'custom');
+      vi.stubEnv('BLOB_STORAGE_PROVIDER_CONFIG', '{"module":"./my-blob-storage.js"}');
+
+      expect(new Config().blobStorage?.provider).toBe('custom');
+    });
+
     it('should throw error when BLOB_STORAGE_PROVIDER is "custom" without config', () => {
       vi.stubEnv('BLOB_STORAGE_PROVIDER', 'custom');
 

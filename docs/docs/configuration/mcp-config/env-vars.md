@@ -811,6 +811,16 @@ plug in their own.
 Unlike `TELEMETRY_PROVIDER` and `FEATURE_GATE_PROVIDER`, there is no `noop` value: "no storage"
 changes tool behavior, so it is expressed by leaving the variable unset.
 
+:::warning[Upgrading from the S3 variables]
+
+`MCP_S3_BUCKET`, `MCP_IMAGE_PREFIX`, `FILE_TTL`, and `AWS_DEFAULT_REGION` have been removed. If any
+of `MCP_S3_BUCKET`, `MCP_IMAGE_PREFIX`, or `FILE_TTL` is set while `BLOB_STORAGE_PROVIDER` is
+unset, server startup fails. To keep using S3, write a custom provider (see the S3 example below), load it
+via `BLOB_STORAGE_PROVIDER=custom` and
+[`BLOB_STORAGE_PROVIDER_CONFIG`](#blob_storage_provider_config), then remove the old variables.
+
+:::
+
 :::tip[Custom Provider]
 
 To use a custom blob storage provider, set `BLOB_STORAGE_PROVIDER=custom` and provide the module
