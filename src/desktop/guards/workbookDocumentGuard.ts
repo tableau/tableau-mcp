@@ -1,3 +1,4 @@
+import { normalizeArray, parseXML } from '../metadata/parser.js';
 import type { CommandValidationResult } from './commandNameRegistry.js';
 
 // Real Desktop documents carry comments between the prolog and the root
@@ -5,20 +6,24 @@ import type { CommandValidationResult } from './commandNameRegistry.js';
 // rejects every legitimate whole document.
 const WORKBOOK_ROOT_RE =
   /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<workbook(?:\s|>|\/)/;
-// Match single- OR double-quoted worksheet names so a dropped worksheet cannot
-// slip through when Desktop serializes names with either quote style.
-const WORKSHEET_NAME_RE = /<worksheet\b[^>]*\bname=(['"])(.*?)\1/g;
-
 function fail(problem: string, fix: string): CommandValidationResult {
   return { ok: false, message: `${problem}\nFIX: ${fix}` };
 }
 
-function worksheetNames(xml: string): Set<string> {
-  const names = new Set<string>();
-  for (const match of xml.matchAll(WORKSHEET_NAME_RE)) {
-    names.add(match[2]);
-  }
-  return names;
+export function readSheetNames(xml: string): string[] {
+  const { workbook } = parseXML(xml);
+  const names = [
+    ...normalizeArray<{ '@_name'?: string }>(workbook?.worksheets?.worksheet),
+    // Stories are <dashboard type='storyboard'>.
+    ...normalizeArray<{ '@_name'?: string }>(workbook?.dashboards?.dashboard),
+  ].map((sheet) => sheet['@_name']);
+  return names.filter((name): name is string => typeof name === 'string' && name !== '');
+}
+
+// Desktop deletes every sheet a whole-workbook POST leaves out; throws if either document won't parse.
+export function liveSheetNamesMissingFrom(submittedXml: string, liveXml: string): string[] {
+  const submitted = new Set(readSheetNames(submittedXml));
+  return [...new Set(readSheetNames(liveXml))].filter((name) => !submitted.has(name));
 }
 
 export function validateWorkbookDocumentApply(
@@ -43,14 +48,19 @@ export function validateWorkbookDocumentApply(
     return { ok: true };
   }
 
-  const submittedWorksheetNames = worksheetNames(text);
-  const missingWorksheetNames = [...worksheetNames(liveDocumentXml)].filter(
-    (name) => !submittedWorksheetNames.has(name),
-  );
-  if (missingWorksheetNames.length > 0) {
+  let missingSheetNames: string[];
+  try {
+    missingSheetNames = liveSheetNamesMissingFrom(text, liveDocumentXml);
+  } catch {
     return fail(
-      'This edit would remove worksheet(s) that are present in the live workbook.',
-      `the edit would DROP worksheet(s) ${missingWorksheetNames.join(', ')}, so it was refused. Retry this tool — it re-reads the live workbook on every call. Removing a sheet on purpose is a separate request; say so rather than editing it out here.`,
+      'The sheet check could not read the edited or live workbook document, so the edit was refused.',
+      'Retry this tool — it re-reads the live workbook on every call. If it fails again, report that instead of retrying a third time.',
+    );
+  }
+  if (missingSheetNames.length > 0) {
+    return fail(
+      'This edit would remove sheet(s) that are present in the live workbook.',
+      `the edit would DROP sheet(s) ${missingSheetNames.join(', ')}, so it was refused. Retry this tool — it re-reads the live workbook on every call. Removing a sheet on purpose is a separate request; say so rather than editing it out here.`,
     );
   }
 

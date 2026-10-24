@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../logging/logger.js';
@@ -5,7 +8,13 @@ import invariant from '../../utils/invariant.js';
 import { makeExecutorMock } from '../externalApi/executor.mock.js';
 import { ExternalApiToolExecutor } from '../externalApi/executorTypes.js';
 import * as validationRegistry from '../validation/registry.js';
-import { loadWorkbookXml } from './loadWorkbookXml.js';
+import { sourceSha256 } from './cacheFingerprint.js';
+import { describeLoadWorkbookXmlError, loadWorkbookXml } from './loadWorkbookXml.js';
+
+const REAL_FIXTURE = join(
+  process.cwd(),
+  'src/tools/desktop/authoring/datasource/__fixtures__/real-superstore-document.twb.xml',
+);
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -450,6 +459,149 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     expect(getWorkbookDocument).toHaveBeenCalledOnce();
     expect(validation).not.toHaveBeenCalled();
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  describe('cached live-relative sheet-removal guard', () => {
+    const realLiveXml = readFileSync(REAL_FIXTURE, 'utf8');
+
+    async function run(
+      xml: string,
+      extra: { expectedSourceHash?: string; skipValidation?: boolean } = {},
+    ): Promise<{
+      result: Awaited<ReturnType<typeof loadWorkbookXml>>;
+      applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    }> {
+      const applyWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+      const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: realLiveXml }));
+      const result = await loadWorkbookXml({
+        xml,
+        cachedLiveRelative: true,
+        executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+        signal: mockSignal,
+        focus: NO_FOCUS,
+        ...extra,
+      });
+      return { result, applyWorkbookDocument };
+    }
+
+    function expectRemoved(
+      result: Awaited<ReturnType<typeof loadWorkbookXml>>,
+      names: string[],
+    ): void {
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'sheets-removed');
+      expect(result.error.error.sheetNames).toEqual(names);
+      for (const name of names) expect(result.error.error.message).toContain(`'${name}'`);
+    }
+
+    it('refuses a submission that drops a worksheet and never POSTs', async () => {
+      const xml = realLiveXml.replace(
+        /<worksheet name='stage-encore-canon'>[\s\S]*?<\/worksheet>/,
+        '',
+      );
+      expect(xml).not.toBe(realLiveXml);
+
+      const { result, applyWorkbookDocument } = await run(xml);
+
+      expectRemoved(result, ['stage-encore-canon']);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('refuses a submission that drops the dashboard and never POSTs', async () => {
+      const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
+      expect(xml).not.toBe(realLiveXml);
+
+      const { result, applyWorkbookDocument } = await run(xml);
+
+      expectRemoved(result, ['Sales by Region']);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('still refuses with skipValidation and with no expectedSourceHash', async () => {
+      const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
+
+      const { result, applyWorkbookDocument } = await run(xml, { skipValidation: true });
+
+      expectRemoved(result, ['Sales by Region']);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('POSTs when the submission keeps every sheet and adds one', async () => {
+      const xml = realLiveXml.replace(
+        '</worksheets>',
+        "<worksheet name='Brand New'><table /></worksheet></worksheets>",
+      );
+
+      const { result, applyWorkbookDocument } = await run(xml);
+
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
+    it('POSTs the unchanged real Desktop document (no false refusal)', async () => {
+      const { result, applyWorkbookDocument } = await run(realLiveXml);
+
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
+    it('reports drift, not removed sheets, when the hash is stale', async () => {
+      const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
+
+      const { result, applyWorkbookDocument } = await run(xml, {
+        expectedSourceHash: '0'.repeat(64),
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        invariant(result.error.type === 'load-workbook-xml-error');
+        expect(result.error.error.type).toBe('workbook-drift');
+      }
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('refuses a dashboard drop when the hash matches the live document (production path)', async () => {
+      const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
+
+      const { result, applyWorkbookDocument } = await run(xml, {
+        expectedSourceHash: sourceSha256(realLiveXml),
+      });
+
+      expectRemoved(result, ['Sales by Region']);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['edited', '<!DOCTYPE x><workbook />', validXml, 'edited workbook document'],
+      ['open', validXml, '<!DOCTYPE x><workbook />', 'open workbook'],
+    ])(
+      'fails closed naming the %s document when it cannot be parsed',
+      async (_which, xml, liveXml, phrase) => {
+        const applyWorkbookDocument = vi.fn();
+        const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: liveXml }));
+
+        const result = await loadWorkbookXml({
+          xml,
+          cachedLiveRelative: true,
+          executor: makeExecutorMock({ applyWorkbookDocument, getWorkbookDocument }),
+          signal: mockSignal,
+          focus: NO_FOCUS,
+        });
+
+        expect(result.isErr()).toBe(true);
+        if (result.isErr()) {
+          invariant(result.error.type === 'load-workbook-xml-error');
+          invariant(result.error.error.type === 'sheet-check-failed');
+          expect(result.error.error.message).toContain(`could not read the ${phrase}`);
+          expect(describeLoadWorkbookXmlError(result.error.error)).toBe(result.error.error.message);
+        }
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it('keeps direct no-baseline validation strict without reading live workbook', async () => {
