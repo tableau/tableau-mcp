@@ -55,13 +55,15 @@ ${block === null ? '' : `  <datasources>\n    ${block}\n  </datasources>\n`}  <d
 }
 
 function setup(workbookXml = snapshot()): ReturnType<typeof makeExecutorMock> {
+  let liveDocument = fragment(null);
   return makeExecutorMock({
     listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: UUID, name: 'DS Dash' }] })),
-    getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: fragment(null) })),
+    getDashboardDocument: vi.fn().mockImplementation(async () => Ok({ xml: liveDocument })),
     getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: workbookXml })),
-    applyDashboardDocument: vi
-      .fn()
-      .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+    applyDashboardDocument: vi.fn().mockImplementation(async (_id: string, xml: string) => {
+      liveDocument = xml;
+      return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+    }),
   });
 }
 
@@ -72,12 +74,14 @@ function mockStoryboard(executor: ReturnType<typeof setup>): void {
   vi.mocked(executor.listStoryboards).mockResolvedValue(
     Ok({ storyboards: [{ id: UUID, name: 'DS Dash', hidden: false }] }),
   );
-  vi.mocked(executor.getStoryboardDocument).mockResolvedValue(
-    Ok({ xml: fragment(null), applicationVersion: undefined, xsdPayloadVersion: undefined }),
+  let liveDocument = fragment(null);
+  vi.mocked(executor.getStoryboardDocument).mockImplementation(async () =>
+    Ok({ xml: liveDocument, applicationVersion: undefined, xsdPayloadVersion: undefined }),
   );
-  vi.mocked(executor.applyStoryboardDocument).mockResolvedValue(
-    Ok({ command_id: 'apply', status: 'completed', submitted_at: '' }),
-  );
+  vi.mocked(executor.applyStoryboardDocument).mockImplementation(async (_id, xml) => {
+    liveDocument = xml;
+    return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+  });
 }
 
 const apply = (
