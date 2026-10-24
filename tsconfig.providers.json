@@ -11,7 +11,8 @@
     "src/activityLog/provider.ts",
     "src/features/featureGateProvider.ts",
     "src/telemetry/telemetryProvider.ts",
-    "src/sessionStore/sessionStore.ts"
+    "src/sessionStore/sessionStore.ts",
+    "src/blobStorage/blobStorageProvider.ts"
   ],
   "exclude": ["node_modules", "tests"]
 }

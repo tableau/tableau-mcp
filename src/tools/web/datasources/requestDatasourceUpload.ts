@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { isBlobStorageEnabled } from '../../../blobStorage/init.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -56,16 +57,13 @@ export const getRequestDatasourceUploadTool = (
             );
           }
 
-          if (!extra.config.bucketS3.enabled) {
+          if (!isBlobStorageEnabled()) {
             throw new UnknownError(
-              'MCP_S3_BUCKET must be configured before requesting staged data source uploads.',
+              'Blob storage provider must be configured before requesting staged data source uploads.',
             );
           }
 
-          const result = await requestStagedDatasourceUpload({
-            fileName,
-            config: extra.config.bucketS3,
-          });
+          const result = await requestStagedDatasourceUpload({ fileName });
           return new Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
