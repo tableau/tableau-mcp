@@ -3,6 +3,7 @@ import { readFileSync, rmSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
@@ -11,6 +12,7 @@ import {
 import { ExternalApiInstance, OperationEnvelope } from '../../../desktop/externalApi/types.js';
 import { REDACTED_CREDENTIAL_SENTINEL } from '../../../desktop/limits/datasourceCredentialRedaction.js';
 import * as sessionResolution from '../../../desktop/session/sessionResolution.js';
+import { sidecarPath, sourceSha256 } from '../../../desktop/wrappers/cacheFingerprint.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -39,7 +41,11 @@ describe('get-operation tool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('declares the read contract', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('declares the contract', () => {
     const tool = getOperationTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('get-operation');
@@ -50,9 +56,9 @@ describe('get-operation tool', () => {
       operationId: expect.any(Object),
     });
     expect(tool.annotations).toEqual({
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
@@ -109,8 +115,9 @@ describe('get-operation tool', () => {
     }
   });
 
-  it('moves an oversized document result to a redacted cache file', async () => {
+  it('moves an oversized document result to a redacted cache file with a session sidecar', async () => {
     const harness = await startHarness({ capBytes: 16 });
+    vi.spyOn(externalDiscovery, 'discoverInstances').mockReturnValue([instanceFor(harness.server)]);
     harness.server.setOperation('op-1', {
       poll: [
         {
@@ -136,8 +143,15 @@ describe('get-operation tool', () => {
         const cached = readFileSync(documentFile, 'utf-8');
         expect(cached).toContain(REDACTED_CREDENTIAL_SENTINEL);
         expect(cached).not.toContain('must-not-appear');
+        expect(JSON.parse(readFileSync(sidecarPath(documentFile), 'utf-8'))).toMatchObject({
+          session_id: '999',
+          pid: 999,
+          instanceId: 'inst-get-operation',
+          source_sha256: sourceSha256(cached),
+        });
       } finally {
         rmSync(documentFile, { force: true });
+        rmSync(sidecarPath(documentFile), { force: true });
       }
     } finally {
       await harness.close();

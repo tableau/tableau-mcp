@@ -10,6 +10,7 @@ import {
   xmlByteLength,
 } from '../../../desktop/limits/inlineXmlCap.js';
 import { writeRedactedXmlCacheFile } from '../../../desktop/limits/redactedXmlCache.js';
+import { sourceSha256, writeSidecar } from '../../../desktop/wrappers/cacheFingerprint.js';
 import { runExternalApiTool } from '../../../desktop/wrappers/readHarness.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { sessionParam } from '../params.js';
@@ -32,9 +33,9 @@ export const getOperationTool = (server: DesktopMcpServer): DesktopTool<typeof p
       'Get one Tableau Desktop operation by id: kind, state, result or error, warnings, and timestamps. blockingWindows and progressWindows appear only while it is not in a terminal state.',
     paramsSchema,
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false, // Writes a cache file when the document is over the inline cap
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async ({ session, operationId }, extra): Promise<CallToolResult> => {
@@ -45,13 +46,13 @@ export const getOperationTool = (server: DesktopMcpServer): DesktopTool<typeof p
           await runExternalApiTool({
             session,
             extra,
-            callback: async (_executor, _signal, call) => {
+            callback: async (_executor, _signal, call, resolvedSession) => {
               const operation = await call(
                 'operation',
                 async (executor, signal) => await executor.getOperation(operationId, signal),
               );
               return operation.map((envelope) =>
-                withCappedDocument(envelope, extra.config.inlineXmlMaxBytes),
+                withCappedDocument(envelope, extra.config.inlineXmlMaxBytes, resolvedSession),
               );
             },
           }),
@@ -62,7 +63,11 @@ export const getOperationTool = (server: DesktopMcpServer): DesktopTool<typeof p
   return tool;
 };
 
-function withCappedDocument(operation: OperationEnvelope, capBytes: number): OperationEnvelope {
+function withCappedDocument(
+  operation: OperationEnvelope,
+  capBytes: number,
+  resolvedSession: string,
+): OperationEnvelope {
   const { result } = operation;
   if (typeof result?.document !== 'string') {
     return operation;
@@ -79,6 +84,7 @@ function withCappedDocument(operation: OperationEnvelope, capBytes: number): Ope
     prefix: `operation-${operation.id.replace(/[^a-zA-Z0-9]/g, '_')}`,
   });
   writeRedactedXmlCacheFile(file, redacted);
+  writeSidecar(file, resolvedSession, sourceSha256(redacted));
   logInlineXmlCapHit({ tool: 'get-operation', bytes, capBytes, file });
   return {
     ...operation,
