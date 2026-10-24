@@ -268,13 +268,15 @@ describe('duplicate dashboard zone id guard', () => {
     `<workbook><worksheets>${sheet('A')}${sheet('B')}</worksheets><dashboards>${fragment}</dashboards><windows><window class="dashboard" name="D"><viewpoints><viewpoint name="A"/><viewpoint name="B"/></viewpoints></window></windows></workbook>`;
 
   function build(liveFragment: string): ReturnType<typeof makeExecutorMock> {
+    let live = liveFragment;
     return makeExecutorMock({
-      getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: workbookWith(liveFragment) })),
+      getWorkbookDocument: vi.fn().mockImplementation(async () => Ok({ xml: workbookWith(live) })),
       listDashboards: vi.fn().mockResolvedValue(Ok({ dashboards: [{ id: 'dash-1', name: 'D' }] })),
-      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: liveFragment })),
-      applyDashboardDocument: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'apply', status: 'completed', submitted_at: '' })),
+      getDashboardDocument: vi.fn().mockImplementation(async () => Ok({ xml: live })),
+      applyDashboardDocument: vi.fn().mockImplementation(async (_id: string, xml: string) => {
+        live = xml;
+        return Ok({ command_id: 'apply', status: 'completed', submitted_at: '' });
+      }),
     });
   }
 
