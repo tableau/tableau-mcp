@@ -48,6 +48,7 @@ export async function requestStagedUpload<FileType extends string>({
     await getBlobStorageProvider().getPresignedUploadUrl({
       key: buildStagedUploadKey(kind, uploadId, fileType),
       contentType,
+      maxBytes: MAX_STAGED_UPLOAD_BYTES,
     });
 
   return {
@@ -71,16 +72,16 @@ export async function resolveStagedUpload<FileType extends string>({
   assertStagedUploadId(kind, uploadId);
 
   for (const fileType of kind.fileTypes) {
-    const stream = await getBlobStorageProvider().download({
+    const download = await getBlobStorageProvider().download({
       key: buildStagedUploadKey(kind, uploadId, fileType),
       maxBytes,
     });
 
-    if (stream === undefined) {
+    if (download === undefined) {
       continue;
     }
 
-    const bytes = await collectBytes(kind, stream, maxBytes);
+    const bytes = await collectBytes(kind, download.data, maxBytes);
     if (bytes.byteLength === 0) {
       throw new Error(`${kind.label} upload bytes must not be empty.`);
     }

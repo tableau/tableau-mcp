@@ -845,14 +845,20 @@ await s3.send(new PutObjectCommand({ Bucket, Key: key, Body: Readable.from(data)
 
 When `contentLength` is absent, use `@aws-sdk/lib-storage`'s `Upload` (multipart) instead.
 
-`download` returns a stream (`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found.
-Throw (don't truncate) if the object is known to exceed `maxBytes`; tableau-mcp also enforces
-`maxBytes` while reading. In Node, S3's GetObject `Body` is already an async iterable (map
-`NoSuchKey` to `undefined` and check `ContentLength` against `maxBytes` first):
+`download` returns `{ data, contentLength? }`, where `data` is a stream
+(`AsyncIterable<Uint8Array>`), or `undefined` if the key is not found. Throw (don't truncate) if the
+object is known to exceed `maxBytes`; tableau-mcp also enforces `maxBytes` while reading. In Node,
+S3's GetObject `Body` is already an async iterable (map `NoSuchKey` to `undefined` and check
+`ContentLength` against `maxBytes` first):
 
 ```ts
-return (await s3.send(new GetObjectCommand({ Bucket, Key: key }))).Body as Readable; // Readable from node:stream
+const { Body, ContentLength } = await s3.send(new GetObjectCommand({ Bucket, Key: key }));
+return { data: Body as Readable, contentLength: ContentLength }; // Readable from node:stream
 ```
+
+`getPresignedUploadUrl` receives an optional `maxBytes`. Providers may enforce it in the signature
+(e.g. an S3 POST policy `content-length-range`); tableau-mcp still enforces it when reading the
+upload back.
 
 :::
 

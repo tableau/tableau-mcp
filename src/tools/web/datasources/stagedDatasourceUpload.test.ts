@@ -59,6 +59,7 @@ describe('requestStagedDatasourceUpload', () => {
       expect(mocks.getPresignedUploadUrl).toHaveBeenCalledExactlyOnceWith({
         key: `datasource-uploads/${result.datasourceUploadId}/datasource.${fileType}`,
         contentType,
+        maxBytes: MAX_STAGED_DATASOURCE_BYTES,
       });
     },
   );
@@ -84,7 +85,7 @@ describe('requestStagedDatasourceUpload', () => {
 describe('resolveStagedDatasourceUpload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.download.mockImplementation(async () => streamOf('<data', 'source />'));
+    mocks.download.mockImplementation(async () => ({ data: streamOf('<data', 'source />') }));
   });
 
   function expectedDownload(
@@ -108,7 +109,9 @@ describe('resolveStagedDatasourceUpload', () => {
 
   it('falls back to TDSX only when the TDS object is absent, preserving the byte limit', async () => {
     const bytes = Buffer.from('PK\x03\x04');
-    mocks.download.mockResolvedValueOnce(undefined).mockResolvedValueOnce(streamOf(bytes));
+    mocks.download
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ data: streamOf(bytes) });
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 4096 }),
@@ -131,7 +134,7 @@ describe('resolveStagedDatasourceUpload', () => {
   });
 
   it('rejects a stream that exceeds maxBytes', async () => {
-    mocks.download.mockResolvedValue(streamOf('1234', '5678'));
+    mocks.download.mockResolvedValue({ data: streamOf('1234', '5678') });
 
     await expect(
       resolveStagedDatasourceUpload({ datasourceUploadId: uploadId, maxBytes: 6 }),
@@ -158,7 +161,7 @@ describe('resolveStagedDatasourceUpload', () => {
   );
 
   it('rejects an empty TDS without falling back to another object', async () => {
-    mocks.download.mockResolvedValue(streamOf());
+    mocks.download.mockResolvedValue({ data: streamOf() });
 
     await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toThrow(
       'Data source upload bytes must not be empty.',
@@ -167,7 +170,7 @@ describe('resolveStagedDatasourceUpload', () => {
   });
 
   it('rejects empty TDSX bytes after fallback', async () => {
-    mocks.download.mockResolvedValueOnce(undefined).mockResolvedValueOnce(streamOf());
+    mocks.download.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ data: streamOf() });
 
     await expect(resolveStagedDatasourceUpload({ datasourceUploadId: uploadId })).rejects.toThrow(
       'Data source upload bytes must not be empty.',

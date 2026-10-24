@@ -14,6 +14,10 @@
  *
  * Keys are relative, `/`-delimited paths chosen by the server, and later looked up by the same
  * key. Providers may prepend their own base path but must otherwise store each key as given.
+ *
+ * Any members added to this interface (or to its params and results) in future will be optional,
+ * so existing providers keep compiling. Every `expiresAt` is an ISO-8601 UTC timestamp
+ * (e.g. `2026-01-01T00:00:00.000Z`).
  */
 export interface BlobStorageProvider {
   /**
@@ -21,9 +25,10 @@ export interface BlobStorageProvider {
    * client as-is, so it must be fetchable without credentials and should be short-lived (e.g. a
    * presigned GET).
    *
-   * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) are never held in
-   * memory whole. It can only be assumed to be iterable once. Providers must consume `data` to
-   * completion before resolving; core treats an upload that resolves without reading it as an error.
+   * `data` is a stream of byte pieces so large blobs (e.g. multi-GB workbooks) can be streamed;
+   * the server currently buffers workbook bytes in memory before handing them over. It can only be
+   * assumed to be iterable once. Implementations must consume `data` to completion before
+   * resolving.
    *
    * @param params.key - Storage key/path for the blob
    * @param params.data - The bytes to store, as an async iterable (e.g. a Node `Readable`)
@@ -48,15 +53,19 @@ export interface BlobStorageProvider {
    *
    * @param params.key - Storage key/path for the blob
    * @param params.contentType - MIME type the upload must be sent as
+   * @param params.maxBytes - Upper bound on the upload size. Providers MAY enforce it in the
+   *   signature (e.g. an S3 POST policy `content-length-range`; a plain presigned PUT can't); core
+   *   still enforces it when the upload is read back via `download`.
    */
   getPresignedUploadUrl(params: {
     key: string;
     contentType: string;
+    maxBytes?: number;
   }): Promise<{ uploadUrl: string; requiredHeaders: Record<string, string>; expiresAt?: string }>;
 
   /**
    * Download a previously stored blob as a stream of byte pieces, so large blobs (e.g. multi-GB
-   * workbooks) never have to be held in memory whole.
+   * workbooks) can be streamed; the server currently buffers workbook bytes in memory.
    *
    * Providers MUST throw if the object is known to exceed `maxBytes` (e.g. from its content
    * length), MUST NOT truncate, and should return the stream lazily (no bytes read until it is
@@ -64,11 +73,12 @@ export interface BlobStorageProvider {
    *
    * @param params.key - Storage key/path for the blob
    * @param params.maxBytes - Size limit for the blob
-   * @returns The blob's bytes as an async iterable (e.g. a Node `Readable` or S3 GetObject `Body`),
-   *   or undefined only if the key was not found
+   * @returns `data`, the blob's bytes as an async iterable (e.g. a Node `Readable` or S3 GetObject
+   *   `Body`), plus `contentLength` when the provider knows the exact byte count; or undefined
+   *   only if the key was not found
    */
   download(params: {
     key: string;
     maxBytes: number;
-  }): Promise<AsyncIterable<Uint8Array> | undefined>;
+  }): Promise<{ data: AsyncIterable<Uint8Array>; contentLength?: number } | undefined>;
 }

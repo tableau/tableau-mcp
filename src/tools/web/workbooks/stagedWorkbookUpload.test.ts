@@ -53,6 +53,7 @@ describe('requestStagedWorkbookUpload', () => {
     expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
       key: `workbook-uploads/${result.workbookUploadId}/workbook.twb`,
       contentType: 'application/xml',
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
   });
 
@@ -73,6 +74,7 @@ describe('requestStagedWorkbookUpload', () => {
     expect(mocks.getPresignedUploadUrl).toHaveBeenCalledWith({
       key: `workbook-uploads/${result.workbookUploadId}/workbook.twbx`,
       contentType: 'application/octet-stream',
+      maxBytes: MAX_STAGED_WORKBOOK_BYTES,
     });
   });
 
@@ -109,7 +111,7 @@ describe('resolveStagedWorkbookUpload', () => {
   });
 
   it('returns the staged workbook stream from the .twb key when it exists', async () => {
-    mocks.download.mockResolvedValue(streamOf('<work', 'book />'));
+    mocks.download.mockResolvedValue({ data: streamOf('<work', 'book />'), contentLength: 12 });
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twb`,
@@ -124,7 +126,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
   it('falls back to the .twbx key when the .twb key does not exist', async () => {
     mocks.download.mockResolvedValueOnce(undefined);
-    mocks.download.mockResolvedValueOnce(streamOf('PK\x03\x04'));
+    mocks.download.mockResolvedValueOnce({ data: streamOf('PK\x03\x04') });
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).resolves.toEqual({
       fileName: `${uploadId}.twbx`,
@@ -157,7 +159,7 @@ describe('resolveStagedWorkbookUpload', () => {
 
 describe('resolveStagedWorkbookUpload limits', () => {
   it('rejects empty uploaded workbook bytes', async () => {
-    mocks.download.mockResolvedValue(streamOf());
+    mocks.download.mockResolvedValue({ data: streamOf() });
 
     await expect(resolveStagedWorkbookUpload({ workbookUploadId: uploadId })).rejects.toThrow(
       'must not be empty',
@@ -165,7 +167,7 @@ describe('resolveStagedWorkbookUpload limits', () => {
   });
 
   it('rejects a stream that exceeds maxBytes', async () => {
-    mocks.download.mockResolvedValue(streamOf('1234', '5678'));
+    mocks.download.mockResolvedValue({ data: streamOf('1234', '5678') });
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, maxBytes: 6 }),
@@ -176,7 +178,7 @@ describe('resolveStagedWorkbookUpload limits', () => {
     async function* stringChunks(): AsyncGenerator<unknown> {
       yield '1234';
     }
-    mocks.download.mockResolvedValue(stringChunks());
+    mocks.download.mockResolvedValue({ data: stringChunks() });
 
     await expect(
       resolveStagedWorkbookUpload({ workbookUploadId: uploadId, maxBytes: 2 }),
