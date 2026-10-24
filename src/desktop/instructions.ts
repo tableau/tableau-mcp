@@ -33,6 +33,7 @@ export const SESSION_RESOLUTION_TEXT_UNPINNED =
 export const SESSION_RESOLUTION_TEXT_PINNED =
   'Session defaults to the current Tableau Desktop; use list-instances to see all open Desktops and pass session to target another.';
 
+// Claude Code shows only the first 4,096 characters of server instructions by default, so entries every client needs come first; instructions.test.ts pins the core set and that budget.
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
@@ -41,8 +42,37 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
-    id: 'plan-before-build',
-    text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.',
+    id: 'ask-user-ambiguity',
+    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.',
+  },
+  {
+    kind: 'prose',
+    id: 'analytical-question-no-write',
+    text: 'Do not create or change workbook content for an analytical question alone.',
+  },
+  {
+    kind: 'route',
+    id: 'data-value-question',
+    trigger: 'a data-value question',
+    action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
+    toolSequence: ['get-summary-data'],
+    stopConditions: ['answer only from returned rows'],
+    requiredEvidence: ['get-summary-data returned rows'],
+  },
+  {
+    kind: 'prose',
+    id: 'no-native-tool-escape',
+    text: 'If no native or sanctioned cached-file route covers the ask, say so plainly; never invent an unsupported path.',
+  },
+  {
+    kind: 'prose',
+    id: SESSION_RESOLUTION_ID,
+    text: SESSION_RESOLUTION_TEXT_UNPINNED,
+  },
+  {
+    kind: 'prose',
+    id: 'preflight-rejection',
+    text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
   },
   {
     kind: 'route',
@@ -89,6 +119,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'prose',
     id: 'dense-scatter-bubble',
     text: 'Dense scatter/bubble + categorical color overrides terminal bind: get-worksheet-xml(mode:inline) → list-available-fields → add-field → apply-worksheet. Replace/supplement with bounded semantic discrete Detail finer than Color; use exact column_ref. None: report/ask-user; never invent. Skip one-mark-per-category or continuous color. Readback: claim only Detail/Color persisted; mark density unverified.',
+  },
+  {
+    kind: 'prose',
+    id: 'plan-before-build',
+    text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.',
   },
   {
     kind: 'route',
@@ -201,15 +236,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'data-value-question',
-    trigger: 'a data-value question',
-    action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
-    toolSequence: ['get-summary-data'],
-    stopConditions: ['answer only from returned rows'],
-    requiredEvidence: ['get-summary-data returned rows'],
-  },
-  {
-    kind: 'route',
     id: 'rounded-corners',
     trigger: 'rounded corners on dashboard objects or containers',
     action:
@@ -250,11 +276,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: ["each author-* verb's readback-verified result object"],
   },
   {
-    kind: 'prose',
-    id: 'ask-user-ambiguity',
-    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.',
-  },
-  {
     kind: 'route',
     id: 'edit-in-place',
     trigger: 'an edit to a populated current/existing sheet/chart/view',
@@ -276,21 +297,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'prose',
     id: 'command-census',
     text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort/mark type or compatible rounded ordinary bars; format-dashboard-zones rounds dashboard objects; set-member-colors sets colors for members of the field on Color; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
-  },
-  {
-    kind: 'prose',
-    id: SESSION_RESOLUTION_ID,
-    text: SESSION_RESOLUTION_TEXT_UNPINNED,
-  },
-  {
-    kind: 'prose',
-    id: 'preflight-rejection',
-    text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
-  },
-  {
-    kind: 'prose',
-    id: 'no-native-tool-escape',
-    text: 'If no native or sanctioned cached-file route covers the ask, say so plainly; never invent an unsupported path.',
   },
 ];
 
