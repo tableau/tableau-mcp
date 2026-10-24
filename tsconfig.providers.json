@@ -5,7 +5,7 @@
     "emitDeclarationOnly": true,
     "outDir": "./build",
     "rootDir": "./src",
-    "types": ["node"]
+    "types": []
   },
   "include": [
     "src/activityLog/provider.ts",
