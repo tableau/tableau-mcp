@@ -389,7 +389,7 @@ variable.
 
 The telemetry provider to use for metrics collection.
 
-See [Bring your own infrastructure](../../enterprise/bring-your-own-infrastructure.md#telemetry) for the interface.
+See [Telemetry](../../enterprise/tableau-server.md#telemetry) in the Tableau Server deployment guide for the interface and required variables.
 
 - Default: `noop`
 - Possible values:
@@ -422,8 +422,6 @@ implements the [`TelemetryProvider`](https://github.com/tableau/tableau-mcp/blob
 ## `FEATURE_GATE_PROVIDER`
 
 The feature gate provider to use for feature flag management.
-
-See [Bring your own infrastructure](../../enterprise/bring-your-own-infrastructure.md#feature-gates) for the interface.
 
 - Default: `server`
 - Possible values:
@@ -799,7 +797,7 @@ provider-hosted URLs. This follows the same "bring your own infra" pattern as
 tableau-mcp ships no cloud-vendor-specific storage implementation; on-prem/self-hosted deployments
 plug in their own.
 
-See [Bring your own infrastructure](../../enterprise/bring-your-own-infrastructure.md#blob-storage) for the interface and an S3 example.
+See [Blob storage](../../enterprise/tableau-server.md#blob-storage) in the Tableau Server deployment guide for the interface and required variables.
 
 - Default: unset (no blob storage). Tools fall back to file paths and inline results: inline
   base64/text for view images and data, local file paths for workbook downloads and the data app
