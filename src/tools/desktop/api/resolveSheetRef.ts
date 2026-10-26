@@ -17,10 +17,12 @@ export type ResolvedSheetRef = {
 export async function resolveSheetRef({
   session,
   sheet,
+  kind,
   extra,
 }: {
   session: string | undefined;
   sheet: string;
+  kind?: SheetKind;
   extra: Parameters<typeof runExternalApiReadTool>[0]['extra'];
 }): ReturnType<typeof runExternalApiReadTool<ResolvedSheetRef>> {
   return await runExternalApiReadTool<ResolvedSheetRef>({
@@ -64,7 +66,11 @@ export async function resolveSheetRef({
         })),
       ];
 
-      const resolved = resolveItemByNameOrId('Sheet', sheet, tagged);
+      const resolved = resolveItemByNameOrId(
+        'Sheet',
+        sheet,
+        kind ? tagged.filter((item) => item.kind === kind) : tagged,
+      );
       if (resolved.isErr()) {
         return resolved.error.toErr();
       }
