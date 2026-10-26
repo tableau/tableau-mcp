@@ -26,7 +26,8 @@ jobs:
           npm run build
           npm pack --json > npm-pack.json
           npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
-          PACKAGE_TARBALL="$(node -p "require('./npm-pack.json')[0].filename")"
+          # npm pack --json is an array on npm <=11 but an object keyed by package name on npm 12+.
+          PACKAGE_TARBALL="$(node -p "(d => Array.isArray(d) ? d[0].filename : Object.values(d)[0].filename)(require('./npm-pack.json'))")"
           # Prerelease-aware publish. A SemVer prerelease version (one containing a
           # `-`, e.g. 2.18.0-hotfix.1; build metadata `+...` is NOT a prerelease)
           # must NOT reassign the `latest` npm dist-tag — otherwise a hotfix off an

@@ -5,6 +5,7 @@ import {
   findMissingPackageTargets,
   findUnexpectedNonBuildFiles,
   getPackageTargets,
+  normalizePackResults,
 } from './packedPackageTargets.js';
 
 describe('packedPackageTargets', () => {
@@ -75,6 +76,32 @@ describe('packedPackageTargets', () => {
       expect(findUnexpectedNonBuildFiles([...allowed, 'README.combined.md'])).toEqual([
         'README.combined.md',
       ]);
+    });
+  });
+
+  describe('normalizePackResults', () => {
+    const result = {
+      filename: 'tableau-mcp-server-5.1.2.tgz',
+      files: [{ path: 'build/index.js' }],
+    };
+
+    it('returns the npm <=11 array shape unchanged', () => {
+      expect(normalizePackResults([result])).toEqual([result]);
+    });
+
+    it('unwraps the npm 12+ object keyed by package name', () => {
+      expect(normalizePackResults({ '@tableau/mcp-server': result })).toEqual([result]);
+    });
+
+    it('reports more than one artifact when either shape has multiple entries', () => {
+      expect(normalizePackResults([result, result])).toHaveLength(2);
+      expect(normalizePackResults({ a: result, b: result })).toHaveLength(2);
+    });
+
+    it('returns an empty array for non-object JSON', () => {
+      expect(normalizePackResults(null)).toEqual([]);
+      expect(normalizePackResults('tableau-mcp-server-5.1.2.tgz')).toEqual([]);
+      expect(normalizePackResults(42)).toEqual([]);
     });
   });
 });
