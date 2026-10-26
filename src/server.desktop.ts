@@ -93,8 +93,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * includes the two knowledge tools (search-knowledge and read-knowledge-resource), because the
  * instructions tell the model to consult the expertise library before authoring and these are
  * the only way it can read that library. Workbook and data reads, navigation, dialog handling
- * and scoped cached-XML fallbacks are included. Standalone validation and unrelated info tools
- * are left out, and clients that need more can use TOOL_PROFILE=full.
+ * and scoped cached-XML fallbacks are included. Clients that need more can use TOOL_PROFILE=full.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
@@ -124,9 +123,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'apply-dashboard',
     'apply-storyboard',
     'apply-workbook',
-    'apply-workbook-style',
-    'inspect-custom-theme',
-    'export-custom-theme',
     'run-dashboard-batch',
     'execute-tableau-command',
     'search-commands',
@@ -142,12 +138,14 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'compose-story',
     'open-file',
     'set-start-page-visibility',
+    'set-data-source-page-active',
     'save-workbook',
     'workbook-export-as',
     'pause-auto-updates',
     'refresh-auto-updates',
     'refresh-storyboard-auto-updates',
     'refresh-dashboard-auto-updates',
+    'reload-extensions',
     'resume-auto-updates',
     // Workbook-level undo/redo — recover from a bad edit without hand-reverting XML.
     'undo-workbook',
@@ -155,6 +153,10 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'ask-user',
     'list-instances',
     'get-desktop-state',
+    'get-app-info',
+    'get-capabilities',
+    'list-operations',
+    'get-operation',
     'get-diagnostics',
     'get-active-dialogs',
     'invoke-dialog-action',
@@ -163,6 +165,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'list-worksheets',
     'get-show-me-options',
     'list-dashboards',
+    'list-storyboards',
+    'get-sheet-info',
     'get-summary-data',
     'list-worksheet-logical-tables',
     'get-worksheet-underlying-data',
@@ -175,6 +179,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'refresh-datasource-data',
     'refresh-datasource-extract',
     'author-calc',
+    'validate-calculated-field',
     'author-set',
     'author-parameter',
     'author-action',

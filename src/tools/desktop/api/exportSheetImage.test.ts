@@ -153,6 +153,47 @@ describe('export-image tools', () => {
     }
   });
 
+  it.each([
+    {
+      tool: exportWorksheetImageTool,
+      args: { worksheetName: 'sheet-sales' },
+      path: '/v0/workbook/worksheets/sheet-sales/image',
+    },
+    {
+      tool: exportDashboardImageTool,
+      args: { dashboardName: 'Executive Dashboard' },
+      path: '/v0/workbook/dashboards/dash-exec/image',
+    },
+  ])('reports no pixel size for an SVG written to $path', async ({ tool, args, path }) => {
+    const harness = await startHarness(tool, (server) => {
+      server.setOverride(`GET ${path}`, {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filePath: '/tmp/out.svg',
+          width: -1,
+          height: -1,
+          effectiveMimeType: 'image/svg+xml',
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({
+        ...args,
+        filePath: '/tmp/out.svg',
+        mimeType: 'image/svg+xml',
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('/tmp/out.svg');
+      expect(result.content[0].text).toContain('pixel size not applicable');
+      expect(result.content[0].text).not.toContain('-1');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('downgrades an over-cap inline image to a cache file instead of an image block', async () => {
     const harness = await startHarness(exportWorksheetImageTool, undefined, {
       inlineImageMaxBytes: 1,

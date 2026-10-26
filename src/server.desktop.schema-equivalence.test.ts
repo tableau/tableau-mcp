@@ -159,3 +159,47 @@ describe('desktop tools/list alwaysLoad pins', () => {
     expect(JSON.stringify(pinned).length).toBeLessThan(6_000);
   });
 });
+
+describe('always-load pin list', () => {
+  it('is exactly the seven intended tools', () => {
+    expect([...ALWAYS_LOAD_TOOL_NAMES].sort()).toEqual(
+      [
+        'get-dashboard-xml',
+        'invoke-dialog-action',
+        'read-knowledge-resource',
+        'rename-sheet',
+        'run-dashboard-batch',
+        'search-commands',
+        'search-knowledge',
+      ].sort(),
+    );
+    expect(ALWAYS_LOAD_TOOL_NAMES.size).toBe(7);
+  });
+});
+
+describe('getModelFacingToolEntry', () => {
+  const makeEntry = (): Tool => ({
+    name: 'sample',
+    title: 'Sample',
+    description: 'A sample tool',
+    inputSchema: { type: 'object', properties: { a: { type: 'string' } } },
+    outputSchema: { type: 'object', properties: { b: { type: 'number' } } },
+    annotations: { readOnlyHint: true },
+    _meta: { 'anthropic/alwaysLoad': true },
+  });
+
+  it('omits only _meta and keeps every other field', () => {
+    const entry = makeEntry();
+    const { _meta, ...expected } = structuredClone(entry);
+    expect(_meta).toBeDefined();
+    const result = getModelFacingToolEntry(entry);
+    expect(result).not.toHaveProperty('_meta');
+    expect(result).toEqual(expected);
+  });
+
+  it('does not mutate the input entry', () => {
+    const entry = makeEntry();
+    getModelFacingToolEntry(entry);
+    expect(entry).toEqual(makeEntry());
+  });
+});

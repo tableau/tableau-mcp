@@ -1,4 +1,6 @@
 import {
+  datasourceRefreshDataRoute,
+  datasourceRefreshExtractRoute,
   EXTERNAL_API_ROUTES,
   workbookDatasourceDocumentRoute,
   workbookDatasourceRoute,
@@ -20,6 +22,20 @@ describe('workbook datasource routes', () => {
     expect(workbookDatasourceRoute(datasourceId)).toBe(`/v0/workbook/datasources/${segment}`);
     expect(workbookDatasourceDocumentRoute(datasourceId)).toBe(
       `/v0/workbook/datasources/${segment}/document`,
+    );
+  });
+});
+
+describe('datasource refresh routes', () => {
+  it.each([
+    ['ds-1', 'ds-1'],
+    ['My%20Data', 'My%20Data'],
+    ['Sales%2FExtract', 'Sales%2FExtract'],
+    ['Sales%252FExtract', 'Sales%252FExtract'],
+  ])('places encoded datasource id %s in the path exactly once', (datasourceId, segment) => {
+    expect(datasourceRefreshDataRoute(datasourceId)).toBe(`/v0/datasources/${segment}:refreshData`);
+    expect(datasourceRefreshExtractRoute(datasourceId)).toBe(
+      `/v0/datasources/${segment}:refreshExtract`,
     );
   });
 });
