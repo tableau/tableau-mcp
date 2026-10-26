@@ -32,9 +32,6 @@
     },
     "./sessionStore/sessionStore": {
       "types": "./build/sessionStore/sessionStore.d.ts"
-    },
-    "./blobStorage/blobStorageProvider": {
-      "types": "./build/blobStorage/blobStorageProvider.d.ts"
     }
   },
   "scripts": {
@@ -77,6 +74,8 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
+    "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.26.0",

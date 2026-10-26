@@ -1,5 +1,6 @@
+import { BucketS3Config } from '../s3Client.js';
 import {
-  buildStagedUploadKey,
+  buildStagedUploadS3Key,
   getStagedFileType,
   MAX_STAGED_UPLOAD_BYTES,
   requestStagedUpload,
@@ -27,39 +28,45 @@ export type ResolvedWorkbook = ResolvedStagedFile;
 export type RequestWorkbookUploadResult = {
   workbookUploadId: string;
   uploadUrl: string;
-  expiresAt?: string;
+  expiresAt: string;
   maxSizeBytes: number;
   requiredHeaders: Record<string, string>;
 };
 
 export async function requestStagedWorkbookUpload({
   fileName,
+  config,
 }: {
   fileName: string;
+  config: BucketS3Config;
 }): Promise<RequestWorkbookUploadResult> {
-  const { uploadId, ...rest } = await requestStagedUpload({ kind: workbookKind, fileName });
+  const { uploadId, ...rest } = await requestStagedUpload({ kind: workbookKind, fileName, config });
   return { workbookUploadId: uploadId, ...rest };
 }
 
 export async function resolveStagedWorkbookUpload({
   workbookUploadId,
+  config,
   maxBytes,
 }: {
   workbookUploadId: string;
+  config: BucketS3Config;
   maxBytes?: number;
 }): Promise<ResolvedWorkbook> {
   return await resolveStagedUpload({
     kind: workbookKind,
     uploadId: workbookUploadId,
+    config,
     maxBytes,
   });
 }
 
-export function buildWorkbookUploadKey(
+export function buildWorkbookUploadS3Key(
+  keyPrefix: string,
   workbookUploadId: string,
   fileType: WorkbookFileType,
 ): string {
-  return buildStagedUploadKey(workbookKind, workbookUploadId, fileType);
+  return buildStagedUploadS3Key(workbookKind, keyPrefix, workbookUploadId, fileType);
 }
 
 export function getWorkbookFileType(fileName: string): WorkbookFileType | undefined {

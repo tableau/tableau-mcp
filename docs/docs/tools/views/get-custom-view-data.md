@@ -37,10 +37,10 @@ Example: `{ "year": "2017" }`
 
 The tool returns one of two result shapes:
 
-- **Blob storage not configured/enabled (default):** returns the CSV as a single JSON-encoded text
-  string (`JSON.stringify(csv)`), with newlines escaped as `\n`.
-- **Blob storage configured/enabled:** returns a `resource_link` with a URL to the CSV file in blob
-  storage, instead of inlining the data.
+- **`MCP_S3_BUCKET` unset (default):** returns the CSV as a single JSON-encoded text string
+  (`JSON.stringify(csv)`), with newlines escaped as `\n`.
+- **`MCP_S3_BUCKET` set:** returns a `resource_link` with a short-lived presigned URL to the CSV
+  file in S3, instead of inlining the data.
 
 ## Example result (default)
 
@@ -48,14 +48,14 @@ The tool returns one of two result shapes:
 "Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)\nCanada,Ontario,26.8%,50.94,-84.75\n"
 ```
 
-## Example result (blob storage mode)
+## Example result (S3 mode)
 
 ```json
 {
   "type": "resource_link",
-  "uri": "https://blob.example.com/...presigned...",
+  "uri": "https://example-bucket.s3.amazonaws.com/...presigned...",
   "name": "view-data.csv",
   "mimeType": "text/csv",
-  "description": "View data (CSV) stored in blob storage."
+  "description": "View data (CSV) stored in S3. This is a short-lived presigned URL."
 }
 ```

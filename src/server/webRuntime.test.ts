@@ -33,12 +33,6 @@ vi.mock('../activityLog/init.js', () => ({
   }),
 }));
 
-vi.mock('../blobStorage/init.js', () => ({
-  initializeBlobStorageProvider: vi.fn(() => {
-    runtimeState.events.push('blob storage');
-  }),
-}));
-
 vi.mock('../features/init.js', () => ({
   initializeFeatureGate: vi.fn(() => {
     runtimeState.events.push('feature gate');
@@ -135,7 +129,6 @@ describe('initializeWebRuntime', () => {
     expect(RestApi.host).toBe(config.server);
     expect(runtimeState.events).toEqual([
       'feature gate',
-      'blob storage',
       'activity log init',
       'session store init',
       'session store connect',
@@ -148,7 +141,6 @@ describe('initializeWebRuntime', () => {
 
     expect(runtimeState.events).toEqual([
       'feature gate',
-      'blob storage',
       'activity log init',
       'session store init',
       'session store connect',
@@ -178,13 +170,12 @@ describe('initializeWebRuntime', () => {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
 
     expect(initializeSessionStore).not.toHaveBeenCalled();
-    expect(runtimeState.events).toEqual(['feature gate', 'blob storage']);
+    expect(runtimeState.events).toEqual(['feature gate']);
 
     activityLogInit.resolve();
     await runtimePromise;
-    expect(runtimeState.events.slice(0, 4)).toEqual([
+    expect(runtimeState.events.slice(0, 3)).toEqual([
       'feature gate',
-      'blob storage',
       'activity log init',
       'session store init',
     ]);

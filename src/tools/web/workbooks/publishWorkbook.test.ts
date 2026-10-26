@@ -24,17 +24,12 @@ const mocks = vi.hoisted(() => ({
   mockResolveStagedWorkbookUpload: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
   mockGetPersonalSpace: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(),
   useRestApiCalls: [] as Array<{ jwtScopes: unknown }>,
   sessionEvents: [] as string[],
 }));
 
 vi.mock('fs/promises', () => ({
   readFile: mocks.mockReadFile,
-}));
-
-vi.mock('../../../blobStorage/init.js', () => ({
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -104,8 +99,6 @@ describe('publishWorkbookTool', () => {
     mocks.mockUploadFileInChunks.mockReset();
     mocks.mockResolveStagedWorkbookUpload.mockReset();
     mocks.mockReadFile.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReset();
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(true);
     mocks.mockIsFeatureEnabled.mockReset();
     mocks.mockGetPersonalSpace.mockReset();
     mocks.useRestApiCalls.length = 0;
@@ -344,6 +337,7 @@ describe('publishWorkbookTool', () => {
     });
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId: validArgs.workbookUploadId,
+      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -417,7 +411,7 @@ describe('publishWorkbookTool', () => {
 
     const result = await getToolResult(
       { ...validLocalArgs, workbookFilePath: '/tmp/source-superstore.twbx' },
-      { blobStorageEnabled: false },
+      { bucketS3Enabled: false },
     );
 
     expect(result.isError).toBe(false);
@@ -505,6 +499,7 @@ describe('publishWorkbookTool', () => {
 
     expect(mocks.mockResolveStagedWorkbookUpload).toHaveBeenCalledWith({
       workbookUploadId,
+      config: expect.objectContaining({ bucket: 'tableau-workbooks' }),
     });
     expect(mocks.mockValidateWorkbookAndUpload).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -523,7 +518,7 @@ describe('publishWorkbookTool', () => {
       project: { id: 'target-project-id', name: 'Marketing Analytics' },
     });
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(false);
     expect(mocks.mockReadFile).toHaveBeenCalledWith('/tmp/source-superstore.twb');
@@ -535,13 +530,13 @@ describe('publishWorkbookTool', () => {
     });
   });
 
-  it('rejects local workbook file paths when blob storage is configured', async () => {
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: true });
+  it('rejects local workbook file paths when staged S3 uploads are configured', async () => {
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: true });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
-      'workbookFilePath is only supported when staged uploads are not configured',
+      'workbookFilePath is only supported when staged S3 uploads are not configured',
     );
     expect(mocks.mockReadFile).not.toHaveBeenCalled();
     expect(mocks.mockResolveStagedWorkbookUpload).not.toHaveBeenCalled();
@@ -554,7 +549,7 @@ describe('publishWorkbookTool', () => {
         ...validLocalArgs,
         workbookFilePath: '/tmp/source-superstore.xml',
       },
-      { blobStorageEnabled: false },
+      { bucketS3Enabled: false },
     );
 
     expect(result.isError).toBe(true);
@@ -567,7 +562,7 @@ describe('publishWorkbookTool', () => {
   it('returns an args-validation error when local workbook file is empty', async () => {
     mocks.mockReadFile.mockResolvedValue(Buffer.from(''));
 
-    const result = await getToolResult(validLocalArgs, { blobStorageEnabled: false });
+    const result = await getToolResult(validLocalArgs, { bucketS3Enabled: false });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -1279,11 +1274,8 @@ async function getToolResult(
     personalSpace?: boolean;
     overwrite?: boolean;
   },
-  options: { boundedProjectIds?: Set<string> | null; blobStorageEnabled?: boolean } = {},
+  options: { boundedProjectIds?: Set<string> | null; bucketS3Enabled?: boolean } = {},
 ): Promise<CallToolResult> {
-  if (options.blobStorageEnabled !== undefined) {
-    mocks.mockIsBlobStorageEnabled.mockReturnValue(options.blobStorageEnabled);
-  }
   const tool = getPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
@@ -1301,8 +1293,10 @@ async function getToolResult(
 
 function getMockExtra({
   boundedProjectIds = null,
+  bucketS3Enabled = true,
 }: {
   boundedProjectIds?: Set<string> | null;
+  bucketS3Enabled?: boolean;
 } = {}): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   return {
@@ -1316,5 +1310,15 @@ function getMockExtra({
         tags: null,
       },
     }),
+    config: {
+      ...extra.config,
+      bucketS3: {
+        enabled: bucketS3Enabled,
+        bucket: 'tableau-workbooks',
+        region: 'us-east-1',
+        keyPrefix: 'mcp/',
+        presignTtlSeconds: 300,
+      },
+    },
   };
 }

@@ -1,5 +1,4 @@
 import { closeActivityLog, initializeActivityLog } from '../activityLog/init.js';
-import { initializeBlobStorageProvider } from '../blobStorage/init.js';
 import type { Config } from '../config.js';
 import { initializeFeatureGate } from '../features/init.js';
 import { getTableauServerInfo } from '../getTableauServerInfo.js';
@@ -53,7 +52,6 @@ export async function initializeWebRuntime(
   RestApi.host = config.server;
 
   initializeFeatureGate();
-  initializeBlobStorageProvider();
   await initializeActivityLog();
   initializeSessionStore();
   await connectSessionStore();
