@@ -10,6 +10,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -30,6 +31,11 @@ vi.mock('@aws-sdk/client-s3', () => ({
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
+
+const wiring = buildDatasourceWiringInfo({
+  serverUrl: 'https://10ax.online.tableau.com',
+  siteName: 'mcp-test',
+});
 
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
@@ -56,12 +62,14 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
@@ -200,12 +208,14 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
@@ -247,6 +257,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
@@ -262,6 +273,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
