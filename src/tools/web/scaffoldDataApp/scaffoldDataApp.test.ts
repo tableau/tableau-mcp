@@ -172,6 +172,53 @@ describe('getScaffoldDataAppTool', () => {
       );
     });
 
+    it('returns wiring for the configured server and the session site', async () => {
+      const result = await invokeCallback('Sales Demo');
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).wiring).toMatchObject({
+        server: 'my-tableau-server.com',
+        site: 'tc25',
+        channel: 'https',
+        port: 443,
+      });
+    });
+
+    it('falls back to the OAuth server when no server is configured', async () => {
+      const extra = getMockRequestHandlerExtra({
+        tableauAuthInfo: {
+          type: 'Bearer',
+          username: 'user',
+          server: 'https://10ax.online.tableau.com',
+          siteId: 'site-luid',
+          siteName: 'mcp-test',
+          raw: 'token',
+        },
+        getSiteName: () => 'mcp-test',
+      });
+      extra.config.server = '';
+
+      const callback = await Provider.from(makeTool().callback);
+      const result = await callback({ datappName: 'Sales Demo' }, extra);
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).wiring).toMatchObject({
+        server: '10ax.online.tableau.com',
+        site: 'mcp-test',
+      });
+    });
+
+    it('fails when no Tableau server can be determined', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.config.server = '';
+
+      const callback = await Provider.from(makeTool().callback);
+      const result = await callback({ datappName: 'Sales Demo' }, extra);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Tableau server could not be determined');
+    });
+
     it('includes allowedOrigins when the site policy is empty', async () => {
       const result = await invokeCallback('Sales Demo');
       expect(result.isError).toBeFalsy();
