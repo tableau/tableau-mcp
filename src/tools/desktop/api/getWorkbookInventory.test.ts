@@ -14,7 +14,6 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getWorkbookInventoryTool } from './getWorkbookInventory.js';
-import { workbookTargetFingerprint } from './workbookTargetFingerprint.js';
 
 vi.mock('../../../desktop/session/sessionResolution.js');
 
@@ -22,7 +21,6 @@ const resultSchema = z.object({
   title: z.string(),
   location: z.string().nullable().optional(),
   unsavedChanges: z.boolean(),
-  targetFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   worksheets: z.array(
     z.object({
       id: z.string(),
@@ -71,14 +69,6 @@ describe('getWorkbookInventoryTool', () => {
         title: 'Regional Sales Analysis',
         location: '/Users/tableau/Documents/regional-sales.twb',
         unsavedChanges: true,
-        targetFingerprint: workbookTargetFingerprint({
-          title: 'Regional Sales Analysis',
-          location: '/Users/tableau/Documents/regional-sales.twb',
-          unsavedChanges: true,
-          worksheets: body.worksheets,
-          dashboards: body.dashboards,
-          storyboards: body.storyboards,
-        }),
       });
       expect(body.worksheets[0]).toMatchObject({
         id: 'sheet-sales',
@@ -91,43 +81,6 @@ describe('getWorkbookInventoryTool', () => {
     } finally {
       await harness.close();
     }
-  });
-
-  it('fingerprints only stable workbook identity fields in stable sheet order', () => {
-    const first = workbookTargetFingerprint({
-      title: 'Book',
-      location: undefined,
-      unsavedChanges: false,
-      worksheets: [
-        { id: 'b', name: 'Beta', hidden: false, index: 2, datasources: ['A'] },
-        { id: 'a', name: 'Alpha', hidden: true, index: 1, datasources: ['B'] },
-      ],
-      dashboards: [{ id: 'd', name: 'Dashboard', hidden: false, isActiveSheet: true }],
-      storyboards: [{ id: 's', name: 'Story', hidden: false, storyPointCount: 4 }],
-    });
-    const second = workbookTargetFingerprint({
-      title: 'Book',
-      location: null,
-      unsavedChanges: true,
-      worksheets: [
-        { id: 'a', name: 'Alpha', hidden: false, index: 99, datasources: ['Changed'] },
-        { id: 'b', name: 'Beta', hidden: true, isActiveSheet: true },
-      ],
-      dashboards: [{ id: 'd', name: 'Dashboard', hidden: true, index: 7 }],
-      storyboards: [{ id: 's', name: 'Story', hidden: true, storyPointCount: 99 }],
-    });
-
-    expect(second).toBe(first);
-    expect(
-      workbookTargetFingerprint({
-        title: 'Book',
-        location: null,
-        unsavedChanges: true,
-        worksheets: [{ id: 'a', name: 'Renamed', hidden: false }],
-        dashboards: [],
-        storyboards: [],
-      }),
-    ).not.toBe(first);
   });
 
   it('reports an honest too-new endpoint 404 when the route is missing', async () => {
