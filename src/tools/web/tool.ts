@@ -10,6 +10,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { RouteSafetyError } from '../../sdks/routeSafety/core.js';
+import { parseTableauApiError } from '../../sdks/tableau/tableauApiError.js';
 import { SiteRole } from '../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
@@ -392,8 +393,23 @@ function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
     content: [
       {
         type: 'text',
-        text: `requestId: ${requestId}, error: ${getExceptionMessage(error)}`,
+        text: `requestId: ${requestId}, error: ${getErrorText(error)}`,
       },
     ],
   };
+}
+
+function getErrorText(error: unknown): string {
+  const message = getExceptionMessage(error);
+  const tableauError = parseTableauApiError(error);
+  if (!tableauError) {
+    return message;
+  }
+
+  const { code, summary, detail } = tableauError;
+  const tableauMessage = [summary, detail].filter(Boolean).join(': ');
+  if (!code && !tableauMessage) {
+    return message;
+  }
+  return `${message} (Tableau${code ? ` [${code}]` : ''}: ${tableauMessage || 'request failed'})`;
 }

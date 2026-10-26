@@ -397,6 +397,49 @@ describe('Tool', () => {
     });
   });
 
+  describe('Tableau REST error body', () => {
+    async function getErrorText(data: unknown): Promise<string> {
+      const tool = new WebTool(mockParams);
+      const axiosError = new AxiosError('Request failed with status code 400');
+      axiosError.response = { status: 400, data } as AxiosError['response'];
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      return result.content[0].text;
+    }
+
+    it('should include the code, summary and detail', async () => {
+      expect(
+        await getErrorText({
+          error: { code: '400006', summary: 'Bad Request', detail: 'Invalid page size' },
+        }),
+      ).toBe(
+        'requestId: 2, error: Request failed with status code 400 (Tableau [400006]: Bad Request: Invalid page size)',
+      );
+    });
+
+    it('should include a detail-only body', async () => {
+      expect(await getErrorText({ error: { detail: 'Invalid page size' } })).toBe(
+        'requestId: 2, error: Request failed with status code 400 (Tableau: Invalid page size)',
+      );
+    });
+
+    it('should keep the plain message for an empty or non-Tableau body', async () => {
+      const plain = 'requestId: 2, error: Request failed with status code 400';
+      expect(await getErrorText({ error: {} })).toBe(plain);
+      expect(await getErrorText('<html>Bad Request</html>')).toBe(plain);
+    });
+  });
+
   describe('product telemetry', () => {
     beforeEach(() => {
       mockTelemetrySend.mockClear();
