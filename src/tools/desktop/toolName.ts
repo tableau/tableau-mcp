@@ -30,6 +30,8 @@ export const desktopToolNames = [
   'refresh-dashboard-auto-updates',
   'reload-extensions',
   'get-workbook-extensions',
+  'scaffold-data-app',
+  'export-data-app',
   'resume-auto-updates',
   'refine-worksheet',
   'get-dashboard-xml',

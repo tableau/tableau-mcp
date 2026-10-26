@@ -1,3 +1,5 @@
+import { isAbsolute, resolve } from 'node:path';
+
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
@@ -106,6 +108,13 @@ export class Config extends BaseConfig {
   /** Ordered knowledge roots (TABLEAU_KNOWLEDGE_DIR, split on the path delimiter by assets.ts). */
   knowledgeDir: string | undefined;
 
+  /**
+   * Absolute root for durable data-app source packages (TABLEAU_DATA_APP_WORKSPACE_DIR).
+   * Unset or relative values are ignored so scaffolding fails with an actionable error
+   * instead of writing relative to the process working directory.
+   */
+  dataAppWorkspaceDir: string | undefined;
+
   // Dev/test overrides for search assets; not user settings.
   workbookXsdPath: string | undefined;
   examplesDir: string | undefined;
@@ -185,6 +194,11 @@ export class Config extends BaseConfig {
       TWB_INDEX_PATH: twbIndexPath,
     } = cleansedVars;
     this.knowledgeDir = knowledgeDir || undefined;
+    const dataAppWorkspaceDir = cleansedVars.TABLEAU_DATA_APP_WORKSPACE_DIR?.trim();
+    this.dataAppWorkspaceDir =
+      dataAppWorkspaceDir && isAbsolute(dataAppWorkspaceDir)
+        ? resolve(dataAppWorkspaceDir)
+        : undefined;
     this.workbookXsdPath = workbookXsdPath || undefined;
     // An empty EXAMPLES_DIR still selects the directory route (an empty list), as before.
     this.examplesDir = examplesDir;

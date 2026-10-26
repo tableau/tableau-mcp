@@ -43,6 +43,11 @@ describe('ToolName', () => {
         }
 
         for (const toolName of toolNamesA) {
+          // Desktop and web both expose scaffold-data-app. South's web MCP excludes
+          // the web copy, and the web tool stays disabled unless its feature gate is on.
+          if (toolName === 'scaffold-data-app') {
+            continue;
+          }
           expect(
             isToolNameB(toolName),
             `Tool "${toolName}" from the "${variantA}" variant is already a tool in the "${variantB}" variant`,
