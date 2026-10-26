@@ -25,7 +25,7 @@ function refreshPosts(
   server: MockExternalApiServer,
   datasourceId: string,
 ): Array<{ body: string }> {
-  const path = `/v0/datasources/${encodeURIComponent(datasourceId)}:refreshData`;
+  const path = `/v0/datasources/${datasourceId}:refreshData`;
   return server.requests.filter((r) => r.method === 'POST' && r.path === path);
 }
 
@@ -47,12 +47,12 @@ describe('refresh-datasource-data tool', () => {
     }
   });
 
-  it('percent-encodes a datasource id with special characters in the route', async () => {
+  it('puts an already percent-encoded datasource id in the route verbatim', async () => {
     const harness = await startHarness();
     try {
-      const result = await harness.callTool({ datasourceId: 'a b/c' });
+      const result = await harness.callTool({ datasourceId: 'My%20Data' });
       expect(result.isError).toBeFalsy();
-      expect(refreshPosts(harness.server, 'a b/c')).toHaveLength(1);
+      expect(refreshPosts(harness.server, 'My%20Data')).toHaveLength(1);
     } finally {
       await harness.close();
     }

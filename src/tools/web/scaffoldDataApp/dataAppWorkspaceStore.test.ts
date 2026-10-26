@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -10,6 +10,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { exportedForTesting } from '../s3Client.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -30,6 +31,11 @@ vi.mock('@aws-sdk/client-s3', () => ({
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
+
+const wiring = buildDatasourceWiringInfo({
+  serverUrl: 'https://10ax.online.tableau.com',
+  siteName: 'mcp-test',
+});
 
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
@@ -56,12 +62,14 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
@@ -168,6 +176,17 @@ describe('createDataAppWorkspace', () => {
         // Starter app.js left untouched with its authoring marker.
         const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
         expect(appJs).toContain('AUTHOR YOUR APP HERE');
+
+        // Data/ ships empty except its placeholder, for datasource files the workbook embeds.
+        expect(readdirSync(join(root, 'Data'))).toEqual(['.gitkeep']);
+
+        // Resources/.agents/ ships the agent-docs README, which carries no identity tokens.
+        const agentsReadme = await readFile(
+          join(root, 'Resources', '.agents', 'README.md'),
+          'utf8',
+        );
+        expect(agentsReadme).toContain('# Resources/.agents/');
+        expect(agentsReadme).not.toContain('TODO');
       } finally {
         await rm(extractDir, { recursive: true, force: true });
       }
@@ -189,12 +208,14 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
 
       expect(value.s3URL).toBe('https://s3.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
@@ -236,6 +257,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 
@@ -251,6 +273,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
         config: getConfig(),
       });
 

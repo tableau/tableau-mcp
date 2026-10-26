@@ -486,16 +486,17 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
   });
 
   it.each(['', 'dynamic-authoring'])(
-    'TOOL_PROFILE=%j registers exactly the 74-tool modern surface with scoped XML fallbacks',
+    'TOOL_PROFILE=%j registers exactly the 83-tool modern surface with scoped XML fallbacks',
     (profile) => {
       const selected = selectToolsForProfile(allTools(), profile);
       expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-      expect(selected).toHaveLength(74);
+      expect(selected).toHaveLength(83);
       // The full dynamic dialect, semantically named — every author-* verb present,
       // plus the ask-for-help, command-discovery, diagnostics, screenshot, deterministic
       // fast-path, and the two knowledge doors the system prompt's "consult the expertise library" law routes to.
       for (const verb of [
         'author-calc',
+        'validate-calculated-field',
         'author-set',
         'author-parameter',
         'author-action',
@@ -530,6 +531,10 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'redo-workbook',
         'list-instances',
         'get-desktop-state',
+        'get-app-info',
+        'get-capabilities',
+        'list-operations',
+        'get-operation',
         'get-diagnostics',
         'get-active-dialogs',
         'invoke-dialog-action',
@@ -538,6 +543,8 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'list-worksheets',
         'get-show-me-options',
         'list-dashboards',
+        'list-storyboards',
+        'get-sheet-info',
         'list-worksheet-logical-tables',
         'get-worksheet-underlying-data',
         'capture-window-screenshot',
@@ -546,11 +553,13 @@ describe('selectToolsForProfile (TOOL_PROFILE)', () => {
         'add-storyboard',
         'open-file',
         'set-start-page-visibility',
+        'set-data-source-page-active',
         'save-workbook',
         'workbook-export-as',
         'refresh-auto-updates',
         'refresh-dashboard-auto-updates',
         'refresh-storyboard-auto-updates',
+        'reload-extensions',
         'refresh-datasource-data',
         'refresh-datasource-extract',
         'get-workbook-xml',
@@ -843,6 +852,10 @@ describe('API-version tool gate (interim minApiVersion floor)', () => {
     expect(floors.get('apply-datasource')).toBe('0.2.10');
     expect(floors.get('set-start-page-visibility')).toBe('0.2.11');
     expect(floors.get('get-show-me-options')).toBe('0.2.18');
+    expect(floors.get('set-data-source-page-active')).toBe('0.2.25');
+    expect(floors.get('get-capabilities')).toBe('0.2.25');
+    expect(floors.get('reload-extensions')).toBe('0.2.25');
+    expect(floors.get('validate-calculated-field')).toBe('0.2.16');
   });
 
   it('registers get-diagnostics once and gates it at External Client API 0.2.16', () => {

@@ -14,7 +14,7 @@ const paramsSchema = {
     .string()
     .min(1)
     .describe(
-      "Datasource id from the workbook's datasource list; not its display name or caption.",
+      'Datasource id as returned by the datasource list (already percent-encoded); not its name or caption.',
     ),
 };
 const title = 'Refresh Datasource Data';
@@ -29,8 +29,9 @@ export const getRefreshDatasourceDataTool = (
     title,
     description:
       'Refresh the live data for a datasource in the open workbook, reading it again from its source ' +
-      '(the toolbar Refresh Data Source). This is not an extract refresh; for a datasource backed by ' +
-      "an extract the data stays current only to the extract's date. A datasource with no connection to refresh does nothing.",
+      '(the toolbar Refresh Data Source). Use refresh-datasource-extract for an extract. A credential prompt ' +
+      'keeps the operation running until answered in Desktop. A connection failure or a refresh cancelled in ' +
+      'Desktop still ends as a success.',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
