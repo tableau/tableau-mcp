@@ -14,6 +14,7 @@ import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
 import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
+import { DatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -32,12 +33,13 @@ import {
  *  - S3: `s3URL` is a presigned GET for the (un-substituted) template zip — download it first, then
  *    unzip and apply `postUnzip`.
  * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
- * app's external origins in it.
+ * app's external origins in it, and `wiring`: the server/site values every datasource descriptor needs.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
   allowedOrigins: string[];
   requestedOrigins: RequestedOriginsGuide;
+  wiring: DatasourceWiringInfo;
   filePath?: string;
   s3URL?: string;
   postUnzip?: PostUnzipPlan;
@@ -123,10 +125,12 @@ export const exportedForTesting = {
 export async function createDataAppWorkspace({
   datappName,
   allowedOrigins,
+  wiring,
   config,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
   config: Config;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
@@ -142,7 +146,14 @@ export async function createDataAppWorkspace({
   }
 
   if (config.bucketS3.enabled) {
-    return await createS3Workspace({ datappName, allowedOrigins, identity, config, source });
+    return await createS3Workspace({
+      datappName,
+      allowedOrigins,
+      wiring,
+      identity,
+      config,
+      source,
+    });
   }
 
   let zipPath: string;
@@ -153,18 +164,20 @@ export async function createDataAppWorkspace({
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-  return createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
+  return createLocalWorkspace({ datappName, allowedOrigins, wiring, identity, zipPath });
 }
 
 async function createS3Workspace({
   datappName,
   allowedOrigins,
+  wiring,
   identity,
   config,
   source,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
   identity: DataAppIdentity;
   config: Config;
   source: TemplateSource;
@@ -199,6 +212,7 @@ async function createS3Workspace({
     datappName,
     allowedOrigins,
     requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
     s3URL,
     postUnzip: buildPostUnzipPlan(identity),
   });
@@ -207,11 +221,13 @@ async function createS3Workspace({
 function createLocalWorkspace({
   datappName,
   allowedOrigins,
+  wiring,
   identity,
   zipPath,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
   identity: DataAppIdentity;
   zipPath: string;
 }): Result<DataAppWorkspaceResult, McpToolError> {
@@ -222,6 +238,7 @@ function createLocalWorkspace({
     datappName,
     allowedOrigins,
     requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
     filePath: zipPath,
     postUnzip: buildPostUnzipPlan(identity),
   });
