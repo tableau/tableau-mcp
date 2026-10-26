@@ -475,6 +475,8 @@ export class WebMcpServer extends Server {
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
+      // Combined registers Desktop's scaffold-data-app on this same server. Standalone web keeps its own.
+      if (!this.ownsMcpServer && tool.name === 'scaffold-data-app') continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       if (enforceRoleRequirements && roleRequiresEnforcement(tool.minRequiredRole)) {

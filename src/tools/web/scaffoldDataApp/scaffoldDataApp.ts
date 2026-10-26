@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
+import { datappNameSchema } from '../../../dataApps/dataAppName.js';
 import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -16,18 +16,9 @@ import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspa
 import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 
 const paramsSchema = {
-  datappName: z
-    .string()
-    .min(1)
-    .max(100)
-    .regex(
-      /^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,98}[A-Za-z0-9])?$/,
-      'Name must be 1-100 characters using letters, digits, spaces, dot, underscore, or hyphen, and must start and end with a letter or digit.',
-    )
-    .refine((value) => !value.includes('..'), 'Name must not contain "..".')
-    .describe(
-      'Name for the new data app. Used verbatim as the workspace folder name, the workbook (.twb) filename, and the extension display name, and slugified into the extension package id. Letters, digits, spaces, dot, underscore, and hyphen only; no path separators.',
-    ),
+  datappName: datappNameSchema.describe(
+    'Name for the new data app. Used verbatim as the workspace folder name, the workbook (.twb) filename, and the extension display name, and slugified into the extension package id. Letters, digits, spaces, dot, underscore, and hyphen only; no path separators.',
+  ),
 };
 
 export const getScaffoldDataAppTool = (

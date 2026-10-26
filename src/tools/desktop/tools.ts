@@ -61,6 +61,8 @@ import { getValidateWorkbookXmlTool } from './api/validateWorkbookXml.js';
 import { getWorkbookExportAsTool } from './api/workbookExportAs.js';
 import { getBindTemplateTool } from './authoring/binder/bindTemplate.js';
 import { getListTemplatesTool } from './authoring/binder/listTemplates.js';
+import { getExportDataAppTool } from './authoring/dataApps/exportDataApp.js';
+import { getScaffoldDataAppTool } from './authoring/dataApps/scaffoldDataApp.js';
 import { getAuthorActionTool } from './authoring/datasource/authorAction.js';
 import { getAuthorCalcTool } from './authoring/datasource/authorCalc.js';
 import { getAuthorParameterTool } from './authoring/datasource/authorParameter.js';
@@ -114,6 +116,8 @@ export const desktopToolFactories = [
   getRefreshDatasourceExtractTool,
   getListWorksheetsTool,
   getWorkbookExtensionsTool,
+  getScaffoldDataAppTool,
+  getExportDataAppTool,
   getShowMeOptionsTool,
   getListDashboardsTool,
   getListStoryboardsTool,
