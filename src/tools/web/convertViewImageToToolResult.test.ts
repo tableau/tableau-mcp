@@ -4,7 +4,7 @@ import {
 } from './convertViewImageToToolResult.js';
 
 describe('convertViewImageUrlToToolResult', () => {
-  const url = 'https://blob.example.com/view-images/abc/uuid.png?signature=xyz';
+  const url = 'https://s3.example.com/view-images/abc/uuid.png?signature=xyz';
 
   it('returns a single resource_link block for PNG (default)', () => {
     const result = convertViewImageUrlToToolResult(url);
@@ -15,7 +15,7 @@ describe('convertViewImageUrlToToolResult', () => {
       uri: url,
       name: 'view-image.png',
       mimeType: 'image/png',
-      description: 'Rendered view image stored in blob storage.',
+      description: 'Rendered view image stored in S3. This is a short-lived presigned URL.',
     });
   });
 

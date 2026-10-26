@@ -36,7 +36,6 @@ const mocks = vi.hoisted(() => ({
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockCheckRegistrationConditions: vi.fn(),
-  mockIsBlobStorageEnabled: vi.fn(() => false),
 }));
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
@@ -54,11 +53,6 @@ vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
 const uiCapableClientCapabilities: ClientCapabilitiesWithUiExtension = {
   extensions: { [UI_EXTENSION_ID]: { mimeTypes: ['text/html'] } },
 };
-
-vi.mock('./blobStorage/init.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./blobStorage/init.js')>()),
-  isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
-}));
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
@@ -102,7 +96,6 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
     mocks.mockRunningAsSea.mockReset().mockReturnValue(false);
-    mocks.mockIsBlobStorageEnabled.mockReset().mockReturnValue(false);
     mocks.mockReadSeaAssetText.mockReset();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
@@ -398,13 +391,13 @@ describe('server', () => {
 
     it.each(
       authModes.flatMap((mode) => [
-        { ...mode, blobStorage: false },
-        { ...mode, blobStorage: true },
+        { ...mode, s3: false },
+        { ...mode, s3: true },
       ]),
     )(
-      'registers datasource and workbook publishing tools alike for $label with blob storage=$blobStorage',
-      async ({ auth, blobStorage }) => {
-        mocks.mockIsBlobStorageEnabled.mockReturnValue(blobStorage);
+      'registers datasource and workbook publishing tools alike for $label with S3=$s3',
+      async ({ auth, s3 }) => {
+        vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
         vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
         mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
           (featureName: string) => featureName === 'authoring-tools',

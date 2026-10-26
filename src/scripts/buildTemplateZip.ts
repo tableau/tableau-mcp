@@ -1,6 +1,6 @@
 /**
  * Regenerates the static, un-substituted `scaffold-data-app` template zip from the committed
- * template tree (`src/templates/Data App Name/`). Both local (stdio) and blob storage output modes serve
+ * template tree (`src/templates/Data App Name/`). Both local (stdio) and S3 output modes serve
  * this same zip verbatim; it is never committed and is always rebuilt so it can't drift from the
  * template tree.
  *
