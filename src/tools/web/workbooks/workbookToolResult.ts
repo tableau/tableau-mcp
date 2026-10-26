@@ -5,11 +5,11 @@ import { mkdir, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { Config } from '../../../config.js';
+import { getBlobStorageProvider, isBlobStorageEnabled } from '../../../blobStorage/init.js';
+import { toUploadData } from '../../../blobStorage/uploadData.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { joinS3Prefix, uploadBufferToS3 } from '../s3Client.js';
 
 export type WorkbookToolResult =
   | { kind: 'url'; url: string; mimeType: string; filename: string }
@@ -20,40 +20,32 @@ export async function buildWorkbookToolResult({
   mimeType,
   filename,
   resourceId,
-  config,
   toolName,
-  keyPrefixSegment,
 }: {
   content: Buffer;
   mimeType: string;
   filename: string;
   resourceId: string;
-  config: Config;
   toolName: string;
-  keyPrefixSegment: string;
 }): Promise<WorkbookToolResult> {
-  if (
-    !config.bucketS3.enabled ||
-    !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))
-  ) {
+  if (!isBlobStorageEnabled() || !(await getFeatureGate().isFeatureEnabled('workbook-file-mode'))) {
     return await persistWorkbookToTempPath({ content, mimeType, filename });
   }
 
+  let url: string;
+  let started = false;
   try {
     const ext = mimeType === 'application/xml' ? 'twb' : 'twbx';
-    const keyPrefix = joinS3Prefix(config.bucketS3.keyPrefix, keyPrefixSegment);
-    const key = `${keyPrefix}${resourceId}/${randomUUID()}.${ext}`;
-    const url = await uploadBufferToS3(content, {
-      key,
+    const { data, contentLength } = toUploadData(content);
+    ({ url } = await getBlobStorageProvider().upload({
+      key: buildWorkbookKey(resourceId, ext),
+      data: markStarted(data, () => (started = true)),
       contentType: mimeType,
-      bucket: config.bucketS3.bucket,
-      region: config.bucketS3.region,
-      presignTtlSeconds: config.bucketS3.presignTtlSeconds,
-    });
-    return { kind: 'url', url, mimeType, filename };
+      contentLength,
+    }));
   } catch (error) {
     log({
-      message: `${toolName}: S3 workbook upload failed, falling back to temp-file output: ${getExceptionMessage(
+      message: `${toolName}: blob storage workbook upload failed, falling back to temp-file output: ${describeUploadError(
         error,
       )}`,
       level: 'warning',
@@ -61,6 +53,47 @@ export async function buildWorkbookToolResult({
     });
     return await persistWorkbookToTempPath({ content, mimeType, filename });
   }
+
+  if (!started) {
+    throw new Error('Blob storage provider returned without reading the upload data.');
+  }
+  return { kind: 'url', url, mimeType, filename };
+}
+
+/** Builds the blob storage key for a workbook; any base path is the provider's concern. */
+function buildWorkbookKey(resourceId: string, ext: 'twb' | 'twbx'): string {
+  return `workbook-files/${resourceId}/${randomUUID()}.${ext}`;
+}
+
+// `started` flips on the first pull, so a provider that drained an empty payload still counts.
+async function* markStarted(
+  data: AsyncIterable<Uint8Array>,
+  onStart: () => void,
+): AsyncGenerator<Uint8Array> {
+  onStart();
+  yield* data;
+}
+
+// Node connect failures can be an AggregateError with an empty message; the reason is on
+// `code` or the inner errors.
+function describeUploadError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return getExceptionMessage(error) || 'unknown error';
+  }
+  if (error.message) {
+    return error.message;
+  }
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && code) {
+    return code;
+  }
+  if (error instanceof AggregateError) {
+    const inner = error.errors.map(getExceptionMessage).filter(Boolean).join('; ');
+    if (inner) {
+      return inner;
+    }
+  }
+  return 'unknown error';
 }
 
 export function workbookToolResultToCallToolResult(result: WorkbookToolResult): CallToolResult {
@@ -88,8 +121,7 @@ export function workbookToolResultToCallToolResult(result: WorkbookToolResult): 
         uri: result.url,
         name: result.filename,
         mimeType: result.mimeType,
-        description:
-          'Downloaded Tableau workbook content stored in S3. This is a short-lived presigned URL.',
+        description: 'Downloaded Tableau workbook content stored in blob storage.',
       },
     ],
   };

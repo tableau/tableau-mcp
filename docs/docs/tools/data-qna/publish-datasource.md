@@ -21,7 +21,8 @@ The MCP scope is `tableau:mcp:datasource:create`; publication uses `tableau:data
   it.
 - Exactly one of `datasourceFilePath` or `datasourceUploadId`. `datasourceUploadId` comes from
   [Request Data Source Upload](request-datasource-upload.md). `datasourceFilePath` is a path on the
-  MCP server and is accepted only when the server runs over stdio and `MCP_S3_BUCKET` is unset.
+  MCP server and is accepted only when the server runs over stdio and no blob storage provider is
+  configured.
 - `overwrite`: defaults to `false`. Set `true` to replace a same-name datasource in the project.
 
 Project bounds apply before file access or upload, including on overwrite. Datasource-ID and tag
@@ -30,7 +31,7 @@ an allowed project. Tableau permissions still govern the mutation.
 
 Local paths are accepted only when the MCP server runs over stdio, and use the server process's
 filesystem permissions. Don't put a stdio server behind a stdio-to-HTTP proxy: it still counts as
-stdio, so remote callers could read files on the server. HTTP servers must use staged S3 uploads
+stdio, so remote callers could read files on the server. HTTP servers must use staged uploads
 instead. Staged uploads retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server
 memory before uploading to Tableau. See
 [Data source publishing](../../configuration/mcp-config/tool-scoping.md#data-source-publishing) for

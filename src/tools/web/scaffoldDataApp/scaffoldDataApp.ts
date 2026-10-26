@@ -40,7 +40,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into, and a manifest.json). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If S3 storage is configured, the zip is served as a presigned `s3URL` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. The tool requires a successful allowed-origins lookup and includes `allowedOrigins` in every successful result — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
+      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into, and a manifest.json). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If blob storage is configured, the zip is served as a URL in `downloadUrl` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. The tool requires a successful allowed-origins lookup and includes `allowedOrigins` in every successful result — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
     paramsSchema,
     annotations: {
       title: 'Scaffold Data App',
@@ -74,7 +74,6 @@ export const getScaffoldDataAppTool = (
           return await createDataAppWorkspace({
             datappName,
             allowedOrigins,
-            config: extra.config,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
