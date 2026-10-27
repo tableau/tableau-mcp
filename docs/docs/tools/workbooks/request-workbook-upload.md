@@ -14,11 +14,6 @@ Tableau MCP only the resulting `workbookUploadId`. Local MCP servers that can re
 directly can skip this tool and pass `workbookFilePath` to [Publish Workbook](publish-workbook.md)
 instead.
 
-:::warning[Disabled by Default]
-This tool is gated behind the `authoring-tools` feature flag, which defaults to `false` in `features.json`. It is unavailable unless an administrator enables `authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
-Slack clients additionally require the `authoring-with-slack` feature flag.
-:::
-
 :::info[Requires S3 configuration]
 This tool requires `MCP_S3_BUCKET` (and related S3 settings) to be configured. It returns an error
 if staged uploads are not configured, and it is not available when the caller is authenticated via
