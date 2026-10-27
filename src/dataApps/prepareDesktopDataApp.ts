@@ -15,7 +15,7 @@ import {
   unzippedPackageSrcUrl,
 } from './packageFiles.js';
 
-export type LiveDatasource = { id?: string; name?: string };
+export type LiveDatasource = { id?: string; name?: string; caption?: string };
 
 export type PreparedDesktopDataApp = {
   packageId: string;
@@ -25,15 +25,20 @@ export type PreparedDesktopDataApp = {
   worksheetName: string;
 };
 
-function extensionsDatasourceId(
+type BoundDatasource = {
+  extensionsDatasourceId: string;
+  caption: string;
+};
+
+function boundDatasource(
   datasourceId: string,
   datasources: LiveDatasource[],
-): Result<string, McpToolError> {
+): Result<BoundDatasource, McpToolError> {
   const matches = datasources.filter((datasource) => datasource.id === datasourceId);
-  if (matches.length !== 1 || !matches[0].name) {
+  if (matches.length !== 1 || !matches[0].name || !matches[0].caption) {
     const available = datasources
-      .filter((datasource) => datasource.id && datasource.name)
-      .map((datasource) => `${datasource.id} (${datasource.name})`);
+      .filter((datasource) => datasource.id && datasource.name && datasource.caption)
+      .map((datasource) => `${datasource.id} (${datasource.caption})`);
     return new McpToolError({
       type: 'datasource-not-selected',
       message:
@@ -42,7 +47,10 @@ function extensionsDatasourceId(
       statusCode: 400,
     }).toErr();
   }
-  return new Ok(matches[0].name);
+  return new Ok({
+    extensionsDatasourceId: matches[0].name,
+    caption: matches[0].caption,
+  });
 }
 
 function worksheetXml(args: {
@@ -51,14 +59,16 @@ function worksheetXml(args: {
   version: string;
   sourceDir: string;
   extensionsDatasourceId: string;
+  caption: string;
 }): string {
   const name = escapeXml(args.worksheetName);
   const datasource = escapeXml(args.extensionsDatasourceId);
+  const caption = escapeXml(args.caption);
   const url = escapeXml(unzippedPackageSrcUrl(args.sourceDir));
   const instanceId = randomBytes(16).toString('hex').toUpperCase();
   return (
     `<worksheet name='${name}'>` +
-    `<table><view><datasources><datasource name='${datasource}' /></datasources>` +
+    `<table><view><datasources><datasource caption='${caption}' name='${datasource}' /></datasources>` +
     "<aggregation value='true' /></view><style />" +
     "<panes><pane><view><breakdown value='auto' /></view>" +
     "<mark class='VizExtension' />" +
@@ -85,7 +95,7 @@ export async function prepareDesktopDataApp(args: {
     }).toErr();
   }
 
-  const selected = extensionsDatasourceId(args.datasourceId, args.datasources);
+  const selected = boundDatasource(args.datasourceId, args.datasources);
   if (selected.isErr()) {
     return selected;
   }
@@ -128,7 +138,7 @@ export async function prepareDesktopDataApp(args: {
         display,
       ),
       "var BOUND_DATASOURCE_ID = '';",
-      `var BOUND_DATASOURCE_ID = ${JSON.stringify(selected.value)};`,
+      `var BOUND_DATASOURCE_ID = ${JSON.stringify(selected.value.extensionsDatasourceId)};`,
     );
   });
 
@@ -137,7 +147,8 @@ export async function prepareDesktopDataApp(args: {
     packageId,
     version: identity.version,
     sourceDir,
-    extensionsDatasourceId: selected.value,
+    extensionsDatasourceId: selected.value.extensionsDatasourceId,
+    caption: selected.value.caption,
   });
   await mkdir(resolve(args.worksheetFile, '..'), { recursive: true });
   await writeFile(args.worksheetFile, xml, 'utf8');
@@ -146,7 +157,7 @@ export async function prepareDesktopDataApp(args: {
     packageId,
     sourceDir,
     worksheetFile: args.worksheetFile,
-    datasourceId: selected.value,
+    datasourceId: selected.value.extensionsDatasourceId,
     worksheetName: identity.displayName,
   });
 }

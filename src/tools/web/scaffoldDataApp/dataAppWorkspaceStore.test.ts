@@ -174,6 +174,7 @@ describe('createDataAppWorkspace', () => {
         expect(JSON.parse(manifest)).toEqual({
           id: 'TODO-MANIFEST-ID',
           version: 'TODO-MANIFEST-VERSION',
+          manifestVersion: '0.1',
           name: 'TODO App Name',
           author: 'TODO Author Name',
           requestedOrigins: '',
@@ -191,6 +192,7 @@ describe('createDataAppWorkspace', () => {
         expect(JSON.parse(finalize(manifest, manifestPath))).toEqual({
           id: 'com.tableau.mcp.sales-demo',
           version: '1.0.0',
+          manifestVersion: '0.1',
           name: 'Sales Demo',
           author: 'Tableau MCP',
           requestedOrigins: '',

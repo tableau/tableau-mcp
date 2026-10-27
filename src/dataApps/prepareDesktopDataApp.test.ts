@@ -6,9 +6,9 @@ import { resolveTemplatePackageDir } from '../tools/desktop/authoring/dataApps/s
 import { prepareDesktopDataApp } from './prepareDesktopDataApp.js';
 
 const datasources = [
-  { id: 'Sales%20West', name: 'Sales West' },
-  { id: '%E5%A3%B2%E4%B8%8A', name: '売上' },
-  { id: '100%25', name: '100%' },
+  { id: 'Sales%20West', name: 'Sales West', caption: 'Sales West' },
+  { id: '%E5%A3%B2%E4%B8%8A', name: '売上', caption: '売上' },
+  { id: '100%25', name: '100%', caption: 'One Hundred Percent' },
 ];
 
 describe('prepareDesktopDataApp', () => {
@@ -42,6 +42,7 @@ describe('prepareDesktopDataApp', () => {
     expect(result.value.packageId).toMatch(/^com\.tableau\.mcp\.sales-demo\.[0-9a-f]+$/);
     expect(result.value.sourceDir.startsWith(workspace)).toBe(true);
     const xml = await readFile(result.value.worksheetFile, 'utf8');
+    expect(xml).toContain("caption='One Hundred Percent'");
     expect(xml).toContain("name='100%'");
     expect(xml).toContain('tableauunzippedpackagesrc:///');
     expect(xml).not.toContain('simple-id');
@@ -49,6 +50,21 @@ describe('prepareDesktopDataApp', () => {
     const appJs = await readFile(join(result.value.sourceDir, 'content', 'src', 'app.js'), 'utf8');
     expect(appJs).toContain('var BOUND_DATASOURCE_ID = "100%";');
     expect(appJs).toContain('AUTHOR YOUR APP HERE');
+  });
+
+  it('rejects a datasource that has no caption', async () => {
+    const template = (await resolveTemplatePackageDir())!;
+    const result = await prepareDesktopDataApp({
+      workspaceRoot: workspace,
+      worksheetFile: join(cache, 'sheet.xml'),
+      templatePackageDir: template,
+      datappName: 'Sales Demo',
+      datasourceId: 'Sales%20West',
+      datasources: [{ id: 'Sales%20West', name: 'Sales West' }],
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('Sales%20West');
   });
 
   it('keeps a second app when the display name collides', async () => {
