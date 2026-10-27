@@ -16,22 +16,13 @@ TWB workbooks are validated up front and uploaded only when validation succeeds,
 errors returned instead of publishing. TWBX workbooks are uploaded directly and validated by Tableau
 as part of publishing, since Tableau cannot pre-validate extracts packaged inside a TWBX.
 
-:::warning[Disabled by Default]
-
-This tool is gated behind the `authoring-tools` feature flag, which
-defaults to `false` in `features.json`. It is unavailable unless an administrator enables
-`authoring-tools`. See [Feature Flags](../../developers/feature-flags.md).
-Slack clients additionally require the `authoring-with-slack` feature flag.
-
-:::
-
 :::info[Personal Space feature flag]
 
 Direct Personal Space publishing additionally requires the existing `data-apps` feature flag, which
 defaults to `false`. When it is off, `personalSpace` is omitted from the advertised tool schema and
 description, and `projectId` is required. The execution path also checks the flag: with it off, a
 call with `projectId` publishes to that project, and a call without `projectId` is rejected before
-API calls or file access. Project publishing remains available when `authoring-tools` is enabled.
+API calls or file access. Project publishing is always available.
 
 After changing file-based flags, restart the MCP server and reconnect clients to refresh the schema.
 
