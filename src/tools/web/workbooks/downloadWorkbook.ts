@@ -3,9 +3,12 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { DownloadWorkbookResult } from '../../../sdks/tableau/types/downloadWorkbookResult.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -17,7 +20,7 @@ import {
 } from './workbookToolResult.js';
 
 const paramsSchema = {
-  workbookId: z.string(),
+  workbookId: luidSchema,
   includeExtract: z
     .boolean()
     .optional()
@@ -28,6 +31,7 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
   const downloadWorkbookTool = new WebTool({
     server,
     name: 'download-workbook',
+    minRequiredRole: SiteRole.EXPLORER,
     description: [
       'Downloads workbook content as a TWB (application/xml) or TWBX (application/octet-stream) file.',
       'The returned file metadata includes Tableau-provided content type and filename when available.',
@@ -43,7 +47,9 @@ export const getDownloadWorkbookTool = (server: WebMcpServer): WebTool<typeof pa
       openWorldHint: false,
     },
     disabled: new Provider(
-      async () => !(await getFeatureGate().isFeatureEnabled('authoring-tools')),
+      async () =>
+        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async ({ workbookId, includeExtract }, extra): Promise<CallToolResult> => {
       return await downloadWorkbookTool.logAndExecute<WorkbookToolResult>({

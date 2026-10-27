@@ -8,7 +8,9 @@ import {
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -20,7 +22,7 @@ import {
 } from './imageToolResult.js';
 
 const paramsSchema = {
-  customViewId: z.string(),
+  customViewId: luidSchema,
   width: z.number().gt(0).int().optional(),
   height: z.number().gt(0).int().optional(),
   format: z
@@ -47,6 +49,7 @@ export const getGetCustomViewImageTool = (
   const getCustomViewImageTool = new WebTool({
     server,
     name: 'get-custom-view-image',
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       'Retrieves an image of the specified custom view in a published viz.',
       'A custom view is a shortcut to a specific state of interaction, such as filter selections and sorting, for a published viz.',

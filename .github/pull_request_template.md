@@ -8,6 +8,15 @@ the pull request._
 <!-- Thank you for your contribution! Please fill out the following template to help us review your pull
 request! -->
 
+<!-- TITLE: say plainly what the change does. Keep the `type(scope):` prefix; skip jargon, slogans, and
+version numbers. Good: "fix(remove-field): refetch the worksheet before removing a field". -->
+
+## Decision
+
+<!-- The one thing a reviewer is being asked to accept. State whether it is a RULE WE NOW KEEP (e.g.
+"every worksheet-mutating tool refreshes state first") or a ONE-OFF for this case. Do not leave the
+reviewer to infer which. This is the most important line in the PR. -->
+
 ## Description
 
 <!-- Please include a summary of the change. -->
@@ -24,6 +33,14 @@ request! -->
 - [ ] Documentation update
 - [ ] Other (please describe):
 
+## Version Bump
+
+Version is bumped automatically after merge. Select the bump this PR needs (defaults to Patch if none selected):
+
+- [ ] Patch
+- [ ] Minor
+- [ ] Major
+
 ## How Has This Been Tested?
 
 <!-- Please describe the tests that you performed to verify your changes. -->
@@ -34,8 +51,6 @@ request! -->
 
 ## Checklist
 
-- [ ] I have updated the version in the package.json file by using `npm run version`. For example,
-      use `npm run version:patch` for a patch version bump.
 - [ ] I have made any necessary changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes

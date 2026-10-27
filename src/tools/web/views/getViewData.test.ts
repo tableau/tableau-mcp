@@ -1,5 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { AxiosError } from 'axios';
 
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -13,9 +15,41 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mockViewData =
   '"Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)\nCanada,Alberta,19.5%,53.41,-114.42\n"';
+const multipartBoundary = 'view-data-boundary';
+const multipartContentType = `multipart/form-data; boundary=${multipartBoundary}`;
+
+function buildMultipartBody(
+  sheets: Array<{ name: string; columns: string[]; rows: string[][]; errorDetail?: string }>,
+): Buffer {
+  return Buffer.from(
+    [
+      ...sheets.flatMap((sheet) => [
+        `--${multipartBoundary}`,
+        `Content-Disposition: form-data; name="${sheet.name}_payload"`,
+        'Content-Type: text/csv; charset=utf-8',
+        `X-Tableau-Sheet-Name: ${sheet.name}`,
+        ...(sheet.errorDetail
+          ? [
+              'X-Tableau-Sheet-Error-Code: 400081',
+              `X-Tableau-Sheet-Error-Detail: ${sheet.errorDetail}`,
+              '',
+              '',
+            ]
+          : [
+              'X-Tableau-Sheet-Status: 200',
+              '',
+              [sheet.columns, ...sheet.rows].map((row) => row.join(',')).join('\r\n'),
+            ]),
+      ]),
+      `--${multipartBoundary}--`,
+      '',
+    ].join('\r\n'),
+  );
+}
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
+  mockGetViewAllData: vi.fn(),
   mockQueryViewData: vi.fn(),
   mockUploadCsvToS3: vi.fn(),
   mockLog: vi.fn(),
@@ -27,6 +61,7 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       viewsMethods: {
         getView: mocks.mockGetView,
+        getViewAllData: mocks.mockGetViewAllData,
         queryViewData: mocks.mockQueryViewData,
       },
       siteId: 'test-site-id',
@@ -49,22 +84,32 @@ vi.mock('../../../logging/logger.js', async (importActual) => ({
 }));
 
 describe('getViewDataTool', () => {
+  const originalRestApiVersion = RestApi.version;
+  const originalVersionIsAtLeast = RestApi.versionIsAtLeast;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    RestApi.version = '3.29';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
+  afterAll(() => {
+    RestApi.version = originalRestApiVersion;
+    RestApi.versionIsAtLeast = originalVersionIsAtLeast;
+  });
+
   it('should create a tool instance with correct properties', () => {
     const getViewDataTool = getGetViewDataTool(new WebMcpServer());
     expect(getViewDataTool.name).toBe('get-view-data');
     expect(getViewDataTool.description).toContain(
-      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
+      "Retrieves data for the specified view in a Tableau workbook, including the user's filters.",
     );
     expect(getViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
@@ -95,6 +140,116 @@ describe('getViewDataTool', () => {
       viewId: mockView.id,
       viewFilters: { Year: '2024' },
     });
+  });
+
+  it('uses allData and returns every parsed server response part on REST API 3.30 or later', async () => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    mocks.mockGetViewAllData.mockResolvedValue({
+      body: buildMultipartBody([
+        {
+          name: 'Sales',
+          columns: ['Region', 'Sales'],
+          rows: [
+            ['West', '100'],
+            ['East', '200'],
+          ],
+        },
+      ]),
+      contentType: multipartContentType,
+    });
+
+    const result = await getToolResult({ viewId: mockView.id, viewFilters: { Region: 'West' } });
+
+    expect(parseJsonContent(result)).toEqual([
+      {
+        sheetName: 'Sales',
+        columns: ['Region', 'Sales'],
+        rows: [
+          ['West', '100'],
+          ['East', '200'],
+        ],
+        sheetStatus: 'OK',
+      },
+    ]);
+    expect(mocks.mockGetViewAllData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+      viewFilters: { Region: 'West' },
+    });
+    expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
+    expect(mocks.mockLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Parsed view all-data response',
+        data: expect.objectContaining({
+          viewId: mockView.id,
+          sheetCount: 1,
+          sheetNames: ['Sales'],
+        }),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('returns every response part when no sheetName is provided on REST API 3.30 or later', async () => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    mocks.mockGetViewAllData.mockResolvedValue({
+      body: buildMultipartBody([
+        { name: 'Sales', columns: ['Region'], rows: [['West']] },
+        { name: 'Profit', columns: ['Region'], rows: [['East']] },
+      ]),
+      contentType: multipartContentType,
+    });
+
+    expect(parseJsonContent(await getToolResult({ viewId: mockView.id }))).toEqual([
+      { sheetName: 'Sales', columns: ['Region'], rows: [['West']], sheetStatus: 'OK' },
+      { sheetName: 'Profit', columns: ['Region'], rows: [['East']], sheetStatus: 'OK' },
+    ]);
+  });
+
+  it('preserves server response order and sheet errors on REST API 3.30 or later', async () => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    mocks.mockGetViewAllData.mockResolvedValue({
+      body: buildMultipartBody([
+        { name: 'Sales', columns: ['Region'], rows: [['West']] },
+        { name: 'Sales', columns: ['Region'], rows: [['East']] },
+        { name: 'Broken', columns: [], rows: [], errorDetail: 'Sheet+could+not+be+rendered' },
+      ]),
+      contentType: multipartContentType,
+    });
+
+    expect(parseJsonContent(await getToolResult({ viewId: mockView.id }))).toEqual([
+      { sheetName: 'Sales', columns: ['Region'], rows: [['West']], sheetStatus: 'OK' },
+      { sheetName: 'Sales', columns: ['Region'], rows: [['East']], sheetStatus: 'OK' },
+      {
+        sheetName: 'Broken',
+        columns: [],
+        rows: [],
+        sheetStatus: 'ERROR',
+        errorDetail: 'Sheet could not be rendered',
+      },
+    ]);
+  });
+
+  it.each([403, 404])('returns an allData %i error to the caller', async (status) => {
+    RestApi.version = '3.30';
+    RestApi.versionIsAtLeast = vi.fn().mockReturnValue(true);
+    const error = new AxiosError(`Request failed with status code ${status}`);
+    error.response = { status } as AxiosError['response'];
+    mocks.mockGetViewAllData.mockRejectedValue(error);
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    // A 403 is rewritten by logAndExecute into the shared permission-denied guidance
+    // (W-23757363); other statuses (e.g. 404) still surface the raw Axios message.
+    const expectedText =
+      status === 403 ? 'Permission denied (403)' : `Request failed with status code ${status}`;
+    expect(result.content[0].text).toContain(expectedText);
+    expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
   });
 
   it('should handle API errors gracefully', async () => {
@@ -255,4 +410,9 @@ async function getToolResult({
   const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
   return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
+}
+
+function parseJsonContent(result: CallToolResult): any {
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text);
 }

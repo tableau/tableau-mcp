@@ -3,7 +3,9 @@
  * PAT env (the vitest mcpClient.getDefaultEnv() whitelist strips PAT_NAME/PAT_VALUE, which is why
  * the vitest e2e suites fail to even start the child). Run with:
  *
- *   set -a && . <env.list> && set +a && ADMIN_TOOLS_ENABLED=true npx tsx tests/e2e/_mutationGuardDriver.ts
+ *   set -a && . <env.list> && set +a && npx tsx tests/e2e/_mutationGuardDriver.ts
+ *
+ * from the repo root (fullEnv() enables admin tools via a repo-relative feature-gate fixture).
  *
  * Verifies the mutation-guard contract against the LIVE site:
  *   1. forged/precomputed confirm  -> rejected with preview-not-run
@@ -27,7 +29,12 @@ function fullEnv(): Record<string, string> {
     if (typeof v === 'string') env[k] = v;
   }
   env.TRANSPORT = 'stdio';
+  env.PRODUCT_TELEMETRY_ENABLED = 'false';
   env.ADMIN_TOOLS_ENABLED = 'true';
+  env.FEATURE_GATE_PROVIDER = 'custom';
+  env.FEATURE_GATE_PROVIDER_CONFIG = JSON.stringify({
+    module: './tests/e2e/fixtures/adminToolsFeatureGate.cjs',
+  });
   env.PATH = process.env.PATH ?? '';
   return env;
 }
@@ -87,7 +94,7 @@ async function main(): Promise<void> {
     console.log(`${ok ? PASS : FAIL} ${name} :: ${detail}`);
   };
 
-  // Tool registration under ADMIN_TOOLS_ENABLED=true
+  // Tool registration with admin tools enabled
   const toolNames = (await client.listTools()).tools.map((t) => t.name);
   for (const tn of [
     'delete-content',
@@ -169,7 +176,6 @@ async function main(): Promise<void> {
         resourceType: 'datasource',
         resourceId: dsId,
         confirm: true,
-        tag: 'pending-deletion-driver-never-set',
       },
     });
     const msg = textOf(res);

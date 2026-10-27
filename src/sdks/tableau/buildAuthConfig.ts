@@ -3,14 +3,17 @@ import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { AuthConfig } from './authConfig.js';
 
 function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  const username = authInfo?.username ?? '';
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', () => username);
 }
 
 function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  // Escape so the username can't alter the JSON; a replacer function keeps `$'` etc. literal.
+  const username = JSON.stringify(authInfo?.username ?? '').slice(1, -1);
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', () => username);
   return JSON.parse(json || '{}');
 }
 
@@ -67,8 +70,9 @@ export function buildAuthConfig({
       };
 
     case 'oauth':
-      // oauth has no server-side signing material — Bearer tokens are passed
-      // through separately by the caller.
+      return null;
+
+    case 'passthrough':
       return null;
   }
 }

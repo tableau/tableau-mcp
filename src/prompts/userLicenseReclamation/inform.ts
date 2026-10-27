@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { WebPromptFactory } from '../registry.js';
 
 export const LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT = 90;
@@ -57,7 +58,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     'list. Read-only — no user modifications are performed. ' +
     'Consider for general admin/site-health and cost/license questions.',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const inactiveDays = args.inactiveDays
       ? parseInt(args.inactiveDays, 10)
@@ -87,8 +88,19 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     const listUsersFilter = `siteRole:in:${roles.join('|')},lastLogin:lt:${cutoffIso}`;
 
     // Field captions verified against live TS Events VDS schema (2026-07-19).
-    // `Actor User Name` is a STRING matching the user's Tableau username (email).
-    // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
+    // `Actor User Name` is a STRING matching the user's Tableau username (== email on
+    // Tableau Cloud). `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't
+    // exist on TS Events.
+    //
+    // Scope to the Step-1 candidates via a SET filter on `Actor User Name`: an UNfiltered
+    // query on a large tenant (e.g. 27k users) returns site-wide Access events that VDS
+    // silently truncates to an arbitrary 10000-row slice, dropping an active candidate's
+    // events → "no Access event" → false-positive reclamation. `Actor User Name` matches
+    // the candidate's Tableau username (== email on Tableau Cloud), so the `values` array
+    // is a render-time placeholder the model replaces with the Step-1 candidate names.
+    const tsEventsActorPlaceholder =
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username ' +
+      '(equals the email on Tableau Cloud); one string per candidate>';
     const tsEventsQuery = {
       fields: [
         { fieldCaption: 'Actor User Name' },
@@ -96,6 +108,12 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
         { fieldCaption: 'Item Name' },
       ],
       filters: [
+        {
+          field: { fieldCaption: 'Actor User Name' },
+          filterType: 'SET',
+          values: [tsEventsActorPlaceholder],
+          exclude: false,
+        },
         {
           field: { fieldCaption: 'Event Type' },
           filterType: 'SET',
@@ -148,25 +166,32 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       '## Step 1 — Fetch candidate users',
       '',
-      'Call `list-users` to retrieve users matching the reclamation criteria. The tool paginates automatically (subject to any configured `MAX_RESULT_LIMIT`). Use the following filter:',
+      'Call `list-users` with the filter below to retrieve users matching the reclamation criteria. Pass an explicit `limit` so the candidate set is bounded but as complete as one call allows: an *unbounded* call is capped at a default of 100 and *any* single call is clamped to a hard ceiling of 1000 (an admin-configured `MAX_RESULT_LIMIT` may lower these further). Do NOT assume the tool returns every matching user — it does not page past the 1000-per-call ceiling.',
       '',
       '```json',
-      JSON.stringify({ filter: listUsersFilter }, null, 2),
+      JSON.stringify({ filter: listUsersFilter, limit: 1000 }, null, 2),
       '```',
       '',
       `This returns users with site roles [${roles.join(', ')}] whose \`lastLogin\` is before ${cutoffIso} (inactive ≥ ${inactiveDays} days).`,
+      '',
+      "**Completeness check (required before treating the candidate set as final).** After the call, inspect `mcp.resultInfo.truncated`. If it is `true` (`truncationReason` `requested-limit`, `default-limit`, or `max-limit`), MORE inactive users match than were returned — the list is PARTIAL. Do not report it as the complete candidate set. Because identity filters cannot page past the 1000-per-call ceiling, try narrowing the `filter` (a tighter `siteRole:in` subset, or a smaller inactivity window) and re-running per slice, combining the results. But narrowing does NOT always converge: a never-signed-in user has a null `lastLogin`, which matches every `lastLogin:lt` window regardless of how small, so if the overflow is concentrated in a single role's never-signed-in population, no filter narrowing will shrink it below the ceiling. If after narrowing as far as the criteria allow the result is still truncated, STOP retrying — report the candidate set as PARTIAL (state the truncationReason and that more inactive users exist beyond what was returned) rather than looping indefinitely or presenting it as complete.",
       '',
       'This single call **also** includes users who have never signed in (empty/null `lastLogin`): the `lastLogin:lt` filter treats them as the most-inactive candidates. Do not issue a second `list-users` call for them — they are already in these results. Render never-signed-in users with Days Inactive = "Never".',
       '',
       '## Step 2 — Cross-reference recent activity',
       '',
-      'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users:',
+      'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users.',
+      '',
+      "**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `Actor User Name` filter's `values` placeholder below with the exact list of candidate `name` values from Step 1 (the Tableau username, which equals the `email` on Tableau Cloud — one string per candidate). This SET filter bounds the response to the candidate set, so the 10000-row cap cannot silently drop an active candidate's Access events and turn them into a false positive. Do not fetch site-wide events.",
       '',
       '```json',
       JSON.stringify({ kind: 'ts-events', query: tsEventsQuery, limit: 10000 }, null, 2),
       '```',
       '',
       `Group the TS Events results by \`Actor User Name\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's \`name\` or \`email\` field from Step 1. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
+      '',
+      "If the TS Events query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true, warn that results were truncated at the row limit: some candidates' Access events may be missing, so an active user could be wrongly kept as a candidate — narrow the scope with a smaller role set or candidate list and re-run. (With the `Actor User Name` scoping above this should not occur unless the candidate set itself has more Access events in the window than the row limit.)",
+      'Unlike the TS Users query in Step 3, 0 rows here is a VALID result — it means none of the scoped candidates had an Access event in the lookback window, so all candidates are correctly retained. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder unsubstituted (the literal placeholder matches no actor): if you did not replace it with the exact Step-1 candidate names, do so and re-run before relying on the result, since an unsubstituted filter fails to rescue genuinely-active users.',
       '',
       '## Step 3 — Cross-reference Tableau Desktop / Prep activity',
       '',
@@ -180,7 +205,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       `Match each row to a candidate by \`User Email\` (against the candidate's \`email\`) or \`User Name\` (against the candidate's \`name\`). A candidate is **active** — and must be excluded from the final list — if either \`Tableau Desktop - Last Access Date\` OR \`Tableau Prep - Last Access Date\` is **non-null AND on or after ${cutoffIso}** (i.e. within the last ${inactiveDays} days).`,
       '',
-      'If the TS Users query returns exactly 10000 rows, warn that results were truncated at the 10000-row limit: some candidates may be missing their Desktop/Prep last-access date and could be falsely listed as inactive — narrow the scope with a smaller role set or candidate list. (With the `User Email` scoping above this should not occur unless the candidate set itself exceeds 10000.)',
+      'If the TS Users query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true, warn that results were truncated at the row limit: some candidates may be missing their Desktop/Prep last-access date and could be falsely listed as inactive — narrow the scope with a smaller role set or candidate list. (With the `User Email` scoping above this should not occur unless the candidate set itself exceeds the row limit.)',
       'If the TS Users query returns 0 rows, the `User Email` scoping was likely not applied — either the `<REPLACE ...>` placeholder was left unsubstituted, or no candidate email matched. TS Users is one row per user, so a real candidate set should return at least one row; 0 rows means the Desktop/Prep signal could NOT be confirmed for ANY candidate. Do NOT treat this as "no Desktop/Prep activity" (that would keep every candidate via the null = no-signal rule and reintroduce false positives). Warn that Desktop/Prep activity could not be confirmed for any candidate and the list may contain false positives; verify the placeholder was replaced with the exact Step-1 candidate emails and re-run before relying on the result.',
       '',
       '**Null handling — null is NOT activity.** A `null`, empty, or missing Desktop/Prep date is NOT evidence of activity: the user REMAINS a candidate. Only a recent *non-null* Desktop/Prep date rescues a user. (Many tenants do not collect Desktop/Prep telemetry, in which case these fields are null for every user — see the caveat note in Step 4.)',

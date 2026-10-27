@@ -1,8 +1,9 @@
 import express from 'express';
 import http from 'http';
-import request from 'supertest';
+import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../src/config.js';
+import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 import * as getTableauAuthInfoModule from '../../../src/server/oauth/getTableauAuthInfo.js';
@@ -10,6 +11,7 @@ import {
   PassthroughAuthInfo,
   passthroughAuthInfoSchema,
 } from '../../../src/server/passthroughAuthMiddleware.js';
+import request from '../../../src/testLoopbackRequest.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -68,10 +70,16 @@ describe('OAuth', () => {
     expect(response.headers['www-authenticate']).toMatch(
       /Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:(\d+)\/.well-known\/oauth-protected-resource"/,
     );
-    expect(response.body).toEqual({
+    // The `error` code is the stable contract; the human-readable description was enriched with
+    // shared multi-server auth guidance (W-23757363), so match the stable substrings rather than
+    // pinning the full string byte-for-byte.
+    expect(response.body).toMatchObject({
       error: 'unauthorized',
-      error_description: 'Authorization required. Use OAuth 2.1 flow.',
     });
+    expect(response.body.error_description).toContain('Authorization required');
+    expect(response.body.error_description).toContain(
+      'A 401 is an authentication problem, not a missing feature.',
+    );
   });
 
   it('should use OAUTH_RESOURCE_URI in 401 resource_metadata when set', async () => {
@@ -304,6 +312,73 @@ describe('OAuth', () => {
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 
+  it('should reject a session ID replayed with a different user token', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const userA = await exchangeAuthzCodeForAccessToken(app);
+
+    const initResponse = await request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${userA.access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'tableau-mcp-tests', version: '1.0.0' },
+        },
+        jsonrpc: '2.0',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = initResponse.headers['mcp-session-id'];
+
+    // The authorization callback builds one RestApi to read the signed-in user; make it user B.
+    vi.mocked(RestApi).mockImplementationOnce(
+      () =>
+        ({
+          setCredentials: vi.fn(),
+          authenticatedServerMethods: {
+            getCurrentServerSession: vi.fn().mockResolvedValue(
+              Ok({
+                site: { id: 'site_id', name: 'mcp-test', contentUrl: 'mcp-test' },
+                user: { id: 'other_user_id', name: 'other-user' },
+              }),
+            ),
+          },
+        }) as unknown as RestApi,
+    );
+    const userB = await exchangeAuthzCodeForAccessToken(app);
+
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${userB.access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
+      .send({ jsonrpc: '2.0', id: '1', method: 'tools/list' });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Forbidden: session does not match the authenticated identity',
+      },
+      id: null,
+    });
+  });
+
   it('should allow authenticated requests using the X-Tableau-Auth header', async () => {
     vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
 
@@ -439,7 +514,7 @@ describe('OAuth', () => {
       expect(passthroughRawFromAuthInfo[0]).toBe('valid-access-token-1');
 
       // Tool call used the second header
-      expect(passthroughRawFromAuthInfo[1]).toBe('valid-access-token-2');
+      expect(passthroughRawFromAuthInfo.at(-1)).toBe('valid-access-token-2');
     } finally {
       getTableauAuthInfoSpy.mockRestore();
     }
@@ -758,10 +833,16 @@ describe('OAuth', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
+    // The `error` code is the stable contract; the human-readable description was enriched with
+    // shared multi-server auth guidance (W-23757363), so match the stable substrings rather than
+    // pinning the full string byte-for-byte.
+    expect(response.body).toMatchObject({
       error: 'invalid_token',
-      error_description: 'Invalid or expired access token',
     });
+    expect(response.body.error_description).toContain('Invalid or expired access token');
+    expect(response.body.error_description).toContain(
+      'A 401 is an authentication problem, not a missing feature.',
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -839,6 +920,18 @@ describe('OAuth', () => {
   it('should revoke a JWE access token, attempt signout, and delete the associated refresh token', async () => {
     const { app } = await startServer();
 
+    const guardedFetch = globalThis.fetch;
+    const signoutRequests: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      if (new URL(url).pathname.endsWith('/api/3.24/auth/signout')) {
+        signoutRequests.push(url);
+        return new Response(null, { status: 204 });
+      }
+      return guardedFetch(input, init);
+    });
+    onTestFinished(() => fetchSpy.mockRestore());
+
     mocks.mockGetTokenResult.mockResolvedValue({
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
@@ -887,6 +980,8 @@ describe('OAuth', () => {
       });
 
     expect(mcpResponse.status).toBe(200);
+    expect(signoutRequests).toHaveLength(1);
+    expect(new URL(signoutRequests[0]).hostname).toBe('10ax.online.tableau.com');
   });
 
   it('should advertise revocation_endpoint in authorization server metadata (embedded mode)', async () => {

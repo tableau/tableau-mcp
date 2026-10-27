@@ -3,12 +3,16 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../../config.js';
+import { ArgsValidationError } from '../../../../errors/mcpToolError.js';
+import { isFlowReadToolsEnabled } from '../../../../features/flowTools.js';
 import { BoundedContext } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
+import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo, TruncationReason } from '../../_lib/truncation.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
-import { buildTruncationInfo, ListFlowsTruncationReason } from '../listFlows/listFlows.js';
 import {
   applyFlowTaskFilters,
   parseAndValidateFlowTasksFilterString,
@@ -28,7 +32,7 @@ const paramsSchema = {
 export type ListFlowTasksResultInfo = {
   returnedCount: number;
   truncated: boolean;
-  truncationReason?: ListFlowsTruncationReason;
+  truncationReason?: TruncationReason;
   // Always known — every matching task is fetched before the limit is applied.
   totalAvailable: number;
 };
@@ -50,7 +54,8 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
   const listFlowTasksTool = new WebTool({
     server,
     name: 'list-flow-tasks',
-    disabled: !config.flowToolsEnabled,
+    minRequiredRole: SiteRole.VIEWER,
+    disabled: new Provider(async () => !(await isFlowReadToolsEnabled(config))),
     description: `
   Retrieves the scheduled flow run tasks on a Tableau site. A flow run task is the **schedule** for a Tableau Prep flow — when and how often it is configured to run — NOT a record of past executions (for run history use the \`list-flow-runs\` tool). Each task includes the target flow (\`flow.id\`, \`flow.name\`), the schedule (frequency, next run time, state), and the task \`id\` used to trigger an on-demand run.
 
@@ -120,17 +125,21 @@ export const getListFlowTasksTool = (server: WebMcpServer): WebTool<typeof param
     },
     callback: async (args, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-
-      // Validate the filter string early so a malformed filter fails fast with a
-      // clear error before any network call.
-      if (args.filter) {
-        parseAndValidateFlowTasksFilterString(args.filter);
-      }
-
       return await listFlowTasksTool.logAndExecute<ListFlowTasksResult>({
         extra,
         args,
         callback: async () => {
+          // Return malformed filters as MCP errors.
+          if (args.filter) {
+            try {
+              parseAndValidateFlowTasksFilterString(args.filter);
+            } catch (error) {
+              return new ArgsValidationError(
+                error instanceof Error ? error.message : 'Invalid flow task filter.',
+              ).toErr();
+            }
+          }
+
           const tasks = await useRestApi({
             ...extra,
             jwtScopes: listFlowTasksTool.requiredApiScopes,

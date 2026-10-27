@@ -3,15 +3,15 @@
 .env.*
 .vscode/
 build/
-cache/
-node_modules/
+/cache/
+node_modules
 junit/
 coverage/
 test-logs/
 config.json
 env.list
 *.env.list
-manifest.json
+/manifest.json
 sea-prep.blob
 tableau-mcp
 tableau-mcp.dxt
@@ -26,6 +26,8 @@ tableau-mcp.mcpb
 # MCP Apps
 src/web/apps/dist/
 
+src/templates/data-app-template.zip
+
 # Playwright
 /test-results/
 /playwright-report/
@@ -38,6 +40,7 @@ src/web/apps/dist/
 .work/specs/GUS-*.md
 .work/specs/gus-*.md
 .work/reports/*.md
+.claude/reviews/**/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
 
@@ -47,3 +50,10 @@ src/web/apps/dist/
 *.tsv
 stale-*.md
 /logs/
+
+# SEA build outputs
+tableau-mcp-desktop
+tableau-mcp-desktop.exe
+sea-prep.*.blob
+sea-config.*.generated.json
+asset-manifest.*.generated.json

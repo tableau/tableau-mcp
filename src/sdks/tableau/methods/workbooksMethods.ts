@@ -1,11 +1,13 @@
-import { Zodios } from '@zodios/core';
-
-import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { assertLuid, buildRestPath } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
 import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
 import { DownloadWorkbookResult } from '../types/downloadWorkbookResult.js';
 import { Pagination } from '../types/pagination.js';
+import { GranteeCapability } from '../types/permissions.js';
 import { Workbook, WorkbookConnection, workbookSchema } from '../types/workbook.js';
 import {
   WorkbookValidationResult,
@@ -22,7 +24,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbooksApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, workbooksApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, workbooksApis, { axiosConfig }), creds);
   }
 
   /**
@@ -107,6 +109,30 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Returns the permission rules (grantee capabilities) for the specified workbook. Each grantee is
+   * a user or group with the capabilities (e.g. Read, Write) granted or denied on the workbook.
+   *
+   * Required scopes (Tableau Cloud): `tableau:permissions:read`
+   *
+   * @param workbookId - The ID of the workbook to return permissions for.
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_permissions.htm#query_workbook_permissions
+   */
+  queryWorkbookPermissions = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<GranteeCapability[]> => {
+    const response = await this._apiClient.queryWorkbookPermissions({
+      params: { siteId, workbookId },
+      ...this.authHeader,
+    });
+    return response.permissions.granteeCapabilities ?? [];
+  };
+
+  /**
    * Downloads the specified workbook in twb or twbx format.
    *
    * Required scopes (Tableau Cloud): `tableau:workbooks:download`
@@ -126,7 +152,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     includeExtract?: boolean;
   }): Promise<DownloadWorkbookResult> => {
     const response = await this._apiClient.axios.get<ArrayBuffer>(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/${workbookId}/content`,
+      buildRestPath('sites', siteId, 'workbooks', assertLuid('workbookId', workbookId), 'content'),
       {
         params: { includeExtract },
         ...this.authHeader,
@@ -197,16 +223,94 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   };
 
   /**
+   * Removes a single tag (by label) from the specified workbook. Responds 204; removing a tag the
+   * workbook does not carry is a no-op on the server.
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbook_tags:delete`
+   *
+   * @param workbookId - The ID of the workbook to untag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabel - The tag label to remove.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_tag_from_workbook
+   */
+  deleteTagFromWorkbook = async ({
+    workbookId,
+    siteId,
+    tagLabel,
+  }: {
+    workbookId: string;
+    siteId: string;
+    tagLabel: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteTagFromWorkbook(undefined, {
+      params: { siteId, workbookId, tagName: tagLabel },
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Modifies the destination of the specified workbook (i.e. moves it between projects, or into
+   * the caller's Personal Space).
+   *
+   * The destination is exactly one of `projectId` (sends `project: {id}`) or `location` (sends
+   * `location: {id, type: 'PersonalSpace'}`). The two are mutually exclusive.
+   *
+   * Required scopes (Tableau Cloud): `tableau:workbooks:update`
+   *
+   * @param workbookId - The ID of the workbook to update.
+   * @param siteId - The Tableau site ID
+   * @param projectId - The ID of the project to move the workbook into (mutually exclusive with `location`)
+   * @param location - The Personal Space LUID to move the workbook into (mutually exclusive with `projectId`)
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#update_workbook
+   */
+  updateWorkbook = async ({
+    workbookId,
+    siteId,
+    projectId,
+    location,
+  }: {
+    workbookId: string;
+    siteId: string;
+    projectId?: string;
+    location?: string;
+  }): Promise<Partial<Workbook>> => {
+    if (projectId === undefined && location === undefined) {
+      throw new Error('updateWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('updateWorkbook accepts only one of `projectId` or `location`, not both.');
+    }
+    const { workbook } = await this._apiClient.updateWorkbook(
+      {
+        workbook:
+          projectId !== undefined
+            ? { project: { id: projectId } }
+            : { location: { id: location!, type: 'PersonalSpace' } },
+      },
+      {
+        params: { siteId, workbookId },
+        ...this.authHeader,
+      },
+    );
+    return workbook;
+  };
+
+  /**
    * Publishes a workbook on the specified site, committing a file previously uploaded
    * via `validateWorkbookAndUpload`.
    * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
    * Zodios-typed client and calls the underlying axios instance directly.
    *
+   * The destination is exactly one of `projectId` (emits `<project id=.../>`) or `location`
+   * (emits `<location id=... type=.../>`, used to publish directly into the caller's Personal
+   * Space). The two are mutually exclusive.
+   *
    * @param siteId - The Tableau site ID
    * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
    * @param workbookType - `twb` or `twbx`, matching the file uploaded to the session
    * @param name - The name to give the published workbook
-   * @param projectId - The ID of the project to publish the workbook into
+   * @param projectId - The ID of the project to publish into (mutually exclusive with `location`)
+   * @param location - The Personal Space LUID to publish into (mutually exclusive with `projectId`)
    * @param overwrite - Whether to overwrite an existing workbook with the same name
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#publish_workbook
    */
@@ -216,25 +320,37 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
     workbookType,
     name,
     projectId,
+    location,
     overwrite,
   }: {
     siteId: string;
     uploadSessionId: string;
     workbookType: 'twb' | 'twbx';
     name: string;
-    projectId: string;
+    projectId?: string;
+    location?: string;
     overwrite?: boolean;
   }): Promise<Workbook> => {
+    if (projectId === undefined && location === undefined) {
+      throw new Error('publishWorkbook requires one of `projectId` or `location`.');
+    }
+    if (projectId !== undefined && location !== undefined) {
+      throw new Error('publishWorkbook accepts only one of `projectId` or `location`, not both.');
+    }
+    const destination =
+      projectId !== undefined
+        ? `<project id="${escapeXmlAttribute(projectId)}"/>`
+        : `<location id="${escapeXmlAttribute(location!)}" type="PersonalSpace"/>`;
     const xml =
       `<tsRequest><workbook name="${escapeXmlAttribute(name)}">` +
-      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      destination +
       '</workbook></tsRequest>';
     const { body, contentType } = buildMultipartMixedBody([
       { name: 'request_payload', contentType: 'text/xml', data: xml },
     ]);
 
     const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks`,
+      buildRestPath('sites', siteId, 'workbooks'),
       body,
       {
         params: {
@@ -282,34 +398,32 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       },
     ]);
 
-    const response = await this._apiClient.axios.post(
-      `${this._apiClient.axios.defaults.baseURL}/sites/${siteId}/workbooks/validateWorkbookAndUpload`,
-      body,
-      {
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': contentType,
-          ...this.authHeader.headers,
+    try {
+      const response = await this._apiClient.axios.post(
+        buildRestPath('sites', siteId, 'workbooks', 'validateWorkbookAndUpload'),
+        body,
+        {
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': contentType,
+            ...this.authHeader.headers,
+          },
         },
-      },
-    );
+      );
 
-    return workbookValidationResultSchema.parse(response.data);
+      return workbookValidationResultSchema.parse(response.data);
+    } catch (error) {
+      // Tableau returns HTTP 422 with a validation-result body when the workbook fails validation.
+      // Parse that structured result instead of letting axios throw; any other status still throws.
+      if (isAxiosError(error) && error.response?.status === 422) {
+        const result = workbookValidationResultSchema.safeParse(error.response.data);
+        if (result.success) {
+          return result.data;
+        }
+      }
+      throw error;
+    }
   };
-}
-
-function escapeXmlAttribute(value: string): string {
-  return (
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      // Numeric char ref, not the named &apos; - &apos; is a valid XML 1.0 entity but is absent from
-      // the HTML predefined set and the Tableau publish endpoint's parser rejects it (a name like
-      // O'Brien then 400s). &#39; is universally accepted.
-      .replace(/'/g, '&#39;')
-  );
 }
 
 function getHeader(headers: Record<string, unknown>, name: string): string | undefined {

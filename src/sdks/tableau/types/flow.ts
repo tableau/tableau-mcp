@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { looseBooleanFalsy } from './looseBoolean.js';
 import { projectSchema } from './project.js';
 import { tagsSchema } from './tags.js';
 
@@ -99,6 +100,25 @@ export const flowParameterRunSchema = z.object({
 
 export type FlowParameterRun = z.infer<typeof flowParameterRunSchema>;
 
+/**
+ * Why a `Failed` flow run failed. Requires Tableau REST API 3.30 or later and is
+ * present ONLY on runs whose status is `Failed`, so absence is meaningful rather
+ * than exceptional and needs no version gate at the call site.
+ *
+ * Derived from the flow's output-step run errors (not the background job), which
+ * is what makes it readable by non-admin callers.
+ *
+ * `available: true` carries a specific localized cause. `available: false` means
+ * Tableau could not determine one and `message` is a generic placeholder, so
+ * callers must not present it as a diagnosis.
+ */
+export const flowRunFailureReasonSchema = z.object({
+  available: looseBooleanFalsy,
+  message: z.string(),
+});
+
+export type FlowRunFailureReason = z.infer<typeof flowRunFailureReasonSchema>;
+
 export const flowRunSchema = z.object({
   id: z.string(),
   flowId: z.string().optional(),
@@ -107,6 +127,11 @@ export const flowRunSchema = z.object({
   completedAt: z.string().optional(),
   progress: z.coerce.number().optional(),
   backgroundJobId: z.string().optional(),
+  // `.catch` degrades a malformed reason to absent rather than throwing. This is a
+  // Zodios RESPONSE schema, so without it one bad record would fail the entire
+  // Get Flow Runs call over a sidecar field the caller never asked for. Absent is
+  // a state every consumer already handles: it falls back to the UI deep link.
+  failureReason: flowRunFailureReasonSchema.optional().catch(undefined),
   flowParameterRuns: z
     .object({
       parameterRuns: z.array(flowParameterRunSchema).optional(),

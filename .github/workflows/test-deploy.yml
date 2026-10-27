@@ -27,6 +27,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+      - name: Verify docs tool-name guard logic
+        run: npm run test:guard
+      - name: Check docs for removed tool-name references
+        run: npm run check:tool-names
       - name: Test build website
         run: npm run build
       - name: Upload artifacts

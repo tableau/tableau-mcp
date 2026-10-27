@@ -5,7 +5,9 @@ import { z } from 'zod';
 import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
@@ -15,7 +17,7 @@ import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {
-  workbookId: z.string().min(1),
+  workbookId: luidSchema,
   filter: z.string().optional(),
   limit: z.number().int().gt(0).max(MAX_PAGE_SIZE).optional(),
 };
@@ -24,6 +26,7 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
   const listCustomViewsTool = new WebTool({
     server,
     name: 'list-custom-views',
+    minRequiredRole: SiteRole.VIEWER,
     // workbookId intentionally omitted from the filter field table since it originates from the workbookId parameter
     description: `
   Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., viewId:eq:<view_id>) for precise and flexible custom view discovery. The tool always includes the workbookId in the final filter expression based on the required workbookId argument. Including the workbookId field in the filter will be ignored. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.

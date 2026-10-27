@@ -1,4 +1,8 @@
-import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import {
+  AnySchema,
+  SchemaOutput,
+  ZodRawShapeCompat,
+} from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
@@ -9,6 +13,9 @@ import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
+
+type ToolAnnotationsWithOptionalTitle = Omit<Required<ToolAnnotations>, 'title'> &
+  Pick<ToolAnnotations, 'title'>;
 
 /**
  * The parameters for creating a tool instance
@@ -38,7 +45,7 @@ export type ToolParams<
   paramsSchema: TypeOrProvider<Args>;
 
   // The annotations of the tool
-  annotations: TypeOrProvider<Required<ToolAnnotations>>;
+  annotations: TypeOrProvider<ToolAnnotationsWithOptionalTitle>;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TCallback>;
@@ -64,7 +71,11 @@ export type LogAndExecuteParams<
   extra: TExtra;
 
   // The arguments of the tool call
-  args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
+  args: Args extends ZodRawShape
+    ? z.objectOutputType<Args, ZodTypeAny>
+    : Args extends AnySchema
+      ? SchemaOutput<Args>
+      : undefined;
 
   // A function that contains the business logic of the tool to be logged and executed
   callback: () => Promise<Result<T, McpToolError>>;
@@ -83,14 +94,14 @@ export abstract class Tool<
   TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
-  Args extends ZodRawShape | undefined = undefined,
+  Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
 > {
   server: TServer;
   name: TToolName;
   title?: TypeOrProvider<string>;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
-  annotations: TypeOrProvider<Required<ToolAnnotations>>;
+  annotations: TypeOrProvider<ToolAnnotationsWithOptionalTitle>;
   callback: TypeOrProvider<TCallback>;
   disabled: TypeOrProvider<boolean>;
 

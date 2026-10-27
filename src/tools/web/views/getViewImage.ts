@@ -8,7 +8,9 @@ import {
   ViewNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -20,7 +22,7 @@ import {
 } from './imageToolResult.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  viewId: luidSchema,
   width: z.number().gt(0).int().optional(),
   height: z.number().gt(0).int().optional(),
   format: z
@@ -42,6 +44,7 @@ export const getGetViewImageTool = (
   const getViewImageTool = new WebTool({
     server,
     name: 'get-view-image',
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       'Returns a static, non-interactive image of the specified view in a Tableau workbook.',
       'Use only when the user explicitly wants an image artifact — a screenshot, picture, thumbnail, PNG/PDF, or an image to embed in a document or export.',

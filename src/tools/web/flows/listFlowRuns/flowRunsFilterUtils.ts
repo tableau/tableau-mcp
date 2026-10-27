@@ -1,5 +1,7 @@
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ArgsValidationError, McpToolError } from '../../../../errors/mcpToolError.js';
 import { FlowRun, flowRunStatusSchema } from '../../../../sdks/tableau/types/flow.js';
 import {
   FilterOperator,
@@ -8,13 +10,8 @@ import {
   splitTopLevel,
 } from '../../../../utils/parseAndValidateFilterString.js';
 
-// The Tableau "Get Flow Runs" endpoint (GET /sites/:siteId/flows/runs) supports
-// server-side filtering on the fields below. `status` is the ONE exception: it
-// is NOT a server-side filter field (live-verified against REST 3.30 — passing
-// `status:eq:Failed` is ignored by the server), so this tool fetches runs with
-// the server-side fields applied and filters `status` client-side. We still
-// validate `status` here (fields + values) so a typo surfaces as a clear error
-// rather than a silent no-op.
+// REST API 3.30+ accepts `status` filters; older servers need client-side status matching.
+// Validate `status` here so invalid filters fail clearly rather than silently doing nothing.
 //
 // Field/operator allow-lists mirror the official spec at
 // https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm
@@ -65,37 +62,66 @@ export type ValidatedFlowRunsFilter = {
  */
 export function parseAndValidateFlowRunsFilterString(
   filterString: string,
-): ValidatedFlowRunsFilter {
-  // Validates fields/operators, normalizes date-only values for
-  // startedAt/completedAt, and dedupes repeated fields (last one wins).
-  const normalizedFilter = parseAndValidateFilterString<FilterField, FilterExpression>({
-    filterString,
-    allowedOperatorsByField,
-    filterFieldSchema: FilterFieldSchema,
-  });
+  { statusFilterSupported = false }: { statusFilterSupported?: boolean } = {},
+): Result<ValidatedFlowRunsFilter, McpToolError> {
+  try {
+    // Validates fields/operators, normalizes date-only values for
+    // startedAt/completedAt, and dedupes repeated fields (last one wins).
+    const normalizedFilter = parseAndValidateFilterString<FilterField, FilterExpression>({
+      filterString,
+      allowedOperatorsByField,
+      filterFieldSchema: FilterFieldSchema,
+    });
 
-  const serverClauses: string[] = [];
-  let statusClause: { operator: FilterOperator; values: string[] } | undefined;
+    const serverClauses: string[] = [];
+    let statusClause: { operator: FilterOperator; values: string[] } | undefined;
 
-  for (const clause of splitTopLevel(normalizedFilter, ',')
-    .map((c) => c.trim())
-    .filter(Boolean)) {
-    const [field, operator, ...valueParts] = clause.split(':');
-    const value = valueParts.join(':');
-    if (field === 'status') {
-      const values = parseListOrSingle(operator as FilterOperator, value);
-      assertValidStatusValues(values);
-      statusClause = { operator: operator as FilterOperator, values };
-    } else {
-      serverClauses.push(clause);
+    for (const clause of splitTopLevel(normalizedFilter, ',')
+      .map((c) => c.trim())
+      .filter(Boolean)) {
+      const [field, operator, ...valueParts] = clause.split(':');
+      const value = valueParts.join(':');
+      if (field === 'status') {
+        const values = parseListOrSingle(operator as FilterOperator, value);
+        assertValidStatusValues(values);
+        statusClause = { operator: operator as FilterOperator, values };
+      } else {
+        serverClauses.push(clause);
+      }
     }
-  }
 
-  return {
-    serverFilter: serverClauses.join(','),
-    matchesStatus: buildStatusMatcher(statusClause),
-    normalizedFilter,
-  };
+    if (statusFilterSupported && statusClause) {
+      const statusInError = getUnsupportedStatusInError(statusClause);
+      if (statusInError) {
+        return new ArgsValidationError(statusInError).toErr();
+      }
+      const statusClauses = splitTopLevel(normalizedFilter, ',')
+        .map((c) => c.trim())
+        .filter((c) => c.startsWith('status:'));
+      serverClauses.push(...statusClauses);
+    }
+
+    return new Ok({
+      serverFilter: serverClauses.join(','),
+      matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
+      normalizedFilter,
+    });
+  } catch (error) {
+    return new ArgsValidationError(error instanceof Error ? error.message : String(error)).toErr();
+  }
+}
+
+function getUnsupportedStatusInError(statusClause: {
+  operator: FilterOperator;
+  values: string[];
+}): string | undefined {
+  if (statusClause.operator !== 'in' || statusClause.values.length <= 1) {
+    return undefined;
+  }
+  const nonTerminalStatuses = new Set(['Pending', 'InProgress']);
+  return statusClause.values.some((value) => nonTerminalStatuses.has(value))
+    ? 'A multi-value status:in filter is supported on REST API 3.30+ only when all values are terminal statuses: Success, Failed, or Cancelled.'
+    : undefined;
 }
 
 /**

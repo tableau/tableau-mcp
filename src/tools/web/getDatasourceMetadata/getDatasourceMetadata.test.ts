@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
@@ -248,11 +250,16 @@ const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGetDatasourceModel: vi.fn(),
   mockGraphql: vi.fn(),
+  mockTryQueryDatasource: vi.fn(),
+  mockQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
+      siteId: 'test-site-id',
       vizqlDataServiceMethods: {
         readMetadata: mocks.mockReadMetadata,
         getDatasourceModel: mocks.mockGetDatasourceModel,
@@ -260,9 +267,21 @@ vi.mock('../../../restApiInstance.js', () => ({
       metadataMethods: {
         graphql: mocks.mockGraphql,
       },
+      datasourcesMethods: {
+        tryQueryDatasource: mocks.mockTryQueryDatasource,
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
+      },
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
@@ -271,6 +290,9 @@ describe('getDatasourceMetadataTool', () => {
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
     mocks.mockGetDatasourceModel.mockResolvedValue(new Ok(mockDatasourceModelResponses.success));
+    // Default the REST classifier to a non-authoritative failure so tests that don't exercise the
+    // published-vs-embedded disambiguation leave datasourceType unset unless they opt in.
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('error'));
   });
 
   afterEach(() => {
@@ -283,7 +305,7 @@ describe('getDatasourceMetadataTool', () => {
       testProductVersion,
     );
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');
-    expect(getDatasourceMetadataTool.description).toEqual(expect.any(String));
+    expect(getDatasourceMetadataTool.description).toBeInstanceOf(Provider);
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
       datasourceLuid: expect.any(Object),
     });
@@ -305,6 +327,8 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.datasourceDescription).toBe('Test Description');
+    // Metadata-API enrichment matched, so the LUID is labeled a published data source.
+    expect(responseData.datasourceType).toBe('published');
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
     expect(flattenResponseFields(responseData)).toMatchObject([
       {
@@ -440,6 +464,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       datasourceDescription: 'Test Description',
+      datasourceType: 'published',
       datasourceModel: mockDatasourceModelResponses.success,
       fieldGroups: [],
       parameters: [],
@@ -520,15 +545,24 @@ describe('getDatasourceMetadataTool', () => {
     ]);
   });
 
-  it('should handle empty listFields response and return basic metadata only', async () => {
+  it('should label datasourceType embedded and return basic metadata when listFields is empty and REST reports not-found', async () => {
+    // Legacy-server embedded path: the Metadata-API enrichment returns no match, so the tool falls
+    // back to VDS-sourced metadata. On servers that don't serve embedded data sources via REST, the
+    // Query Data Source lookup 404s; since the LUID is VizQL-resolvable, that means embedded.
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('not-found'));
 
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockTryQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      datasourceId: expect.any(String),
+    });
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should have basic fields from readMetadata without enrichment
@@ -588,6 +622,69 @@ describe('getDatasourceMetadataTool', () => {
     // Ensure no enriched fields are present
     expect(flattenResponseFields(responseData)[0]).not.toHaveProperty('description');
     expect(flattenResponseFields(responseData)[0]).not.toHaveProperty('dataCategory');
+  });
+
+  it('should label datasourceType published when listFields is empty but REST resolves a datasource with a project (Metadata API indexing lag)', async () => {
+    // The Metadata API hasn't indexed the published datasource yet (empty enrichment), but REST
+    // Query Data Source resolves it with a `project` — the published signal — so it's published.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-datasource-luid', project: { id: 'test-project-id', name: 'Project' } }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
+  });
+
+  it('should label datasourceType embedded when listFields is empty and REST returns a workbook data source (HTTP 200)', async () => {
+    // WBDS-enabled servers return embedded (workbook) data sources from Query Data Source too, with
+    // `parentType: "Workbook"` and no `project`. Classify on that shape, not on a 404.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-datasource-luid', parentType: 'Workbook' }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+  });
+
+  it('should leave datasourceType unset when listFields is empty and the REST lookup fails non-authoritatively', async () => {
+    // A permissions/transient REST failure isn't authoritative, so we can't classify the datasource.
+    // Labeling is best-effort — the metadata response still succeeds, just without a type.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('error'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData).not.toHaveProperty('datasourceType');
+  });
+
+  it('should not call the REST classifier when listFields matches a published datasource', async () => {
+    // A publishedDatasources match is authoritative and free; no extra REST round-trip is made.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
+    expect(mocks.mockTryQueryDatasource).not.toHaveBeenCalled();
   });
 
   it('should handle empty fields in listFields response', async () => {
@@ -740,6 +837,68 @@ describe('getDatasourceMetadataTool', () => {
     ]);
   });
 
+  it('should label datasourceType embedded when listFields throws and REST reports not-found', async () => {
+    // GraphQL throwing (service unavailable) falls back to VDS-only metadata, but we still probe REST
+    // to classify — a not-found there means embedded.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('not-found'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockTryQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      datasourceId: 'test-luid',
+    });
+  });
+
+  it('should label datasourceType published when listFields throws and REST resolves a datasource with a project', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-luid', project: { id: 'test-project-id', name: 'Project' } }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
+  });
+
+  it('should label datasourceType embedded when listFields throws and REST returns a workbook data source (HTTP 200)', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-luid', parentType: 'Workbook' }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+  });
+
+  it('should leave datasourceType unset when listFields throws and the REST lookup fails non-authoritatively', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockRejectedValue(new Error('GraphQL API Error'));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('error'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData).not.toHaveProperty('datasourceType');
+  });
+
   it('should handle when both APIs fail', async () => {
     const readMetadataError = 'ReadMetadata API Error';
     const graphqlError = 'GraphQL API Error';
@@ -766,6 +925,9 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
+    // With the Metadata API disabled we still probe REST to classify, but the default mock returns a
+    // non-authoritative error, so the type is left unset.
+    expect(responseData).not.toHaveProperty('datasourceType');
 
     // Should only have basic fields from readMetadata without enrichment
     expect(flattenResponseFields(responseData)).toMatchObject([
@@ -804,6 +966,59 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
+  it('should label datasourceType embedded when disableMetadataApiRequests is true and REST reports not-found', async () => {
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockTryQueryDatasource.mockResolvedValue(Err('not-found'));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+    expect(mocks.mockTryQueryDatasource).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      datasourceId: 'test-luid',
+    });
+  });
+
+  it('should label datasourceType published when disableMetadataApiRequests is true and REST resolves a datasource with a project', async () => {
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-luid', project: { id: 'test-project-id', name: 'Project' } }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('published');
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should label datasourceType embedded when disableMetadataApiRequests is true and REST returns a workbook data source (HTTP 200)', async () => {
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
+
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockTryQueryDatasource.mockResolvedValue(
+      new Ok({ id: 'test-luid', parentType: 'Workbook' }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceType).toBe('embedded');
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
   it('should return error when disableMetadataApiRequests is true and readMetadata fails', async () => {
     vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
@@ -833,7 +1048,10 @@ describe('getDatasourceMetadataTool', () => {
     );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
-    const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
+    const result = await callback(
+      { datasourceLuid: '', workbookLuid: undefined },
+      getMockRequestHandlerExtra(),
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -849,6 +1067,19 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should show the workbook-datasource-not-enabled gate error when readMetadata is gated', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(Err('workbook-datasource-not-enabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new WorkbookDatasourceNotEnabledError().getErrorText());
+    expect(result.content[0].text).toContain('not enabled on this Tableau site');
+    // Gate short-circuits before model and enrichment calls.
     expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
@@ -894,17 +1125,68 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockQueryDatasource.mockResolvedValue({
+        id: 'test-luid',
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'test-luid' } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+      mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    });
+
+    it('should return metadata for an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockReadMetadata).toHaveBeenCalled();
+    });
+
+    it('should not return metadata for an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult(
-  params: { productVersion?: ProductVersion } = {},
+  params: { productVersion?: ProductVersion; workbookLuid?: string } = {},
 ): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
     new WebMcpServer(),
     params.productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
+  return await callback(
+    { datasourceLuid: 'test-luid', workbookLuid: params.workbookLuid },
+    getMockRequestHandlerExtra(),
+  );
 }
 
 function flattenResponseFields(responseData: Record<string, unknown>): Record<string, unknown>[] {

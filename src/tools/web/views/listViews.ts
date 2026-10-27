@@ -12,6 +12,7 @@ import {
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isAxiosError } from '../../../utils/axios.js';
@@ -22,6 +23,7 @@ import {
   GetPageResult,
   MAX_PAGE_SIZE,
 } from '../../../utils/paginate.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
@@ -41,14 +43,21 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
+};
+
+type ListViewsResult = GetPageResult<View> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
 };
 
 export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listViewsTool = new WebTool({
     server,
     name: 'list-views',
+    minRequiredRole: SiteRole.VIEWER,
     description: `
   Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.
@@ -91,7 +100,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
   The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
-  To get just the count of views matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more views exist; page up to \`totalAvailable\` or filter to reach the rest.`,
     paramsSchema,
     annotations: {
       title: 'List Views',
@@ -105,7 +114,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
 
-      return await listViewsTool.logAndExecute({
+      return await listViewsTool.logAndExecute<ListViewsResult>({
         extra,
         args: {},
         callback: async () => {
@@ -130,15 +139,16 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                 const viewIds = configWithOverrides.boundedContext.viewIds;
                 let page: GetPageResult<View>;
                 if (viewIds !== null && !validatedFilter) {
-                  const effectiveLimit = maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? MAX_PAGE_SIZE)
-                    : limit;
-                  const views = await fetchAllowedViewsById({
-                    restApi,
-                    viewIds,
-                    limit: effectiveLimit,
+                  const allowedViews = await fetchAllowedViewsById({ restApi, viewIds });
+                  page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => ({
+                      pagination: { pageNumber, pageSize, totalAvailable: allowedViews.length },
+                      data: allowedViews.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+                    }),
                   });
-                  page = { data: views, totalAvailable: views.length };
                 } else {
                   page = await getPage({
                     pageNumber,
@@ -207,6 +217,15 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },
@@ -272,17 +291,15 @@ export function constrainViews({
  * result matches the slow path, where such views simply never appear in Query Views for Site. Any
  * other failure (5xx, network, etc.) propagates so genuine errors aren't hidden.
  *
- * All views are fetched before slicing to `limit` so that omitted (403/404) views are backfilled by
- * other allowed views rather than leaving the result short.
+ * All views are fetched before the caller pages over them so that omitted (403/404) views are
+ * backfilled by other allowed views rather than leaving a page short.
  */
 async function fetchAllowedViewsById({
   restApi,
   viewIds,
-  limit,
 }: {
   restApi: RestApi;
   viewIds: Set<string>;
-  limit: number | undefined;
 }): Promise<Array<View>> {
   const ids = [...viewIds];
   const results = await Promise.allSettled(
@@ -315,7 +332,7 @@ async function fetchAllowedViewsById({
     throw result.reason;
   });
 
-  return limit !== undefined ? views.slice(0, limit) : views;
+  return views;
 }
 
 function flattenViewUsage(views: Array<View>): Array<View> {

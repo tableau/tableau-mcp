@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
 import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { WebPromptFactory } from '../registry.js';
 
@@ -89,9 +90,20 @@ const argsSchema = {
 } as const;
 
 // Field captions verified against live TS Events VDS schema (2026-07-19).
-// `Actor User Name` is a STRING matching the user's Tableau username (email).
+// `Actor User Name` is a STRING matching the user's Tableau username (== email on Tableau Cloud).
 // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
 const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
+
+// Scope TS Events to the Step-1 candidates via a SET filter on `Actor User Name`.
+// `Actor User Name` matches the candidate's Tableau username (== email on Tableau Cloud),
+// so this bounds the response to the candidate set. An UNfiltered query on a large tenant
+// (e.g. 27k users) returns site-wide Access events that VDS silently truncates to an
+// arbitrary 10000-row slice, dropping an active candidate's events → "no Access event" →
+// false-positive downgrade. The `values` array is a render-time placeholder the model must
+// replace with the actual candidate names from Step 1 before issuing the call.
+const TS_EVENTS_ACTOR_PLACEHOLDER =
+  '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username ' +
+  '(equals the email on Tableau Cloud); one string per candidate>';
 
 // TS Users captions verified against the official Admin Insights TS Users data dictionary
 // (help.tableau.com adminview_insights_users). TS Users uses PLAIN, unprefixed user captions
@@ -116,6 +128,12 @@ const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   query: {
     fields: TS_EVENTS_FIELDS.map((fieldCaption) => ({ fieldCaption })),
     filters: [
+      {
+        field: { fieldCaption: 'Actor User Name' },
+        filterType: 'SET',
+        values: [TS_EVENTS_ACTOR_PLACEHOLDER],
+        exclude: false,
+      },
       {
         field: { fieldCaption: 'Event Type' },
         filterType: 'SET',
@@ -187,7 +205,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
     `Unlicensed via \`${UPDATE_USER_TOOL}\`. Admin-only. ` +
     'Ownership of content is retained after downgrade (no content is deleted).',
   argsSchema,
-  disabled: (config) => !config.adminToolsEnabled,
+  disabled: async (config) => !(await isAdminToolsEnabled(config)),
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const inactiveDays = args.inactiveDays
@@ -268,22 +286,71 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       `**Inactive threshold:** ${inactiveDays} days.`,
       `**Site roles in scope:** ${scopeRoles.join(', ')}.`,
       '',
-      `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` to retrieve all users on the site. ` +
-        'Filter client-side to users whose `siteRole` is one of the roles in scope above ' +
-        'and who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator).',
-      'Users whose `lastLogin` is null (never signed in) are also candidates — they were ' +
-        'provisioned but never used their license. Include them with Days Inactive = "Never".',
       ...(userIds.length > 0
         ? [
-            'After the call returns, narrow the working set client-side to the user IDs listed in **Scope** above. ' +
-              'If any requested ID is missing from the inventory, list it under "Missing users" in the final report and skip it.',
+            `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` to retrieve the requested users. ` +
+              'Target the requested IDs directly with an `id:in:` filter rather than fetching the whole site:',
+            '',
+            '```json',
+            JSON.stringify(
+              { filter: `id:in:${userIds.join('|')}`, limit: Math.min(userIds.length, 1000) },
+              null,
+              2,
+            ),
+            '```',
+            '',
+            'From the returned users, keep those who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator). ' +
+              'Users whose `lastLogin` is null (never signed in) are also candidates — they were provisioned but ' +
+              'never used their license. Include them with Days Inactive = "Never".',
+            '**Before declaring any requested ID "missing" (required).** After the call, inspect ' +
+              '`mcp.resultInfo.truncated`. If it is `true`, the inventory is PARTIAL — a requested user may exist ' +
+              'but fall outside the returned page. NEVER skip a requested user based on a truncated inventory: ' +
+              're-run narrowing the `filter` (e.g. fewer IDs per call) until `mcp.resultInfo.truncated` is `false`, ' +
+              'then list an ID under "Missing users" in the final report only if it is genuinely absent from a ' +
+              'complete (non-truncated) result.',
           ]
-        : []),
+        : [
+            `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` with the filter below to retrieve ` +
+              'licensed users matching the reclamation criteria. Pass an explicit `limit` so the candidate set is ' +
+              'bounded but as complete as one call allows — an unbounded call is capped at a default of 100 and any ' +
+              'single call is clamped to a hard ceiling of 1000:',
+            '',
+            '```json',
+            JSON.stringify(
+              {
+                filter: `siteRole:in:${scopeRoles.join('|')},lastLogin:lt:${cutoffIso}`,
+                limit: 1000,
+              },
+              null,
+              2,
+            ),
+            '```',
+            '',
+            'From the returned users, keep those who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator). ' +
+              'Users whose `lastLogin` is null (never signed in) are also candidates — they were provisioned but ' +
+              'never used their license. Include them with Days Inactive = "Never". (The `lastLogin:lt` filter ' +
+              'already matches null-lastLogin users, so they are in these results.)',
+            '**Completeness check (required).** After the call, inspect `mcp.resultInfo.truncated`. If it is ' +
+              '`true`, MORE inactive users match than were returned — the candidate set is PARTIAL. Because there ' +
+              'is no page offset, try narrowing the `filter` (a tighter `siteRole:in` subset or a smaller ' +
+              'inactivity window) and re-running per slice, combining results. But narrowing does NOT always ' +
+              'converge: a never-signed-in user has a null `lastLogin`, which matches every `lastLogin:lt` window ' +
+              "no matter how small, so an overflow concentrated in one role's never-signed-in population cannot " +
+              'be shrunk below the ceiling this way. If after narrowing as far as the criteria allow the result is ' +
+              'still truncated, STOP retrying — report the candidate set as PARTIAL in the final output (state ' +
+              'the `truncationReason`) rather than looping indefinitely or presenting it as complete.',
+          ]),
       '',
       `**Step 2 — Activity signals (read-only).** Make TWO \`${ADMIN_INSIGHTS_TOOL}\` calls.`,
       '',
       `**2a — Content-access events.** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
-        `to retrieve access events within the ${activityLookbackDays}-day lookback window.`,
+        `to retrieve access events by the Step-1 candidates within the ${activityLookbackDays}-day lookback window.`,
+      '',
+      '**Scope this query to the Step-1 candidates.** Before issuing the call, replace the `Actor User Name` ' +
+        "filter's `values` placeholder below with the exact list of candidate `name` values from Step 1 (the " +
+        'Tableau username, which equals the `email` on Tableau Cloud — one string per candidate). This SET ' +
+        'filter bounds the response to the candidate set, so the 10000-row cap cannot silently drop an active ' +
+        "candidate's Access events and turn them into a false-positive downgrade. Do NOT fetch site-wide events.",
       '',
       '```json',
       JSON.stringify(buildActivityQuery(inactiveDays), null, 2),
@@ -314,11 +381,11 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '**Null handling — null is NOT activity.** A null, empty, or missing Desktop/Prep date is NOT ' +
         'evidence of activity; such a user remains a candidate. Only a recent *non-null* Desktop/Prep ' +
         'date rescues a user.',
-      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Users results were truncated at ` +
-        `the ${10000}-row limit. Some candidates may be missing their Desktop/Prep last-access date and ` +
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, warn the admin: "⚠️ TS Users results were truncated at ` +
+        'the row limit. Some candidates may be missing their Desktop/Prep last-access date and ' +
         'could be falsely flagged as inactive — narrow the scope with `userIds` or a smaller candidate ' +
         'set." (With the `User Email` scoping above this should not occur unless the candidate set itself ' +
-        'exceeds 10000.)',
+        'exceeds the row limit.)',
       'If the query returns 0 rows, the `User Email` scoping was likely NOT applied — either the ' +
         '`<REPLACE ...>` placeholder was left unsubstituted, or no candidate email matched. TS Users is ' +
         'one row per user, so a real candidate set should return at least one row. Do NOT treat 0 rows as ' +
@@ -338,9 +405,15 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       'A user with a recent non-null Desktop or Prep last-access date is **active** and must be excluded even if ' +
         'they have no TS Events Access event and a stale `lastLogin`.',
       '',
-      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Events results were truncated at the ` +
-        `${10000}-row limit. Some active users may not appear in the result — candidates are not exhaustive. ` +
-        'Consider narrowing the scope with `userIds` or reducing `inactiveDays`."',
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, warn the admin: "⚠️ TS Events results were truncated at the ` +
+        'row limit. Some active users may not appear in the result — candidates are not exhaustive. ' +
+        'Consider narrowing the scope with `userIds` or reducing `inactiveDays`." (With the `Actor User Name` ' +
+        'scoping in 2a this should not occur unless the candidate set itself has more Access events in the window than the row limit.)',
+      'Unlike the TS Users query (2b), 0 rows in the TS Events result (2a) is a VALID outcome — it means none ' +
+        'of the scoped candidates had an Access event in the lookback window, so they are correctly retained as ' +
+        'candidates. But 0 rows ALSO results from leaving the `<REPLACE ...>` `Actor User Name` placeholder ' +
+        'unsubstituted (the literal placeholder matches no actor): if you did not replace it with the exact ' +
+        'Step-1 candidate names, do so and re-run, since an unsubstituted filter fails to rescue genuinely-active users.',
       '',
       `Note: TS Events caps at ${TS_EVENTS_LOOKBACK_MAX_DAYS} days lookback on standard Tableau Cloud ` +
         '(365 days with Advanced Management). Users inactive longer than the lookback window may have ' +
@@ -365,8 +438,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         'This is informational — ownership is NOT affected by downgrade. ' +
         'Present the owned-content count per user so the admin can decide whether to reassign ownership ' +
         'separately before or after reclamation.',
-      `If the query returns exactly ${10000} rows, note in the report: "⚠️ Site Content results were ` +
-        `truncated at the ${10000}-row limit — owned-content counts may be understated for some users."`,
+      `If the query returns exactly ${10000} rows or \`mcp.resultInfo.truncated\` is true, note in the report: "⚠️ Site Content results were ` +
+        'truncated at the row limit — owned-content counts may be understated for some users."',
       '',
       '**IMPORTANT — Ownership note:** Downgrading a user to Unlicensed does NOT delete, reassign, ' +
         'or affect any content they own. Their workbooks, data sources, and other content remain ' +

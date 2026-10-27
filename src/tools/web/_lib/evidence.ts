@@ -6,21 +6,18 @@ import { milliseconds } from '../../../utils/milliseconds.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
 import { WebToolName } from '../toolName.js';
 import { MutationTarget } from './mutationGuard.js';
-
-// Default tag applied during the preview phase to mark content as pending deletion. Reversible and
-// visible in the Tableau UI, giving owners a window to object before the confirmed delete. Generic
-// by design — callers (e.g. the Stale Content Cleanup prompt) override via `tag`. Lifted here from
-// the delete tools so the tag-gate vocabulary lives next to the evidence strategy that enforces it.
-export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
+import { formatPendingDeletionTag, getPendingDeletionMarkers } from './pendingDeletionTag.js';
 
 /**
  * Context handed to an EvidenceStrategy on every guarded mutation. `confirmationToken` is the
  * caller-supplied confirmation value (e.g. the nonce echoed back from a preview), if any.
  */
+export type EvidenceTarget = Pick<MutationTarget, 'id'> & Partial<Omit<MutationTarget, 'id'>>;
+
 export interface EvidenceContext {
   restApi: RestApi;
   siteId: string;
-  target: MutationTarget;
+  target: EvidenceTarget;
   // The WebToolName, used to namespace registry keys so one tool's evidence can't satisfy another's.
   tool: WebToolName;
   userLuid: string;
@@ -40,32 +37,42 @@ export interface EvidenceContext {
  * - `establish` is called in the preview phase to record server-side proof.
  * - `verify` is called in the confirm phase to re-check that proof against live state.
  * - `describeEvidence` returns the non-sensitive evidence descriptor for the audit record.
+ * - `explainRejection` (optional) returns a human-readable note on WHY the last `verify` failed, when
+ *   the strategy saw something more specific than "no proof" (e.g. a marker from another batch).
  */
 export interface EvidenceStrategy<TTarget> {
   establish(ctx: EvidenceContext): Promise<void>;
   verify(ctx: EvidenceContext): Promise<boolean>;
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string };
+  explainRejection?(): string | undefined;
   // Phantom marker so the target type participates in the strategy's identity; never read.
   readonly _target?: TTarget;
 }
 
 /**
- * TagEvidence — the server-authoritative pending-deletion tag gate (lifted verbatim from #414).
+ * TagEvidence — the server-authoritative pending-deletion tag gate (#414), batch-scoped (W-24311035).
  *
- * `establish` tags the target with the pending-deletion label (reversible, visible in the Tableau
- * UI). `verify` re-fetches the target LIVE and checks the tag is present. The tag is server-side
- * state the caller cannot fabricate, so its presence is genuine proof the preview ran — unlike a
- * caller-computable confirmation token, this gate cannot be bypassed by deriving a value.
+ * The tag is `pending-deletion-YYYY-MM-DD` for the cleanup batch's UTC date (see
+ * pendingDeletionTag.ts). `establish` tags the target with it (reversible, visible in the Tableau
+ * UI). `verify` re-fetches the target LIVE and checks THAT EXACT label is present. The tag is
+ * server-side state the caller cannot fabricate, so its presence is genuine proof the preview for
+ * this batch ran. A marker from a different batch — or the legacy undated `pending-deletion` label —
+ * does NOT verify, so a residual tag from an abandoned preview can never silently authorize a later
+ * deletion; `explainRejection` names what was seen so the caller understands the rejection.
  */
 export class TagEvidence implements EvidenceStrategy<MutationTarget> {
   private readonly pendingTag: string;
   private readonly kind: 'datasource' | 'workbook';
+  private rejection?: string;
 
-  constructor({ tag, kind }: { tag?: string; kind: 'datasource' | 'workbook' }) {
-    // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank label never
-    // gets applied (preview) or verified against (confirm).
-    this.pendingTag = tag?.trim() ? tag : DEFAULT_PENDING_DELETION_TAG;
+  constructor({ cleanupDate, kind }: { cleanupDate: string; kind: 'datasource' | 'workbook' }) {
+    this.pendingTag = formatPendingDeletionTag(cleanupDate);
     this.kind = kind;
+  }
+
+  /** The exact marker label this strategy establishes and verifies. */
+  getPendingTag(): string {
+    return this.pendingTag;
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {
@@ -87,18 +94,35 @@ export class TagEvidence implements EvidenceStrategy<MutationTarget> {
   async verify(ctx: EvidenceContext): Promise<boolean> {
     // Query fresh here (not any cached content) so the check reflects the current server state at
     // mutation time. Rejected with zero destructive side effects.
-    if (this.kind === 'datasource') {
-      const datasource = await ctx.restApi.datasourcesMethods.queryDatasource({
-        datasourceId: ctx.target.id,
-        siteId: ctx.siteId,
-      });
-      return datasource.tags?.tag?.some((t) => t.label === this.pendingTag) ?? false;
+    const tags =
+      this.kind === 'datasource'
+        ? (
+            await ctx.restApi.datasourcesMethods.queryDatasource({
+              datasourceId: ctx.target.id,
+              siteId: ctx.siteId,
+            })
+          ).tags
+        : (
+            await ctx.restApi.workbooksMethods.getWorkbook({
+              workbookId: ctx.target.id,
+              siteId: ctx.siteId,
+            })
+          ).tags;
+    if (tags?.tag?.some((t) => t.label === this.pendingTag)) {
+      this.rejection = undefined;
+      return true;
     }
-    const workbook = await ctx.restApi.workbooksMethods.getWorkbook({
-      workbookId: ctx.target.id,
-      siteId: ctx.siteId,
-    });
-    return workbook.tags?.tag?.some((t) => t.label === this.pendingTag) ?? false;
+    const others = getPendingDeletionMarkers(tags).map((m) => m.tag);
+    this.rejection =
+      others.length > 0
+        ? `It carries ${others.map((t) => `'${t}'`).join(', ')} from a different cleanup batch, ` +
+          `which does not authorize this one (expected '${this.pendingTag}').`
+        : undefined;
+    return false;
+  }
+
+  explainRejection(): string | undefined {
+    return this.rejection;
   }
 
   describeEvidence(): { kind: 'tag'; detail?: string } {
@@ -280,8 +304,9 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
 
 /**
  * AllEvidence — AND-composition of several strategies. `verify` is true only when EVERY member
- * verifies; `establish` establishes every member. Used by confirm-delete-workbook to require BOTH a
- * live `pending-deletion` tag (durable, un-forgeable) AND a fresh in-iframe human approval
+ * verifies; `establish` establishes every member; `explainRejection` delegates to the member that
+ * failed. Used by confirm-delete-workbook to require BOTH a
+ * live batch `pending-deletion-YYYY-MM-DD` tag (durable, un-forgeable) AND a fresh in-iframe human approval
  * (AppApprovalEvidence) — layering the human-gesture proof ON TOP of the tag so the composite can
  * only ever NARROW access (reject), never wrongly allow.
  *
@@ -292,6 +317,7 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
  */
 export class AllEvidence implements EvidenceStrategy<MutationTarget> {
   private readonly strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>;
+  private failed?: EvidenceStrategy<MutationTarget>;
 
   constructor(strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>) {
     this.strategies = strategies;
@@ -304,12 +330,18 @@ export class AllEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
+    this.failed = undefined;
     for (const strategy of this.strategies) {
       if (!(await strategy.verify(ctx))) {
+        this.failed = strategy;
         return false;
       }
     }
     return true;
+  }
+
+  explainRejection(): string | undefined {
+    return this.failed?.explainRejection?.();
   }
 
   describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string } {

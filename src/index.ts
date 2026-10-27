@@ -5,40 +5,19 @@ import dotenv from 'dotenv';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { initializeFeatureGate } from './features/init.js';
-import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
-import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
+import { initializeWebRuntime } from './server/webRuntime.js';
 
 const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
-
-  RestApi.host = config.server;
-
-  // Initialize feature gate provider
-  initializeFeatureGate();
-
-  // Start fetching server info immediately but don't block the port from opening.
-  // Any failure here is fatal and logged explicitly -- no silent failures.
-  // For http transport, the port opens first so health checks can succeed,
-  // then we await this before declaring the server ready.
-  // For stdio transport, there are no health checks, but we still await before serving.
-  const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
-    log({
-      message: 'Fatal error initializing server info',
-      level: 'error',
-      logger: 'startup',
-      data: error,
-    });
-    process.exit(1);
-  });
+  const { serverInfoReady } = await initializeWebRuntime(config);
 
   log({
     message: `Config resolved: transport=${config.transport}, auth=${config.auth}, server=${config.server}`,
@@ -81,7 +60,7 @@ async function startServer(): Promise<void> {
       // Port is now open. Wait for server info before logging the ready message.
       await serverInfoReady;
 
-      if (!config.oauth.enabled) {
+      if (!config.oauth.enabled && config.auth !== 'passthrough') {
         log({
           message:
             '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access. Non-OAuth HTTP usage is intended only for testing/prototyping or deployments that are licensed and approved for usage-based licensing (UBL). For general multi-user HTTP deployments, prefer OAuth. By explicitly disabling OAuth with DANGEROUSLY_DISABLE_OAUTH="true", confirm this matches your Tableau licensing/security guidance.',

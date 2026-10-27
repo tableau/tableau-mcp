@@ -1,16 +1,31 @@
 import features from '../../features.json';
 import pkg from '../../package.json';
+import { Config } from '../../src/config.js';
+import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getAdminToolsEnv, resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
 
 const serverVersion = pkg.version;
 const authoringToolsEnabled = Boolean(features['authoring-tools']);
+const flowReadToolsEnabled = Boolean(features['flow-read-tools']);
+const flowWriteToolsEnabled = Boolean(features['flow-write-tools']);
+let flowReadExpected: boolean;
+let flowWriteExpected: boolean;
+const knowledgeToolsEnabled = Boolean(features['knowledge-tools']);
+const tableauDataAppsEnabled = Boolean(features['data-apps']);
+const adminToolsFlagEnabled = Boolean(features['admin-tools']);
+const flowWriteTools: ReadonlyArray<WebToolName> = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
 
 describe('server', () => {
-  beforeAll(setEnv);
+  beforeAll(() => {
+    setEnv();
+    const config = new Config();
+    flowReadExpected = config.flowReadToolsEnabled ?? flowReadToolsEnabled;
+    flowWriteExpected = config.flowWriteToolsEnabled ?? flowWriteToolsEnabled;
+  });
   afterAll(resetEnv);
 
   describe('default variant', () => {
@@ -54,20 +69,31 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
+        'get-flow-task',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
+        'request-datasource-upload',
         'publish-workbook',
+        'publish-datasource',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      // data-app tools are gated off by default (data-apps feature flag)
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -76,14 +102,14 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !oauthOnlyTools.includes(name));
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
-        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -91,8 +117,23 @@ describe('server', () => {
         expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedToolNames = expectedToolNames.filter((name) => !authoringTools.includes(name));
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !knowledgeTools.includes(name));
+      }
+
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
+      if (!tableauDataAppsEnabled) {
+        expectedToolNames = expectedToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
+        expectedToolNames = expectedToolNames.filter((name) => !flowWriteTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -114,13 +155,13 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });
 
-  // Instructions depend on ADMIN_TOOLS_ENABLED, which is fixed at process spawn, so the admin-on case
-  // needs its own client with the flag injected into its env (mirroring how admin-tool tests inject it).
+  // Admin instructions require ADMIN_TOOLS_ENABLED and the admin-tools feature flag, both fixed at
+  // process spawn, so the admin-on case needs its own client env (see getAdminToolsEnv).
   describe('default variant with admin tools enabled', () => {
     let client: McpClient;
 
@@ -128,7 +169,7 @@ describe('server', () => {
       await buildVariant('default');
       client = new McpClient({
         variant: 'default',
-        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+        env: getAdminToolsEnv(),
       });
       await client.connect();
     });
@@ -146,8 +187,14 @@ describe('server', () => {
       // ...and the admin capability menu + generic-intent tie-in is appended.
       expect(instructions).toContain('site-administration capabilities');
       expect(instructions).toContain('general admin/site-health');
-      expect(instructions).toContain('user-license reclamation');
       expect(instructions).toContain('query-admin-insights');
+      // Each packaged admin prompt is named by its exact invokable identifier (W-23757369).
+      expect(instructions).toContain('stale-content-cleanup-inform');
+      expect(instructions).toContain('stale-content-cleanup-apply');
+      expect(instructions).toContain('job-optimization-inform');
+      expect(instructions).toContain('extract-optimization-apply');
+      expect(instructions).toContain('user-license-reclamation-inform');
+      expect(instructions).toContain('user-license-reclamation-apply');
     });
   });
 
@@ -173,7 +220,10 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = [...desktopToolNames];
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedToolNames).toContain('bind-template');
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -220,20 +270,31 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
-      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = [
+      const flowReadTools: ReadonlyArray<WebToolName> = [
         'list-flows',
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
+        'get-flow-task',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
       // authoring tools are gated off by default (authoring-tools feature flag)
       const authoringTools: ReadonlyArray<WebToolName> = [
         'request-workbook-upload',
+        'request-datasource-upload',
         'publish-workbook',
+        'publish-datasource',
       ];
+      // knowledge tools are gated off by default (knowledge-tools feature flag)
+      const knowledgeTools: ReadonlyArray<WebToolName> = [
+        'query-knowledge-context',
+        'inspect-knowledge-context',
+        'manage-knowledge-context',
+      ];
+      // data-app tools are gated off by default (data-apps feature flag)
+      const dataAppTools: ReadonlyArray<WebToolName> = ['scaffold-data-app', 'move-workbook'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -244,16 +305,16 @@ describe('server', () => {
         );
       }
 
-      // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+      // Admin tools require both ADMIN_TOOLS_ENABLED and the admin-tools feature flag.
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true' || !adminToolsFlagEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );
       }
 
-      // Filter out flow tools if they are not enabled
-      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      // Read tools follow FLOW_READ_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowReadExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowReadTools.includes(name));
       }
 
       // Filter out insights tools if they are not enabled
@@ -261,9 +322,28 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
-      if (!features['authoring-tools']) {
+      if (!authoringToolsEnabled) {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !authoringTools.includes(name),
+        );
+      }
+
+      // Filter out knowledge tools if they are not enabled (knowledge-tools feature flag)
+      if (!knowledgeToolsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !knowledgeTools.includes(name),
+        );
+      }
+
+      // Filter out data-app tools if they are not enabled (data-apps feature flag)
+      if (!tableauDataAppsEnabled) {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !dataAppTools.includes(name));
+      }
+
+      // Write tools follow FLOW_WRITE_TOOLS_ENABLED when set, otherwise their flag.
+      if (!flowWriteExpected) {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !flowWriteTools.includes(name),
         );
       }
 
@@ -273,7 +353,11 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter((name) => name !== 'download-workbook');
       }
 
-      const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
+      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
+      expect(expectedDesktopToolNames).toContain('bind-template');
+      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -291,7 +375,7 @@ describe('server', () => {
       expect(instructions).toContain('Tableau MCP exposes tools');
       expect(instructions).not.toContain('site-administration capabilities');
       expect(instructions).not.toContain('general admin/site-health');
-      expect(instructions).not.toContain('user-license reclamation');
+      expect(instructions).not.toContain('user-license-reclamation-inform');
       expect(instructions).not.toContain('query-admin-insights');
     });
   });

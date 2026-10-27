@@ -1,3 +1,4 @@
+import * as loggerModule from '../logging/logger.js';
 import { stubDefaultEnvVars } from '../testShared.js';
 import { initializeTelemetry, validateTelemetryProvider } from './init.js';
 const mocks = vi.hoisted(() => ({
@@ -7,6 +8,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./noop.js', () => ({
   NoOpTelemetryProvider: mocks.MockNoOpTelemetryProvider,
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('initializeTelemetry', () => {
   beforeEach(() => {

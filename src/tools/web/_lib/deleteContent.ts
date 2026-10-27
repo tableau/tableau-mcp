@@ -11,17 +11,21 @@ import {
   UnknownError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
+import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   DatasourceDownstream,
   getDatasourceDownstreamByLuid,
   getDatasourceDownstreamQuery,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { Provider } from '../../../utils/provider.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { AppToolResult, WebTool } from '../tool.js';
@@ -29,7 +33,6 @@ import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 import {
   AppApprovalEvidence,
-  DEFAULT_PENDING_DELETION_TAG,
   getMutationPreviewTtlMs,
   RegistryEvidence,
   TagEvidence,
@@ -40,7 +43,19 @@ import {
   renderTokenConfirmNextStep,
 } from './hitlText.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import {
+  checkCleanupBatchAge,
+  cleanupDateSchema,
+  getPendingDeletionMarkers,
+  getUtcCleanupDate,
+} from './pendingDeletionTag.js';
+import {
+  MAX_REMOVE_RESOURCE_IDS,
+  removePendingDeletionTags,
+  RemovePendingDeletionTagsResult,
+} from './removePendingDeletionTags.js';
 import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
+import { checkContentStillStale } from './stalenessCheck.js';
 
 export type DeleteWorkbookConfirmPanel = {
   kind: 'delete-workbook-confirm';
@@ -48,6 +63,11 @@ export type DeleteWorkbookConfirmPanel = {
   name?: string;
   project?: string;
   owner?: string;
+  // The cleanup batch (UTC YYYY-MM-DD) whose `pending-deletion-<date>` tag the preview wrote, and
+  // the staleness threshold it was assessed with — the panel echoes both into confirm-delete-content
+  // (Confirm) or delete-content action "remove-pending-tags" (Cancel).
+  cleanupDate: string;
+  minAgeDays: number;
   expiresAtMs: number;
 };
 
@@ -57,6 +77,11 @@ export type DeleteDatasourceConfirmPanel = {
   name?: string;
   project?: string;
   owner?: string;
+  // The cleanup batch (UTC YYYY-MM-DD) whose `pending-deletion-<date>` tag the preview wrote, and
+  // the staleness threshold it was assessed with — the panel echoes both into confirm-delete-content
+  // (Confirm) or delete-content action "remove-pending-tags" (Cancel).
+  cleanupDate: string;
+  minAgeDays: number;
   expiresAtMs: number;
 };
 
@@ -68,53 +93,106 @@ export type DeleteExtractRefreshTaskConfirmPanel = {
 
 /**
  * Dispatches on `resourceType`:
- * - `workbook` — TagEvidence + resourceAccessChecker.isWorkbookAllowed.
- * - `datasource` — TagEvidence + isDatasourceAllowed + downstream warning.
+ * - `workbook` — batch TagEvidence + staleness precondition + resourceAccessChecker.isWorkbookAllowed.
+ * - `datasource` — batch TagEvidence + staleness precondition + isDatasourceAllowed + downstream
+ *   warning.
  * - `extract-refresh-task` — RegistryEvidence nonce.
  *
- * Two-phase (preview → confirm):
- * - Flag OFF (`mcp-apps`): preview tags/mints-nonce; confirm re-verifies evidence and deletes.
- * - Flag ON: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
+ * Two-phase (preview → confirm). The branch is chosen by whether an MCP-Apps card can ACTUALLY
+ * render for THIS client (`extra.mcpAppToolsRenderable` — the feature is on AND the client advertised
+ * the UI capability AND it is not a known-incompatible renderer), NOT by the `mcp-apps` flag alone:
+ * - Not app-renderable (flag off, OR flag on but an app-incapable client): preview tags
+ *   (workbook/datasource) or mints a nonce (extract-refresh-task) and returns a readable TEXT
+ *   preview; confirm re-verifies that evidence and deletes. This is the path an app-incapable client
+ *   takes even with `mcp-apps` on, so it never receives an unrenderable app-card payload (W-24212898).
+ * - App-renderable: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
  *   MCP-Apps iframe. The iframe's Confirm button calls the separate app-only
  *   `confirm-delete-content` tool (visibility:['app'], model-invisible). Model-driven `confirm:true`
- *   on THIS tool is unconditionally rejected with PreviewNotRunError when mcp-apps is enabled.
+ *   on THIS tool is unconditionally rejected with PreviewNotRunError only when the card can render.
+ *
+ * Workbook/datasource batch identity (W-24311035): the preview writes `pending-deletion-<today UTC>`
+ * and a confirm verifies the tag of the batch it names via `cleanupDate` (default: today), so a
+ * marker from an earlier abandoned preview cannot silently authorize a later deletion. Both phases
+ * re-evaluate staleness against Admin Insights (checkContentStillStale) — the preview BEFORE it
+ * tags, so non-stale content is rejected with no residue.
  */
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
+/**
+ * Human phrase for a target's containing project. `target.project` is the project NAME resolved from
+ * the content's REST response (getWorkbook / queryDatasource), which returns a `<project id name>`
+ * element for project-resident content and OMITS it entirely for content that has no project — e.g. a
+ * workbook in a user's Personal Space (verified live: the same getWorkbook call returns the project
+ * name for a project-resident workbook and no project at all for a Personal-Space one). This
+ * distinguishes a named project from a genuinely project-less item, instead of the previous
+ * misleading "unknown project" wording (which read as a lookup failure when the item simply has no
+ * project). Shared by delete-content and confirm-delete-content so both surfaces phrase it identically.
+ */
+export function formatProjectPhrase(project: string | undefined): string {
+  return project ? `in project '${project}'` : 'in no project (e.g. a Personal Space item)';
+}
+
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
 
+const actionSchema = z.enum(['delete', 'remove-pending-tags']);
+
 const paramsSchema = {
-  resourceType: resourceTypeSchema.describe(
-    'The kind of resource to delete: "workbook", "datasource", or "extract-refresh-task".',
-  ),
-  resourceId: z
-    .string()
+  action: actionSchema
+    .optional()
     .describe(
-      'The LUID of the workbook or data source, or the UUID of the extract refresh task. ' +
-        'For extract-refresh-task, must be a valid UUID.',
+      '"delete" (default): the preview → confirm deletion flow. "remove-pending-tags": remove ' +
+        'pending-deletion marker tags from resourceIds; nothing is deleted.',
+    ),
+  resourceType: resourceTypeSchema.describe(
+    'The kind of resource: "workbook", "datasource", or "extract-refresh-task" (not valid for ' +
+      'action "remove-pending-tags").',
+  ),
+  resourceId: luidSchema
+    .optional()
+    .describe(
+      'Required for action "delete": the LUID of the workbook or data source, or the UUID of the ' +
+        'extract refresh task.',
+    ),
+  resourceIds: z
+    .array(luidSchema)
+    .min(1)
+    .max(MAX_REMOVE_RESOURCE_IDS)
+    .optional()
+    .describe(
+      'Only for action "remove-pending-tags": LUIDs of the workbooks or data sources to clear ' +
+        `(1–${MAX_REMOVE_RESOURCE_IDS}).`,
     ),
   confirm: z
     .boolean()
     .optional()
     .describe(
-      'When omitted or false, runs a non-destructive preview. When true, permanently deletes — ' +
-        'but only if the prior-preview evidence is present (tag for workbook/datasource, ' +
+      'When omitted or false, runs a preview: nothing is deleted, but a workbook/datasource gets a ' +
+        'reversible pending-deletion-YYYY-MM-DD marker tag. When true, permanently deletes — but ' +
+        'only if the prior-preview evidence is present (batch tag for workbook/datasource, ' +
         'confirmationToken for extract-refresh-task). ' +
         'When the `mcp-apps` feature is enabled, model-driven confirm is CLOSED: the destructive ' +
         'step requires a human gesture in the in-iframe confirm panel.',
     ),
-  tag: z
-    .string()
-    .max(200)
-    .regex(
-      /^[A-Za-z0-9 _-]+$/,
-      'tag must contain only letters, numbers, spaces, underscores, and dashes',
-    )
+  cleanupDate: cleanupDateSchema
     .optional()
     .describe(
-      'Only for resourceType="workbook" or "datasource": the pending-deletion tag label. ' +
-        `Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
+      'Only for resourceType="workbook" or "datasource": the cleanup batch date (YYYY-MM-DD, UTC) ' +
+        'returned by the preview. On confirm, defaults to today; pass it when confirming on a ' +
+        'later day (batches older than the server limit, default 30 days, are rejected). A preview ' +
+        'always uses today\'s date. With action "remove-pending-tags": remove only that batch\'s ' +
+        'marker (default: every pending-deletion marker on each item, including the legacy undated ' +
+        'tag).',
+    ),
+  minAgeDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(3650)
+    .optional()
+    .describe(
+      'Only for resourceType="workbook" or "datasource": minimum days since last access for the ' +
+        'item to still count as stale. Defaults to the server stale-content threshold (90).',
     ),
   confirmationToken: z
     .string()
@@ -127,6 +205,7 @@ const paramsSchema = {
 
 type DeleteContentResult =
   | string
+  | RemovePendingDeletionTagsResult
   | AppToolResult<DeleteWorkbookConfirmPanel>
   | AppToolResult<DeleteDatasourceConfirmPanel>
   | AppToolResult<DeleteExtractRefreshTaskConfirmPanel>;
@@ -140,7 +219,8 @@ export const getDeleteContentTool = async (
   const tool = new WebTool({
     server,
     name: 'delete-content',
-    disabled: !config.adminToolsEnabled,
+    disabled: new Provider(async () => !(await isAdminToolsEnabled(config))),
+    minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     ...(mcpAppsEnabled ? { app: getAppConfig('delete-content', 'hitl-confirm') } : {}),
     description: `
 Permanently deletes a workbook, published data source, or extract refresh task. Restricted to
@@ -149,6 +229,13 @@ site administrators (\`ADMIN_TOOLS_ENABLED\`). Dispatches on \`resourceType\`.
 Two-phase: preview (\`confirm\` omitted) tags/tokens what would be deleted; confirm (\`confirm:
 true\`) permanently deletes after verifying that evidence. Human confirmation is REQUIRED between
 the two phases — do not auto-confirm.
+
+Workbooks/datasources must still be stale per Admin Insights at preview AND confirm. Preview tags
+them \`pending-deletion-YYYY-MM-DD\` (UTC); confirm accepts only that batch's tag.
+
+Find markers with \`list-workbooks\` / \`list-datasources\` (\`filter: tags:eq:pending-deletion-YYYY-MM-DD\`).
+Clear them with \`action: "remove-pending-tags"\` and \`resourceIds\`; this removes only marker tags and
+deletes nothing.
 
 Workbooks/datasources go to the recycle bin on Tableau Cloud; extract refresh task deletion is
 permanent.
@@ -162,32 +249,100 @@ permanent.
       openWorldHint: false,
     },
     callback: async (
-      { resourceType, resourceId, confirm, tag, confirmationToken },
+      {
+        action,
+        resourceType,
+        resourceId,
+        resourceIds,
+        confirm,
+        cleanupDate,
+        minAgeDays,
+        confirmationToken,
+      },
       extra,
     ): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
+      const today = getUtcCleanupDate();
+      const batchDate = cleanupDate ?? today;
+      const thresholdDays = minAgeDays ?? configWithOverrides.staleContentMinAgeDays;
 
       return await tool.logAndExecute<DeleteContentResult>({
         extra,
-        args: { resourceType, resourceId, confirm, tag, confirmationToken },
+        args: {
+          action,
+          resourceType,
+          resourceId,
+          resourceIds,
+          confirm,
+          cleanupDate,
+          minAgeDays,
+          confirmationToken,
+        },
         callback: async () => {
-          // Reject bad resourceId shape before opening a Tableau REST session. Only
-          // extract-refresh-task requires a UUID; workbook/datasource accept any LUID string and
-          // let the REST call surface a 404 if it's genuinely unknown.
-          if (resourceType === 'extract-refresh-task') {
-            const uuidCheck = z
-              .string()
-              .uuid('resourceId must be a valid UUID for extract-refresh-task')
-              .safeParse(resourceId);
-            if (!uuidCheck.success) {
-              return new ArgsValidationError(uuidCheck.error.issues[0].message).toErr();
+          if (action === 'remove-pending-tags') {
+            const invalid = validateRemovePendingTagsArgs({
+              resourceType,
+              resourceId,
+              resourceIds,
+              confirm,
+              minAgeDays,
+              confirmationToken,
+            });
+            if (invalid) {
+              return invalid.toErr();
+            }
+            return await useRestApi({
+              ...extra,
+              jwtScopes: tool.requiredApiScopes,
+              callback: async (restApi) =>
+                await removePendingDeletionTags({
+                  restApi,
+                  extra,
+                  resourceType: resourceType as 'workbook' | 'datasource',
+                  resourceIds: resourceIds ?? [],
+                  cleanupDate,
+                }),
+            });
+          }
+          if (resourceId === undefined || resourceIds !== undefined) {
+            return new ArgsValidationError(
+              'action "delete" requires resourceId and does not accept resourceIds; use action ' +
+                '"remove-pending-tags" to clear markers from several items.',
+            ).toErr();
+          }
+          const targetId: string = resourceId;
+          // A preview always opens TODAY's batch: back-dating it would let a new preview mint the
+          // tag an older batch's confirm accepts. (Future dates are rejected by the schema.)
+          if (!confirm && resourceType !== 'extract-refresh-task' && batchDate !== today) {
+            return new ArgsValidationError(
+              `cleanupDate must be today's UTC date (${today}) for a preview; pass an earlier ` +
+                'cleanupDate only with confirm: true.',
+            ).toErr();
+          }
+          // Whether an MCP-Apps confirm card can ACTUALLY render for THIS client — not merely whether
+          // the `mcp-apps` flag is on. A flag-on-but-app-incapable client is registered as a PLAIN
+          // tool, so returning the app-card payload here would degrade to an unreadable raw JSON blob
+          // (W-24212898). Keying the app path on this signal makes such a client fall through to the
+          // readable text/token flow instead. Defaults to false when the signal is absent.
+          const appRenderable = extra.mcpAppToolsRenderable ?? false;
+          // A batch past PENDING_DELETION_MAX_AGE_DAYS no longer authorizes a delete, so a marker
+          // orphaned by a crashed or abandoned preview expires on its own. Checked before any REST
+          // call; the marker is left for action "remove-pending-tags". (App clients get the
+          // confirm-closed message below instead.)
+          if (confirm && !appRenderable && resourceType !== 'extract-refresh-task') {
+            const expired = checkCleanupBatchAge({
+              cleanupDate: batchDate,
+              maxAgeDays: getConfig().pendingDeletionMaxAgeDays,
+            });
+            if (expired) {
+              return expired.toErr();
             }
           }
           return await useRestApi({
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              if (confirm && mcpAppsEnabled) {
+              if (confirm && appRenderable) {
                 return new PreviewNotRunError(
                   renderConfirmClosedMessage({
                     actionPhrase: `deleting a ${resourceType}`,
@@ -202,29 +357,31 @@ permanent.
                   return await runWorkbookBranch({
                     restApi,
                     extra,
-                    workbookId: resourceId,
+                    workbookId: targetId,
                     confirm,
-                    tag,
-                    mcpAppsEnabled,
+                    cleanupDate: batchDate,
+                    minAgeDays: thresholdDays,
+                    appRenderable,
                   });
                 case 'datasource':
                   return await runDatasourceBranch({
                     restApi,
                     extra,
-                    datasourceId: resourceId,
+                    datasourceId: targetId,
                     confirm,
-                    tag,
-                    mcpAppsEnabled,
+                    cleanupDate: batchDate,
+                    minAgeDays: thresholdDays,
+                    appRenderable,
                     disableMetadataApiRequests: configWithOverrides.disableMetadataApiRequests,
                   });
                 case 'extract-refresh-task':
                   return await runExtractRefreshTaskBranch({
                     restApi,
                     extra,
-                    taskId: resourceId,
+                    taskId: targetId,
                     confirm,
                     confirmationToken,
-                    mcpAppsEnabled,
+                    appRenderable,
                   });
               }
             },
@@ -238,23 +395,71 @@ permanent.
   return tool;
 };
 
+/**
+ * Per-action argument rules for the flat `delete-content` schema. A parameter that does not apply to
+ * the chosen action is rejected, never ignored — most importantly `confirm`, so that
+ * `{ action: "remove-pending-tags", confirm: true }` can never be read as a deletion.
+ */
+function validateRemovePendingTagsArgs({
+  resourceType,
+  resourceId,
+  resourceIds,
+  confirm,
+  minAgeDays,
+  confirmationToken,
+}: {
+  resourceType: z.infer<typeof resourceTypeSchema>;
+  resourceId: string | undefined;
+  resourceIds: string[] | undefined;
+  confirm: boolean | undefined;
+  minAgeDays: number | undefined;
+  confirmationToken: string | undefined;
+}): ArgsValidationError | null {
+  if (resourceType === 'extract-refresh-task') {
+    return new ArgsValidationError(
+      'action "remove-pending-tags" supports resourceType "workbook" or "datasource" only; ' +
+        'extract refresh tasks carry no tags.',
+    );
+  }
+  if (!resourceIds || resourceIds.length === 0) {
+    return new ArgsValidationError('action "remove-pending-tags" requires resourceIds.');
+  }
+  const unsupported = [
+    resourceId !== undefined && 'resourceId',
+    confirm !== undefined && 'confirm',
+    minAgeDays !== undefined && 'minAgeDays',
+    confirmationToken !== undefined && 'confirmationToken',
+  ].filter((name): name is string => typeof name === 'string');
+  if (unsupported.length > 0) {
+    return new ArgsValidationError(
+      `action "remove-pending-tags" does not accept ${unsupported.join(', ')}. It only removes ` +
+        'marker tags and never deletes content.',
+    );
+  }
+  return null;
+}
+
 async function runWorkbookBranch({
   restApi,
   extra,
   workbookId,
   confirm,
-  tag,
-  mcpAppsEnabled,
+  cleanupDate,
+  minAgeDays,
+  appRenderable,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
   workbookId: string;
   confirm: boolean | undefined;
-  tag: string | undefined;
-  mcpAppsEnabled: boolean;
+  cleanupDate: string;
+  minAgeDays: number;
+  appRenderable: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
-  const pendingTag = tag?.trim() || DEFAULT_PENDING_DELETION_TAG;
+  const tagEvidence = new TagEvidence({ cleanupDate, kind: 'workbook' });
+  const pendingTag = tagEvidence.getPendingTag();
+  let currentTags: Parameters<typeof getPendingDeletionMarkers>[0];
 
   const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
     workbookId,
@@ -268,6 +473,7 @@ async function runWorkbookBranch({
     const workbook =
       isWorkbookAllowedResult.content ??
       (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
+    currentTags = workbook.tags;
     const ownerEmail = await resolveOwnerEmail(
       restApi,
       siteId,
@@ -290,15 +496,23 @@ async function runWorkbookBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: new TagEvidence({ tag: pendingTag, kind: 'workbook' }),
+    evidence: tagEvidence,
     resolveTarget,
     fallbackTargetKind: 'workbook',
+    precondition: () =>
+      checkContentStillStale({
+        restApi,
+        resourceType: 'workbook',
+        resourceId: workbookId,
+        minAgeDays,
+        cleanupDate,
+      }),
   });
   if (guardResult.isErr()) {
     return guardResult.error.toErr();
   }
   const { target, recordOutcome } = guardResult.value;
-  const projectName = target.project ?? 'unknown project';
+  const projectPhrase = formatProjectPhrase(target.project);
   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
   if (confirm) {
@@ -310,13 +524,13 @@ async function runWorkbookBranch({
     }
     recordOutcome({ ok: true });
     return new Ok<DeleteContentResult>(
-      `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+      `Deleted workbook '${target.name}' (id ${workbookId}) ${projectPhrase}, ${ownerText}. ` +
         `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a limited ` +
         'time before permanent removal.',
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
@@ -332,6 +546,8 @@ async function runWorkbookBranch({
         name: target.name,
         project: target.project,
         owner: target.owner,
+        cleanupDate,
+        minAgeDays,
         expiresAtMs,
       },
       url: '',
@@ -339,11 +555,14 @@ async function runWorkbookBranch({
   }
 
   return new Ok<DeleteContentResult>(
-    `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
-      `It has been tagged '${pendingTag}' (reversible). ` +
+    `Preview — workbook '${target.name}' (id ${workbookId}) ${projectPhrase}, ${ownerText}. ` +
+      describeMarkerWrite({ pendingTag, cleanupDate, currentTags }) +
       renderTagDeleteNextStep({
         subject: 'show this workbook (name, project, owner)',
         pendingTag,
+        cleanupDate,
+        resourceType: 'workbook',
+        resourceId: workbookId,
       }) +
       `Deleted workbooks are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
       'for a limited time.',
@@ -355,20 +574,24 @@ async function runDatasourceBranch({
   extra,
   datasourceId,
   confirm,
-  tag,
-  mcpAppsEnabled,
+  cleanupDate,
+  minAgeDays,
+  appRenderable,
   disableMetadataApiRequests,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
   datasourceId: string;
   confirm: boolean | undefined;
-  tag: string | undefined;
-  mcpAppsEnabled: boolean;
+  cleanupDate: string;
+  minAgeDays: number;
+  appRenderable: boolean;
   disableMetadataApiRequests: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
-  const pendingTag = tag?.trim() || DEFAULT_PENDING_DELETION_TAG;
+  const tagEvidence = new TagEvidence({ cleanupDate, kind: 'datasource' });
+  const pendingTag = tagEvidence.getPendingTag();
+  let currentTags: Parameters<typeof getPendingDeletionMarkers>[0];
 
   const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
     datasourceLuid: datasourceId,
@@ -382,6 +605,7 @@ async function runDatasourceBranch({
     const datasource =
       isDatasourceAllowedResult.content ??
       (await restApi.datasourcesMethods.queryDatasource({ datasourceId, siteId }));
+    currentTags = datasource.tags;
     const ownerEmail = await resolveOwnerEmail(
       restApi,
       siteId,
@@ -404,15 +628,23 @@ async function runDatasourceBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence: new TagEvidence({ tag: pendingTag, kind: 'datasource' }),
+    evidence: tagEvidence,
     resolveTarget,
     fallbackTargetKind: 'datasource',
+    precondition: () =>
+      checkContentStillStale({
+        restApi,
+        resourceType: 'datasource',
+        resourceId: datasourceId,
+        minAgeDays,
+        cleanupDate,
+      }),
   });
   if (guardResult.isErr()) {
     return guardResult.error.toErr();
   }
   const { target, recordOutcome } = guardResult.value;
-  const projectName = target.project ?? 'unknown project';
+  const projectPhrase = formatProjectPhrase(target.project);
   const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
   if (confirm) {
@@ -424,14 +656,14 @@ async function runDatasourceBranch({
     }
     recordOutcome({ ok: true });
     return new Ok<DeleteContentResult>(
-      `Deleted data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+      `Deleted data source '${target.name}' (id ${datasourceId}) ${projectPhrase}, ${ownerText}. ` +
         `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
         'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
         'Dependent workbooks and flows were not deleted but no longer have this data source.',
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
@@ -447,6 +679,8 @@ async function runDatasourceBranch({
         name: target.name,
         project: target.project,
         owner: target.owner,
+        cleanupDate,
+        minAgeDays,
         expiresAtMs,
       },
       url: '',
@@ -460,12 +694,15 @@ async function runDatasourceBranch({
   });
 
   return new Ok<DeleteContentResult>(
-    `Preview — data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+    `Preview — data source '${target.name}' (id ${datasourceId}) ${projectPhrase}, ${ownerText}. ` +
       `${dependencyWarning} ` +
-      `It has been tagged '${pendingTag}' (reversible). ` +
+      describeMarkerWrite({ pendingTag, cleanupDate, currentTags }) +
       renderTagDeleteNextStep({
         subject: 'show this data source (name, project, owner) and its dependent content',
         pendingTag,
+        cleanupDate,
+        resourceType: 'datasource',
+        resourceId: datasourceId,
       }) +
       'On Tableau Cloud deleted data sources are recoverable from the recycle bin ' +
       `(${RECYCLE_BIN_DOC_URL}) for a limited time; on Tableau Server deletion is permanent.`,
@@ -478,14 +715,14 @@ async function runExtractRefreshTaskBranch({
   taskId,
   confirm,
   confirmationToken,
-  mcpAppsEnabled,
+  appRenderable,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
   taskId: string;
   confirm: boolean | undefined;
   confirmationToken: string | undefined;
-  mcpAppsEnabled: boolean;
+  appRenderable: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
 
@@ -552,7 +789,7 @@ async function runExtractRefreshTaskBranch({
     );
   }
 
-  if (mcpAppsEnabled) {
+  if (appRenderable) {
     await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
@@ -581,6 +818,35 @@ async function runExtractRefreshTaskBranch({
         nonce,
         tail: ' before deleting).',
       }),
+  );
+}
+
+/**
+ * The preview's honest account of its one write (W-24199845): nothing was deleted, the item now
+ * carries this batch's marker, and any markers from OTHER batches (which do not authorize this one)
+ * are named so the admin can clear them. `currentTags` is the item as read before the preview tagged.
+ */
+function describeMarkerWrite({
+  pendingTag,
+  cleanupDate,
+  currentTags,
+}: {
+  pendingTag: string;
+  cleanupDate: string;
+  currentTags: Parameters<typeof getPendingDeletionMarkers>[0];
+}): string {
+  const others = getPendingDeletionMarkers(currentTags)
+    .map((m) => m.tag)
+    .filter((t) => t !== pendingTag);
+  const otherText =
+    others.length > 0
+      ? `It also carries ${others.map((t) => `'${t}'`).join(', ')} from an earlier cleanup ` +
+        'batch; those markers do not authorize this deletion and can be cleared with ' +
+        'delete-content action "remove-pending-tags". '
+      : '';
+  return (
+    'Nothing has been deleted. The item is still stale and has been marked with the reversible ' +
+    `tag '${pendingTag}' (cleanup batch ${cleanupDate}, UTC). ${otherText}`
   );
 }
 

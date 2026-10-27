@@ -6,8 +6,15 @@ import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  GetPageResult,
+  MAX_PAGE_SIZE,
+} from '../../../utils/paginate.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
@@ -27,14 +34,21 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of data sources to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of data sources to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
+};
+
+type ListDatasourcesResult = GetPageResult<DataSource> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
 };
 
 export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listDatasourcesTool = new WebTool({
     server,
     name: 'list-datasources',
+    minRequiredRole: SiteRole.VIEWER,
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.
@@ -87,8 +101,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
 
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
-  The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
-  To get just the count of datasources matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.
+  The response is a flat object \`{ data, totalAvailable }\`; to collect every data source, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more data sources exist; page up to \`totalAvailable\` or filter to reach the rest.
   `,
     paramsSchema,
     annotations: {
@@ -102,7 +116,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listDatasourcesTool.name);
-      return await listDatasourcesTool.logAndExecute({
+      return await listDatasourcesTool.logAndExecute<ListDatasourcesResult>({
         extra,
         args: { filter, limit },
         callback: async () => {
@@ -154,6 +168,15 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },
@@ -181,7 +204,7 @@ export function constrainDatasources({
 
   const { projectIds, datasourceIds, tags } = boundedContext;
   if (projectIds) {
-    datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
+    datasources = datasources.filter((datasource) => projectIds.has(datasource.project?.id ?? ''));
   }
 
   if (datasourceIds) {

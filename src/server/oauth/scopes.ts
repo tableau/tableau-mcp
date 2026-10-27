@@ -6,7 +6,11 @@
  */
 
 import { getConfig } from '../../config.js';
+import { isAdminToolsEnabled } from '../../features/adminTools.js';
+import { isAuthoringAllowedForClient } from '../../features/authoringAccess.js';
+import { isFlowReadToolsEnabled, isFlowWriteToolsEnabled } from '../../features/flowTools.js';
 import { getFeatureGate } from '../../features/init.js';
+import { REGISTRATION_CONDITION_API_SCOPES } from '../../tools/web/registrationConditions.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -18,11 +22,14 @@ import type { WebToolName } from '../../tools/web/toolName.js';
 export type McpScope =
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
+  | 'tableau:mcp:datasource:create'
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:workbook:create'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
+  | 'tableau:mcp:flow:run'
+  | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
@@ -30,36 +37,53 @@ export type McpScope =
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read'
-  | 'tableau:mcp:users:write';
+  | 'tableau:mcp:users:write'
+  | 'tableau:mcp:workbook:write'
+  | 'tableau:mcp:knowledge:read'
+  | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:download'
+  | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
+  | 'tableau:flow_runs:update'
+  | 'tableau:flow_tasks:run'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
+  | 'tableau:entitlements:read'
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
+  | 'tableau:workbook_tags:delete'
   | 'tableau:workbooks:download'
   | 'tableau:workbooks:delete'
   | 'tableau:workbooks:create'
   | 'tableau:file_uploads:create'
   | 'tableau:datasource_tags:update'
+  | 'tableau:datasource_tags:delete'
   | 'tableau:datasources:delete'
+  | 'tableau:datasources:create'
   | 'tableau:jobs:read'
   | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
-  | 'tableau:users:update';
+  | 'tableau:users:update'
+  | 'tableau:workbooks:update'
+  | 'tableau:knowledge:read'
+  | 'tableau:knowledge:write'
+  | 'tableau:permissions:read'
+  | 'tableau:packages:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -68,6 +92,7 @@ export type TableauApiScope =
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
   'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
@@ -77,11 +102,14 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:users:write',
+  'tableau:mcp:workbook:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:knowledge:read',
+  'tableau:mcp:knowledge:write',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -139,15 +167,61 @@ export const LIST_FLOW_RUNS_PRIMARY_API_SCOPES: ReadonlyArray<TableauApiScope> =
 export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tableau:flows:read';
 
 /**
+ * Minimum scopes needed by `describe-flow`. This is also the tool's complete
+ * static scope surface, so both runtime JWT minting and OAuth discovery share
+ * one source of truth.
+ */
+export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flows:read',
+  'tableau:flows:download',
+  'tableau:mcp_site_settings:read',
+];
+
+/**
+ * Tableau API scopes required by `scaffold-data-app`. The tool reads the site's external
+ * allowed-origins allow-list from the experimental packages endpoint to enrich its output.
+ */
+export const SCAFFOLD_DATA_APP_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:packages:read',
+];
+
+/**
+ * Tableau API scopes required by the `publish-workbook` tool. Unlike `get-flow`, this tool does
+ * NOT narrow its base JWT scopes per call — it always requests this set via `tool.requiredApiScopes`
+ * (see publishWorkbook.ts). Accepted tradeoff: a direct-trust/UAT Connected App must grant
+ * `tableau:projects:read` for the Personal Space lookup before ANY publish-workbook call succeeds,
+ * not just personal-space ones —
+ * simplicity over narrowing the blast radius.
+ *
+ * The optional permissions read uses a separate REST session so a missing permissions scope
+ * cannot prevent publishing. Its scope is advertised when publishing is enabled and optional
+ * scopes are requested.
+ */
+export const PUBLISH_WORKBOOK_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:workbooks:create',
+  'tableau:file_uploads:create',
+  'tableau:projects:read',
+];
+
+export const PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE: TableauApiScope = 'tableau:permissions:read';
+
+/**
  * Validates that a scope string is a valid MCP scope
  */
-export async function isValidScope(scope: string): Promise<boolean> {
-  return (await getSupportedMcpScopes()).some((supported) => supported === scope);
+export async function isValidScope(scope: string, clientId?: string): Promise<boolean> {
+  return (await getSupportedMcpScopes(clientId)).some((supported) => supported === scope);
 }
 
 const toolScopeMap: Record<
   WebToolName,
-  { mcp: ReadonlyArray<McpScope>; api: ReadonlySet<TableauApiScope> }
+  {
+    mcp: ReadonlyArray<McpScope>;
+    api: ReadonlySet<TableauApiScope>;
+    // Checking registration conditions for a tool involves calling REST APIs.
+    // Each condition check has its own set of scopes used. Each tool needs to provide
+    // the set of scopes used to check all conditions it requires.
+    conditionApiScopes?: ReadonlySet<TableauApiScope>;
+  }
 > = {
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -173,6 +247,22 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:jobs:read'],
     api: new Set(['tableau:jobs:read', 'tableau:users:read']),
   },
+  'query-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
+  },
+  'inspect-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:read'],
+    api: new Set(['tableau:knowledge:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
+  },
+  // The duplicate check on create and the existence check on delete read before writing.
+  'manage-knowledge-context': {
+    mcp: ['tableau:mcp:knowledge:write'],
+    api: new Set(['tableau:knowledge:write', 'tableau:knowledge:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresKnowledge),
+  },
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
     api: new Set(['tableau:users:read']),
@@ -191,7 +281,15 @@ const toolScopeMap: Record<
   },
   'publish-workbook': {
     mcp: ['tableau:mcp:workbook:create'],
-    api: new Set(['tableau:workbooks:create', 'tableau:file_uploads:create']),
+    api: new Set(PUBLISH_WORKBOOK_API_SCOPES),
+  },
+  'request-datasource-upload': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set([]),
+  },
+  'publish-datasource': {
+    mcp: ['tableau:mcp:datasource:create'],
+    api: new Set(['tableau:datasources:create', 'tableau:file_uploads:create']),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -231,6 +329,27 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
+  'describe-flow': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(DESCRIBE_FLOW_API_SCOPES),
+  },
+  'get-flow-task': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
+  'run-flow': {
+    // Needed for resourceAccessChecker.isFlowAllowed under bounded contexts.
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'run-flow-task': {
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
+  },
+  'cancel-flow-run': {
+    mcp: ['tableau:mcp:flow:cancel'],
+    api: new Set(['tableau:flow_runs:update', 'tableau:mcp_site_settings:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -249,11 +368,23 @@ const toolScopeMap: Record<
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+    api: new Set([
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'download-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:workbooks:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'move-workbook': {
+    mcp: ['tableau:mcp:workbook:write'],
+    api: new Set([
+      'tableau:workbooks:update',
+      'tableau:projects:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
   },
   'get-view': {
     mcp: ['tableau:mcp:view:read'],
@@ -278,18 +409,22 @@ const toolScopeMap: Record<
   'list-all-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metric-definitions-from-definition-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metrics-from-metric-definition-id': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metrics-from-metric-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_metrics:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'list-pulse-metric-subscriptions': {
     mcp: ['tableau:mcp:pulse:read'],
@@ -300,14 +435,20 @@ const toolScopeMap: Record<
       'tableau:insight_metrics:read',
       'tableau:mcp_site_settings:read',
     ]),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set(REGISTRATION_CONDITION_API_SCOPES.RequiresPulse),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
+    conditionApiScopes: new Set([
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
+    ]),
   },
   'generate-insight-cards': {
     mcp: ['tableau:mcp:insight:create', 'tableau:mcp:datasource:read'],
@@ -316,6 +457,10 @@ const toolScopeMap: Record<
       'tableau:content:read',
       'tableau:viz_data_service:read',
       'tableau:mcp_site_settings:read',
+    ]),
+    conditionApiScopes: new Set([
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulse,
+      ...REGISTRATION_CONDITION_API_SCOPES.RequiresPulsePremium,
     ]),
   },
   'search-content': {
@@ -357,16 +502,24 @@ const toolScopeMap: Record<
   // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
   // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
   // route through resourceAccessChecker.
+  // Workbook/datasource paths also query Admin Insights Site Content (VDS) for the staleness
+  // precondition (W-24311035). `action: "remove-pending-tags"` additionally needs the tag-delete
+  // scopes (W-24199845).
   'delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
+      'tableau:workbook_tags:delete',
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:datasource_tags:delete',
       'tableau:tasks:read',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
@@ -380,20 +533,39 @@ const toolScopeMap: Record<
       'tableau:datasource_tags:update',
       'tableau:tasks:delete',
       'tableau:users:read',
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Requires the site's external allowed-origins policy before returning the bundled template
+  // (or uploading it to S3 and presigning a GET URL).
+  // Datasource wiring is entirely the caller's/skill's responsibility, applied outside this tool.
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
+  },
 };
 
-async function getEnabledToolNames(): Promise<Set<WebToolName>> {
+async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
   const config = getConfig();
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
-  const authoringToolsEnabled = await featureGate.isFeatureEnabled('authoring-tools');
+  // Mirrors the per-client `disabled` provider on the authoring tool registrations.
+  const authoringToolsEnabled =
+    (await featureGate.isFeatureEnabled('authoring-tools')) &&
+    (await isAuthoringAllowedForClient(clientId));
+  const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
+  const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
+  const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
+  const knowledgeWriteToolsEnabled = await featureGate.isFeatureEnabled('knowledge-write-tools');
+  const dataAppsEnabled = await featureGate.isFeatureEnabled('data-apps');
+  const adminToolsEnabled = await isAdminToolsEnabled(config);
 
   // Remove disabled tools based on feature flags
-  if (!config.adminToolsEnabled) {
+  if (!adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
@@ -415,27 +587,49 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools are gated off by default (FLOW_TOOLS_ENABLED). When disabled they are not registered,
-  // so their scopes must not be advertised or enforced either — otherwise a client could be asked to
-  // hold scopes for tools that don't exist. Mirrors the adminToolsEnabled gating above.
-  if (!config.flowToolsEnabled) {
+  // Disabled Flow tools are not registered, so their scopes must not be advertised or enforced
+  // either — otherwise a client could be asked to hold scopes for tools that don't exist.
+  if (!flowReadToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+    enabledTools.delete('describe-flow');
+    enabledTools.delete('get-flow-task');
+  }
+
+  if (!flowWriteToolsEnabled) {
+    enabledTools.delete('run-flow');
+    enabledTools.delete('run-flow-task');
+    enabledTools.delete('cancel-flow-run');
+  }
+
+  if (!knowledgeToolsEnabled) {
+    enabledTools.delete('query-knowledge-context');
+    enabledTools.delete('inspect-knowledge-context');
+  }
+  if (!knowledgeToolsEnabled || !knowledgeWriteToolsEnabled) {
+    enabledTools.delete('manage-knowledge-context');
   }
 
   if (!authoringToolsEnabled) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('request-datasource-upload');
+    enabledTools.delete('publish-datasource');
     enabledTools.delete('download-workbook');
+  }
+
+  if (!dataAppsEnabled) {
+    enabledTools.delete('scaffold-data-app');
+    enabledTools.delete('move-workbook');
   }
 
   return enabledTools;
 }
 
-export async function getSupportedMcpScopes(): Promise<McpScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedMcpScopes(clientId?: string): Promise<McpScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<McpScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -449,14 +643,30 @@ export async function getSupportedMcpScopes(): Promise<McpScope[]> {
   return Array.from(scopes);
 }
 
-export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
-  const enabledTools = await getEnabledToolNames();
+export async function getSupportedApiScopes(
+  clientId?: string,
+  { includeOptionalScopes = true }: { includeOptionalScopes?: boolean } = {},
+): Promise<TableauApiScope[]> {
+  const enabledTools = await getEnabledToolNames(clientId);
   const scopes = new Set<TableauApiScope>();
+  const enforceRegistrationConditions = await getFeatureGate().isFeatureEnabled(
+    'enforce-registration-conditions',
+  );
+
+  if (includeOptionalScopes && enabledTools.has('publish-workbook')) {
+    scopes.add(PUBLISH_WORKBOOK_PERMISSIONS_API_SCOPE);
+  }
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
     if (enabledTools.has(toolName as WebToolName)) {
       for (const scope of scopeConfig.api) {
         scopes.add(scope);
+      }
+      // adding api scopes needed to check the registration conditions required by this tool
+      if (enforceRegistrationConditions) {
+        for (const scope of scopeConfig.conditionApiScopes ?? []) {
+          scopes.add(scope);
+        }
       }
     }
   }
@@ -466,11 +676,13 @@ export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
 
 export async function getSupportedScopes({
   includeApiScopes,
+  clientId,
 }: {
   includeApiScopes: boolean;
+  clientId?: string;
 }): Promise<string[]> {
-  const mcpScopes = await getSupportedMcpScopes();
-  const apiScopes = await getSupportedApiScopes();
+  const mcpScopes = await getSupportedMcpScopes(clientId);
+  const apiScopes = await getSupportedApiScopes(clientId);
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
 }
 
@@ -537,6 +749,15 @@ export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<M
 
 export function getRequiredApiScopesForTool(toolName: WebToolName): ReadonlyArray<TableauApiScope> {
   return Array.from(toolScopeMap[toolName].api);
+}
+
+/**
+ * The API scopes used when checking a tool's registration condition as declared in {@link toolScopeMap}.
+ * Must match what the tool instance's `registrationConditions` map to; a parity test guards against
+ * the two drifting apart.
+ */
+export function getConditionApiScopesForTool(toolName: WebToolName): ReadonlySet<TableauApiScope> {
+  return toolScopeMap[toolName].conditionApiScopes ?? new Set();
 }
 
 /**

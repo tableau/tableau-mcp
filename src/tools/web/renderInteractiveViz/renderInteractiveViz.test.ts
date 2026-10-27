@@ -71,10 +71,21 @@ describe('renderInteractiveVizTool', () => {
       objectType: expect.any(Object),
     });
     expect(tool.app?.resourceUri).toBe('ui://render-interactive-viz/mcp-app.html');
+    // Opts out of the plain-tool fallback so the tool is hidden from clients that can't render it.
+    expect(tool.app?.hideWhenUnsupported).toBe(true);
   });
 
   describe('disabled property', () => {
     it('should be disabled when AUTH is pat (default test env), even with mcp-apps enabled', async () => {
+      const tool = getRenderInteractiveVizTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('should be disabled when AUTH=passthrough, even with mcp-apps enabled', async () => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
       const tool = getRenderInteractiveVizTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });

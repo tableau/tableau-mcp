@@ -26,6 +26,30 @@ This tool is restricted to Tableau site administrators and requires the `ADMIN_T
 
 Admin Insights datasource LUIDs are resolved automatically; callers do not pass `datasourceLuid`.
 
+## Datasource resolution and duplicate handling
+
+Each `kind` maps to a system-provisioned Admin Insights datasource (`TS Events`, `TS Users`,
+`Site Content`, `Job Performance`). The tool resolves that name to a LUID at request time and caches
+the result per site.
+
+On most sites there is exactly one datasource per name and resolution is a single REST call. Some
+sites, however, contain **cloned Admin Insights content** or a duplicate `Admin Insights` project —
+so several published datasources share the same name, and one of them may be a broken copy with a
+dead extract (a query against it fails with a Hyper connection error). To pick the canonical,
+system-provisioned datasource in that case, the resolver:
+
+1. narrows the candidates to the top-level `Admin Insights` project;
+2. ranks the survivors on free datasource-payload signals — certification, a canonical
+   `contentUrl` slug (a cloned copy carries a `_<epoch-ms>` suffix), and a non-empty description —
+   and, only to break a residual tie, the owner being the non-enumerable **Tableau System Account**;
+   oldest `createdAt` is the final tie-break;
+3. picks the best-ranked candidate and, if a query against it fails with a Hyper connection error at
+   runtime, negative-caches that LUID and retries the next-ranked candidate.
+
+When more than one candidate exists, the result carries a diagnostic warning under `mcp.warnings`
+(`ADMIN_INSIGHTS_AMBIGUOUS_DATASOURCE`, or `ADMIN_INSIGHTS_DATASOURCE_UNHEALTHY` when a dead extract
+forced a fallback) naming the duplicates and which was chosen, so an admin can delete the
+non-canonical copy to remove the ambiguity.
 
 ## APIs called
 
@@ -34,9 +58,11 @@ Admin Insights datasource LUIDs are resolved automatically; callers do not pass 
 - [Query Data Sources (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
   — used internally to resolve Admin Insights dataset LUIDs
 - [Query Projects (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
-  — used internally for `stale-content` to resolve project LUIDs to names
+  — used internally for `stale-content` to resolve project LUIDs to names, and to locate the
+  canonical top-level `Admin Insights` project when disambiguating duplicate datasources
 - [Get User on Site (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_user_on_site)
-  — used internally for the admin gate
+  — used internally for the admin gate, and (only on a residual tie between duplicate datasources)
+  to check whether a candidate's owner is the Tableau System Account
 
 ## Required arguments
 
@@ -90,11 +116,17 @@ The maximum number of rows to return. Applied when `kind` is `ts-events`, `ts-us
 `site-content`, or `job-performance`; **ignored** for `stale-content`.
 
 The effective row limit is the **tightest** of:
-1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
+1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`), or `MAX_RESULT_LIMIT` when no
+   per-tool entry is set
 2. The caller-supplied `limit`
 
+When a row limit applies, the response includes `mcp.resultInfo` with `returnedCount` and
+`truncated`, next to any `mcp.warnings`. If `truncated` is `true`, more rows matched;
+`truncationReason` is `admin-cap` when a server cap cut the results, or `requested-limit` when this
+argument did. `mcp.resultInfo` is absent when no row limit applies.
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)
 
 <hr />
 
@@ -163,6 +195,12 @@ This is a **successful** result, not an error — only the row payload is withhe
   count and a `ROW_CAP_EXCEEDED` warning is attached — see [Row cap](#row-cap-stale-content).
 - This tool intentionally bypasses the standard datasource access checker because Admin Insights
   datasources are internal/known and admin-gated independently.
+- **A `401` or a "not found in the Admin Insights project" error does not necessarily mean Admin
+  Insights is missing.** When multiple MCP servers are configured, the request may have reached the
+  wrong or unauthenticated server. An `Authentication failed (401): ...` message is an
+  authentication failure; the "not provisioned on the targeted Tableau Cloud site" message means
+  Admin Insights is genuinely absent on the targeted site. See
+  [Running Multiple Servers & Diagnosing Auth Errors](../../configuration/mcp-config/multiple-servers.md).
 
 ## Example results
 
@@ -217,7 +255,10 @@ Example result:
       "Tableau Desktop - Last Access Date": "2026-07-28T09:14:00Z",
       "Tableau Prep - Last Access Date": null
     }
-  ]
+  ],
+  "mcp": {
+    "resultInfo": { "returnedCount": 1, "truncated": false }
+  }
 }
 ```
 
@@ -269,6 +310,23 @@ Example result:
   }
 }
 ```
+
+## Output formatting
+
+This tool returns raw JSON. Any table rendering (Markdown, Slack) is performed by the AI
+client, not the server, so it lives only in the current conversation. When
+`ADMIN_TOOLS_ENABLED` is set, the server's `initialize` instructions nudge clients to present
+admin/list results as Markdown tables by default — but this is best-effort (hosts that ignore
+`initialize.instructions` get no nudge) and does not pin a specific column set or style.
+
+For a **durable, exact** output style that survives across sessions, set it in your MCP client's
+own memory (e.g. a line in Claude Code / Claude Desktop `CLAUDE.md`), for example:
+
+> When showing Tableau admin/list results, render a Markdown table with columns
+> Full Name · Site Role · Email · Last Login; wrap emails in backticks; show "never" for a
+> missing last login.
+
+The server has no per-user preference store, so this persistence is necessarily a client concern.
 
 ## Related
 

@@ -18,6 +18,10 @@ Fetches datasource metadata for the specified datasource, including:
 - [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html)
 - [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
   (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
+- [Query Workbook Connections](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook_connections)
+  and
+  [Get Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook)
+  (if `workbookLuid` is provided and tool scoping is enabled)
 
 ## Environment variables
 
@@ -31,6 +35,35 @@ The LUID of the data source, potentially retrieved by the [List Data Sources](li
 tool.
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d45`
+
+## Optional arguments
+
+### `workbookLuid`
+
+The LUID of the workbook an embedded (workbook) data source belongs to, potentially retrieved by the
+[Get Workbook](../../tools/workbooks/get-workbook.md) tool. Required to access an embedded data
+source when [tool scoping](../../configuration/mcp-config/tool-scoping.md#embedded-data-sources) is
+enabled. Ignored for published data sources.
+
+Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
+
+## Embedded (workbook) data sources
+
+Besides published data sources, this tool can fetch metadata for a data source embedded in a
+workbook — pass the embedded data source's `datasourceLuid` (e.g. a connection's datasource ID from
+[Get Workbook](../../tools/workbooks/get-workbook.md)). A few caveats apply:
+
+- **Site opt-in:** a site administrator must enable querying of workbook (embedded) data sources on
+  the Tableau site, otherwise the request returns a "not enabled" error.
+- **Permissions:** an embedded data source has no permissions of its own — it inherits those of its
+  containing workbook, so you need view/query access to that workbook.
+  [Get Workbook](../../tools/workbooks/get-workbook.md) reports this up front as
+  `queryability.isQueryable`.
+- **Version:** requires Tableau 2026.3+ (REST API 3.30 or later); published data sources are
+  unaffected.
+- **Tool scoping:** when
+  [tool scoping](../../configuration/mcp-config/tool-scoping.md#embedded-data-sources) is enabled,
+  also pass [`workbookLuid`](#workbookluid).
 
 ## Response shape
 

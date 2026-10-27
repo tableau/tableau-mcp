@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
@@ -14,7 +16,7 @@ import {
 } from './dataToolResult.js';
 
 const paramsSchema = {
-  customViewId: z.string(),
+  customViewId: luidSchema,
   viewFilters: z
     .record(z.string())
     .optional()
@@ -30,6 +32,7 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
   const getCustomViewDataTool = new WebTool({
     server,
     name: 'get-custom-view-data',
+    minRequiredRole: SiteRole.VIEWER,
     description: [
       "Retrieves comma-separated value (CSV) data for a Tableau Custom View (saved/personalized view state), including the user's filters.",
       'Requires the custom view LUID from the content URL (not the published view id).',

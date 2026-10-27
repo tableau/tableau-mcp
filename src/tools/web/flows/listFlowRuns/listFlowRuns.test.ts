@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import { FlowRun } from '../../../../sdks/tableau/types/flow.js';
 import { WebMcpServer } from '../../../../server.web.js';
@@ -8,13 +9,25 @@ import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { constrainFlowRuns, getListFlowRunsTool } from './listFlowRuns.js';
-import { mockFlowRuns } from './mockFlowRuns.js';
+import {
+  mockFlowRunFlowIds,
+  mockFlowRuns,
+  mockFlowRunsUnresolvedFailure,
+  mockFlowRunsWithFailureReasons,
+} from './mockFlowRuns.js';
+
+const { FLOW_A, FLOW_B } = mockFlowRunFlowIds;
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowRuns: vi.fn(),
   mockQueryFlow: vi.fn(),
-  mockVersionIsAtLeast: vi.fn((_version: `${number}.${number}`): boolean => true),
+  mockVersionIsAtLeast: vi.fn((version: `${number}.${number}`): boolean => version === '3.10'),
   rejectFlowsRead: false,
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../sdks/tableau/restApi.js', async () => {
@@ -47,8 +60,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -79,10 +90,17 @@ const NO_BOUNDED_CONTEXT = {
 
 const FLOW_WEBPAGE_URL = 'https://my.tableau.example.com/#/site/mysite/flows/96151';
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('listFlowRunsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    mocks.mockVersionIsAtLeast.mockImplementation(
+      (version: `${number}.${number}`) => version === '3.10',
+    );
     mocks.rejectFlowsRead = false;
     // Default: the failure-insight resolver finds a flow with a webpageUrl.
     mocks.mockQueryFlow.mockResolvedValue({
@@ -98,19 +116,24 @@ describe('listFlowRunsTool', () => {
     expect(tool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
   });
 
-  it('should be enabled when flow tools are turned on', async () => {
-    const tool = getListFlowRunsTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = getListFlowRunsTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getListFlowRunsTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('lists flow runs with the default completedAt:desc sort and the server filter', async () => {
     mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
@@ -245,6 +268,45 @@ describe('listFlowRunsTool', () => {
     );
   });
 
+  it('passes status filtering to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` }),
+    );
+  });
+
+  it('falls back to client-side status filtering before REST API 3.30', async () => {
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID}` }),
+    );
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).flowRuns).toHaveLength(1);
+  });
+
+  it('rejects status sorting before REST API 3.30', async () => {
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau REST API version 3.30');
+    expect(mocks.mockGetFlowRuns).not.toHaveBeenCalled();
+  });
+
+  it('passes status sorting to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'status:asc' }),
+    );
+  });
+
   it('supports status:in:[...] client-side', async () => {
     mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
     const result = await getToolResult({ filter: 'status:in:[Failed,InProgress]' });
@@ -255,12 +317,16 @@ describe('listFlowRunsTool', () => {
     expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(expect.objectContaining({ filter: '' }));
   });
 
-  it('rejects an unknown status value with the allowed list', async () => {
-    await expect(getToolResult({ filter: 'status:eq:Borked' })).rejects.toThrow(/Allowed flow-run/);
+  it('returns an args-validation error for an unknown status value', async () => {
+    const result = await getToolResult({ filter: 'status:eq:Borked' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Allowed flow-run');
   });
 
-  it('rejects an unsupported filter field', async () => {
-    await expect(getToolResult({ filter: 'bogusField:eq:x' })).rejects.toThrow();
+  it('returns an args-validation error for an unsupported filter field', async () => {
+    const result = await getToolResult({ filter: 'bogusField:eq:x' });
+    expect(result.isError).toBe(true);
   });
 
   it('reports requested-limit truncation when the caller limit cuts the result', async () => {
@@ -579,6 +645,94 @@ describe('listFlowRunsTool', () => {
     });
   });
 
+  describe('failureSummary', () => {
+    it('groups the window failure causes when the runs carry reasons', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReasons);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary.failedRunCount).toBe(6);
+      expect(payload.mcp.failureSummary.failedFlowCount).toBe(3);
+      expect(payload.mcp.failureSummary.reasons[0]).toEqual({
+        message: 'Table "orders" was not found.',
+        available: true,
+        runCount: 3,
+        // Ascending, so FLOW_B ("c1e8...") precedes FLOW_A ("d007...").
+        flowIds: [FLOW_B, FLOW_A],
+      });
+    });
+
+    it('skips the fallback REST call when a failure has a resolved reason', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsWithFailureReasons);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeDefined();
+      expect(payload.mcp.failureInsight).toBeUndefined();
+      expect(mocks.mockQueryFlow).not.toHaveBeenCalled();
+    });
+
+    // The half a naive "skip the fallback whenever reasons exist" gets wrong: an
+    // unresolved reason is a placeholder, so the deep link is still needed.
+    it('still resolves the deep link when every reason in the window is unresolved', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRunsUnresolvedFailure);
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary.reasons).toEqual([
+        { message: 'Error in flow steps', available: false, runCount: 1, flowIds: [FLOW_A] },
+      ]);
+      expect(payload.mcp.failureInsight.example.runHistoryUrl).toBe(
+        `${FLOW_WEBPAGE_URL}/runHistory`,
+      );
+      expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(1);
+
+      // Both fields describe the same window, so their counts must agree — they
+      // share one definition of "failed run" precisely so this cannot drift.
+      expect(payload.mcp.failureInsight.failedRunCount).toBe(
+        payload.mcp.failureSummary.failedRunCount,
+      );
+      expect(payload.mcp.failureInsight.failedFlowCount).toBe(
+        payload.mcp.failureSummary.failedFlowCount,
+      );
+    });
+
+    // AC3: on a pre-3.30 server nothing about the response changes.
+    it('emits no failureSummary and keeps the deep link when no run carries a reason', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+      const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID}` });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeUndefined();
+      expect(payload.mcp.failureInsight).toEqual({
+        failedRunCount: 1,
+        failedFlowCount: 1,
+        example: { flowId: FLOW_ID, runHistoryUrl: `${FLOW_WEBPAGE_URL}/runHistory` },
+      });
+      expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits neither failure field when nothing failed', async () => {
+      mocks.mockGetFlowRuns.mockResolvedValue(buildRuns(3, 'Success'));
+      const result = await getToolResult({});
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.mcp.failureSummary).toBeUndefined();
+      expect(payload.mcp.failureInsight).toBeUndefined();
+      expect(mocks.mockQueryFlow).not.toHaveBeenCalled();
+    });
+  });
+
   describe('constrainFlowRuns', () => {
     it('returns the baseline empty message when no runs are found', () => {
       const result = constrainFlowRuns({
@@ -674,6 +828,38 @@ describe('listFlowRunsTool', () => {
         boundedContext: { ...NO_BOUNDED_CONTEXT, projectIds: new Set(['p1']) },
       });
       // Bounded context fails closed → empty result, so no link leaks out.
+      invariant(result.type === 'empty');
+    });
+
+    it('passes failureSummary through on the success path', () => {
+      const failureSummary = {
+        failedRunCount: 2,
+        failedFlowCount: 1,
+        reasons: [{ message: 'Boom', available: true, runCount: 2, flowIds: [FLOW_ID] }],
+      };
+      const result = constrainFlowRuns({
+        result: {
+          flowRuns: mockFlowRuns,
+          mcp: { resultInfo: { returnedCount: 3, truncated: false }, failureSummary },
+        },
+        boundedContext: NO_BOUNDED_CONTEXT,
+      });
+      invariant(result.type === 'success');
+      expect(result.result.mcp.failureSummary).toEqual(failureSummary);
+    });
+
+    it('drops failureSummary when a bounded context forces an empty result', () => {
+      const result = constrainFlowRuns({
+        result: {
+          flowRuns: mockFlowRuns,
+          mcp: {
+            resultInfo: { returnedCount: 3, truncated: false },
+            failureSummary: { failedRunCount: 1, failedFlowCount: 1, reasons: [] },
+          },
+        },
+        boundedContext: { ...NO_BOUNDED_CONTEXT, projectIds: new Set(['p1']) },
+      });
+      // No failure detail leaks out of a fail-closed result.
       invariant(result.type === 'empty');
     });
   });

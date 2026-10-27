@@ -141,7 +141,7 @@ export async function uploadBufferToS3(
     presignTtlSeconds: number;
   },
 ): Promise<string> {
-  const { client, PutObjectCommand, GetObjectCommand, getSignedUrl } = await getS3Bundle(region);
+  const { client, PutObjectCommand } = await getS3Bundle(region);
 
   const span = getTelemetryProvider().startSpan?.('tableau.s3.upload', { bucket, key });
   let error: unknown;
@@ -160,6 +160,26 @@ export async function uploadBufferToS3(
   } finally {
     span?.end(error);
   }
+
+  return await presignGetObjectUrl({ key, bucket, region, presignTtlSeconds });
+}
+
+/**
+ * Returns a short-lived presigned GET URL for an object already present in S3. Does not read or
+ * write the object — only signs a URL the caller can hand out for a direct download.
+ */
+async function presignGetObjectUrl({
+  key,
+  bucket,
+  region,
+  presignTtlSeconds,
+}: {
+  key: string;
+  bucket: string;
+  region: string;
+  presignTtlSeconds: number;
+}): Promise<string> {
+  const { client, GetObjectCommand, getSignedUrl } = await getS3Bundle(region);
 
   return await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
     expiresIn: presignTtlSeconds,

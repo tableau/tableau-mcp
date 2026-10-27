@@ -315,6 +315,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TOOL_PROFILE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tool Profile',
+    description:
+      'This Web bundle registers tools eagerly; TOOL_PROFILE does not change its tool surface.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
@@ -396,6 +405,15 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Log Masking',
     description: 'Disable masking of credentials in logs. For debug purposes only.',
+    required: false,
+    sensitive: false,
+  },
+  NOTIFICATION_PAYLOAD_MAX_BYTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Notification Payload Max Bytes',
+    description:
+      'The maximum string length included in MCP client notifications and server logs before large payloads are redacted or truncated.',
     required: false,
     sensitive: false,
   },
@@ -622,6 +640,23 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  EPISODE_EVENTS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events',
+    description: 'Set to "on" to emit Desktop eval episode JSONL events. Defaults to off.',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS_DIR: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events Directory',
+    description:
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY. Files persist until an operator removes them; use a dedicated directory with external retention.',
+    required: false,
+    sensitive: false,
+  },
   BREAK_GLASS_DISABLE_GLOBALLY: {
     includeInUserConfig: false,
     type: 'boolean',
@@ -639,12 +674,21 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  FLOW_TOOLS_ENABLED: {
+  FLOW_READ_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Enable Tableau Prep flow MCP tools',
+    title: 'Enable read-only Tableau Prep flow MCP tools',
     description:
-      'Registers the Tableau Prep flow tools (list-flows, get-flow). Disabled by default; set to "true" to enable them.',
+      'list-flows, get-flow, list-flow-runs, list-flow-tasks, describe-flow, and get-flow-task are enabled by default. Set to "false" to disable them. describe-flow also requires Tableau Server 2026.3 or later and the server feature flag features.getFlowDocumentRestApi.',
+    required: false,
+    sensitive: false,
+  },
+  FLOW_WRITE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable content-mutating Tableau Prep flow MCP tools',
+    description:
+      'run-flow, run-flow-task, and cancel-flow-run are enabled by default. Set to "false" to disable them. Each tool previews the change and returns a single-use confirmation token. The change happens only when the tool is called again with that token, after the user approves the preview.',
     required: false,
     sensitive: false,
   },
@@ -672,6 +716,15 @@ const envVars = {
     title: 'Stale content min age (days)',
     description:
       'Minimum days since last access for content to be considered stale by the stale-content-cleanup-inform prompt. Defaults to 90.',
+    required: false,
+    sensitive: false,
+  },
+  PENDING_DELETION_MAX_AGE_DAYS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Pending deletion max batch age (days)',
+    description:
+      'Oldest cleanup batch (days) a delete-content confirm still accepts for a workbook or data source; older pending-deletion markers can no longer authorize a delete. Defaults to 30; range 1-90.',
     required: false,
     sensitive: false,
   },

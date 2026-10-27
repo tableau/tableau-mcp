@@ -11,10 +11,17 @@ import {
   getWorkbookLineageQuery,
   mergeWorkbookLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  GetPageResult,
+  MAX_PAGE_SIZE,
+} from '../../../utils/paginate.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
@@ -34,14 +41,21 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of workbooks to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of workbooks to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
+};
+
+type ListWorkbooksResult = GetPageResult<Workbook> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
 };
 
 export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listWorkbooksTool = new WebTool({
     server,
     name: 'list-workbooks',
+    minRequiredRole: SiteRole.VIEWER,
     description: `
   Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery.
   To list results based on usage popularity or relevance, use the search-content tool.
@@ -77,11 +91,11 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List workbooks with the name "Superstore" in the "Finance" project and created after January 1, 2023:
       filter: "name:eq:Superstore,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
-      
+
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
   The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
-  To get just the count of workbooks matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more workbooks exist; page up to \`totalAvailable\` or filter to reach the rest.`,
     paramsSchema,
     annotations: {
       title: 'List Workbooks',
@@ -95,7 +109,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listWorkbooksTool.name);
 
-      return await listWorkbooksTool.logAndExecute({
+      return await listWorkbooksTool.logAndExecute<ListWorkbooksResult>({
         extra,
         args: {},
         callback: async () => {
@@ -176,6 +190,15 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },

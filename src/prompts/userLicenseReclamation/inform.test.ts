@@ -1,10 +1,13 @@
 import { WebMcpServer } from '../../server.web.js';
 import { getUserLicenseReclamationInformPrompt } from './inform.js';
 
-afterEach(() => {
-  delete process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
-  delete process.env.LICENSE_RECLAIM_ROLES;
-});
+const mocks = vi.hoisted(() => ({
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../features/init.js', () => ({
+  getFeatureGate: () => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled }),
+}));
 
 describe('user-license-reclamation-inform prompt', () => {
   it('registers under the documented name', () => {
@@ -12,11 +15,19 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(prompt.name).toBe('user-license-reclamation-inform');
   });
 
-  it('is disabled when adminToolsEnabled is false', () => {
-    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
-    expect(prompt.disabled({ adminToolsEnabled: true } as any)).toBe(false);
-    expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
-  });
+  it.each([
+    [true, true, false],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
+  ])(
+    'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
+    async (adminToolsEnabled, flag, disabled) => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(flag);
+      const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+      expect(await prompt.disabled({ adminToolsEnabled } as any)).toBe(disabled);
+    },
+  );
 
   it('instructs the model to call list-users and query-admin-insights', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
@@ -32,6 +43,27 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('`query-admin-insights`');
     expect(text).toContain('"kind": "ts-events"');
     expect(text).toContain('read-only');
+  });
+
+  it('passes an explicit Step-1 limit and requires a truncation completeness check (no false "paginates automatically" claim)', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    // Step 1 now passes an explicit limit — exactly 1000 (the list-users ceiling), not the
+    // 10000 used by the VDS ts-events/ts-users queries.
+    expect(text).toMatch(/"limit": 1000(?!\d)/);
+    // The old, false "paginates automatically" / complete-inventory claim is gone.
+    expect(text).not.toContain('paginates automatically');
+    // The model must confirm the result was not truncated before treating candidates as complete.
+    expect(text).toContain('Completeness check (required');
+    expect(text).toContain('mcp.resultInfo.truncated');
+    // Narrowing the filter does not always converge (e.g. an overflow of never-signed-in users
+    // in a single role matches every lastLogin:lt window) — the model must stop and report
+    // PARTIAL rather than loop indefinitely.
+    expect(text).toContain('STOP retrying');
   });
 
   it('uses default inactiveDays of 90 and roles of Creator,Explorer', async () => {
@@ -91,6 +123,47 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('"Event Date"');
   });
 
+  it('scopes the ts-events query to the Step-1 candidate names to avoid the 10000-row truncation blind spot', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    // The ts-events query carries an `Actor User Name` SET filter with a replace-me placeholder.
+    expect(text).toContain(
+      '<REPLACE with the candidate Actor User Names from Step 1 — the Tableau username (equals the email on Tableau Cloud); one string per candidate>',
+    );
+    // The Step 2 instruction tells the model to scope, not to fetch site-wide events.
+    expect(text).toContain('**Scope this query to the Step-1 candidates.**');
+    expect(text).toContain('Do not fetch site-wide events.');
+  });
+
+  it('warns when the ts-events query hits the 10000-row truncation limit', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('If the TS Events query returns exactly 10000 rows');
+    expect(text).toContain(
+      'If the TS Events query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true',
+    );
+    expect(text).toContain('wrongly kept as a candidate');
+  });
+
+  it('explains ts-events 0 rows is valid but flags an unsubstituted placeholder', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('0 rows here is a VALID result');
+    expect(text).toContain('fails to rescue genuinely-active users');
+  });
+
   it('includes the ts-users Desktop/Prep cross-reference query block', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
@@ -131,8 +204,23 @@ describe('user-license-reclamation-inform prompt', () => {
       throw new Error('expected text content');
     }
     const { text } = result.messages[0].content;
-    expect(text).toContain('truncated at the 10000-row limit');
+    expect(text).toContain('truncated at the row limit');
     expect(text).toContain('could be falsely listed as inactive');
+    expect(text).toContain(
+      'If the TS Users query returns exactly 10000 rows or `mcp.resultInfo.truncated` is true',
+    );
+  });
+
+  it('names no fixed row count in the truncation warnings, so a lower server cap is not misreported', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).not.toContain('10000-row limit');
+    expect(text).not.toContain('more than 10000 Access events');
+    expect(text).not.toContain('exceeds 10000.');
   });
 
   it('fails loud when the ts-users query returns 0 rows (scoping likely not applied)', async () => {
@@ -192,7 +280,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env when no arg provided', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
@@ -204,7 +292,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_ROLES from env when no arg provided', async () => {
-    process.env.LICENSE_RECLAIM_ROLES = 'Viewer,Creator';
+    vi.stubEnv('LICENSE_RECLAIM_ROLES', 'Viewer,Creator');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
@@ -215,7 +303,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('arg overrides env var for inactiveDays', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({ inactiveDays: '120' });
     if (result.messages[0].content.type !== 'text') {
@@ -240,7 +328,7 @@ describe('user-license-reclamation-inform prompt', () => {
   });
 
   it('falls back to default when env var is invalid', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = 'not-a-number';
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', 'not-a-number');
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {

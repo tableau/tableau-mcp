@@ -1,0 +1,46 @@
+<!-- Live probe ok-L1-dirty-ws.xml, verbatim: nothing cut. Identical to ok-L1-before-ws.xml: the stale table-level map survives the user's OK in Edit Colors. -->
+<worksheet name='L1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='superstore' />
+      </datasources>
+      <datasource-dependencies datasource='superstore'>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[superstore].[none:Category:nk]' type='palette'>
+          <map to='#00aa00'>
+            <bucket>&quot;Office Supplies&quot;</bucket>
+          </map>
+          <map to='#d4c37a'>
+            <bucket>&quot;Technology&quot;</bucket>
+          </map>
+          <map to='#ff0000'>
+            <bucket>&quot;Furniture&quot;</bucket>
+          </map>
+        </encoding>
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[superstore].[none:Category:nk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[superstore].[sum:Sales:qk]</rows>
+    <cols>[superstore].[none:Category:nk]</cols>
+  </table>
+  <simple-id uuid='{1F3B7AD1-9ED9-4FE9-A1D0-D4D4E0339B42}' />
+</worksheet>

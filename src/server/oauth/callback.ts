@@ -8,8 +8,10 @@ import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { SessionStore } from '../../sessionStore/sessionStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
+import { siteBindingRequired, siteMatchesConfig } from './siteBinding.js';
 import { AuthorizationCode, PendingAuthorization } from './types.js';
 
 /**
@@ -21,8 +23,8 @@ import { AuthorizationCode, PendingAuthorization } from './types.js';
  */
 export function callback(
   app: express.Application,
-  pendingAuthorizations: Map<string, PendingAuthorization>,
-  authorizationCodes: Map<string, AuthorizationCode>,
+  pendingAuthorizations: SessionStore<PendingAuthorization>,
+  authorizationCodes: SessionStore<AuthorizationCode>,
 ): void {
   const config = getConfig();
 
@@ -59,7 +61,7 @@ export function callback(
     try {
       // Parse state to get auth key and Tableau state
       const [authKey, tableauState] = state?.split(':') ?? [];
-      const pendingAuth = pendingAuthorizations.get(authKey);
+      const pendingAuth = await pendingAuthorizations.get(authKey);
 
       if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
         res.status(400).json({
@@ -124,13 +126,14 @@ export function callback(
         return;
       }
 
-      if (config.oauth.lockSite) {
+      if (siteBindingRequired(config)) {
         const { name: siteName, contentUrl: siteContentUrl } = sessionResult.value.site;
         const expected = config.siteName || 'Default';
-        const siteMatches =
-          siteName === config.siteName ||
-          siteContentUrl === config.siteName ||
-          (siteName === 'Default' && !config.siteName);
+        const siteMatches = siteMatchesConfig({
+          configSiteName: config.siteName,
+          siteName,
+          siteContentUrl,
+        });
 
         if (!siteMatches) {
           const signedIntoSite = siteContentUrl || siteName || 'Default';
@@ -150,7 +153,7 @@ export function callback(
 
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
-      authorizationCodes.set(authorizationCode, {
+      await authorizationCodes.set(authorizationCode, {
         clientId: pendingAuth.clientId,
         redirectUri: pendingAuth.redirectUri,
         codeChallenge: pendingAuth.codeChallenge,
@@ -168,7 +171,7 @@ export function callback(
       });
 
       // Clean up
-      pendingAuthorizations.delete(authKey);
+      await pendingAuthorizations.delete(authKey);
 
       // Redirect back to client with authorization code
       const redirectUrl = new URL(pendingAuth.redirectUri);

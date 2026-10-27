@@ -1,8 +1,14 @@
+import './testTelemetryGuard.js';
+
 import { Ok } from 'ts-results-es';
 
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
+
+beforeEach(() => {
+  stubDefaultEnvVars();
+});
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
   return {
@@ -11,12 +17,15 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
       server: {
         notification: vi.fn(),
         setRequestHandler: vi.fn(),
+        registerCapabilities: vi.fn(),
         getClientVersion: vi.fn().mockReturnValue({
           version: '1.0.0',
           name: 'test-client',
         }),
+        getClientCapabilities: vi.fn().mockReturnValue(undefined),
       },
       registerTool: vi.fn(),
+      registerResource: vi.fn(),
       connect: vi.fn(),
       close: vi.fn(),
     })),

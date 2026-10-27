@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import { dataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 import { tagsSchema } from '../types/tags.js';
@@ -14,11 +15,7 @@ const listDatasourcesEndpoint = makeEndpoint({
     'Returns a list of published data sources on the specified site. Supports a filter string as a query parameter in the format field:operator:value.',
   parameters: [
     ...paginationParameters,
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
     {
       name: 'filter',
       type: 'Query',
@@ -29,6 +26,7 @@ const listDatasourcesEndpoint = makeEndpoint({
   response: z.object({
     pagination: paginationSchema,
     datasources: z.object({
+      // Rows can lack `project` (seen on Tableau Cloud for a data source after it was deleted).
       datasource: z.optional(z.array(dataSourceSchema)),
     }),
   }),
@@ -39,9 +37,22 @@ const queryDatasourceEndpoint = makeEndpoint({
   path: '/sites/:siteId/datasources/:datasourceId',
   alias: 'queryDatasource',
   description: 'Returns information about the specified data source.',
+  parameters: [pathParam('siteId', 'segment'), pathParam('datasourceId')],
   response: z.object({
     datasource: dataSourceSchema,
   }),
+  // Declared so isErrorFromAlias can narrow the caught error; a 404 (no such published data source)
+  // is used by tryQueryDatasource to classify a LUID as embedded.
+  errors: [
+    {
+      status: 'default',
+      schema: z.any(),
+    },
+    {
+      status: 404,
+      schema: z.any(),
+    },
+  ],
 });
 
 const deleteDatasourceEndpoint = makeEndpoint({
@@ -50,18 +61,7 @@ const deleteDatasourceEndpoint = makeEndpoint({
   alias: 'deleteDatasource',
   description:
     'Deletes the specified published data source from the site. On Tableau Cloud the data source is moved to the recycle bin and can be restored for a limited time.',
-  parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'datasourceId',
-      type: 'Path',
-      schema: z.string(),
-    },
-  ],
+  parameters: [pathParam('siteId', 'segment'), pathParam('datasourceId')],
   response: z.void(),
 });
 
@@ -71,16 +71,8 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
   alias: 'addTagsToDatasource',
   description: 'Adds one or more tags to the specified data source.',
   parameters: [
-    {
-      name: 'siteId',
-      type: 'Path',
-      schema: z.string(),
-    },
-    {
-      name: 'datasourceId',
-      type: 'Path',
-      schema: z.string(),
-    },
+    pathParam('siteId', 'segment'),
+    pathParam('datasourceId'),
     {
       name: 'body',
       type: 'Body',
@@ -90,10 +82,24 @@ const addTagsToDatasourceEndpoint = makeEndpoint({
   response: z.object({ tags: tagsSchema }),
 });
 
+const deleteTagFromDatasourceEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/datasources/:datasourceId/tags/:tagName',
+  alias: 'deleteTagFromDatasource',
+  description: 'Removes a single tag (by label) from the specified data source.',
+  parameters: [
+    pathParam('siteId', 'segment'),
+    pathParam('datasourceId'),
+    pathParam('tagName', 'segment'),
+  ],
+  response: z.void(),
+});
+
 const datasourcesApi = makeApi([
   listDatasourcesEndpoint,
   queryDatasourceEndpoint,
   deleteDatasourceEndpoint,
   addTagsToDatasourceEndpoint,
+  deleteTagFromDatasourceEndpoint,
 ]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

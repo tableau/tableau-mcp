@@ -2,8 +2,6 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
-import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 export class McpToolError extends Error {
@@ -82,15 +80,116 @@ export class PreviewNotRunError extends McpToolError {
   }
 }
 
+// Thrown by delete-content (preview AND confirm) when Admin Insights shows the workbook/datasource no
+// longer meets the stale-content criteria — it was used within the threshold, or accessed on/after
+// the cleanup batch's date (W-24311035). statusCode 409: the resource's state blocks the mutation.
+export class ContentNotStaleError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'content-not-stale', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content when the staleness precondition cannot be evaluated (Admin Insights
+// unavailable, or the item is absent from the Site Content extract). The destructive gate fails
+// CLOSED: missing data never authorizes a deletion.
+export class StalenessUnverifiedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'staleness-unverified', message, statusCode: 409 });
+  }
+}
+
+// Thrown by delete-content / confirm-delete-content when a confirm names a cleanup batch older than
+// PENDING_DELETION_MAX_AGE_DAYS. A marker left by a crashed or abandoned preview expires instead of
+// authorizing a delete indefinitely; the marker itself is left in place for explicit cleanup.
+// statusCode 409: the batch's state blocks the mutation.
+export class CleanupBatchExpiredError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'cleanup-batch-expired', message, statusCode: 409 });
+  }
+}
+
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
     super({ type: 'feature-disabled', message, statusCode: 404 });
   }
 }
 
+// Thrown when query-datasource targets an embedded (workbook) datasource on a site where
+// workbook-datasource querying isn't enabled. This is the EXPECTED response on non-enabled sites
+// (opt-in per site), not a rare edge case, so the message names the site-admin opt-in. statusCode
+// 403: an opt-in/permission gate, not a missing feature/endpoint.
+export class WorkbookDatasourceNotEnabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'workbook-datasource-not-enabled',
+      message: 'Querying workbook data sources is not enabled on this Tableau site',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'This data source is embedded in a workbook, and querying workbook (embedded) data sources is not enabled on this Tableau site. This capability is opt-in per site: a site administrator must enable it before this data source can be queried.';
+  }
+}
+
 export class FlowNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'flow-not-allowed', message, statusCode: 403 });
+  }
+}
+
+/** The flow-document endpoint requires Tableau Server 2026.3 or later. */
+export class FlowDocumentVersionUnsupportedError extends McpToolError {
+  constructor(serverVersion: string) {
+    super({
+      type: 'flow-document-version-unsupported',
+      message: `describe-flow requires Tableau Server 2026.3 or later. The connected server is version ${serverVersion}. Upgrade Tableau Server to read flow designs; use get-flow for flow metadata in the meantime.`,
+      statusCode: 501,
+    });
+  }
+}
+
+/**
+ * The experimental flow-document REST API is not enabled on this server.
+ *
+ * The endpoint returns 403 with Tableau error code `403201` when its
+ * `getFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * specific code into this clearer, actionable error — any other 403 (insufficient
+ * download permission, insufficient token scope, generic forbidden) is surfaced
+ * as a {@link FlowDocumentForbiddenError} so a permission problem is never
+ * misreported as a disabled API.
+ */
+export class FlowDocumentApiDisabledError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-api-disabled', message, statusCode: 403 });
+  }
+}
+
+/**
+ * The caller is not authorized to download the requested flow's document.
+ *
+ * The flow-document endpoint also returns 403 for ordinary authorization
+ * failures — the caller lacks permission to download the flow (the same
+ * permission as downloading its `.tfl`/`.tflx` file in Tableau) or the token
+ * lacks the `tableau:flows:download` scope. These are distinct from the
+ * feature-flag-off case (Tableau error code `403201`), which maps to
+ * {@link FlowDocumentApiDisabledError}.
+ */
+export class FlowDocumentForbiddenError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-forbidden', message, statusCode: 403 });
+  }
+}
+
+/**
+ * No flow document could be downloaded for the requested flow.
+ *
+ * The endpoint returns 404 when the flow does not exist, is not visible to the
+ * caller, or has no stored file on the FileServer (e.g. a metadata-only seeded flow).
+ */
+export class FlowDocumentNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-document-not-found', message, statusCode: 404 });
   }
 }
 
@@ -167,6 +266,12 @@ export class ViewNotAllowedError extends McpToolError {
   }
 }
 
+export class ViewSheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'view-sheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class CustomViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'custom-view-not-allowed', message, statusCode: 403 });
@@ -188,6 +293,12 @@ export class ProjectNotAllowedError extends McpToolError {
 export class WorkbookNotFoundError extends McpToolError {
   constructor(message: string) {
     super({ type: 'workbook-not-found', message, statusCode: 404 });
+  }
+}
+
+export class WorksheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'worksheet-not-found', message, statusCode: 404 });
   }
 }
 
@@ -223,25 +334,10 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         'No running Tableau Desktop instances found.',
         'Make sure:',
         '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
-        '  3. The manifest file exists in the expected location',
+        '  2. The External Client API is available in this Desktop build',
+        '  3. The External Client API discovery file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
-    });
-  }
-}
-
-export class GetEventsFailedError extends McpToolError {
-  constructor(error: unknown) {
-    super({
-      type: 'get-events-failed',
-      message: [
-        `Failed to get events: ${getExceptionMessage(error)}.`,
-        'Make sure:',
-        '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
-      ].join('\n'),
-      statusCode: 500,
     });
   }
 }
@@ -258,26 +354,6 @@ export class AdminInsightsUnavailableError extends McpToolError {
   }
 }
 
-export class DesktopCommandExecutionError extends McpToolError {
-  constructor(error: ExecuteCommandError) {
-    super({
-      type: 'desktop-command-execution-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class WorkbookXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadWorkbookXmlError) {
-    super({
-      type: 'load-workbook-xml-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({
@@ -285,5 +361,48 @@ export class FileReadError extends McpToolError {
       message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
       statusCode: 500,
     });
+  }
+}
+
+export class FileNotFoundError extends McpToolError {
+  constructor(filePath: string) {
+    super({
+      type: 'file-not-found',
+      message: `File not found: ${filePath}. Make sure the path was returned from the appropriate get-*-xml tool.`,
+      statusCode: 404,
+    });
+  }
+}
+
+export class XmlModificationError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'xml-modification-error', message, statusCode: 422 });
+  }
+}
+
+/**
+ * Refuse to apply a cache file whose instance fingerprint does not match the current
+ * Desktop session (cross-instance cache bleed). `message` carries the recovery recipe.
+ */
+export class CacheSessionMismatchError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'cache-session-mismatch', message, statusCode: 409 });
+  }
+}
+
+export class XmlValidationError extends McpToolError {
+  constructor(errors: string[]) {
+    const errorList = errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
+    super({
+      type: 'xml-validation-error',
+      message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
+      statusCode: 422,
+    });
+  }
+}
+
+export class DataAppTemplateUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-template-unavailable', message, statusCode: 500 });
   }
 }

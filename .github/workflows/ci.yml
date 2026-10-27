@@ -22,7 +22,7 @@ jobs:
           cache: 'npm'
 
       - name: Set up Docker
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Install dependencies
         run: npm ci
@@ -36,13 +36,35 @@ jobs:
       - name: Build
         run: npm run build
 
+      # --dirty: the plain build:desktop CLEANS ./build first, deleting the
+      # build/index.js the default build just produced — the e2e suites spawn
+      # `node build/index.js` children, which then die pre-handshake
+      # ("Connection closed") until server.test.ts happens to rebuild it
+      # mid-pool. Root-caused 2026-07-15 on the resync PR (#504).
+      - name: Build desktop variant
+        run: npm run build:desktop:dirty
+
+      - name: Check Desktop bundle runs from outside the repo
+        run: npx tsx src/scripts/assertDesktopBundle.ts
+
       - name: Build Docker image
         run: npm run build:docker
 
       - name: Build NPM package
-        run: npm pack
+        run: |
+          npm pack --json > npm-pack.json
+          npx tsx src/scripts/assertWebNpmPackage.ts npm-pack.json
 
       - name: Tests
+        run: npx vitest run --config ./vitest.config.ts --maxWorkers=2
+
+      # Coverage is informational (fail_below_min is false below). Vitest 3 can exit 1
+      # after every test passes when its fixed worker watchdog fires during coverage;
+      # the required test step above remains authoritative, and the report step still
+      # fails if this command does not produce the Cobertura artifact.
+      - name: Generate coverage report
+        if: matrix.node-version == '>=22.7.5 <23'
+        continue-on-error: true
         run: npm run coverage
 
       - name: E2E Tests
@@ -101,7 +123,7 @@ jobs:
 
       - name: Report code coverage
         if: always() && matrix.node-version == '>=22.7.5 <23'
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
           badge: true
@@ -121,6 +143,6 @@ jobs:
           if-no-files-found: error
           path: |
             build/
-            junit/
             playwright-report/
             tableau-mcp.mcpb
+            tableau-mcp-server-*.tgz

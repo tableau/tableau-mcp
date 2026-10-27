@@ -7,12 +7,12 @@ import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import type { SessionStore } from '../../sessionStore/sessionStore.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
-import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { checkRedirectUriAllowed } from './authorizeRedirectUri.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDeviceId, getDeviceName } from './device.js';
@@ -34,8 +34,8 @@ import { ClientRegistration, PendingAuthorization } from './types.js';
  */
 export function authorize(
   app: express.Application,
-  pendingAuthorizations: Map<string, PendingAuthorization>,
-  clientRegistrations: Map<string, ClientRegistration>,
+  pendingAuthorizations: SessionStore<PendingAuthorization>,
+  clientRegistrations: SessionStore<ClientRegistration>,
 ): void {
   const config = getConfig();
 
@@ -121,7 +121,7 @@ export function authorize(
     const requestedScopes = parseScopes(scope);
     const { valid: validScopes, invalid: invalidScopes } = validateScopes(
       requestedScopes,
-      await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id }),
     );
 
     if (invalidScopes.length > 0) {
@@ -136,13 +136,13 @@ export function authorize(
       validScopes.length > 0
         ? validScopes
         : enforceScopes
-          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes, clientId: client_id })
           : [];
 
     // Redirect URI security enforcement for opaque client_ids (runs after baseline param
     // validation, before storing pending auth). The CIMD path enforces its own allowlist above.
     if (!clientIdUrl) {
-      const redirectError = checkRedirectUriAllowed({
+      const redirectError = await checkRedirectUriAllowed({
         clientId: client_id,
         redirectUri: redirect_uri,
         clientRegistrations,
@@ -162,7 +162,7 @@ export function authorize(
     const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
-    pendingAuthorizations.set(authKey, {
+    await pendingAuthorizations.set(authKey, {
       clientId: client_id,
       redirectUri: redirect_uri,
       codeChallenge: code_challenge,
@@ -172,9 +172,6 @@ export function authorize(
       tableauCodeVerifier,
       scopes: scopesToGrant,
     });
-
-    // Clean up expired authorizations
-    setLongTimeout(() => pendingAuthorizations.delete(authKey), config.oauth.authzCodeTimeoutMs);
 
     // Redirect to Tableau OAuth
     const server = config.server || TABLEAU_CLOUD_SERVER_URL;

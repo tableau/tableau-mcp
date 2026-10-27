@@ -1,4 +1,4 @@
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getAdminToolsEnv, getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 const PROMPT_NAME = 'job-optimization-inform';
@@ -14,7 +14,7 @@ describe('job-optimization-inform prompt', () => {
 
     beforeAll(async () => {
       client = new McpClient({
-        env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
+        env: getAdminToolsEnv(),
       });
       await client.connect();
       const prompts = await client.listPrompts();
@@ -22,7 +22,7 @@ describe('job-optimization-inform prompt', () => {
       if (!promptAvailable) {
         console.warn(
           `Skipping ${PROMPT_NAME} e2e tests — prompt not registered. ` +
-            'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env.',
+            'Check that getAdminToolsEnv() enables admin tools.',
         );
       }
     });

@@ -12,14 +12,44 @@ of the shape `{ data, totalAvailable }` (see [Example result](#example-result)).
 every project, start at `pageNumber: 1` and increment `pageNumber` on each subsequent call until
 you have collected `totalAvailable` items.
 
-To get the **count** of projects matching the request, read `totalAvailable` from a single call
-(for example, `pageNumber: 1`) without paging through every item.
+To get the **count** of projects matching the request, read `totalAvailable` from a single call (for
+example, with `limit: 1`) without paging through every item; your own `limit` does not change it.
+When a server cap ([`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+or [`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits)) hides some
+projects, `totalAvailable` stops at the cap and the response includes `mcp.resultInfo` with
+`truncationReason: "admin-cap"`. More projects exist than `totalAvailable` shows: you can page up to
+`totalAvailable`, and you need a `filter` to reach the rest.
 
 ## APIs called
 
 - [Query Projects](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
 
 ## Optional arguments
+
+### `capability`
+
+Only return projects the current user has this effective capability on. The only supported value
+is `Write`, which returns just the projects the user can publish or create content into. The
+filter is applied by Tableau, so `totalAvailable` counts only the matching projects. Use it when
+asking the user where to publish so they are only offered projects they can publish to.
+
+It combines with [`filter`](#filter), for example `capability: "Write"` with
+`filter: "parentProjectId:eq:abc-123"` lists the publishable child projects of a parent.
+
+:::info[Minimum REST API version and site enablement]
+
+`capability` requires Tableau REST API version 3.30 or later (Tableau Server 2026.3+). On older
+servers it is not advertised, because they ignore it and return every project the user can view.
+
+The filter must also be enabled for the site by Tableau. On a 3.30+ site where it is not yet
+enabled, `capability` is still advertised but is ignored, so the result includes every project the
+user can view and publishing to some of them can fail with a permission error.
+
+:::
+
+Example: `Write`
+
+<hr />
 
 ### `filter`
 
@@ -63,8 +93,9 @@ example, to request a partial final page. It does not fetch across pages.
 
 Example: `500`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
-the overall cap on how many results can be paginated through across all pages.
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit) and
+[`MAX_RESULT_LIMITS`](../../configuration/mcp-config/env-vars.md#max_result_limits), the overall cap
+on how many results can be paginated through across all pages.
 
 <hr />
 
@@ -118,4 +149,8 @@ The response fields are:
 
 - `data`: the projects on the requested page (at most 1000, or fewer when `limit` or a server
   cap applies).
-- `totalAvailable`: the number of projects available for pagination (Your own `limit` argument does not affect this value).
+- `totalAvailable`: the number of projects available for pagination, never more than a server cap.
+  Your own `limit` argument does not affect this value.
+- `mcp.resultInfo`: present only when a server cap hides projects:
+  `{ returnedCount, truncated: true, truncationReason: "admin-cap" }`. `returnedCount` is the
+  number of items in `data`.

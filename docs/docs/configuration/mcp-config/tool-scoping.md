@@ -30,7 +30,8 @@ The following optional environment variables can be used to configure the tool s
 
 A comma-separated list of project IDs by which to constrain tool arguments and results. Only data
 sources and workbooks (or views from those workbooks) that are members of the provided projects can
-be queried or will be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+be queried or will be included in the results of the tools. This variable is site and request
+overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set by the Tableau MCP server, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -40,6 +41,8 @@ be queried or will be included in the results of the tools. This variable is sit
   [List Workbooks](../../tools/workbooks/list-workbooks.md), and
   [List Views](../../tools/views/list-views.md) tools (assuming tool scoping is disabled).
 - Has no impact on the results of the Pulse-related tools.
+- Checking a data source's project may require additional permissions. See
+  [Data source permissions](#data-source-permissions).
 
 Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5`
 
@@ -60,7 +63,8 @@ Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5,861566`
 
 A comma-separated list of data source IDs by which to constrain tool arguments and results. Only
 data sources or Pulse metrics and definitions derived from those data sources can be queried or will
-be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+be included in the results of the tools. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -69,6 +73,9 @@ be included in the results of the tools. This variable is site and request overr
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
   scoping is disabled).
 - Has no impact on tools that return information about workbooks or views.
+- This is an absolute allowlist: when set, data sources outside it cannot be queried, and embedded
+  (workbook) data sources, which have no stable ID to list, cannot be queried at all. See
+  [Embedded data sources](#embedded-data-sources).
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
@@ -78,7 +85,8 @@ Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
 A comma-separated list of workbook IDs by which to constrain tool arguments and results. Only
 workbooks or views from those workbooks can be queried or will be included in the results of the
-tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -95,9 +103,10 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 ### `INCLUDE_VIEW_IDS`
 
-A comma-separated list of view IDs by which to constrain tool arguments and results. Only
-the specified views can be queried, fetched as images, or returned by listing tools. This variable
-is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+A comma-separated list of view IDs by which to constrain tool arguments and results. Only the
+specified views can be queried, fetched as images, or returned by listing tools. This variable is
+site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -116,7 +125,8 @@ Example: `4d18c547-bbb1-4187-ae5a-7f78b35adf2d`
 
 A comma-separated list of case-sensitive tags by which to constrain tool arguments and results. Only
 data sources, workbooks, or views with the provided tags can be queried or will be included in the
-results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+results of the tools. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overridden, can be empty to clear any bounds set by the Tableau MCP server.
@@ -128,5 +138,55 @@ results of the tools. This variable is site and request overridable, see [Site S
   and
   [views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view).
 - Has no impact on the results of the Pulse-related tools.
+- Checking a data source's tags may require additional permissions. See
+  [Data source permissions](#data-source-permissions).
 
 Example: `sales,marketing`
+
+## Data source publishing
+
+`publish-datasource` uses `INCLUDE_PROJECT_IDS` to limit the destination project, including when
+`overwrite` is true. Datasource-ID and tag bounds constrain queries and listings; they do not
+restrict replacing a same-name datasource within an allowed project. Tableau publish and overwrite
+permissions still apply.
+
+`datasourceFilePath` refers to the MCP server's filesystem and uses the process's file permissions.
+It is accepted only when the server runs over stdio. Don't put a stdio server behind a stdio-to-HTTP
+proxy: it still counts as stdio, so remote callers could read files on the server. HTTP servers must
+use `request-datasource-upload` and pass its staged upload ID, which requires `MCP_S3_BUCKET`. When
+`MCP_S3_BUCKET` is configured, the publisher also rejects local paths. Staged datasource uploads
+retain the **5 GB (5000000000 bytes)** limit. Files are buffered in server memory before the chunked
+Tableau upload.
+
+## Data source permissions
+
+When [`INCLUDE_PROJECT_IDS`](#include_project_ids) and/or [`INCLUDE_TAGS`](#include_tags) is set,
+the Tableau MCP server checks a data source's project and/or tags before a tool can use it. It looks
+these up with the
+[Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
+REST API, which requires the user to have **View** permission on the data source's parent project,
+even though querying the data source itself does not.
+
+If that request is denied due to missing permissions on the project, the server falls back to the
+[Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html), which is only
+available on Tableau Enterprise and Tableau Plus and if
+[`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests) is not set. Therefore,
+if you are using project or tag based tool scoping, we recommend that your users have view access on
+the projects where they have view access to the content in those projects.
+
+## Embedded data sources
+
+Embedded (workbook) data sources have no tags or stable ID of their own, so when tool scoping is
+enabled they are scoped by the workbook they belong to. To query an embedded data source or get its
+metadata, a client must also pass the ID of that workbook as `workbookLuid`. The server confirms the
+data source belongs to the workbook, then applies the workbook's scoping:
+
+- [`INCLUDE_PROJECT_IDS`](#include_project_ids): the workbook must be in an allowed project.
+- [`INCLUDE_TAGS`](#include_tags): the workbook must have an allowed tag.
+- [`INCLUDE_WORKBOOK_IDS`](#include_workbook_ids): when `workbookLuid` is passed, the workbook must
+  be in the list. On its own this variable does not restrict which data sources can be queried, so
+  it only gates an embedded data source when `workbookLuid` is provided.
+
+Under `INCLUDE_PROJECT_IDS` or `INCLUDE_TAGS`, an embedded data source cannot be queried without
+`workbookLuid`. If [`INCLUDE_DATASOURCE_IDS`](#include_datasource_ids) is set, embedded data sources
+cannot be queried at all: it is an absolute allowlist, and `workbookLuid` does not widen it.

@@ -1,17 +1,24 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
+import { buildTruncationInfo } from '../../_lib/truncation.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { looksLikeLoginNotFullName } from './flowsFilterUtils.js';
-import { buildTruncationInfo, constrainFlows, getListFlowsTool } from './listFlows.js';
+import { constrainFlows, getListFlowsTool } from './listFlows.js';
 import { mockFlows } from './mockFlows.js';
 
 const mocks = vi.hoisted(() => ({
   mockQueryFlowsForSite: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -27,38 +34,47 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
 }));
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('listFlowsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('should create a tool instance with correct properties', () => {
     const listFlowsTool = getListFlowsTool(new WebMcpServer());
     expect(listFlowsTool.name).toBe('list-flows');
-    expect(listFlowsTool.description).toContain('Retrieves a list of Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Retrieves a list of published Tableau Prep flows');
+    expect(listFlowsTool.description).toContain('Flow drafts are excluded');
     expect(listFlowsTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
   });
 
-  it('should be enabled when flow tools are turned on', async () => {
-    const listFlowsTool = getListFlowsTool(new WebMcpServer());
-    expect(await Provider.from(listFlowsTool.disabled)).toBe(false);
-  });
-
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const listFlowsTool = getListFlowsTool(new WebMcpServer());
-    expect(await Provider.from(listFlowsTool.disabled)).toBe(true);
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getListFlowsTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('should successfully list flows', async () => {
     mocks.mockQueryFlowsForSite.mockResolvedValue(mockFlows);

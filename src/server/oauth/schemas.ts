@@ -96,6 +96,9 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),
   tableauSiteId: z.string().optional(),
+  // Site contentUrl the token was minted for ('' is the Default site). Optional only so tokens
+  // minted before site binding existed still parse; the validator fails closed when it is absent.
+  tableauSiteContentUrl: z.string().optional(),
   scope: z.string().optional(),
 });
 
@@ -120,6 +123,42 @@ export const tableauBearerTokenSchema = z.object({
   'https://tableau.com/userId': z.string().optional(), // Unavailable for users without MFA
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
 });
+
+const stringOrStringArraySchema = z.union([z.string(), z.array(z.string())]);
+
+// Other claims pass through so the username claim is configurable.
+const externalTokenClaimsObjectSchema = z
+  .object({
+    iss: z.string().optional(),
+    aud: stringOrStringArraySchema.optional(),
+    exp: z.number().optional(),
+    scope: z.string().optional(),
+    scp: stringOrStringArraySchema.optional(),
+    client_id: z.string().optional(),
+    azp: z.string().optional(),
+  })
+  .passthrough();
+
+/** Claims of a verified JWT (RFC 9068 access token or OIDC ID token) from an external IdP. */
+export const externalTokenClaimsSchema = externalTokenClaimsObjectSchema
+  .refine(({ sub }) => typeof sub === 'string' && sub.length > 0, {
+    message: 'sub must be a non-empty string',
+    path: ['sub'],
+  })
+  .transform(({ client_id, ...claims }) => ({ ...claims, clientId: client_id }));
+
+/** OpenID Connect Discovery 1.0 provider metadata (only the fields token validation needs). */
+export const openIdConfigurationSchema = z
+  .object({
+    issuer: z.string(),
+    jwks_uri: z.string(),
+  })
+  .transform(({ issuer, jwks_uri }) => ({
+    issuer,
+    jwksUri: jwks_uri,
+  }));
+
+export type ExternalTokenClaims = z.infer<typeof externalTokenClaimsSchema>;
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
 export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>;

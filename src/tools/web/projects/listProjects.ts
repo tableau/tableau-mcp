@@ -5,15 +5,30 @@ import { z } from 'zod';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  GetPageResult,
+  MAX_PAGE_SIZE,
+} from '../../../utils/paginate.js';
+import { Provider } from '../../../utils/provider.js';
+import { TruncationReason } from '../_lib/truncation.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
+  capability: z
+    .enum(['Write'])
+    .optional()
+    .describe(
+      'Only return projects the current user has this capability on. Use `Write` to list just the projects the user can publish or create content into, e.g. when asking the user where to publish.',
+    ),
   pageNumber: z
     .number()
     .int()
@@ -27,15 +42,38 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of projects to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
+      'The maximum number of projects to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need `totalAvailable` and want to minimize the response payload.',
     ),
 };
 
-export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
-  const listProjectsTool = new WebTool({
+const capabilityParamsSchema = z.object(paramsSchema);
+const baseParamsSchema = capabilityParamsSchema.omit({ capability: true });
+type ListProjectsParamsSchema = z.ZodType<
+  z.output<typeof capabilityParamsSchema>,
+  z.ZodTypeDef,
+  z.input<typeof capabilityParamsSchema>
+>;
+
+type ListProjectsResult = GetPageResult<Project> & {
+  mcp?: {
+    resultInfo: { returnedCount: number; truncated: true; truncationReason: TruncationReason };
+  };
+};
+
+const isProjectCapabilityFilterSupported = (): boolean => RestApi.versionIsAtLeast('3.30');
+
+const capabilityDescription = `
+
+  **Finding projects to publish to**
+  Pass \`capability: "Write"\` to return only the projects the current user can publish or create content into. The server applies this filter, so \`totalAvailable\` counts only those projects. Sites where Tableau has not yet enabled the filter ignore it and return every viewable project, so a publish to a returned project can still fail with a permission error. Use it whenever you ask the user where to publish, so they are only offered projects they can actually publish to. It combines with \`filter\`, e.g. \`capability: "Write"\` with \`filter: "parentProjectId:eq:abc-123"\` lists the publishable child projects of a parent.`;
+
+export const getListProjectsTool = (server: WebMcpServer): WebTool<ListProjectsParamsSchema> => {
+  const listProjectsTool = new WebTool<ListProjectsParamsSchema>({
     server,
     name: 'list-projects',
-    description: `
+    minRequiredRole: SiteRole.VIEWER,
+    description: new Provider(
+      () => `
   Retrieves a list of projects on a Tableau site including their metadata such as name, description, parent project, content permissions, owner, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Default) for precise project discovery.
   To list results based on usage popularity or relevance, use the search-content tool instead.
 
@@ -61,13 +99,16 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   - List child projects of a specific parent:
       filter: "parentProjectId:eq:abc-123"
   - List projects updated after January 1, 2023:
-      filter: "updatedAt:gt:2023-01-01T00:00:00Z"
+      filter: "updatedAt:gt:2023-01-01T00:00:00Z"${isProjectCapabilityFilterSupported() ? capabilityDescription : ''}
 
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
   The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
-  To get just the count of projects matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
-    paramsSchema,
+  To count, call once with \`limit: 1\` and read \`totalAvailable\` (it ignores \`limit\`). If \`mcp.resultInfo.truncationReason\` is \`'admin-cap'\`, a server cap holds \`totalAvailable\` below the real total: more projects exist; page up to \`totalAvailable\` or filter to reach the rest.`,
+    ),
+    paramsSchema: new Provider(() =>
+      isProjectCapabilityFilterSupported() ? capabilityParamsSchema : baseParamsSchema,
+    ),
     annotations: {
       title: 'List Projects',
       readOnlyHint: true,
@@ -75,12 +116,12 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, capability, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
-      return await listProjectsTool.logAndExecute({
+      return await listProjectsTool.logAndExecute<ListProjectsResult>({
         extra,
         args: {},
         callback: async () => {
@@ -106,6 +147,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
                       await restApi.projectsMethods.queryProjects({
                         siteId: restApi.siteId,
                         filter: validatedFilter ?? '',
+                        capability,
                         pageSize,
                         pageNumber,
                       });
@@ -121,6 +163,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
           const constrained = constrainProjects({
             projects: page.data,
             boundedContext: configWithOverrides.boundedContext,
+            capability,
           });
 
           if (constrained.type !== 'success') {
@@ -132,6 +175,15 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
             result: {
               data: constrained.result,
               totalAvailable: page.totalAvailable,
+              ...(page.cappedByMaxResultLimit && {
+                mcp: {
+                  resultInfo: {
+                    returnedCount: constrained.result.length,
+                    truncated: true,
+                    truncationReason: 'admin-cap',
+                  },
+                },
+              }),
             },
           };
         },
@@ -145,15 +197,19 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
 export function constrainProjects({
   projects,
   boundedContext,
+  capability,
 }: {
   projects: Array<Project>;
   boundedContext: BoundedContext;
+  capability?: 'Write';
 }): ConstrainedResult<Array<Project>> {
   if (projects.length === 0) {
     return {
       type: 'empty',
       message:
-        'No projects were found. Either none exist or you do not have permission to view them.',
+        capability === 'Write'
+          ? 'No projects matching the request were found that you can publish to. Either none match the filter, or you do not have Write permission on any that do.'
+          : 'No projects were found. Either none exist or you do not have permission to view them.',
     };
   }
 

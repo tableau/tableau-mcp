@@ -1,9 +1,11 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { pathParam } from '../../routeSafety/ids.js';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  pulseEntitlementSchema,
   pulseInsightBriefRequestSchema,
   pulseInsightBriefResponseSchema,
   pulseInsightBundleTypeEnum,
@@ -82,13 +84,7 @@ const listPulseMetricsFromMetricDefinitionIdRestEndpoint = makeEndpoint({
   path: '/pulse/definitions/:pulseMetricDefinitionID/metrics',
   alias: 'listPulseMetricsFromMetricDefinitionId',
   description: 'Returns a list of published Pulse Metrics for a specific Pulse Metric Definition.',
-  parameters: [
-    {
-      name: 'pulseMetricDefinitionID',
-      type: 'Path',
-      schema: z.string().nonempty(),
-    },
-  ],
+  parameters: [pathParam('pulseMetricDefinitionID')],
   response: z.object({
     metrics: z.array(pulseMetricSchema),
     total_available: z.number(),
@@ -165,7 +161,20 @@ const generatePulseInsightBriefRestEndpoint = makeEndpoint({
   response: pulseInsightBriefResponseSchema,
 });
 
+const getPulseEntitlementsRestEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/pulse/entitlements',
+  alias: 'getPulseEntitlements',
+  description:
+    "Returns the Pulse feature entitlements for the caller's site. An entitlement reported as " +
+    'enabled means the corresponding Pulse premium feature is available. Tableau Cloud only.',
+  response: z.object({
+    entitlements: z.array(pulseEntitlementSchema).optional(),
+  }),
+});
+
 const pulseApi = makeApi([
+  getPulseEntitlementsRestEndpoint,
   generatePulseMetricValueInsightBundleRestEndpoint,
   generatePulseInsightBriefRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,

@@ -49,7 +49,7 @@ function normalizeDateTimeValue(field: string, value: string): string {
 // fields with these exact names are affected, so adding flow-run date fields
 // (startedAt/completedAt) here is inert for every other tool, none of which
 // filters on a bare field of that name.
-const dateTimeFields = ['createdAt', 'updatedAt', 'startedAt', 'completedAt'];
+const defaultDateTimeFields = ['createdAt', 'updatedAt', 'startedAt', 'completedAt'];
 
 /**
  * Reject filter strings whose `[...]` brackets are unbalanced before any
@@ -122,6 +122,7 @@ export function splitTopLevel(s: string, sep: string): string[] {
  * @param filterString e.g. 'name:eq:Project Views,type:eq:Workbook'
  * @param allowedOperatorsByField - A map of filter fields to allowed operators
  * @param filterFieldSchema - A schema for the filter field
+ * @param dateTimeFields - Optional filter fields whose values should be normalized/validated as date-times
  * @returns validated filter string
  * @throws ZodError or custom error for invalid operators
  */
@@ -136,10 +137,12 @@ export function parseAndValidateFilterString<
   filterString,
   allowedOperatorsByField,
   filterFieldSchema,
+  dateTimeFields = defaultDateTimeFields,
 }: {
   filterString: string;
   allowedOperatorsByField: Record<TFilterField, FilterOperator[]>;
   filterFieldSchema: z.ZodSchema<TFilterField>;
+  dateTimeFields?: readonly string[];
 }): string {
   function isOperatorAllowed(field: TFilterField, operator: FilterOperator): boolean {
     const allowed = allowedOperatorsByField[field];

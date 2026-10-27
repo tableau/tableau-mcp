@@ -6,6 +6,8 @@ sidebar_position: 1
 
 `stale-content-cleanup-inform`
 
+Also readable by the model as the MCP resource `tableau-mcp://admin-workflows/stale-content-cleanup-inform` (default arguments).
+
 A read-only Tableau Cloud admin workflow that identifies stale workbooks and published data sources and renders them as a report for review.
 
 :::warning[Admin Only]

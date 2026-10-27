@@ -1,4 +1,5 @@
 import { Config } from './config.js';
+import * as logger from './logging/logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
 import { milliseconds } from './utils/milliseconds.js';
 
@@ -171,6 +172,33 @@ describe('Config', () => {
     expect(config.transport).toBe('http');
   });
 
+  it('accepts AUTH case and whitespace variants', () => {
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('AUTH', ' Passthrough ');
+    vi.stubEnv('PAT_NAME', undefined);
+    vi.stubEnv('PAT_VALUE', undefined);
+
+    const config = new Config();
+    expect(config.auth).toBe('passthrough');
+    expect(config.enablePassthroughAuth).toBe(true);
+  });
+
+  it('warns and falls back to the default for an unknown AUTH value', () => {
+    const logSpy = vi.spyOn(logger, 'log');
+    vi.stubEnv('AUTH', 'passthru');
+
+    const config = new Config();
+
+    expect(config.auth).toBe('pat');
+    expect(config.enablePassthroughAuth).toBe(false);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('Unknown AUTH "passthru"'),
+      }),
+    );
+  });
+
   it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);
@@ -205,6 +233,31 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
+  });
+
+  describe('PENDING_DELETION_MAX_AGE_DAYS', () => {
+    it('defaults to 30 days', () => {
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+    });
+
+    it('accepts a value within 1-90', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '14');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(14);
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '90');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(90);
+    });
+
+    it('falls back to the default when out of range or not a number', () => {
+      for (const raw of ['0', '91', '-5', 'abc']) {
+        vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', raw);
+        expect(new Config().pendingDeletionMaxAgeDays).toBe(30);
+      }
+    });
+
+    it('truncates a fractional value to whole days', () => {
+      vi.stubEnv('PENDING_DELETION_MAX_AGE_DAYS', '7.9');
+      expect(new Config().pendingDeletionMaxAgeDays).toBe(7);
+    });
   });
 
   it('should set enableMcpSiteSettings to true by default', () => {
@@ -271,24 +324,20 @@ describe('Config', () => {
     expect(config.breakGlassDisableGlobally).toBe(true);
   });
 
-  it('should set flowToolsEnabled to false by default', () => {
-    const config = new Config();
-    expect(config.flowToolsEnabled).toBe(false);
-  });
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the flow read environment override only when FLOW_READ_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', value);
 
-  it('should set flowToolsEnabled to true when FLOW_TOOLS_ENABLED is "true"', () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
-
-    const config = new Config();
-    expect(config.flowToolsEnabled).toBe(true);
-  });
-
-  it('should keep flowToolsEnabled false for values other than "true"', () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'yes');
-
-    const config = new Config();
-    expect(config.flowToolsEnabled).toBe(false);
-  });
+      expect(new Config().flowReadToolsEnabled).toBe(expected);
+    },
+  );
 
   it('should default insightsToolsEnabled to false', () => {
     const config = new Config();
@@ -301,6 +350,21 @@ describe('Config', () => {
     const config = new Config();
     expect(config.insightsToolsEnabled).toBe(true);
   });
+
+  it.each([
+    { value: undefined, expected: undefined },
+    { value: '', expected: undefined },
+    { value: 'yes', expected: undefined },
+    { value: 'true', expected: true },
+    { value: 'false', expected: false },
+  ])(
+    'sets the flow write environment override only when FLOW_WRITE_TOOLS_ENABLED is true or false ($value)',
+    ({ value, expected }) => {
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', value);
+
+      expect(new Config().flowWriteToolsEnabled).toBe(expected);
+    },
+  );
 
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
@@ -623,6 +687,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
+      external: null,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -643,6 +708,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
+        external: null,
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -882,6 +948,150 @@ describe('Config', () => {
       const config = new Config();
       expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
     });
+
+    describe('external authorization server', () => {
+      function stubExternalEnvVars(): void {
+        vi.stubEnv('OAUTH_ISSUER', 'https://idp.example.com');
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'true');
+        vi.stubEnv('AUTH', 'direct-trust');
+        vi.stubEnv('JWT_SUB_CLAIM', '{OAUTH_USERNAME}');
+        vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'client-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_ID', 'secret-id');
+        vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'secret-value');
+      }
+
+      const enableError =
+        'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"';
+      const authError = 'When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"';
+      const requireDiscoveryError =
+        'OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"';
+
+      it('parses a discovery configuration', () => {
+        stubExternalEnvVars();
+
+        expect(new Config().oauth.external).toEqual({
+          discovery: true,
+          usernameClaimName: 'sub',
+        });
+      });
+
+      it.each(['false', 'TRUE', '1', ''])('treats OAUTH_EXTERNAL_DISCOVERY %j as off', (value) => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', value);
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'sub');
+
+        expect(() => new Config()).toThrow(requireDiscoveryError);
+      });
+
+      it('does not enable external mode when OAUTH_EXTERNAL_DISCOVERY is not "true"', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', 'false');
+
+        expect(new Config().oauth.external).toBeNull();
+      });
+
+      it.each(['http://localhost:8080', 'http://127.0.0.1:8080/realms/mcp', 'http://[::1]'])(
+        'allows a loopback http OAUTH_ISSUER %s with discovery',
+        (issuer) => {
+          stubExternalEnvVars();
+          vi.stubEnv('OAUTH_ISSUER', issuer);
+
+          expect(new Config().oauth.issuer).toBe(issuer);
+        },
+      );
+
+      it('throws when OAUTH_ISSUER uses http on a non-loopback host with discovery', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_ISSUER', 'http://idp.example.com');
+
+        expect(() => new Config()).toThrow(
+          'The environment variable OAUTH_ISSUER must use https unless its host is loopback',
+        );
+      });
+
+      it.each([
+        'https://mcp:s3cret@idp.example.com',
+        'https://mcp@idp.example.com',
+        'https://:s3cret@idp.example.com',
+      ])('throws when OAUTH_ISSUER %s has credentials with discovery', (issuer) => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_ISSUER', issuer);
+
+        expect(() => new Config()).toThrow(
+          'The environment variable OAUTH_ISSUER must not contain a username or password',
+        );
+      });
+
+      it.each([
+        ['   ', 'sub'],
+        [' tableau_username ', 'tableau_username'],
+      ])('trims OAUTH_EXTERNAL_USERNAME_CLAIM_NAME %j to %j', (claimName, expected) => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', claimName);
+
+        expect(new Config().oauth.external?.usernameClaimName).toBe(expected);
+      });
+
+      it('throws when OAUTH_ISSUER is not set', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_ISSUER', '');
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it('throws when DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it('throws when OAUTH_EMBEDDED_AUTHZ_SERVER is not "false"', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', undefined);
+
+        expect(() => new Config()).toThrow(enableError);
+      });
+
+      it('throws when only OAUTH_EXTERNAL_USERNAME_CLAIM_NAME is set', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_EXTERNAL_DISCOVERY', '');
+        vi.stubEnv('OAUTH_EXTERNAL_USERNAME_CLAIM_NAME', 'sub');
+
+        expect(() => new Config()).toThrow(requireDiscoveryError);
+      });
+
+      it('throws when OAUTH_ISSUER is not a valid URL', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('OAUTH_ISSUER', 'not a url');
+
+        expect(() => new Config()).toThrow(
+          'The environment variable OAUTH_ISSUER is not a valid URL',
+        );
+      });
+
+      it.each([
+        ['"oauth"', 'oauth'],
+        ['"uat"', 'uat'],
+        ['"pat"', 'pat'],
+        ['unset (defaults to "oauth")', undefined],
+      ])('throws when AUTH is %s', (_, auth) => {
+        stubExternalEnvVars();
+        vi.stubEnv('AUTH', auth);
+
+        expect(() => new Config()).toThrow(authError);
+      });
+
+      it('throws when JWT_SUB_CLAIM does not contain {OAUTH_USERNAME} for direct-trust', () => {
+        stubExternalEnvVars();
+        vi.stubEnv('JWT_SUB_CLAIM', 'shared-user@example.com');
+
+        expect(() => new Config()).toThrow(
+          'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
+        );
+      });
+    });
   });
 
   describe('CSP allowed domains', () => {
@@ -945,6 +1155,111 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.featureGate.provider).toBe('server');
+    });
+  });
+
+  describe('Passthrough auth', () => {
+    beforeEach(() => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
+      vi.stubEnv('OAUTH_ISSUER', undefined);
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+    });
+
+    it('should accept AUTH=passthrough with only SERVER configured', () => {
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.server).toBe('https://my-tableau-server.com');
+      expect(config.oauth.enabled).toBe(false);
+    });
+
+    it('should keep OAuth disabled when AUTH=passthrough and OAUTH_ISSUER is stale', () => {
+      vi.stubEnv('OAUTH_ISSUER', 'https://stale-issuer.example.com');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('passthrough');
+      expect(config.oauth.enabled).toBe(false);
+    });
+
+    it('should imply enablePassthroughAuth=true when AUTH=passthrough', () => {
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', undefined);
+
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.enablePassthroughAuth).toBe(true);
+    });
+
+    it('should not require PAT_NAME when AUTH=passthrough', () => {
+      expect(() => new Config()).not.toThrow('The environment variable PAT_NAME is not set');
+    });
+
+    it('should not require PAT_VALUE when AUTH=passthrough', () => {
+      expect(() => new Config()).not.toThrow('The environment variable PAT_VALUE is not set');
+    });
+
+    it('should reject AUTH=passthrough with TRANSPORT=stdio', () => {
+      vi.stubEnv('TRANSPORT', 'stdio');
+
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when AUTH is "passthrough"');
+    });
+
+    it('should still require SERVER when AUTH=passthrough', () => {
+      vi.stubEnv('SERVER', undefined);
+
+      expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+    });
+
+    it('should preserve optional passthrough fallback when AUTH=pat', () => {
+      vi.stubEnv('AUTH', 'pat');
+      vi.stubEnv('TRANSPORT', 'stdio');
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+      vi.stubEnv('PAT_NAME', 'sponge');
+      vi.stubEnv('PAT_VALUE', 'bob');
+
+      const config = new Config();
+
+      expect(config.auth).toBe('pat');
+      expect(config.enablePassthroughAuth).toBe(true);
+      expect(config.oauth.enabled).toBe(false);
+    });
+  });
+
+  describe('Activity Log provider configuration', () => {
+    it('should default to "noop" when ACTIVITY_LOG_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
+    });
+
+    it('should use "custom" when ACTIVITY_LOG_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+      vi.stubEnv(
+        'ACTIVITY_LOG_PROVIDER_CONFIG',
+        '{"module":"./my-activity-log.js","directory":"/home/nodejs/logs"}',
+      );
+
+      const config = new Config();
+      expect(config.activityLog).toEqual({
+        provider: 'custom',
+        providerConfig: { module: './my-activity-log.js', directory: '/home/nodejs/logs' },
+      });
+    });
+
+    it('should throw error when ACTIVITY_LOG_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'ACTIVITY_LOG_PROVIDER_CONFIG is required when ACTIVITY_LOG_PROVIDER is "custom"',
+      );
+    });
+
+    it('should fall back to "noop" when ACTIVITY_LOG_PROVIDER is invalid', () => {
+      vi.stubEnv('ACTIVITY_LOG_PROVIDER', 'invalid');
+
+      const config = new Config();
+      expect(config.activityLog.provider).toBe('noop');
     });
   });
 });

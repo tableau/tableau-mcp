@@ -11,6 +11,10 @@ These docs are for enabling OAuth for Tableau Server only.
 Tableau Cloud customers should refer to
 [OAuth: Tableau Cloud](../mcp-config/authentication/oauth.md).
 
+A self-hosted MCP server can instead use
+[your own identity provider](#use-your-own-identity-provider-self-hosted-only) with Tableau Server
+or Tableau Cloud, signing in with Direct Trust.
+
 :::
 
 ## How to Enable OAuth
@@ -37,6 +41,84 @@ For more information, please see the
 
 <hr />
 
+## Use your own identity provider (self-hosted only)
+
+A self-hosted MCP server can accept access tokens from your own OAuth or OpenID Connect identity
+provider (IdP) instead of Tableau. The MCP server checks each token, reads the Tableau username from
+one claim, and signs in to Tableau as that user with [Direct Trust](authentication/direct-trust.md).
+This mode is not available for hosted Tableau MCP. It is an interim option for self-hosted
+deployments and may change or be removed in a later release.
+
+To set it up:
+
+- Set [`OAUTH_ISSUER`](#oauth_issuer) to your IdP's issuer and
+  [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) to `false`. Tokens with any other
+  `iss` are rejected.
+- Set [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery) to `true` (JWTs: access tokens or
+  OpenID Connect ID tokens, with the keys read from your IdP's OpenID Connect discovery document).
+- Set [`AUTH`](#auth) to `direct-trust` with `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM`.
+- Have your IdP set the token's `aud` to this server's resource identifier: the
+  [`OAUTH_RESOURCE_URI`](#oauth_resource_uri) origin with the `/tableau-mcp` path, or a value in
+  [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris). Clients request it with the
+  `resource` parameter ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)). The MCP server accepts
+  any token with a matching `aud`, so use a value unique to this server. A client ID is fine only if
+  it is this MCP server's own client ID and no other app receives tokens for it. Never use a client
+  ID shared with another app, or a shared default audience such as Okta's `api://default`.
+- Grant the `tableau:mcp:*` scopes your tools need in the `scope` or `scp` claim. The scopes also
+  keep out tokens without `tableau:mcp:*` scopes, including ID tokens and tokens meant for other
+  apps. Accepting ID tokens requires [`OAUTH_DISABLE_SCOPES`](#oauth_disable_scopes) set to `true`.
+  The audience is then the only check that ties a token to this server, so do this only when every
+  accepted audience is unique to this server.
+
+:::warning
+
+Pick a [username claim](#oauth_external_username_claim_name) that never changes and that users can't
+edit, such as `sub` (the default). Avoid `email` or `preferred_username` unless your IdP guarantees
+them: whoever controls the claim value signs in to Tableau as that user.
+
+:::
+
+Also note:
+
+- Passthrough auth (`ENABLE_PASSTHROUGH_AUTH`) runs first. A request with a valid Tableau session is
+  accepted without checking a bearer token.
+- The token's `client_id` (or `azp`) claim is used as the client ID, which is sent to telemetry.
+- Each rejected token writes one `external-token-rejected` record to the `audit` logger, whatever
+  [`LOG_LEVEL`](env-vars#log_level) is set to.
+
+### Accept OpenID Connect ID tokens
+
+If your IdP signs users in with OpenID Connect ID tokens instead of access tokens, the MCP server
+can accept those as the bearer token. The MCP server reads the keys from your IdP's discovery
+document:
+
+```bash
+OAUTH_ISSUER=https://idp.example.com
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+OAUTH_EXTERNAL_DISCOVERY=true
+OAUTH_GLOBAL_RESOURCE_URIS=<this-mcp-server-client-id>
+OAUTH_DISABLE_SCOPES=true
+OAUTH_EXTERNAL_USERNAME_CLAIM_NAME=employee_id
+```
+
+Use this MCP server's own client ID only if no other app receives tokens for it: with scopes off,
+the audience is the only check that ties a token to this server.
+
+On each request, the MCP server checks that:
+
+- The token is signed with an asymmetric algorithm by a key from the discovery document's
+  `jwks_uri`.
+- `iss` equals `OAUTH_ISSUER` exactly and `aud` is an accepted value.
+- The token has not expired (`exp`) and is already valid (`nbf`, if present), allowing 5 seconds of
+  clock skew.
+- `iss`, `sub`, `aud`, `exp`, and `iat` are present.
+- The [username claim](#oauth_external_username_claim_name) is valid.
+
+Results are not cached. A rejected token gets one generic `401` and an `external-token-rejected`
+audit log record with the reason, never the token.
+
+<hr />
+
 ## Environment Variables
 
 The following environment variables configure OAuth behavior:
@@ -59,6 +141,11 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 **Setting this environment variable enables OAuth.** This should be the origin of your MCP server
 (the issuer of access tokens).
+
+When you [use your own identity provider](#use-your-own-identity-provider-self-hosted-only), set it
+to the provider's issuer exactly as it appears in the token's `iss` claim. A trailing slash matters.
+With [`OAUTH_EXTERNAL_DISCOVERY`](#oauth_external_discovery), it must use `https` unless the host is
+loopback.
 
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
@@ -158,16 +245,20 @@ nor [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris) is rejected with
 
 ### `OAUTH_GLOBAL_RESOURCE_URIS`
 
-One or more additional resource URLs that are also accepted in a token's `aud` claim. Use this when
-clients may reach the deployment through an environment-wide global URL in addition to the
-pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
+One or more additional values that are also accepted in a token's `aud` claim. Use this when clients
+may reach the deployment through an environment-wide global URL in addition to the pod-specific
+[`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 
 - Optional. When unset, only the `OAUTH_RESOURCE_URI` value is accepted.
-- Accepts a single URL or a comma-separated list of URLs.
-- Each value is matched against `aud`, so set it to the global resource URL the
-  authorization server stamps into the claim (for example `https://mcp.tableau.com`).
-- Applies only when using an external Tableau authorization server
+- Accepts a single value or a comma-separated list of values.
+- Each value is matched against `aud`, so set it to the value the authorization server stamps into
+  the claim (for example `https://mcp.tableau.com`). With
+  [your own identity provider](#use-your-own-identity-provider-self-hosted-only), a value may be
+  this MCP server's own client ID, to [accept ID tokens](#accept-openid-connect-id-tokens).
+- Applies only when using a Tableau authorization server or
+  [your own identity provider](#use-your-own-identity-provider-self-hosted-only)
   ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
+- Each value must be unique to this MCP server: any token whose `aud` matches is accepted.
 
 <hr />
 
@@ -214,6 +305,9 @@ Disable scope enforcement and scope challenges.
 - Useful for Tableau Server deployments that do not want to enforce scopes yet.
 - When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
   enforce scopes on incoming access tokens.
+- With [your own identity provider](#use-your-own-identity-provider-self-hosted-only), `true` is
+  required to [accept ID tokens](#accept-openid-connect-id-tokens), which carry no scopes. It is
+  safe only when every accepted audience is unique to this MCP server.
 
 <hr />
 
@@ -293,10 +387,106 @@ References:
 ### `OAUTH_EMBEDDED_AUTHZ_SERVER`
 
 A hint that `OAUTH_ISSUER` points at the embedded OAuth authorization server (authorize, token,
-callback, register routes). When `false`, the issuer is an external authorization server (e.g.
-Tableau); only `.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
+callback, register routes). When `false`, the issuer is an external authorization server (Tableau,
+or [your own identity provider](#use-your-own-identity-provider-self-hosted-only)); only
+`.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
 
 - Default: `true`
+
+<hr />
+
+### `OAUTH_EXTERNAL_DISCOVERY`
+
+When `true`, the MCP server reads your identity provider's
+[OpenID Connect discovery document](https://openid.net/specs/openid-connect-discovery-1_0.html) at
+`OAUTH_ISSUER` + `/.well-known/openid-configuration` (without a doubled `/` if the issuer ends in
+one). It then accepts JWTs signed by a key from the document's `jwks_uri`: access tokens
+([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) or
+[OpenID Connect ID tokens](#accept-openid-connect-id-tokens). See
+[Use your own identity provider](#use-your-own-identity-provider-self-hosted-only).
+
+- Default: `false`. Any value other than `true` leaves it off. If
+  [`OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`](#oauth_external_username_claim_name) is set without
+  `OAUTH_EXTERNAL_DISCOVERY=true`, the server does not start.
+- Only RS, PS, ES, and EdDSA signatures are accepted. HS and `none` tokens are rejected.
+- `exp` and `nbf` allow 5 seconds of clock skew.
+- `iss`, `sub`, `aud`, `exp`, and `iat` must be present.
+- Keys are cached. They are fetched again when a token names an unknown key ID (`kid`), at most once
+  every 30 seconds.
+- [`OAUTH_ISSUER`](#oauth_issuer) must use `https` unless the host is loopback, and must not contain
+  a username or password.
+- The document is read on the first request, then kept for the life of the process. If your provider
+  moves its `jwks_uri`, restart the MCP server. If the read fails, the request is rejected and the
+  next request tries again.
+- The document's `issuer` must equal `OAUTH_ISSUER` exactly, including any trailing slash.
+- `jwks_uri` must use `https` unless both its host and the `OAUTH_ISSUER` host are loopback. It can
+  be on another host than the issuer.
+- Your provider must serve the document at that path.
+
+<hr />
+
+### `OAUTH_EXTERNAL_USERNAME_CLAIM_NAME`
+
+The name of the token claim to use as the Tableau username. The claim's value must be a non-empty
+string, or a whole number from 0 to 9007199254740991, which is used as its decimal string. `sub`
+itself must be a non-empty string, so a number works only in a custom username claim. Surrounding
+spaces in the name are trimmed, and an empty name falls back to `sub`.
+
+- Default: `sub`
+
+<hr />
+
+### `SESSION_STORE_PROVIDER`
+
+The session store provider to use for the embedded OAuth authorization server's session state
+(pending authorizations, authorization codes, refresh tokens, and OAuth client registrations).
+Only relevant when [`AUTH`](env-vars#auth) is `oauth` with the embedded authorization server
+enabled (the default; see [`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) above).
+
+- Default: `memory`
+- Possible values:
+  - `memory` - In-memory session store (default). State is process-local and does not survive a
+    restart or a multi-replica deployment.
+  - `custom` - Load a custom session store provider from a user-specified module, backed by
+    external infrastructure (e.g. Redis, a database, or blob storage) so session state survives
+    restarts and is shared across replicas.
+
+:::tip[Custom Provider]
+
+To use a custom session store provider, set `SESSION_STORE_PROVIDER=custom` and provide the module
+path via `SESSION_STORE_PROVIDER_CONFIG`:
+
+```bash
+SESSION_STORE_PROVIDER=custom
+SESSION_STORE_PROVIDER_CONFIG='{"module":"./my-session-store.js"}'
+```
+
+The custom provider module should export a default class or named export `SessionStore` that
+implements the [`SessionStore`](https://github.com/tableau/tableau-mcp/blob/main/src/sessionStore/sessionStore.ts)
+interface. `consume` must be implemented as a truly atomic operation against the backing store
+(e.g. an ETag-based conditional write for S3/blob storage, a Lua script or `MULTI`/`EXEC` for
+Redis, or a transaction for a relational store).
+
+:::
+
+<hr />
+
+### `SESSION_STORE_PROVIDER_CONFIG`
+
+Configuration for custom session store providers (JSON string).
+
+- Required when: `SESSION_STORE_PROVIDER` is `custom`
+- Format: `{"module": "<path-to-module>", ...additional-config}`
+
+The `module` field can be:
+- A relative file path (e.g., `./my-provider.js`) - resolved from process working directory
+- An absolute file path (e.g., `/path/to/provider.js`)
+- An npm package name (e.g., `@company/session-store-provider`)
+
+**Example:**
+```bash
+SESSION_STORE_PROVIDER_CONFIG='{"module":"./providers/redis-session-store.js"}'
+```
 
 <hr />
 

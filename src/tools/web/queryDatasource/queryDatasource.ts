@@ -7,26 +7,35 @@ import {
   DatasourceNotAllowedError,
   FeatureDisabledError,
   QueryValidationError,
+  WorkbookDatasourceNotEnabledError,
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { luidSchema } from '../../../sdks/routeSafety/ids.js';
 import {
   Datasource,
   QueryOutput,
   QueryRequest,
   querySchema,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../../utils/provider.js';
-import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
+import {
+  getEmbeddedDatasourceVersionHint,
+  getVizqlDataServiceDisabledError,
+} from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
+import { queryDatasourceToolDescription20263 } from './descriptions/queryDescription.2026.3.js';
 import { queryDatasourceToolDescription } from './descriptions/queryDescription.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
@@ -38,14 +47,33 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
-  datasourceLuid: z.string().nonempty(),
+  datasourceLuid: luidSchema,
+  workbookLuid: luidSchema
+    .optional()
+    .describe(
+      'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
+    ),
   query: querySchema,
-  limit: z.number().int().min(1).optional(),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    // VDS's rowLimit width is unverified; keep limit + 1 within int32.
+    .max(MAX_INT32 - 1)
+    .optional()
+    .describe(
+      "Max rows to return. When a row limit applies (this or a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason 'admin-cap' means a server cap cut them — narrow filters or aggregate.",
+    ),
 };
 
 type QueryDatasourceResult = QueryOutput & {
   mcp?: {
-    warnings: ContextFilterWarning[];
+    warnings?: ContextFilterWarning[];
+    resultInfo?: {
+      returnedCount: number;
+      truncated: boolean;
+      truncationReason?: TruncationReason;
+    };
   };
 };
 
@@ -57,10 +85,12 @@ export const getQueryDatasourceTool = (
   const queryDatasourceTool = new WebTool({
     server,
     name: 'query-datasource',
+    minRequiredRole: SiteRole.VIEWER,
     description: new Provider(() =>
       getResultForTableauVersion({
         productVersion,
         mappings: {
+          '2026.3.0': queryDatasourceToolDescription20263,
           '2026.1.0': queryDatasourceToolDescription20261,
           '2025.3.0': queryDatasourceToolDescription20253,
           default: queryDatasourceToolDescription,
@@ -75,11 +105,14 @@ export const getQueryDatasourceTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, workbookLuid, query, limit },
+      extra,
+    ): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, query },
+        args: { datasourceLuid, workbookLuid, query },
         callback: async () => {
           try {
             validateQuery({ datasourceLuid, query, rules });
@@ -89,6 +122,8 @@ export const getQueryDatasourceTool = (
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
+            workbookLuid,
+            supportsWorkbookLuid: true,
             extra,
           });
 
@@ -99,14 +134,17 @@ export const getQueryDatasourceTool = (
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
-            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            ? Math.min(maxResultLimit, limit ?? MAX_INT32 - 1)
             : limit;
 
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
           const options: QueryRequest['options'] = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            ...(rules.dontSpecifyRowLimits ? {} : { rowLimit }),
+            ...(rules.dontSpecifyRowLimits || rowLimit === undefined
+              ? {}
+              : { rowLimit: rowLimit + 1 }),
           };
 
           const credentials = getDatasourceCredentials(datasourceLuid);
@@ -159,7 +197,17 @@ export const getQueryDatasourceTool = (
               if (result.isErr()) {
                 const vdsError = result.error;
                 if (vdsError.type === 'feature-disabled') {
-                  return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
+                  // Any 404 from the VDS query endpoint maps to feature-disabled. On REST API < 3.30
+                  // that 404 can instead mean the target is an embedded datasource (unsupported below
+                  // 3.30), so append a hedged hint — the base "enable VDS via TSM" text stays correct
+                  // for a genuinely-disabled VDS.
+                  const message = RestApi.versionIsAtLeast('3.30')
+                    ? getVizqlDataServiceDisabledError()
+                    : `${getVizqlDataServiceDisabledError()} ${getEmbeddedDatasourceVersionHint()}`;
+                  return new FeatureDisabledError(message).toErr();
+                }
+                if (vdsError.type === 'workbook-datasource-not-enabled') {
+                  return new WorkbookDatasourceNotEnabledError().toErr();
                 }
                 if (vdsError.type === 'zodios-error') {
                   return new ZodiosValidationError(vdsError.error).toErr();
@@ -174,15 +222,31 @@ export const getQueryDatasourceTool = (
                 );
               }
 
-              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
-                result.value.data.length = rowLimit;
+              let resultInfo: NonNullable<QueryDatasourceResult['mcp']>['resultInfo'];
+              if (rowLimit) {
+                const data = result.value.data;
+                const truncatedByLimit = !!data && data.length > rowLimit;
+                if (data && truncatedByLimit) {
+                  data.length = rowLimit;
+                }
+
+                resultInfo = {
+                  returnedCount: data?.length ?? 0,
+                  ...buildTruncationInfo({
+                    truncatedByLimit,
+                    maxResultLimit,
+                    llmLimit: limit,
+                    effectiveLimit: rowLimit,
+                  }),
+                };
               }
 
-              if (contextWarnings.length > 0) {
+              if (contextWarnings.length > 0 || resultInfo) {
                 return new Ok({
                   ...result.value,
                   mcp: {
-                    warnings: contextWarnings,
+                    ...(contextWarnings.length > 0 && { warnings: contextWarnings }),
+                    ...(resultInfo && { resultInfo }),
                   },
                 });
               }

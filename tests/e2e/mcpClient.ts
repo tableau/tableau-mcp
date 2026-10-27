@@ -4,6 +4,7 @@ import { ErrorCode, Implementation, McpError } from '@modelcontextprotocol/sdk/t
 import { z } from 'zod';
 
 import { Variant } from '../../src/scripts/variants.js';
+import type { DesktopToolName } from '../../src/tools/desktop/toolName.js';
 import { WebToolName } from '../../src/tools/web/toolName.js';
 import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv } from '../testEnv.js';
@@ -16,15 +17,18 @@ export class McpClient {
   constructor(args: { variant?: Variant; env?: Record<string, string> } = {}) {
     let { variant, env } = args ?? {};
     variant = variant ?? 'default';
-    env = env ?? getDefaultEnv();
-
-    // https://github.com/nodejs/node/issues/55374
-    env.PATH = process.env.PATH ?? '';
+    env = {
+      ...(env ?? getDefaultEnv()),
+      // https://github.com/nodejs/node/issues/55374
+      PATH: process.env.PATH ?? '',
+      // Set last so no caller env can make an e2e child server send product telemetry.
+      PRODUCT_TELEMETRY_ENABLED: 'false',
+    };
 
     this.transport = new StdioClientTransport({
       command: 'node',
       args: [variant === 'default' ? 'build/index.js' : `build/index.${variant}.js`],
-      env: env ?? {},
+      env,
     });
 
     this.client = new Client({
@@ -88,7 +92,7 @@ export class McpClient {
   /**
    * Calls the MCP tool with the provided arguments.
    *
-   * @param {WebToolName} toolName The name of the tool to call
+   * @param {WebToolName | DesktopToolName} toolName The name of the tool to call
    * @param {({
    *     schema: Z;
    *     contentType?: 'text' | 'image';
@@ -102,7 +106,7 @@ export class McpClient {
    * @returns {*}  {Promise<z.infer<Z>>} The tool call result
    */
   async callTool<Z extends z.ZodTypeAny = z.ZodNever>(
-    toolName: WebToolName,
+    toolName: WebToolName | DesktopToolName,
     {
       schema,
       contentType,

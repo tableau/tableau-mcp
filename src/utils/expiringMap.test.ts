@@ -50,6 +50,17 @@ describe('ExpiringMap', () => {
     expect(map.get('key')).toBeUndefined();
   });
 
+  it('unrefs the expiry timer, including on overwrite, so a cached entry does not keep the process alive', () => {
+    const map = new ExpiringMap<string, string>({ defaultExpirationTimeMs: 10000 });
+    const timers = (map as unknown as { timeouts: Map<string, NodeJS.Timeout> }).timeouts;
+
+    map.set('key', 'value');
+    expect(timers.get('key')?.hasRef()).toBe(false);
+
+    map.set('key', 'value2');
+    expect(timers.get('key')?.hasRef()).toBe(false);
+  });
+
   it('should throw error when expiration time is less than or equal to 0', () => {
     expect(() => new ExpiringMap<string, string>({ defaultExpirationTimeMs: 0 })).toThrow(
       'Expiration time must be greater than 0',
@@ -127,6 +138,56 @@ describe('ExpiringMap', () => {
       expect(
         () => new ExpiringMap<string, string>({ defaultExpirationTimeMs: 10000, maxSize: -1 }),
       ).toThrow('Max size must be greater than 0');
+    });
+  });
+
+  describe('onDelete hook', () => {
+    it('fires when a key is removed by natural expiry', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 1000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+
+      vi.advanceTimersByTime(1000);
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('fires when a key is evicted by maxSize', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        maxSize: 1,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+      map.set('b', 2); // evicts 'a'
+
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('fires when a key is removed by an explicit delete', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.set('a', 1);
+      map.delete('a');
+
+      expect(deleted).toEqual(['a']);
+    });
+
+    it('does not fire when deleting a key that does not exist', () => {
+      const deleted: string[] = [];
+      const map = new ExpiringMap<string, number>({
+        defaultExpirationTimeMs: 10000,
+        onDelete: (key) => deleted.push(key),
+      });
+      map.delete('missing');
+
+      expect(deleted).toEqual([]);
     });
   });
 });

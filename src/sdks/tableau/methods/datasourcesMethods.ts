@@ -1,9 +1,18 @@
-import { Zodios } from '@zodios/core';
+import { isErrorFromAlias } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { buildRestPath, RouteSafetyError } from '../../routeSafety/core.js';
+import { createGuardedZodios } from '../../routeSafety/zodios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
+import { escapeXmlAttribute } from '../escapeXmlAttribute.js';
+import { buildMultipartMixedBody } from '../multipart.js';
 import { RestApiCredentials } from '../restApi.js';
-import { DataSource } from '../types/dataSource.js';
+import {
+  DataSource,
+  PublishedDataSourceResponse,
+  publishedDataSourceResponseSchema,
+} from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -16,7 +25,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  */
 export default class DatasourcesMethods extends AuthenticatedMethods<typeof datasourcesApis> {
   constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
-    super(new Zodios(baseUrl, datasourcesApis, { axiosConfig }), creds);
+    super(createGuardedZodios(baseUrl, datasourcesApis, { axiosConfig }), creds);
   }
 
   /**
@@ -77,6 +86,50 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
   };
 
   /**
+   * Result-returning variant of {@link queryDatasource} for classifying a data source. Resolves to
+   * the DataSource on success — callers classify published vs embedded from its shape, since
+   * WBDS-enabled servers return embedded (workbook) data sources here too (HTTP 200, with
+   * `parentType: "Workbook"` and no `project`). Older servers that don't serve embedded data sources
+   * via REST return 404 instead, mapped to `Err('not-found')`; for a LUID VDS can otherwise resolve,
+   * that too means embedded. Any other failure (permissions, transient) returns `Err('error')`
+   * instead of throwing, so callers using this purely to classify don't break on non-authoritative
+   * errors.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param siteId - The Tableau site ID
+   * @param datasourceId - The ID of the data source
+   */
+  tryQueryDatasource = async ({
+    siteId,
+    datasourceId,
+  }: {
+    siteId: string;
+    datasourceId: string;
+  }): Promise<Result<DataSource, 'not-found' | 'error'>> => {
+    try {
+      return Ok(
+        (
+          await this._apiClient.queryDatasource({
+            params: { siteId, datasourceId },
+            ...this.authHeader,
+          })
+        ).datasource,
+      );
+    } catch (error) {
+      // Unsafe IDs must reach the tool layer as RouteSafetyError (mapped to a 400), not an Err.
+      if (error instanceof RouteSafetyError) throw error;
+      if (
+        isErrorFromAlias(this._apiClient.api, 'queryDatasource', error) &&
+        error.response.status === 404
+      ) {
+        return Err('not-found');
+      }
+      return Err('error');
+    }
+  };
+
+  /**
    * Deletes the specified published data source from the site.
    *
    * On Tableau Cloud the data source is moved to the recycle bin and can be restored
@@ -127,5 +180,89 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
         ...this.authHeader,
       },
     );
+  };
+
+  /**
+   * Removes a single tag (by label) from the specified data source. Responds 204; removing a tag the
+   * data source does not carry is a no-op on the server.
+   *
+   * Required scopes (Tableau Cloud): `tableau:datasource_tags:delete`
+   *
+   * @param datasourceId - The ID of the data source to untag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabel - The tag label to remove.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_tag_from_data_source
+   */
+  deleteTagFromDatasource = async ({
+    datasourceId,
+    siteId,
+    tagLabel,
+  }: {
+    datasourceId: string;
+    siteId: string;
+    tagLabel: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteTagFromDatasource(undefined, {
+      params: { siteId, datasourceId, tagName: tagLabel },
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Publishes a data source on the specified site, committing a file previously uploaded
+   * via `PublishingMethods.uploadFileInChunks`.
+   * Sends a `multipart/mixed` body, which Zodios cannot construct, so this bypasses the
+   * Zodios-typed client and calls the underlying axios instance directly.
+   *
+   * Required scopes: `tableau:datasources:create`
+   *
+   * @param siteId - The Tableau site ID
+   * @param uploadSessionId - The upload session ID returned by `initiateFileUpload`
+   * @param datasourceType - `tds` or `tdsx`, matching the file uploaded to the session
+   * @param name - The name to give the published data source
+   * @param projectId - The ID of the project to publish the data source into
+   * @param overwrite - Whether to overwrite an existing data source with the same name
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#publish_data_source
+   */
+  publishDatasource = async ({
+    siteId,
+    uploadSessionId,
+    datasourceType,
+    name,
+    projectId,
+    overwrite,
+  }: {
+    siteId: string;
+    uploadSessionId: string;
+    datasourceType: 'tds' | 'tdsx';
+    name: string;
+    projectId: string;
+    overwrite?: boolean;
+  }): Promise<PublishedDataSourceResponse> => {
+    const xml =
+      `<tsRequest><datasource name="${escapeXmlAttribute(name)}">` +
+      `<project id="${escapeXmlAttribute(projectId)}"/>` +
+      '</datasource></tsRequest>';
+    const { body, contentType } = buildMultipartMixedBody([
+      { name: 'request_payload', contentType: 'text/xml', data: xml },
+    ]);
+
+    const response = await this._apiClient.axios.post(
+      buildRestPath('sites', siteId, 'datasources'),
+      body,
+      {
+        params: {
+          uploadSessionId,
+          datasourceType,
+          overwrite,
+        },
+        headers: {
+          'Content-Type': contentType,
+          ...this.authHeader.headers,
+        },
+      },
+    );
+
+    return publishedDataSourceResponseSchema.parse(response.data.datasource);
   };
 }

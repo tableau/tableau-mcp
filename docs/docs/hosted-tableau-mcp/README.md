@@ -21,7 +21,7 @@ The hosted service is intended for **Tableau Cloud customers** who want to conne
 
 - Available to **Tableau Cloud customers on any SKU**.
 - Not available for Tableau Server. Server customers should [self-host](../enterprise/tableau-server.md).
-- Some tools require additional entitlements (e.g. Pulse Insight Briefs require Tableau+; the full Metadata API surface requires Data Management). Tools that require entitlements the signed-in user lacks will return an error at call time.
+- Some tools require additional entitlements (e.g. Pulse Insight Briefs and Tableau Knowledge require Tableau+; the full Metadata API surface requires Data Management). Tools that require entitlements the signed-in user lacks will return an error at call time.
 
 ## Connect a client
 
@@ -37,7 +37,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     "settings": [
       {
         "key": "EXCLUDE_TOOLS",
-        "value": "admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,mcp-apps,project,pulse,tasks,token-management,users,view,workbook"
+        "value": "admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,knowledge,mcp-apps,project,pulse,tasks,token-management,users,view,workbook"
       }
     ]
   }
@@ -49,7 +49,7 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
     <mcpSiteSettings>
         <settings>
             <key>EXCLUDE_TOOLS</key>
-            <value>admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,mcp-apps,project,pulse,tasks,token-management,users,view,workbook</value>
+            <value>admin-insights,authoring,content,content-exploration,datasource,flow,insights,jobs,knowledge,mcp-apps,project,pulse,tasks,token-management,users,view,workbook</value>
         </settings>
     </mcpSiteSettings>
 </tsRequest>
@@ -60,4 +60,4 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
 
 ## Data handling
 
-The hosted service does not store your Tableau data. Each tool call is proxied to the same Tableau REST, VDS, Metadata, and Pulse APIs your Tableau Cloud site already exposes, using the signed-in user's access token. See the [Privacy Policy](../privacy.md) for the umbrella data-handling policy.
+The hosted service does not store your Tableau data. Each tool call is proxied to the same Tableau REST, VDS, Metadata, Pulse, and Knowledge APIs your Tableau Cloud site already exposes, using the signed-in user's access token. See the [Privacy Policy](../privacy.md) for the umbrella data-handling policy.

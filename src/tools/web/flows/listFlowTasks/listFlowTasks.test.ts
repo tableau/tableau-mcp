@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import * as loggerModule from '../../../../logging/logger.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
 import invariant from '../../../../utils/invariant.js';
@@ -10,6 +11,11 @@ import { mockFlowRunTasks } from './mockFlowRunTasks.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowRunTasks: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -25,8 +31,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -40,9 +44,14 @@ const NO_BOUNDED_CONTEXT = {
   tags: null,
 } as const;
 
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
+
 describe('listFlowTasksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -54,19 +63,29 @@ describe('listFlowTasksTool', () => {
     expect(tool.paramsSchema).toHaveProperty('limit');
   });
 
-  it('is not admin-gated (callable without ADMIN_TOOLS_ENABLED)', () => {
+  it('is not admin-gated (callable without ADMIN_TOOLS_ENABLED)', async () => {
     const tool = getListFlowTasksTool(new WebMcpServer());
-    expect(tool.disabled).toBeFalsy();
+    expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('should be disabled when flow tools are not enabled', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-    const tool = getListFlowTasksTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getListFlowTasksTool(new WebMcpServer());
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('successfully lists flow run tasks with a resultInfo signal', async () => {
     mocks.mockGetFlowRunTasks.mockResolvedValue(mockFlowRunTasks);
@@ -123,8 +142,29 @@ describe('listFlowTasksTool', () => {
     expect(payload.flowTasks).toHaveLength(2);
   });
 
-  it('rejects an unsupported filter field', async () => {
-    await expect(getToolResult({ filter: 'bogus:eq:x' })).rejects.toThrow();
+  it('returns a friendly tool error for an unsupported filter field before calling the API', async () => {
+    const result = await getToolResult({ filter: 'bogus:eq:x' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Invalid enum value');
+    expect(mocks.mockGetFlowRunTasks).not.toHaveBeenCalled();
+  });
+
+  it('validates and normalizes schedule date filters before calling the API', async () => {
+    mocks.mockGetFlowRunTasks.mockResolvedValue(mockFlowRunTasks);
+    const result = await getToolResult({ filter: 'schedule.nextRunAt:lt:2026-05-25' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.flowTasks).toHaveLength(2);
+  });
+
+  it('returns a friendly tool error for malformed schedule date filters before calling the API', async () => {
+    const result = await getToolResult({ filter: 'schedule.nextRunAt:lt:05/25/2026' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('must be either a full ISO 8601');
+    expect(mocks.mockGetFlowRunTasks).not.toHaveBeenCalled();
   });
 
   it('respects the limit parameter and reports requested-limit truncation', async () => {
