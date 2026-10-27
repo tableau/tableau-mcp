@@ -63,12 +63,12 @@ describe('list-views', () => {
   });
 
   it('should list views with pageNumber and limit', async () => {
-    const { data: views } = await client.callTool('list-views', {
+    const { data: views, totalAvailable } = await client.callTool('list-views', {
       schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'workbookName:eq:Superstore', pageNumber: 1, limit: 2 },
     });
 
-    expect(views.length).greaterThan(0);
-    expect(views.length).toBeLessThanOrEqual(2);
+    expect(totalAvailable).greaterThan(2);
+    expect(views).toHaveLength(2);
   });
 });
