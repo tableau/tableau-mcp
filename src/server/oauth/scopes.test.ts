@@ -43,6 +43,9 @@ describe('scopes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockGetTableauServerInfo.mockResolvedValue({
+      productVersion: { value: '2026.3.0', build: '' },
+    });
   });
 
   describe('datasource publishing scopes', () => {

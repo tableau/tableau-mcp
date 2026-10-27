@@ -631,8 +631,7 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('scaffold-data-app');
   }
 
-  // Without SERVER the OAuth target is Tableau Cloud, which is always above the floor.
-  if (enabledTools.has('scaffold-data-app') && config.server) {
+  if (enabledTools.has('scaffold-data-app')) {
     const { productVersion } = await getTableauServerInfo(config.server);
     if (!isDataAppVersionSupported(productVersion)) {
       enabledTools.delete('scaffold-data-app');
