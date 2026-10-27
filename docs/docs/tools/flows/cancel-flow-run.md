@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 9
 ---
 
 # Cancel Flow Run
@@ -16,7 +16,8 @@ requests cancellation.
 Get the `flowRunId` from [Run Flow](run-flow.md) / [Run Flow Task](run-flow-task.md)
 (`job.runFlowJobType.flowRunId`) or from [List Flow Runs](list-flow-runs.md).
 
-:::warning This tool changes server state
+:::warning[This tool changes server state]
+
 Cancellation is **asynchronous**:
 
 - The server may take several seconds to settle the final status after the cancellation request.
@@ -24,7 +25,9 @@ Cancellation is **asynchronous**:
   status may be Completed or Failed rather than Cancelled. Cancellation does **not** undo writes.
 - It does **not** alter the flow definition or its schedule — it requests cancellation for one run.
 
-Only registered when both `FLOW_TOOLS_ENABLED=true` and `FLOW_WRITE_TOOLS_ENABLED=true`.
+Enabled by default. Set
+[`FLOW_WRITE_TOOLS_ENABLED=false`](../../configuration/mcp-config/env-vars.md#flow_write_tools_enabled)
+to disable the mutating flow tools.
 
 ## Two-phase confirmation
 
@@ -32,6 +35,7 @@ Only registered when both `FLOW_TOOLS_ENABLED=true` and `FLOW_WRITE_TOOLS_ENABLE
    without contacting Tableau and returns a single-use `confirmationToken`.
 2. **Cancel** (`confirm: true`): requires the token from a matching preview. Present the proposed
    cancellation to the user and get explicit approval before making the confirmed call.
+
 :::
 
 ## APIs called

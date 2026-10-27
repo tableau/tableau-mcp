@@ -6,17 +6,14 @@ import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { isAdminToolsEnabled } from '../../../features/adminTools.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { QueryOutput, querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { MIN_ADMIN_SITE_ROLE } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { buildTruncationInfo, MAX_INT32, TruncationReason } from '../_lib/truncation.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
-import {
-  AdminInsightsQueryResult,
-  executeAdminInsightsQuery,
-  runAdminInsightsQuery,
-} from './adminInsightsToolBase.js';
+import { executeAdminInsightsQuery, runAdminInsightsQuery } from './adminInsightsToolBase.js';
 import {
   _buildProjectIdWarnings,
   _buildRowCapWarning,
@@ -72,7 +69,9 @@ const paramsSchema = {
     .optional()
     .describe(
       'Optional row limit. Applied when kind is "ts-events", "ts-users", "site-content", or ' +
-        '"job-performance"; IGNORED when kind is "stale-content".',
+        '"job-performance"; IGNORED when kind is "stale-content". When a row limit applies (this or ' +
+        'a server cap), mcp.resultInfo.truncated says whether more rows matched; truncationReason ' +
+        "'admin-cap' means a server cap cut them — narrow filters or aggregate.",
     ),
   minAgeDays: z
     .number()
@@ -106,6 +105,17 @@ type StaleContentResult = {
   totalStaleSizeBytes: number;
   rows: StaleContentRow[];
   mcp?: { warnings: Array<_StaleReportWarning | AdminInsightsResolverWarning> };
+};
+
+type RawQueryResult = QueryOutput & {
+  mcp?: {
+    warnings?: AdminInsightsResolverWarning[];
+    resultInfo?: {
+      returnedCount: number;
+      truncated: boolean;
+      truncationReason?: TruncationReason;
+    };
+  };
 };
 
 export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -259,7 +269,7 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
         });
       }
 
-      return await tool.logAndExecute<AdminInsightsQueryResult>({
+      return await tool.logAndExecute<RawQueryResult>({
         extra,
         args: { kind, query, limit },
         callback: async () => {
@@ -272,15 +282,40 @@ Consider this for general admin/site-health, governance, cleanup, and cost/licen
 
           const toolCap = configWithOverrides.getMaxResultLimit(tool.name);
           const caps = [toolCap, limit].filter((v): v is number => typeof v === 'number' && v > 0);
-          const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
+          const rowLimit = caps.length > 0 ? Math.min(...caps, MAX_INT32 - 1) : undefined;
 
-          const datasetName = kindToDataset(kind);
-          return await runAdminInsightsQuery({
+          // The extra row tells "exactly rowLimit rows" apart from "more rows matched".
+          const result = await runAdminInsightsQuery({
             extra,
             jwtScopes: tool.requiredApiScopes,
-            datasetName,
+            datasetName: kindToDataset(kind),
             query,
-            rowLimit,
+            rowLimit: rowLimit === undefined ? undefined : rowLimit + 1,
+          });
+          if (result.isErr() || rowLimit === undefined) {
+            return result;
+          }
+
+          const data = result.value.data;
+          const truncatedByLimit = !!data && data.length > rowLimit;
+          if (data && truncatedByLimit) {
+            data.length = rowLimit;
+          }
+
+          return new Ok({
+            ...result.value,
+            mcp: {
+              ...result.value.mcp,
+              resultInfo: {
+                returnedCount: data?.length ?? 0,
+                ...buildTruncationInfo({
+                  truncatedByLimit,
+                  maxResultLimit: toolCap,
+                  llmLimit: limit,
+                  effectiveLimit: rowLimit,
+                }),
+              },
+            },
           });
         },
         constrainSuccessResult: (queryOutput) => ({ type: 'success', result: queryOutput }),

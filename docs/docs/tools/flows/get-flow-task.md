@@ -1,5 +1,5 @@
 ---
-sidebar_position: 8
+sidebar_position: 3
 ---
 
 # Get Flow Task
@@ -21,7 +21,7 @@ every task on the site before filtering. Use `list-flow-tasks` only to discover/
 - `tableau:flow_tasks:read`
 - `tableau:mcp_site_settings:read`
 
-This is a read-only tool and is **not** gated by `FLOW_WRITE_TOOLS_ENABLED`.
+This is a read-only tool. It follows `FLOW_READ_TOOLS_ENABLED`, not `FLOW_WRITE_TOOLS_ENABLED`.
 
 ## Required arguments
 

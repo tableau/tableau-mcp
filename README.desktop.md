@@ -1,1 +1,0 @@
-# Tableau Desktop Authoring MCP

@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey, KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { readFileSync } from 'fs';
 
-import { getConfig } from '../../config.js';
+import { Config, getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { createNamespacedStore } from '../../sessionStore/init.js';
 import type { SessionStore } from '../../sessionStore/sessionStore.js';
@@ -12,6 +12,7 @@ import { oauthProtectedResource } from './.well-known/oauth-protected-resource.j
 import {
   AccessTokenValidator,
   EmbeddedAccessTokenValidator,
+  ExternalAccessTokenValidator,
   TableauAccessTokenValidator,
 } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
@@ -33,7 +34,7 @@ export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
  * Abstract OAuth provider
  *
  */
-abstract class OAuthProvider {
+export abstract class OAuthProvider {
   protected readonly config = getConfig();
 
   protected abstract get accessTokenValidator(): AccessTokenValidator;
@@ -161,4 +162,26 @@ export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {
     return new TableauAccessTokenValidator();
   }
+}
+
+/**
+ * OAuth provider for an external OAuth/OIDC authorization server (self-hosted only).
+ *
+ * As with TableauOAuthProvider, this MCP server is only a resource server: the base routes expose
+ * the protected-resource metadata that points clients at OAUTH_ISSUER.
+ */
+export class ExternalOAuthProvider extends OAuthProvider {
+  private readonly validator = new ExternalAccessTokenValidator();
+
+  get accessTokenValidator(): AccessTokenValidator {
+    return this.validator;
+  }
+}
+
+export function createOAuthProvider(config: Config): OAuthProvider {
+  if (config.oauth.embeddedAuthzServer) {
+    return new EmbeddedOAuthProvider();
+  }
+
+  return config.oauth.external ? new ExternalOAuthProvider() : new TableauOAuthProvider();
 }

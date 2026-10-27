@@ -1,0 +1,304 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build main.26.0802.1921                                -->
+<bookmark source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <document-format-change-manifest>
+    <MarkAnimation />
+    <ObjectModelEncapsulateLegacy />
+    <ObjectModelExtractV2 />
+    <ObjectModelTableType />
+    <SchemaViewerObjectModel />
+    <SortTagCleanup />
+    <VConnDownstreamExtractsWithWarnings />
+    <WindowsPersistSimpleIdentifiers />
+  </document-format-change-manifest>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;&#10;</run>
+        <run fontname='Tableau Light' fontsize='9'>Great when date and duration are key elements of the story in the data.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <datasources>
+    <datasource caption='Composers' inline='true' name='federated.0gx040s1dzf8p31bd8azb1ew2wy2' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='Composers' name='textscan.0qop4820t6p754188zlhv0wdc2bw'>
+            <connection class='textscan' directory='' workgroup-auth-mode='as-is' />
+          </named-connection>
+        </named-connections>
+        <relation connection='textscan.0qop4820t6p754188zlhv0wdc2bw' name='Composers.csv' table='[Composers#csv]' type='table'>
+          <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+            <column datatype='string' name='name' ordinal='0' />
+            <column datatype='date' name='born' ordinal='1' />
+            <column datatype='date' name='died' ordinal='2' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[Composers.csv]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='currency'>&quot;£&quot;</attribute>
+              <attribute datatype='string' name='debit-close-char'>&quot;&quot;</attribute>
+              <attribute datatype='string' name='debit-open-char'>&quot;&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_GB&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>name</remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[name]</local-name>
+            <parent-name>[Composers.csv]</parent-name>
+            <remote-alias>name</remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RGB' />
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>born</remote-name>
+            <remote-type>133</remote-type>
+            <local-name>[born]</local-name>
+            <parent-name>[Composers.csv]</parent-name>
+            <remote-alias>born</remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>died</remote-name>
+            <remote-type>133</remote-type>
+            <local-name>[died]</local-name>
+            <parent-name>[Composers.csv]</parent-name>
+            <remote-alias>died</remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>date</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <object-id>[Migrated Data]</object-id>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Life' datatype='integer' name='[Calculation_4533013781878091776]' role='measure' type='quantitative'>
+        <calculation class='tableau' formula='DATEDIFF(&apos;day&apos;,[born],[died])' />
+      </column>
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />
+      <column caption='Born' datatype='date' name='[born]' role='dimension' type='ordinal' />
+      <column caption='Died' datatype='date' name='[died]' role='dimension' type='ordinal' />
+      <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+      <extract count='-1' enabled='true' object-id='Migrated Data' units='records' user-specific='false'>
+        <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='' default-settings='yes' schema='Extract' sslmode='' tablename='Extract' update-time='07/13/2018 09:10:46 AM' username=''>
+          <relation name='Extract' table='[Extract].[Extract]' type='table' />
+          <refresh>
+            <refresh-event add-from-file-path='' increment-value='%null%' refresh-type='create' rows-inserted='11' timestamp-start='2018-07-13 09:10:46.487' />
+          </refresh>
+          <metadata-records>
+            <metadata-record class='column'>
+              <remote-name>name</remote-name>
+              <remote-type>129</remote-type>
+              <local-name>[name]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>name</remote-alias>
+              <ordinal>0</ordinal>
+              <family>Composers.csv</family>
+              <local-type>string</local-type>
+              <aggregation>Count</aggregation>
+              <approx-count>11</approx-count>
+              <contains-null>true</contains-null>
+              <collation flag='0' name='LEN_RGB' />
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>born</remote-name>
+              <remote-type>133</remote-type>
+              <local-name>[born]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>born</remote-alias>
+              <ordinal>1</ordinal>
+              <family>Composers.csv</family>
+              <local-type>date</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>11</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+            <metadata-record class='column'>
+              <remote-name>died</remote-name>
+              <remote-type>133</remote-type>
+              <local-name>[died]</local-name>
+              <parent-name>[Extract]</parent-name>
+              <remote-alias>died</remote-alias>
+              <ordinal>2</ordinal>
+              <family>Composers.csv</family>
+              <local-type>date</local-type>
+              <aggregation>Year</aggregation>
+              <approx-count>11</approx-count>
+              <contains-null>true</contains-null>
+              <object-id>[Migrated Data]</object-id>
+            </metadata-record>
+          </metadata-records>
+        </connection>
+      </extract>
+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;Reino Unido&quot;' />
+      </semantic-values>
+      <date-options start-of-week='monday' />
+      <object-graph>
+        <objects>
+          <object caption='Migrated Data' id='Migrated Data'>
+            <properties context=''>
+              <relation connection='textscan.0qop4820t6p754188zlhv0wdc2bw' name='Composers.csv' table='[Composers#csv]' type='table'>
+                <columns character-set='UTF-8' header='yes' locale='en_GB' separator=','>
+                  <column datatype='string' name='name' ordinal='0' />
+                  <column datatype='date' name='born' ordinal='1' />
+                  <column datatype='date' name='died' ordinal='2' />
+                </columns>
+              </relation>
+            </properties>
+            <properties context='extract'>
+              <relation name='Extract' table='[Extract].[Extract]' type='table' />
+            </properties>
+          </object>
+        </objects>
+      </object-graph>
+    </datasource>
+  </datasources>
+  <window tab-color='#17927d'>
+    <cards>
+      <edge name='left'>
+        <strip size='160'>
+          <card type='pages' />
+          <card type='filters' />
+          <card type='marks' />
+        </strip>
+      </edge>
+      <edge name='top'>
+        <strip size='2147483647'>
+          <card type='columns' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='rows' />
+        </strip>
+        <strip size='2147483647'>
+          <card type='title' />
+        </strip>
+      </edge>
+    </cards>
+    <viewpoint>
+      <zoom type='entire-view' />
+      <default-map-tool-selection tool='2' />
+    </viewpoint>
+    <simple-id uuid='{5E4D4D3E-80AF-4D1A-ADA2-5A8554C48702}' />
+  </window>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Composers' name='federated.0gx040s1dzf8p31bd8azb1ew2wy2' />
+      </datasources>
+      <datasource-dependencies datasource='federated.0gx040s1dzf8p31bd8azb1ew2wy2'>
+        <column caption='Life' datatype='integer' name='[Calculation_4533013781878091776]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='DATEDIFF(&apos;day&apos;,[born],[died])' />
+        </column>
+        <column-instance column='[born]' derivation='Attribute' name='[attr:born:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[died]' derivation='Attribute' name='[attr:died:ok]' pivot='key' type='ordinal' />
+        <column caption='Born' datatype='date' name='[born]' role='dimension' type='ordinal' />
+        <column caption='Died' datatype='date' name='[died]' role='dimension' type='ordinal' />
+        <column-instance column='[born]' derivation='Min' name='[min:born:qk]' pivot='key' type='quantitative' />
+        <column caption='Name' datatype='string' name='[name]' role='dimension' type='nominal' />
+        <column-instance column='[name]' derivation='None' name='[none:name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_4533013781878091776]' derivation='Sum' name='[sum:Calculation_4533013781878091776:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[born]' derivation='Day-Trunc' name='[tdy:born:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]'>
+        <groupfilter function='except' user:ui-domain='relevant' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[none:name:nk]' />
+          <groupfilter function='union'>
+            <groupfilter function='member' level='[none:name:nk]' member='&quot;Bizet&quot;' />
+            <groupfilter function='member' level='[none:name:nk]' member='&quot;Bruckner&quot;' />
+            <groupfilter function='member' level='[none:name:nk]' member='&quot;Mendelssohn&quot;' />
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <computed-sort column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]' direction='ASC' using='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[min:born:qk]' />
+      <slices>
+        <column>[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='line-visibility' value='off' />
+        <format attr='tick-color' value='#00000000' />
+        <encoding attr='space' class='0' field='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[tdy:born:qk]' field-type='quantitative' major-origin='#1750-01-01 00:00:00#' major-spacing='50.0' major-units='years' minor-origin='#1750-01-01 00:00:00#' minor-spacing='10.0' minor-units='years' scope='cols' type='space' />
+        <format attr='title' class='0' field='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[tdy:born:qk]' scope='cols' value='' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='color' value='#268031' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='display' field='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]' value='false' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+        <format attr='display-field-labels' scope='rows' value='false' />
+        <format attr='in-tooltip' field='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[tdy:born:qk]' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <size column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[sum:Calculation_4533013781878091776:qk]' />
+          <text column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]' />
+          <tooltip column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[attr:died:ok]' />
+          <tooltip column='[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[attr:born:ok]' />
+        </encodings>
+        <style>
+          <style-rule element='cell'>
+            <format attr='text-align' value='center' />
+          </style-rule>
+          <style-rule element='datalabel'>
+            <format attr='color-mode' value='user' />
+            <format attr='color' value='#ffffff' />
+            <format attr='font-family' value='Tableau Medium' />
+            <format attr='font-size' value='8' />
+          </style-rule>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-color' value='#268031' />
+            <format attr='has-stroke' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[none:name:nk]</rows>
+    <cols>[federated.0gx040s1dzf8p31bd8azb1ew2wy2].[tdy:born:qk]</cols>
+  </table>
+</bookmark>

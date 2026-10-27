@@ -118,10 +118,17 @@ export const getListExtractRefreshTasksTool = (
           // Apply client-side filtering
           let filteredTasks = applyTaskFilters(tasks, args.filter);
 
-          // Apply client-side result limiting (pageSize and limit)
+          // Apply client-side result limiting: the smallest of pageSize, limit, and the
+          // admin MAX_RESULT_LIMIT / MAX_RESULT_LIMITS cap (consistent with list-flow-tasks).
+          // NOTE: because the whole set is always fetched first, this cap only bounds the
+          // payload handed back to the caller — it does not reduce server work or latency.
+          const maxResultLimit = configWithOverrides.getMaxResultLimit(
+            listExtractRefreshTasksTool.name,
+          );
           const effectiveLimit = Math.min(
             args.pageSize ?? Number.MAX_SAFE_INTEGER,
             args.limit ?? Number.MAX_SAFE_INTEGER,
+            maxResultLimit ?? Number.MAX_SAFE_INTEGER,
           );
           if (effectiveLimit < Number.MAX_SAFE_INTEGER) {
             filteredTasks = filteredTasks.slice(0, effectiveLimit);

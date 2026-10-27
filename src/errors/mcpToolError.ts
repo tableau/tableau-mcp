@@ -2,8 +2,6 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
-import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 export class McpToolError extends Error {
@@ -140,11 +138,22 @@ export class FlowNotAllowedError extends McpToolError {
   }
 }
 
+/** The flow-document endpoint requires Tableau Server 2026.3 or later. */
+export class FlowDocumentVersionUnsupportedError extends McpToolError {
+  constructor(serverVersion: string) {
+    super({
+      type: 'flow-document-version-unsupported',
+      message: `describe-flow requires Tableau Server 2026.3 or later. The connected server is version ${serverVersion}. Upgrade Tableau Server to read flow designs; use get-flow for flow metadata in the meantime.`,
+      statusCode: 501,
+    });
+  }
+}
+
 /**
  * The experimental flow-document REST API is not enabled on this server.
  *
- * The endpoint returns 403 with Tableau error code `403200` when its
- * `GetFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
+ * The endpoint returns 403 with Tableau error code `403201` when its
+ * `getFlowDocumentRestApi` feature flag is off. describe-flow maps ONLY that
  * specific code into this clearer, actionable error — any other 403 (insufficient
  * download permission, insufficient token scope, generic forbidden) is surfaced
  * as a {@link FlowDocumentForbiddenError} so a permission problem is never
@@ -163,7 +172,7 @@ export class FlowDocumentApiDisabledError extends McpToolError {
  * failures — the caller lacks permission to download the flow (the same
  * permission as downloading its `.tfl`/`.tflx` file in Tableau) or the token
  * lacks the `tableau:flows:download` scope. These are distinct from the
- * feature-flag-off case (Tableau error code `403200`), which maps to
+ * feature-flag-off case (Tableau error code `403201`), which maps to
  * {@link FlowDocumentApiDisabledError}.
  */
 export class FlowDocumentForbiddenError extends McpToolError {
@@ -287,6 +296,12 @@ export class WorkbookNotFoundError extends McpToolError {
   }
 }
 
+export class WorksheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'worksheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
     super({
@@ -319,25 +334,10 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         'No running Tableau Desktop instances found.',
         'Make sure:',
         '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
-        '  3. The manifest file exists in the expected location',
+        '  2. The External Client API is available in this Desktop build',
+        '  3. The External Client API discovery file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
-    });
-  }
-}
-
-export class GetEventsFailedError extends McpToolError {
-  constructor(error: unknown) {
-    super({
-      type: 'get-events-failed',
-      message: [
-        `Failed to get events: ${getExceptionMessage(error)}.`,
-        'Make sure:',
-        '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
-      ].join('\n'),
-      statusCode: 500,
     });
   }
 }
@@ -354,32 +354,49 @@ export class AdminInsightsUnavailableError extends McpToolError {
   }
 }
 
-export class DesktopCommandExecutionError extends McpToolError {
-  constructor(error: ExecuteCommandError) {
-    super({
-      type: 'desktop-command-execution-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class WorkbookXmlLoadFailedError extends McpToolError {
-  constructor(error: LoadWorkbookXmlError) {
-    super({
-      type: 'load-workbook-xml-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({
       type: 'file-read-error',
       message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
       statusCode: 500,
+    });
+  }
+}
+
+export class FileNotFoundError extends McpToolError {
+  constructor(filePath: string) {
+    super({
+      type: 'file-not-found',
+      message: `File not found: ${filePath}. Make sure the path was returned from the appropriate get-*-xml tool.`,
+      statusCode: 404,
+    });
+  }
+}
+
+export class XmlModificationError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'xml-modification-error', message, statusCode: 422 });
+  }
+}
+
+/**
+ * Refuse to apply a cache file whose instance fingerprint does not match the current
+ * Desktop session (cross-instance cache bleed). `message` carries the recovery recipe.
+ */
+export class CacheSessionMismatchError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'cache-session-mismatch', message, statusCode: 409 });
+  }
+}
+
+export class XmlValidationError extends McpToolError {
+  constructor(errors: string[]) {
+    const errorList = errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
+    super({
+      type: 'xml-validation-error',
+      message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
+      statusCode: 422,
     });
   }
 }

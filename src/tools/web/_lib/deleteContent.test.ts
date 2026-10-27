@@ -124,7 +124,6 @@ vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
     pendingDeletionMaxAgeDays: 30,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -181,8 +180,9 @@ describe('deleteContentTool', () => {
 
   it.each([
     [true, true, false],
-    [true, false, true],
-    [false, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
   ])(
     'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
     async (adminToolsEnabled, flag, disabled) => {

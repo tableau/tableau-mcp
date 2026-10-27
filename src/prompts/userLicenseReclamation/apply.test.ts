@@ -29,8 +29,9 @@ describe('user-license-reclamation-apply prompt', () => {
 
   it.each([
     [true, true, false],
-    [true, false, true],
-    [false, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
   ])(
     'ADMIN_TOOLS_ENABLED=%s, admin-tools flag=%s → disabled=%s',
     async (adminToolsEnabled, flag, disabled) => {
@@ -234,7 +235,10 @@ describe('user-license-reclamation-apply prompt', () => {
 
   it('warns admin when TS Users (Step 2b) results hit the row limit', async () => {
     const text = await textOf();
-    expect(text).toContain('TS Users results were truncated at the 10000-row limit');
+    expect(text).toContain('TS Users results were truncated at the row limit');
+    expect(text).toContain(
+      'rows or `mcp.resultInfo.truncated` is true, warn the admin: "⚠️ TS Users results',
+    );
     expect(text).toContain('could be falsely flagged as inactive');
   });
 
@@ -323,14 +327,27 @@ describe('user-license-reclamation-apply prompt', () => {
 
   it('warns admin when TS Events results hit the row limit', async () => {
     const text = await textOf();
-    expect(text).toContain('TS Events results were truncated at the 10000-row limit');
+    expect(text).toContain('TS Events results were truncated at the row limit');
+    expect(text).toContain(
+      'rows or `mcp.resultInfo.truncated` is true, warn the admin: "⚠️ TS Events results',
+    );
     expect(text).toContain('candidates are not exhaustive');
   });
 
   it('warns admin when Site Content results hit the row limit', async () => {
     const text = await textOf();
-    expect(text).toContain('Site Content results were truncated at the 10000-row limit');
+    expect(text).toContain('Site Content results were truncated at the row limit');
+    expect(text).toContain(
+      'rows or `mcp.resultInfo.truncated` is true, note in the report: "⚠️ Site Content results',
+    );
     expect(text).toContain('owned-content counts may be understated');
+  });
+
+  it('names no fixed row count in the truncation warnings, so a lower server cap is not misreported', async () => {
+    const text = await textOf();
+    expect(text).not.toContain('10000-row limit');
+    expect(text).not.toContain('more than 10000 Access events');
+    expect(text).not.toContain('exceeds 10000.');
   });
 
   it('rejects inactiveDays above 3650 via schema validation', () => {
@@ -342,25 +359,17 @@ describe('user-license-reclamation-apply prompt', () => {
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env', async () => {
-    process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
-    try {
-      const text = await textOf();
-      expect(text).toContain('45 days');
-      expect(text).toContain('"rangeN": 45');
-    } finally {
-      delete process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
-    }
+    vi.stubEnv('LICENSE_RECLAIM_INACTIVE_DAYS', '45');
+    const text = await textOf();
+    expect(text).toContain('45 days');
+    expect(text).toContain('"rangeN": 45');
   });
 
   it('reads LICENSE_RECLAIM_ROLES from env', async () => {
-    process.env.LICENSE_RECLAIM_ROLES = 'Creator,Viewer';
-    try {
-      const text = await textOf();
-      expect(text).toContain('Creator, Viewer');
-      expect(text).not.toContain('SiteAdministratorCreator');
-    } finally {
-      delete process.env.LICENSE_RECLAIM_ROLES;
-    }
+    vi.stubEnv('LICENSE_RECLAIM_ROLES', 'Creator,Viewer');
+    const text = await textOf();
+    expect(text).toContain('Creator, Viewer');
+    expect(text).not.toContain('SiteAdministratorCreator');
   });
 
   // --- HITL-refusal / adversarial cases ---

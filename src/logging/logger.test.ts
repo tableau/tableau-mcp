@@ -58,6 +58,10 @@ describe('log', () => {
   const entry = { message: 'test message', level: 'info' as const, logger: 'test' };
   const entryWithLuids = { ...entry, site_luid: '', user_luid: '' };
 
+  beforeEach(() => {
+    vi.stubEnv('LOG_LEVEL', 'info');
+  });
+
   it('should write JSON to stderr when transport is stdio and appLogger is enabled', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 

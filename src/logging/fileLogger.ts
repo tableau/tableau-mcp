@@ -16,10 +16,18 @@ export const getFileLogger = (): FileLogger | undefined => _fileLogger;
 
 export class FileLogger {
   private readonly _logDirectory: string;
+  private readonly _fileNamePrefix: string;
   private readonly _fileMutexes = new Map<string, Promise<void>>();
 
-  constructor({ logDirectory }: { logDirectory: string }) {
+  constructor({
+    logDirectory,
+    fileNamePrefix = '',
+  }: {
+    logDirectory: string;
+    fileNamePrefix?: string;
+  }) {
     this._logDirectory = logDirectory;
+    this._fileNamePrefix = fileNamePrefix;
 
     if (!existsSync(this._logDirectory)) {
       mkdirSync(this._logDirectory, { recursive: true });
@@ -29,9 +37,12 @@ export class FileLogger {
   async log(entry: LogEntry): Promise<void> {
     // Create a new log file each hour e.g. 2025-10-15T21-00-00-000Z.log
     const timestamp = new Date().toISOString();
-    const filename = `${new Date(new Date().setMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
-    const logFilePath = join(this._logDirectory, filename);
+    const filename = `${this._fileNamePrefix}${new Date(new Date().setMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
+    await this.appendJsonLine(filename, { timestamp, ...entry });
+  }
 
+  async appendJsonLine(filename: string, entry: Record<string, unknown>): Promise<void> {
+    const logFilePath = join(this._logDirectory, filename);
     // Get or create a mutex for this specific log file
     const mutexKey = logFilePath;
     const currentMutex = this._fileMutexes.get(mutexKey) ?? Promise.resolve();
@@ -40,7 +51,7 @@ export class FileLogger {
     const newMutex = currentMutex.then(async () => {
       try {
         // appendFile will create the file if it doesn't exist
-        await appendFile(logFilePath, JSON.stringify({ timestamp, ...entry }) + '\n');
+        await appendFile(logFilePath, JSON.stringify(entry) + '\n');
       } catch (error) {
         process.stderr.write(
           `Failed to write to log file ${logFilePath}: ${getExceptionMessage(error)}\n`,

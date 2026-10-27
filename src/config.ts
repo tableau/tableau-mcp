@@ -12,6 +12,8 @@ import {
   isFeatureGateProvider,
   providerConfigSchema as featureGateProviderConfigSchema,
 } from './features/types.js';
+import { log } from './logging/logger.js';
+import { isHttpsOrLoopbackUrl } from './server/oauth/loopbackHosts.js';
 import {
   isSessionStoreProvider,
   providerConfigSchema as sessionStoreProviderConfigSchema,
@@ -23,7 +25,7 @@ import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -85,23 +87,23 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    external: {
+      discovery: boolean;
+      usernameClaimName: string;
+    } | null;
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
-  productTelemetryEndpoint: string;
-  productTelemetryEnabled: boolean;
-  isHyperforce: boolean;
   featureGate: FeatureGateConfig;
   sessionStore: SessionStoreConfig;
   activityLog: ActivityLogConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   pendingDeletionMaxAgeDays: number;
-  flowToolsEnabled: boolean;
+  flowReadToolsEnabled: boolean | undefined;
+  flowWriteToolsEnabled: boolean | undefined;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
-  // Opt-in for mutating flow run tools (run-flow, run-flow-task, cancel-flow-run).
-  flowWriteToolsEnabled: boolean;
   bucketS3: {
     enabled: boolean;
     bucket: string;
@@ -163,6 +165,8 @@ export class Config extends BaseConfig {
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
+      OAUTH_EXTERNAL_DISCOVERY: oauthExternalDiscovery,
+      OAUTH_EXTERNAL_USERNAME_CLAIM_NAME: oauthExternalUsernameClaimName,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       FEATURE_GATE_PROVIDER: featureGateProvider,
@@ -172,16 +176,13 @@ export class Config extends BaseConfig {
       ACTIVITY_LOG_PROVIDER: activityLogProvider,
       ACTIVITY_LOG_PROVIDER_CONFIG: activityLogProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
-      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
-      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
-      IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       PENDING_DELETION_MAX_AGE_DAYS: pendingDeletionMaxAgeDays,
-      FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      FLOW_READ_TOOLS_ENABLED: flowReadToolsEnabled,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
@@ -232,7 +233,17 @@ export class Config extends BaseConfig {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
-    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+    const normalizedAuth = auth?.trim().toLowerCase();
+    // Like TRANSPORT and the provider vars, an unknown value falls back to the default; warn so a typo (e.g. "passthru") is not silent.
+    if (normalizedAuth && !isAuthType(normalizedAuth)) {
+      log({
+        message: `Unknown AUTH "${auth}"; expected one of ${authTypes.join(', ')}. Falling back to the default.`,
+        level: 'warning',
+        logger: 'config',
+      });
+    }
+    const purePassthroughAuth = normalizedAuth === 'passthrough';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true' || purePassthroughAuth;
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -245,7 +256,7 @@ export class Config extends BaseConfig {
     }
 
     this.oauth = {
-      enabled: disableOauthOverride ? false : !!oauthIssuer,
+      enabled: !purePassthroughAuth && !disableOauthOverride && !!oauthIssuer,
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
@@ -289,6 +300,12 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      external: [oauthExternalDiscovery === 'true', oauthExternalUsernameClaimName].some(Boolean)
+        ? {
+            discovery: oauthExternalDiscovery === 'true',
+            usernameClaimName: oauthExternalUsernameClaimName?.trim() || 'sub',
+          }
+        : null,
     };
 
     if (
@@ -318,10 +335,6 @@ export class Config extends BaseConfig {
     }
 
     this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
-    this.productTelemetryEndpoint =
-      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
-    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
-    this.isHyperforce = isHyperforce === 'true';
 
     // Feature gate provider configuration (similar to telemetry provider)
     if (isFeatureGateProvider(featureGateProvider) && featureGateProvider === 'custom') {
@@ -391,15 +404,12 @@ export class Config extends BaseConfig {
         maxValue: PENDING_DELETION_MAX_AGE_DAYS_MAX,
       }),
     );
-    // Flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks) are gated off by default
-    // while flow rollouts are staged into production. Registering them requires both
-    // FLOW_TOOLS_ENABLED=true and the flow-tools feature flag; either one off keeps them off.
-    this.flowToolsEnabled = flowToolsEnabled === 'true';
+    this.flowReadToolsEnabled = parseOptionalBoolean(flowReadToolsEnabled);
+    this.flowWriteToolsEnabled = parseOptionalBoolean(flowWriteToolsEnabled);
     // Insight-cards tools (generate-insight-cards) are gated off by default while
     // the insights rollout is staged (keeps hosts like Slackbot stable); set
     // INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
-    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
@@ -425,13 +435,31 @@ export class Config extends BaseConfig {
       }),
     };
 
-    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
+    this.auth = isAuthType(normalizedAuth) ? normalizedAuth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
-    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+    if (this.oauth.external) {
+      validateOAuthExternal({
+        auth: this.auth,
+        oauth: this.oauth,
+        external: this.oauth.external,
+        usernameTemplate: jwtSubClaim,
+      });
+    }
+
+    if (
+      this.transport === 'http' &&
+      this.auth !== 'passthrough' &&
+      !disableOauthOverride &&
+      !this.oauth.issuer
+    ) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
+    }
+
+    if (this.auth === 'passthrough' && this.transport === 'stdio') {
+      throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
     }
 
     if (this.auth === 'oauth') {
@@ -552,6 +580,16 @@ export class Config extends BaseConfig {
   }
 }
 
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
 function validateServer(server: string): void {
   if (!['https://', 'http://'].find((prefix) => server.startsWith(prefix))) {
     throw new Error(
@@ -567,6 +605,62 @@ function validateServer(server: string): void {
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
     );
   }
+}
+
+function validateOAuthExternal({
+  auth,
+  oauth: { enabled, embeddedAuthzServer, issuer },
+  external: { discovery },
+  usernameTemplate,
+}: {
+  auth: AuthType;
+  oauth: Config['oauth'];
+  external: NonNullable<Config['oauth']['external']>;
+  usernameTemplate: string | undefined;
+}): void {
+  if (!enabled || embeddedAuthzServer) {
+    throw new Error(
+      'OAUTH_EXTERNAL_* variables require OAUTH_ISSUER to be set and OAUTH_EMBEDDED_AUTHZ_SERVER to be "false"',
+    );
+  }
+
+  if (!discovery) {
+    throw new Error('OAUTH_EXTERNAL_* variables require OAUTH_EXTERNAL_DISCOVERY to be "true"');
+  }
+
+  // The issuer becomes the discovery document's fetch target.
+  const issuerUrl = validateHttpsOrLoopbackUri('OAUTH_ISSUER', issuer);
+  // undici repeats the full URL, password included, in its errors.
+  if (issuerUrl.username || issuerUrl.password) {
+    throw new Error(
+      'The environment variable OAUTH_ISSUER must not contain a username or password',
+    );
+  }
+
+  if (auth !== 'direct-trust') {
+    throw new Error('When OAUTH_EXTERNAL_DISCOVERY="true" is set, AUTH must be "direct-trust"');
+  }
+
+  if (!usernameTemplate?.includes('{OAUTH_USERNAME}')) {
+    throw new Error(
+      'When OAUTH_EXTERNAL_* is set and AUTH is "direct-trust", JWT_SUB_CLAIM must contain {OAUTH_USERNAME}',
+    );
+  }
+}
+
+function validateHttpsOrLoopbackUri(name: string, uri: string): URL {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    throw new Error(`The environment variable ${name} is not a valid URL`);
+  }
+
+  if (!isHttpsOrLoopbackUrl(url)) {
+    throw new Error(`The environment variable ${name} must use https unless its host is loopback`);
+  }
+
+  return url;
 }
 
 function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {

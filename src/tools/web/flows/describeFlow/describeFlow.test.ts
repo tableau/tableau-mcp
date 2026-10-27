@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { FlowDocumentForbiddenError } from '../../../../errors/mcpToolError.js';
+import { ProductVersion } from '../../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
@@ -9,6 +10,15 @@ import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockFlow, mockOutputSteps } from '../getFlow/mockFlow.js';
 import { getDescribeFlowTool } from './describeFlow.js';
 import { mockFlowDocument } from './mockFlowDocument.js';
+
+const supportedProductVersion = {
+  value: '2026.3.0',
+  build: '20263.26.0601.0001',
+} satisfies ProductVersion;
+const unsupportedProductVersion = {
+  value: '2026.2.0',
+  build: '20262.26.0301.0001',
+} satisfies ProductVersion;
 
 const mocks = vi.hoisted(() => ({
   mockGetFlowDocument: vi.fn(),
@@ -43,8 +53,6 @@ vi.mock('../../../../restApiInstance.js', () => ({
 
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
-    flowToolsEnabled: true,
-    productTelemetryEnabled: false,
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
@@ -55,14 +63,19 @@ vi.mock('../../../../config.js', () => ({
  * carrying a Tableau REST error code in the response body (the shape Tableau
  * uses: `{ error: { code, summary, detail } }`).
  */
-function axiosError(status: number, tableauErrorCode?: string): Error {
+function axiosError(
+  status: number,
+  tableauErrorCode?: string,
+  tableauErrorCodeHeader?: string,
+): Error {
   const error = new Error(`HTTP ${status}`) as Error & {
     isAxiosError: boolean;
-    response: { status: number; data?: unknown };
+    response: { status: number; data?: unknown; headers?: Record<string, string> };
   };
   error.isAxiosError = true;
   error.response = {
     status,
+    headers: tableauErrorCodeHeader ? { tableau_error_code: tableauErrorCodeHeader } : {},
     ...(tableauErrorCode
       ? { data: { error: { code: tableauErrorCode, summary: 'Forbidden', detail: 'test' } } }
       : {}),
@@ -81,34 +94,33 @@ describe('describeFlowTool', () => {
   });
 
   it('creates a tool instance with the correct properties', () => {
-    const tool = getDescribeFlowTool(new WebMcpServer());
+    const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
     expect(tool.name).toBe('describe-flow');
     expect(tool.minRequiredRole).toBe(SiteRole.EXPLORER);
     expect(tool.description).toContain('underlying document');
+    expect(tool.description).toContain('Tableau Server 2026.3 or later');
+    expect(tool.description).toContain('features.getFlowDocumentRestApi');
     expect(tool.paramsSchema).toMatchObject({ flowId: expect.any(Object) });
   });
 
-  it('is enabled when flow tools are turned on', async () => {
-    const tool = getDescribeFlowTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('is disabled when flow tools are turned off', async () => {
-    const { getConfig } = await import('../../../../config.js');
-    vi.mocked(getConfig).mockReturnValueOnce({
-      flowToolsEnabled: false,
-    } as ReturnType<typeof getConfig>);
-
-    const tool = getDescribeFlowTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-  });
-
-  it('is disabled when the flow-tools feature flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-    const tool = getDescribeFlowTool(new WebMcpServer());
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('flow-tools');
-  });
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].map((readFlag) => ({ readEnv, readFlag })),
+    ),
+  )(
+    'resolves read availability for read env=$readEnv, read FF=$readFlag',
+    async ({ readEnv, readFlag }) => {
+      const { getConfig } = await import('../../../../config.js');
+      vi.mocked(getConfig).mockReturnValueOnce({
+        flowReadToolsEnabled: readEnv,
+      } as ReturnType<typeof getConfig>);
+      mocks.mockIsFeatureEnabled.mockImplementation(
+        async (featureName: string) => featureName === 'flow-read-tools' && readFlag,
+      );
+      const tool = getDescribeFlowTool(new WebMcpServer(), supportedProductVersion);
+      expect(await Provider.from(tool.disabled)).toBe(!(readEnv ?? readFlag));
+    },
+  );
 
   it('summarizes the flow document and enriches it with metadata', async () => {
     const result = await getToolResult({ flowId: mockFlow.id });
@@ -167,8 +179,33 @@ describe('describeFlowTool', () => {
     expect(mocks.mockGetFlowDocument).not.toHaveBeenCalled();
   });
 
-  it('maps a 403 with Tableau code 403200 to a clear "experimental API not enabled" error', async () => {
-    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403200'));
+  it('maps a 403 with Tableau code 403201 to a clear "experimental API not enabled" error', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403201'));
+
+    const result = await getToolResult({ flowId: mockFlow.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('experimental flow-document API is not enabled');
+    expect(result.content[0].text).toContain('features.getFlowDocumentRestApi');
+    expect(result.content[0].text).toContain('tsm pending-changes apply');
+  });
+
+  it('reports the minimum Tableau version before calling the experimental endpoint', async () => {
+    const result = await getToolResult({
+      flowId: mockFlow.id,
+      productVersion: unsupportedProductVersion,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau Server 2026.3 or later');
+    expect(result.content[0].text).toContain('connected server is version 2026.2.0');
+    expect(result.content[0].text).toContain('use get-flow for flow metadata');
+    expect(mocks.mockGetFlowDocument).not.toHaveBeenCalled();
+    expect(mocks.mockIsFlowAllowed).not.toHaveBeenCalled();
+  });
+
+  it('recognizes the disabled code from Tableau response headers', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, undefined, '403201'));
 
     const result = await getToolResult({ flowId: mockFlow.id });
     expect(result.isError).toBe(true);
@@ -176,7 +213,17 @@ describe('describeFlowTool', () => {
     expect(result.content[0].text).toContain('experimental flow-document API is not enabled');
   });
 
-  it('maps a non-403200 403 to a forbidden/download-permission error (not "API disabled")', async () => {
+  it('does not misclassify Tableau code 403200 as the disabled API', async () => {
+    mocks.mockGetFlowDocument.mockRejectedValue(axiosError(403, '403200'));
+
+    const result = await getToolResult({ flowId: mockFlow.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('experimental flow-document API is not enabled');
+    expect(result.content[0].text).toContain('Not authorized to download');
+  });
+
+  it('maps other 403s to a forbidden/download-permission error (not "API disabled")', async () => {
     // A readable flow whose caller lacks download permission / scope returns a
     // 403 with a different Tableau code; it must NOT be reported as the API
     // being disabled.
@@ -254,8 +301,12 @@ describe('describeFlowTool', () => {
 async function getToolResult(params: {
   flowId: string;
   includeFieldSchemas?: boolean;
+  productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
-  const tool = getDescribeFlowTool(new WebMcpServer());
+  const tool = getDescribeFlowTool(
+    new WebMcpServer(),
+    params.productVersion ?? supportedProductVersion,
+  );
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

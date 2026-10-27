@@ -1,0 +1,20 @@
+    <dashboard enable-sort-zone-taborder='true' name='L5 Single'>
+      <style />
+      <size maxheight='1000' maxwidth='1400' minheight='1000' minwidth='1400' sizing-mode='fixed' />
+      <zones>
+        <zone h='100000' id='9' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone h='100000' id='11' param='vert' type-v2='layout-flow' w='100000' x='0' y='0'>
+            <zone h='99998' id='10' name='bar chart of revenue by region' w='100000' x='0' y='0'>
+              <layout-cache cell-count-h='3' non-cell-size-h='98' type-h='cell' type-w='fixed' />
+              <zone-style>
+                <format attr='border-color' value='#000000' />
+                <format attr='border-style' value='none' />
+                <format attr='border-width' value='0' />
+                <format attr='margin' value='4' />
+              </zone-style>
+            </zone>
+          </zone>
+        </zone>
+      </zones>
+      <simple-id uuid='{49EBCB9D-D598-4869-B806-0BEBB64856C6}' />
+    </dashboard>

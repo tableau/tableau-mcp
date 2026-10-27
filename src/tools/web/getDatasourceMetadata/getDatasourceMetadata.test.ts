@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { WorkbookDatasourceNotEnabledError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../../testShared.js';
@@ -250,6 +251,9 @@ const mocks = vi.hoisted(() => ({
   mockGetDatasourceModel: vi.fn(),
   mockGraphql: vi.fn(),
   mockTryQueryDatasource: vi.fn(),
+  mockQueryDatasource: vi.fn(),
+  mockQueryWorkbookConnections: vi.fn(),
+  mockGetWorkbook: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -265,10 +269,19 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
       datasourcesMethods: {
         tryQueryDatasource: mocks.mockTryQueryDatasource,
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+      workbooksMethods: {
+        queryWorkbookConnections: mocks.mockQueryWorkbookConnections,
+        getWorkbook: mocks.mockGetWorkbook,
       },
     }),
   ),
 }));
+
+beforeEach(() => {
+  vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+});
 
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
@@ -1035,7 +1048,10 @@ describe('getDatasourceMetadataTool', () => {
     );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
-    const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
+    const result = await callback(
+      { datasourceLuid: '', workbookLuid: undefined },
+      getMockRequestHandlerExtra(),
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -1109,17 +1125,68 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
+
+  describe('embedded datasources under a project scope', () => {
+    const workbookLuid = '96a43833-27db-40b6-aa80-751efc776b9a';
+    const workbookProjectId = 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d';
+
+    beforeEach(() => {
+      vi.stubEnv('INCLUDE_PROJECT_IDS', workbookProjectId);
+      mocks.mockQueryDatasource.mockResolvedValue({
+        id: 'test-luid',
+        name: 'Embedded',
+        parentType: 'Workbook',
+        tags: {},
+      });
+      mocks.mockQueryWorkbookConnections.mockResolvedValue([
+        { id: 'connection-1', datasource: { id: 'test-luid' } },
+      ]);
+      mocks.mockGetWorkbook.mockResolvedValue({
+        id: workbookLuid,
+        name: 'Workbook',
+        project: { id: workbookProjectId, name: 'Project' },
+        tags: {},
+      });
+      mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+      mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    });
+
+    it('should return metadata for an embedded datasource when its workbook is allowed', async () => {
+      const result = await getToolResult({ workbookLuid });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryWorkbookConnections).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        workbookId: workbookLuid,
+      });
+      expect(mocks.mockReadMetadata).toHaveBeenCalled();
+    });
+
+    it('should not return metadata for an embedded datasource without a workbookLuid', async () => {
+      const result = await getToolResult();
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'can only be queried by also providing the workbookLuid',
+      );
+      expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function getToolResult(
-  params: { productVersion?: ProductVersion } = {},
+  params: { productVersion?: ProductVersion; workbookLuid?: string } = {},
 ): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
     new WebMcpServer(),
     params.productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
+  return await callback(
+    { datasourceLuid: 'test-luid', workbookLuid: params.workbookLuid },
+    getMockRequestHandlerExtra(),
+  );
 }
 
 function flattenResponseFields(responseData: Record<string, unknown>): Record<string, unknown>[] {

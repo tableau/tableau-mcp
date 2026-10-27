@@ -1,11 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MockedFunction } from 'vitest';
 
+import features from '../features.json';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import * as logger from './logging/logger.js';
 import { SiteRole } from './sdks/tableau/types/user.js';
-import { serverName, WebMcpServer } from './server.web.js';
+import { buildWebInstructions, serverName, WebMcpServer } from './server.web.js';
 import { ClientCapabilitiesWithUiExtension } from './server/mcpUiCapability.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getConditionApiScopesForTool } from './server/oauth/scopes.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
@@ -17,7 +19,7 @@ import { REGISTRATION_CONDITION_API_SCOPES } from './tools/web/registrationCondi
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { WebToolName, webToolNames } from './tools/web/toolName.js';
+import { webToolGroups, WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -29,6 +31,8 @@ const mocks = vi.hoisted(() => ({
     isFeatureEnabled: vi.fn((_featureName: string) => false),
   },
   mockReadFile: vi.fn(),
+  mockRunningAsSea: vi.fn(() => false),
+  mockReadSeaAssetText: vi.fn(),
   mockGetCurrentUserSiteRole: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockCheckRegistrationConditions: vi.fn(),
@@ -58,6 +62,12 @@ vi.mock('fs/promises', () => ({
   readFile: (...args: any[]) => mocks.mockReadFile(...args),
 }));
 
+vi.mock('./utils/sea.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/sea.js')>()),
+  runningAsSea: mocks.mockRunningAsSea,
+  readSeaAssetText: mocks.mockReadSeaAssetText,
+}));
+
 vi.mock('./tools/web/adminGate.js', () => ({
   getCurrentUserSiteRole: mocks.mockGetCurrentUserSiteRole,
   assertAdmin: mocks.mockAssertAdmin,
@@ -80,10 +90,13 @@ describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
     mocks.mockReadFile.mockClear();
+    mocks.mockRunningAsSea.mockReset().mockReturnValue(false);
+    mocks.mockReadSeaAssetText.mockReset();
     mocks.mockGetCurrentUserSiteRole.mockReset().mockResolvedValue('SiteAdministratorCreator');
     mocks.mockAssertAdmin.mockReset();
     mocks.mockCheckRegistrationConditions
@@ -100,8 +113,20 @@ describe('server', () => {
   function getServer(opts?: {
     capabilities?: ClientCapabilitiesWithUiExtension;
     clientId?: string;
+    shared?: boolean;
   }): WebMcpServer {
+    const mcpServer = opts?.shared
+      ? new McpServer(
+          { name: 'combined-test', version: '0.0.0' },
+          { capabilities: { tools: {} }, instructions: buildWebInstructions() },
+        )
+      : undefined;
+    if (mcpServer) {
+      (mcpServer.server as unknown as { _instructions?: string })._instructions =
+        buildWebInstructions();
+    }
     const server = new WebMcpServer({
+      mcpServer,
       capabilities: opts?.capabilities,
       clientId: opts?.clientId,
     });
@@ -110,9 +135,13 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(opts?: { hideWhenUnsupported?: boolean }): WebTool<any> {
+  function createMockAppTool(opts?: {
+    hideWhenUnsupported?: boolean;
+    htmlPath?: string;
+    name?: WebToolName;
+  }): WebTool<any> {
     return {
-      name: 'mock-app-tool' as WebToolName,
+      name: opts?.name ?? ('mock-app-tool' as WebToolName),
       server: {} as any,
       title: 'Test App Tool',
       description: 'Test App Tool',
@@ -124,7 +153,7 @@ describe('server', () => {
         idempotentHint: true,
         openWorldHint: false,
       },
-      callback: vi.fn(),
+      callback: vi.fn().mockResolvedValue({ content: [] }),
       disabled: false,
       requiredApiScopes: [],
       minRequiredRole: SiteRole.VIEWER,
@@ -134,7 +163,7 @@ describe('server', () => {
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
-        htmlPath: '<html><body>Test App UI</body></html>',
+        htmlPath: opts?.htmlPath ?? 'web/apps/dist/mcp-app.html',
         ...(opts?.hideWhenUnsupported ? { hideWhenUnsupported: true } : {}),
       },
     };
@@ -234,44 +263,14 @@ describe('server', () => {
     return sdkServer._instructions ?? '';
   }
 
-  it('should include admin site-health guidance in instructions when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'admin-tools',
-    );
-    const instructions = await getRegisteredInstructions();
-
-    // Admin capability menu + generic-intent tie-in.
-    expect(instructions).toContain('site-administration capabilities');
-    expect(instructions).toContain('general admin/site-health');
-    expect(instructions).toContain('query-admin-insights');
-    // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
-    // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
-    // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
-    for (const promptName of adminPromptNamesInInstructions) {
-      expect(instructions).toContain(promptName);
-    }
-    // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
-    expect(instructions).toContain('read-only report');
-    expect(instructions).toContain('dry-run by default');
-    // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
-    // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
-    // so a future edit that drops the rendering guidance can't silently pass.
-    expect(instructions).toContain('present them as Markdown tables');
-    expect(instructions).toContain('to a chat or Slack surface');
-    // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
-    // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
-    expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
-
-    // The admin block is appended after the base guidance, never spliced into the base sentence.
-    expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
-    const adminStart = instructions.indexOf('site-administration capabilities');
-    const clauseStart = instructions.indexOf('present them as Markdown tables');
-    expect(adminStart).toBeGreaterThan(-1);
-    expect(clauseStart).toBeGreaterThan(adminStart);
-  });
-
+  // Admin tools are enabled when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is on, so
+  // each of these scenarios (both on, env-only, flag-only) surfaces the full admin guidance block.
   it.each([
+    {
+      scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+      env: 'true',
+      flag: true,
+    },
     {
       scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
       env: 'true',
@@ -282,11 +281,55 @@ describe('server', () => {
       env: undefined,
       flag: true,
     },
-  ])('should omit admin guidance from instructions when $scenario', async ({ env, flag }) => {
-    vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => flag && featureName === 'admin-tools',
-    );
+  ])(
+    'should include admin site-health guidance in instructions when $scenario',
+    async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => flag && featureName === 'admin-tools',
+      );
+      const instructions = await getRegisteredInstructions();
+
+      // Admin capability menu + generic-intent tie-in.
+      expect(instructions).toContain('site-administration capabilities');
+      expect(instructions).toContain('general admin/site-health');
+      expect(instructions).toContain('query-admin-insights');
+      // Every packaged admin prompt must be named by its exact invokable identifier so a fresh
+      // session can discover and correctly invoke it without any external doc-feeding (W-23757369).
+      // These names are kept in lockstep with the registered prompts in src/prompts/index.ts.
+      for (const promptName of adminPromptNamesInInstructions) {
+        expect(instructions).toContain(promptName);
+      }
+      // The model cannot call prompts/get (prompts are user-invoked slash commands), so the
+      // instructions point it at the model-readable workflow resources instead (W-23757369).
+      expect(instructions).not.toContain('prompts/get');
+      expect(instructions).toContain('tableau-mcp://admin-workflows/<prompt-name>');
+      expect(instructions).toContain('slash-command prompt');
+      expect(instructions).toContain('If you cannot read MCP resources');
+      // The inform (read-only) vs apply (destructive) distinction is stated explicitly.
+      expect(instructions).toContain('read-only report');
+      expect(instructions).toContain('dry-run by default');
+      // Output-formatting nudge so chat/Slack surfaces render admin/list results as tables.
+      // Assert on a distinctive slice of the actual clause, not the bare words "Markdown tables",
+      // so a future edit that drops the rendering guidance can't silently pass.
+      expect(instructions).toContain('present them as Markdown tables');
+      expect(instructions).toContain('to a chat or Slack surface');
+      // Admin-invocation nudge: the model must not gate admin-tool use on the user restating admin
+      // status — the per-call assertAdmin gate authorizes each call and cleanly rejects non-admins.
+      expect(instructions).toContain('Do not require the user to state or re-confirm admin status');
+
+      // The admin block is appended after the base guidance, never spliced into the base sentence.
+      expect(instructions.startsWith('Tableau MCP exposes tools')).toBe(true);
+      const adminStart = instructions.indexOf('site-administration capabilities');
+      const clauseStart = instructions.indexOf('present them as Markdown tables');
+      expect(adminStart).toBeGreaterThan(-1);
+      expect(clauseStart).toBeGreaterThan(adminStart);
+    },
+  );
+
+  it('should omit admin guidance from instructions when both ADMIN_TOOLS_ENABLED and the admin-tools flag are off', async () => {
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(() => false);
     const instructions = await getRegisteredInstructions();
 
     // Base guidance is still present...
@@ -299,6 +342,7 @@ describe('server', () => {
       expect(instructions).not.toContain(promptName);
     }
     expect(instructions).not.toContain('Markdown tables');
+    expect(instructions).not.toContain('tableau-mcp://admin-workflows/');
     expect(instructions).not.toContain(
       'Do not require the user to state or re-confirm admin status',
     );
@@ -324,29 +368,69 @@ describe('server', () => {
     }
   });
 
-  it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {
-    const server = getServer();
-    await server.registerTools();
+  describe('publishing tool discovery', () => {
+    const publishingNames = [
+      'request-workbook-upload',
+      'request-datasource-upload',
+      'publish-workbook',
+      'publish-datasource',
+    ];
+    const caller = {
+      username: 'publisher@example.com',
+      userId: 'test-user-id',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-id',
+      siteName: 'test-site',
+    };
+    const authModes: Array<{ label: string; auth: TableauAuthInfo | undefined }> = [
+      { label: 'server credentials', auth: undefined },
+      { label: 'embedded OAuth', auth: { type: 'X-Tableau-Auth', ...caller } },
+      { label: 'Tableau OAuth', auth: { type: 'Bearer', ...caller, raw: 'test-token' } },
+      { label: 'Passthrough', auth: { type: 'Passthrough', ...caller, raw: 'test-token' } },
+    ];
 
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
-
-    // Flow tools are gated off by default...
-    expect(registeredToolNames).not.toContain('list-flows');
-    expect(registeredToolNames).not.toContain('get-flow');
-    expect(registeredToolNames).not.toContain('list-flow-runs');
-    expect(registeredToolNames).not.toContain('list-flow-tasks');
-    expect(registeredToolNames).not.toContain('describe-flow');
-    expect(registeredToolNames).not.toContain('get-flow-task');
-    // ...while unrelated tools stay registered.
-    expect(registeredToolNames).toContain('list-datasources');
+    it.each(
+      authModes.flatMap((mode) => [
+        { ...mode, s3: false },
+        { ...mode, s3: true },
+      ]),
+    )(
+      'registers datasource and workbook publishing tools alike for $label with S3=$s3',
+      async ({ auth, s3 }) => {
+        vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
+        vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
+        mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+          (featureName: string) => featureName === 'authoring-tools',
+        );
+        const server = getServer();
+        await server.registerTools(auth);
+        const registered = vi
+          .mocked(server.mcpServer.registerTool)
+          .mock.calls.map((call) => call[0]);
+        expect(registered.sort()).toEqual([...publishingNames].sort());
+      },
+    );
   });
 
-  it('should register flow tools when FLOW_TOOLS_ENABLED is "true" and the flow-tools flag is ON', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+  const readFlowToolNames = [
+    'list-flows',
+    'get-flow',
+    'list-flow-runs',
+    'list-flow-tasks',
+    'describe-flow',
+    'get-flow-task',
+  ];
+  const writeFlowToolNames = ['run-flow', 'run-flow-task', 'cancel-flow-run'];
+
+  const flowFlag = (readFlag: boolean, writeFlag: boolean) => (featureName: string) =>
+    (featureName === 'flow-read-tools' && readFlag) ||
+    (featureName === 'flow-write-tools' && writeFlag);
+
+  it('registers all nine flow tools with shipped feature defaults and unset environment controls', async () => {
+    vi.stubEnv('FLOW_READ_TOOLS_ENABLED', undefined);
+    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
     mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'flow-tools',
+      (featureName: string) => features[featureName as keyof typeof features] ?? false,
     );
     const server = getServer();
     await server.registerTools();
@@ -355,90 +439,95 @@ describe('server', () => {
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0 /* tool name */]);
 
-    // Both switches on turns on every flow tool...
-    expect(registeredToolNames).toContain('list-flows');
-    expect(registeredToolNames).toContain('get-flow');
-    expect(registeredToolNames).toContain('list-flow-runs');
-    expect(registeredToolNames).toContain('list-flow-tasks');
-    expect(registeredToolNames).toContain('describe-flow');
-    expect(registeredToolNames).toContain('get-flow-task');
-    // ...alongside the unrelated tools.
+    for (const toolName of [...readFlowToolNames, ...writeFlowToolNames]) {
+      expect(registeredToolNames).toContain(toolName);
+    }
     expect(registeredToolNames).toContain('list-datasources');
   });
 
-  it('should not register flow tools when FLOW_TOOLS_ENABLED is "true" but the flow-tools flag is OFF', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
-    const server = getServer();
-    await server.registerTools();
+  it.each(
+    [false, true].flatMap((readFlag) =>
+      [false, true].map((writeFlag) => ({ readFlag, writeFlag })),
+    ),
+  )(
+    'uses hosted feature flags with unset environment overrides: read FF=$readFlag, write FF=$writeFlag',
+    async ({ readFlag, writeFlag }) => {
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', undefined);
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(flowFlag(readFlag, writeFlag));
+      const server = getServer();
+      await server.registerTools();
+      const registeredToolNames: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
 
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
+      for (const toolName of readFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(readFlag);
+      }
+      for (const toolName of writeFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(writeFlag);
+      }
+    },
+  );
 
-    // The feature flag is the per-environment rollout control, so it can veto the env switch.
-    expect(registeredToolNames).not.toContain('list-flows');
-    expect(registeredToolNames).not.toContain('get-flow');
-    expect(registeredToolNames).not.toContain('list-flow-runs');
-    expect(registeredToolNames).not.toContain('list-flow-tasks');
-    expect(registeredToolNames).not.toContain('describe-flow');
-    expect(registeredToolNames).not.toContain('get-flow-task');
-    expect(registeredToolNames).toContain('list-datasources');
-  });
+  it.each([
+    { exclude: 'flow', envEnabled: false, readsEnabled: false },
+    { exclude: 'run-flow,run-flow-task,cancel-flow-run', envEnabled: false, readsEnabled: true },
+    { exclude: 'flow', envEnabled: true, readsEnabled: false },
+    { exclude: 'run-flow,run-flow-task,cancel-flow-run', envEnabled: true, readsEnabled: true },
+  ])(
+    'honors self-hosted exclusions ($exclude) with environment overrides=$envEnabled and shipped flags',
+    async ({ exclude, envEnabled, readsEnabled }) => {
+      vi.stubEnv('EXCLUDE_TOOLS', exclude);
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', envEnabled ? 'true' : undefined);
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', envEnabled ? 'true' : undefined);
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => features[featureName as keyof typeof features] ?? false,
+      );
+      const server = getServer();
+      await server.registerTools();
+      const registeredToolNames: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
 
-  it('should register mutating flow tools only when both static gates and the flow-tools feature flag are enabled', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
-    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'flow-tools',
-    );
-    const server = getServer();
-    await server.registerTools();
+      for (const toolName of readFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(readsEnabled);
+      }
+      for (const toolName of writeFlowToolNames) {
+        expect(registeredToolNames).not.toContain(toolName);
+      }
+      expect(registeredToolNames).toContain('list-datasources');
+    },
+  );
 
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
+  it.each(
+    [undefined, false, true].flatMap((readEnv) =>
+      [false, true].flatMap((readFlag) =>
+        [undefined, false, true].flatMap((writeEnv) =>
+          [false, true].map((writeFlag) => ({ readEnv, readFlag, writeEnv, writeFlag })),
+        ),
+      ),
+    ),
+  )(
+    'registers flow tools for read env=$readEnv, read FF=$readFlag, write env=$writeEnv, write FF=$writeFlag',
+    async ({ readEnv, readFlag, writeEnv, writeFlag }) => {
+      vi.stubEnv('FLOW_READ_TOOLS_ENABLED', readEnv?.toString());
+      vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', writeEnv?.toString());
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(flowFlag(readFlag, writeFlag));
+      const server = getServer();
+      await server.registerTools();
+      const registeredToolNames: string[] = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
 
-    expect(registeredToolNames).toContain('run-flow');
-    expect(registeredToolNames).toContain('run-flow-task');
-    expect(registeredToolNames).toContain('cancel-flow-run');
-  });
-
-  it('should not register mutating flow tools when only the write gate is enabled', async () => {
-    vi.stubEnv('FLOW_WRITE_TOOLS_ENABLED', 'true');
-    const server = getServer();
-    await server.registerTools();
-
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
-
-    expect(registeredToolNames).not.toContain('run-flow');
-    expect(registeredToolNames).not.toContain('run-flow-task');
-    expect(registeredToolNames).not.toContain('cancel-flow-run');
-  });
-
-  it('should register read-only flow tools but not mutating flow tools when FLOW_WRITE_TOOLS_ENABLED is unset', async () => {
-    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
-    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-      (featureName: string) => featureName === 'flow-tools',
-    );
-    const server = getServer();
-    await server.registerTools();
-
-    const registeredToolNames = vi
-      .mocked(server.mcpServer.registerTool)
-      .mock.calls.map((call) => call[0 /* tool name */]);
-
-    expect(registeredToolNames).toContain('list-flows');
-    expect(registeredToolNames).toContain('get-flow');
-    expect(registeredToolNames).toContain('list-flow-runs');
-    expect(registeredToolNames).toContain('list-flow-tasks');
-    expect(registeredToolNames).toContain('get-flow-task');
-
-    expect(registeredToolNames).not.toContain('run-flow');
-    expect(registeredToolNames).not.toContain('run-flow-task');
-    expect(registeredToolNames).not.toContain('cancel-flow-run');
-  });
+      for (const toolName of readFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(readEnv ?? readFlag);
+      }
+      for (const toolName of writeFlowToolNames) {
+        expect(registeredToolNames.includes(toolName)).toBe(writeEnv ?? writeFlag);
+      }
+    },
+  );
 
   describe('admin tools', () => {
     const adminToolNames = [
@@ -459,19 +548,48 @@ describe('server', () => {
       'user-license-reclamation-apply',
     ];
 
-    async function getRegisteredNames(): Promise<{ tools: string[]; prompts: string[] }> {
+    const adminWorkflowResourceUris = adminPromptNames.map(
+      (name) => `tableau-mcp://admin-workflows/${name}`,
+    );
+
+    async function getRegisteredNames(): Promise<{
+      tools: string[];
+      prompts: string[];
+      resourceUris: string[];
+    }> {
       const server = getServer();
       await server.registerTools();
       return {
         tools: vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]),
         prompts: vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0]),
+        resourceUris: vi
+          .mocked(server.mcpServer.registerResource)
+          .mock.calls.map((call) => String(call[1])),
       };
     }
 
-    it('should register admin tools and prompts when ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    // Admin tools/prompts register when EITHER ADMIN_TOOLS_ENABLED is set OR the admin-tools flag is
+    // on — every enabling scenario registers the same admin surface.
+    it.each([
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" and the admin-tools flag is ON',
+        env: 'true',
+        flag: true,
+      },
+      {
+        scenario: 'ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF',
+        env: 'true',
+        flag: false,
+      },
+      {
+        scenario: 'the admin-tools flag is ON but ADMIN_TOOLS_ENABLED is unset',
+        env: undefined,
+        flag: true,
+      },
+    ])('should register admin tools and prompts when $scenario', async ({ env, flag }) => {
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', env);
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-        (featureName: string) => featureName === 'admin-tools',
+        (featureName: string) => flag && featureName === 'admin-tools',
       );
       const { tools, prompts } = await getRegisteredNames();
 
@@ -479,27 +597,28 @@ describe('server', () => {
       expect(prompts).toEqual(expect.arrayContaining(adminPromptNames));
     });
 
-    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is "true" but the admin-tools flag is OFF', async () => {
+    it('should register a workflow resource per admin prompt without adding any tool', async () => {
+      const { tools: toolsWithoutAdmin } = await getRegisteredNames();
       vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
-      const { tools, prompts } = await getRegisteredNames();
-
-      for (const name of adminToolNames) {
-        expect(tools).not.toContain(name);
-      }
-      expect(prompts).toEqual([]);
-    });
-
-    it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED is unset but the admin-tools flag is ON', async () => {
-      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
       mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
         (featureName: string) => featureName === 'admin-tools',
       );
-      const { tools, prompts } = await getRegisteredNames();
+      const { tools, prompts, resourceUris } = await getRegisteredNames();
 
-      for (const name of adminToolNames) {
-        expect(tools).not.toContain(name);
-      }
-      expect(prompts).toEqual([]);
+      expect(resourceUris).toEqual(adminWorkflowResourceUris);
+      expect(resourceUris).toHaveLength(prompts.length);
+      // The only tools added by enabling admin are the pre-existing admin tools — no workflow tool.
+      expect(tools.filter((name) => !toolsWithoutAdmin.includes(name)).sort()).toEqual(
+        [...adminToolNames].sort(),
+      );
+      expect(tools.every((name) => webToolNames.includes(name as WebToolName))).toBe(true);
+    });
+
+    it('should not register workflow resources when admin tools are disabled', async () => {
+      // Admin tools are disabled only when BOTH the env var and the flag are off.
+      vi.stubEnv('ADMIN_TOOLS_ENABLED', undefined);
+      const { resourceUris } = await getRegisteredNames();
+      expect(resourceUris).toEqual([]);
     });
 
     it('should not register admin tools or prompts when ADMIN_TOOLS_ENABLED and the admin-tools flag are both off', async () => {
@@ -684,6 +803,13 @@ describe('server', () => {
 
     const result = await readCallback();
 
+    expect(mocks.mockReadFile).toHaveBeenCalledWith(
+      expect.stringMatching(/web[\\/]apps[\\/]dist[\\/]mcp-app\.html$/),
+      'utf-8',
+    );
+    expect(mocks.mockReadSeaAssetText).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html><body>Test App UI</body></html>');
+
     expect(result.contents[0]._meta).toEqual({
       ui: {
         csp: {
@@ -710,6 +836,302 @@ describe('server', () => {
           ]),
         },
       },
+    });
+  });
+
+  it('reads app resources from the embedded asset when running as a SEA', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue('<html>embedded app</html>');
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    const result = await readCallback();
+
+    expect(mocks.mockReadSeaAssetText).toHaveBeenCalledWith('web/apps/dist/mcp-app.html');
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+    expect(result.contents[0].text).toBe('<html>embedded app</html>');
+  });
+
+  it('fails closed when a SEA app resource is missing instead of falling back to disk', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+    mocks.mockRunningAsSea.mockReturnValue(true);
+    mocks.mockReadSeaAssetText.mockReturnValue(null);
+
+    const server = getServer();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([createMockAppTool()]);
+    await server.registerTools();
+
+    const readCallback = mocks.mockRegisterAppResource.mock.calls[0]?.[4];
+    invariant(readCallback);
+    await expect(readCallback()).rejects.toThrow(
+      "SEA app resource 'web/apps/dist/mcp-app.html' is missing or unreadable",
+    );
+    expect(mocks.mockReadFile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      clientId: 'https://cursor.com/some/cimd',
+      expectedRenderable: true,
+      registration: 'app',
+    },
+    {
+      clientId: 'https://claude.ai/some/cimd',
+      expectedRenderable: false,
+      registration: 'plain',
+    },
+  ])(
+    'passes mcpAppToolsRenderable=$expectedRenderable through a lazily registered $registration tool',
+    async ({ clientId, expectedRenderable, registration }) => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+        (featureName: string) => featureName === 'mcp-apps',
+      );
+
+      const server = getServer({ clientId, shared: true });
+      const mockAppTool = createMockAppTool({ name: 'delete-content' });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+      await server.registerTools();
+      await server.loadWebTools('content');
+
+      const registeredCallback =
+        registration === 'app'
+          ? mocks.mockRegisterAppTool.mock.calls[0]?.[3]
+          : vi
+              .mocked(server.mcpServer.registerTool)
+              .mock.calls.find((call) => call[0] === 'delete-content')?.[2];
+      invariant(registeredCallback);
+      await registeredCallback({}, getMockRequestHandlerExtra());
+
+      expect(mockAppTool.callback).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ mcpAppToolsRenderable: expectedRenderable }),
+      );
+    },
+  );
+
+  describe('mcp-apps flag read', () => {
+    const mcpAppsReads = (): number =>
+      mocks.mockFeatureGate.isFeatureEnabled.mock.calls.filter(
+        ([featureName]) => featureName === 'mcp-apps',
+      ).length;
+
+    it('happens once per eager registration pass regardless of tool count', async () => {
+      const server = getServer();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'get-view-data' }),
+        createMockAppTool({ name: 'query-datasource' }),
+      ]);
+      await server.registerTools();
+      expect(mcpAppsReads()).toBe(1);
+    });
+
+    it('happens once per lazy load pass regardless of tool count', async () => {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([
+        createMockAppTool({ name: 'delete-content' }),
+        createMockAppTool({ name: 'confirm-delete-content' }),
+      ]);
+      const result = await server.loadWebTools('content');
+      expect(result.toolNames).toEqual(['delete-content', 'confirm-delete-content']);
+      expect(mcpAppsReads()).toBe(1);
+    });
+  });
+
+  it('registers admin instructions, prompts and skills on the combined-lean shared stateful path', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('ADMIN_TOOLS_ENABLED', 'true');
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
+      (featureName: string) => featureName === 'admin-tools' || featureName === 'skills-over-mcp',
+    );
+
+    const server = getServer({ shared: true });
+    await server.registerTools();
+
+    const instructions =
+      (server.mcpServer.server as unknown as { _instructions?: string })._instructions ?? '';
+    expect(instructions).toContain('site-administration capabilities');
+    expect(vi.mocked(server.mcpServer.registerPrompt).mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining(['stale-content-cleanup-inform', 'user-license-reclamation-apply']),
+    );
+    expect(server.mcpServer.server.registerCapabilities).toHaveBeenCalledWith({
+      extensions: { 'io.modelcontextprotocol/skills': { directoryRead: false } },
+    });
+    expect(
+      vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.some(([name]) => String(name).startsWith('skill://')),
+    ).toBe(true);
+    expect(vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0])).toEqual([
+      'load-web-tools',
+    ]);
+  });
+
+  describe('combined-lean group loading', () => {
+    const contentTool = (): WebTool<any> =>
+      ({ ...createMockAdminTool(), name: 'delete-content' }) as WebTool<any>;
+
+    async function setup(): Promise<WebMcpServer> {
+      vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(enforceRoleRequirements);
+      const server = getServer({ shared: true });
+      await server.registerTools();
+      return server;
+    }
+
+    const registered = (server: WebMcpServer): string[] =>
+      vi.mocked(server.mcpServer.registerTool).mock.calls.map((call) => call[0]);
+
+    it('returns the role-fetch warning in the tool result, keeps the group retryable, and leaves instructions alone', async () => {
+      const server = await setup();
+      const before = getInstructions(server);
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('site role could not be determined'),
+      ]);
+      expect(first.warnings?.[0]).toContain('Call load-web-tools again');
+      expect(first.warnings?.[0]).not.toContain('reconnect');
+      expect(getInstructions(server)).toBe(before);
+
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+      expect(second.warnings).toBeUndefined();
+      expect(registered(server)).toContain('delete-content');
+
+      const third = await server.loadWebTools('content');
+      expect(third.status).toBe('already-loaded');
+    });
+
+    it('treats a tool omitted for a low role as loaded so the role is not refetched', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockClear().mockResolvedValue('Viewer');
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const first = await server.loadWebTools('content');
+      expect(first).toEqual({ status: 'loaded', toolNames: [] });
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('already-loaded');
+      expect(mocks.mockGetCurrentUserSiteRole).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a registration error as a warning and retries the group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue('SiteAdministratorCreator');
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([contentTool()])
+        .mockReturnValueOnce([contentTool()]);
+      vi.mocked(server.mcpServer.registerTool).mockImplementationOnce(() => {
+        throw new Error('boom');
+      });
+
+      const first = await server.loadWebTools('content');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([
+        expect.stringContaining('Failed to register delete-content: boom'),
+      ]);
+
+      const second = await server.loadWebTools('content');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['delete-content']);
+    });
+
+    const pulseTool = (): WebTool<any> =>
+      ({
+        ...createMockConditionalTool(),
+        name: 'list-all-pulse-metric-definitions',
+        minRequiredRole: SiteRole.VIEWER,
+      }) as WebTool<any>;
+
+    it('retries a Pulse group after an indeterminate condition probe and registers it once the probe succeeds', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions
+        .mockResolvedValueOnce({
+          registrationConditionsMet: false,
+          failingCondition: 'RequiresPulse',
+          indeterminate: true,
+        })
+        .mockResolvedValueOnce({ registrationConditionsMet: true });
+      vi.spyOn(webToolFactories, 'map')
+        .mockReturnValueOnce([pulseTool()])
+        .mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('partial');
+      expect(first.toolNames).toEqual([]);
+      expect(first.warnings).toEqual([expect.stringContaining('could not be confirmed')]);
+      expect(first.notes).toBeUndefined();
+
+      const second = await server.loadWebTools('pulse');
+      expect(second.status).toBe('loaded');
+      expect(second.toolNames).toEqual(['list-all-pulse-metric-definitions']);
+    });
+
+    it('reports a definitive unmet condition as a note and closes the group', async () => {
+      const server = await setup();
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((name: string) =>
+        enforceRegistrationConditions(name),
+      );
+      mocks.mockCheckRegistrationConditions.mockResolvedValue({
+        registrationConditionsMet: false,
+        failingCondition: 'RequiresPulse',
+      });
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([pulseTool()]);
+
+      const first = await server.loadWebTools('pulse');
+      expect(first.status).toBe('loaded');
+      expect(first.warnings).toBeUndefined();
+      expect(first.notes).toEqual([expect.stringContaining('Pulse is not available')]);
+      expect((await server.loadWebTools('pulse')).status).toBe('already-loaded');
+    });
+
+    it('only reports problems for tools in the requested group', async () => {
+      const server = await setup();
+      mocks.mockGetCurrentUserSiteRole.mockResolvedValue(undefined);
+      vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([contentTool()]);
+
+      const result = await server.loadWebTools('datasource');
+
+      expect(result.status).toBe('loaded');
+      expect(result.warnings).toBeUndefined();
+      expect(result.notes).toBeUndefined();
+    });
+
+    it('describes every group and tool in the load-web-tools description', async () => {
+      const server = await setup();
+      const config = vi.mocked(server.mcpServer.registerTool).mock.calls[0][1] as {
+        description: string;
+      };
+      expect(config.description).toContain('"partial"');
+      for (const [group, tools] of Object.entries(webToolGroups)) {
+        expect(config.description).toContain(group);
+        for (const tool of tools) {
+          expect(config.description).toContain(tool);
+        }
+      }
     });
   });
 
