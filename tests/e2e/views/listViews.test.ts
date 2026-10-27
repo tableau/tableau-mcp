@@ -24,8 +24,10 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
+    // Scoped to Superstore: a site-wide listing can 400 while publishWorkbook.test.ts publishes concurrently.
     const { data: views } = await client.callTool('list-views', {
       schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
+      toolArgs: { filter: 'workbookName:eq:Superstore' },
     });
 
     expect(views.length).greaterThan(0);
@@ -63,9 +65,10 @@ describe('list-views', () => {
   it('should list views with pageNumber and limit', async () => {
     const { data: views } = await client.callTool('list-views', {
       schema: z.object({ data: z.array(viewSchema), totalAvailable: z.number() }),
-      toolArgs: { pageNumber: 1, limit: 10 },
+      toolArgs: { filter: 'workbookName:eq:Superstore', pageNumber: 1, limit: 2 },
     });
 
-    expect(views.length).toBeLessThanOrEqual(10);
+    expect(views.length).greaterThan(0);
+    expect(views.length).toBeLessThanOrEqual(2);
   });
 });
