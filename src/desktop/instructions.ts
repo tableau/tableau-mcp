@@ -33,7 +33,7 @@ export const SESSION_RESOLUTION_TEXT_UNPINNED =
 export const SESSION_RESOLUTION_TEXT_PINNED =
   'Session defaults to the current Tableau Desktop; use list-instances to see all open Desktops and pass session to target another.';
 
-// Claude Code shows only the first 4,096 characters of server instructions by default, so entries every client needs come first; instructions.test.ts pins the core set and that budget.
+// Claude Code shows only the first 4,096 characters of server instructions by default, so the entries every client needs are ordered first.
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
