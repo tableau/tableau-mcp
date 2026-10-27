@@ -554,9 +554,9 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
   const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
   // Mirrors the per-client `disabled` provider on the authoring tool registrations.
-  const authoringToolsEnabled =
-    (await featureGate.isFeatureEnabled('authoring-tools')) &&
-    (await isAuthoringAllowedForClient(clientId));
+  const authoringAllowedForClient = await isAuthoringAllowedForClient(clientId);
+  const datasourceAuthoringEnabled =
+    (await featureGate.isFeatureEnabled('datasource-authoring')) && authoringAllowedForClient;
   const flowReadToolsEnabled = await isFlowReadToolsEnabled(config);
   const flowWriteToolsEnabled = await isFlowWriteToolsEnabled(config);
   const knowledgeToolsEnabled = await featureGate.isFeatureEnabled('knowledge-tools');
@@ -612,12 +612,15 @@ async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>>
     enabledTools.delete('manage-knowledge-context');
   }
 
-  if (!authoringToolsEnabled) {
+  if (!authoringAllowedForClient) {
     enabledTools.delete('request-workbook-upload');
     enabledTools.delete('publish-workbook');
+    enabledTools.delete('download-workbook');
+  }
+
+  if (!datasourceAuthoringEnabled) {
     enabledTools.delete('request-datasource-upload');
     enabledTools.delete('publish-datasource');
-    enabledTools.delete('download-workbook');
   }
 
   if (!dataAppsEnabled) {
