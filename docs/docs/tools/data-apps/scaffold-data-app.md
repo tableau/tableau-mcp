@@ -69,6 +69,7 @@ The extension package ships a JSON manifest at `Packages/<package id>/manifest.j
 {
   "id": "com.tableau.mcp.sales-demo",
   "version": "1.0.0",
+  "manifestVersion": "0.1",
   "name": "Sales Demo",
   "author": "Tableau MCP",
   "requestedOrigins": ""

@@ -14,10 +14,7 @@ import { DesktopTool } from '../../tool.js';
 
 const paramsSchema = {
   session: sessionParam(),
-  sheet: z
-    .string()
-    .min(1)
-    .describe('Stable sheet id or current sheet name of the data app to export.'),
+  sheet: z.string().min(1).describe('Stable sheet id of the data app to export.'),
 };
 
 export const getExportDataAppTool = (
@@ -65,7 +62,7 @@ export const getExportDataAppTool = (
             return listed;
           }
           const matches = (listed.value.extensions ?? []).filter(
-            (extension) => extension.sheet.id === sheet || extension.sheet.name === sheet,
+            (extension) => extension.sheet.id === sheet,
           );
           if (matches.length !== 1) {
             return new McpToolError({
