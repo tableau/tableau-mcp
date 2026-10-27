@@ -400,7 +400,7 @@ describe('server', () => {
         vi.stubEnv('MCP_S3_BUCKET', s3 ? 'publish-uploads' : '');
         vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
         mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-          (featureName: string) => featureName === 'authoring-tools',
+          (featureName: string) => featureName === 'datasource-authoring',
         );
         const server = getServer();
         await server.registerTools(auth);
