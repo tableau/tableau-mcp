@@ -46,3 +46,27 @@ export function findUnexpectedNonBuildFiles(packedPaths: Iterable<string>): stri
   const allowed: readonly string[] = allowedPackageRootFiles;
   return [...packedPaths].filter((path) => !path.startsWith('build/') && !allowed.includes(path));
 }
+
+export interface PackFile {
+  path: string;
+}
+
+export interface PackResult {
+  filename: string;
+  files: PackFile[];
+}
+
+/**
+ * `npm pack --json` reports one entry per packed tarball, but the container shape changed across
+ * npm majors: npm <=11 emits an array, npm 12+ emits an object keyed by package name. Normalize
+ * both to an array so callers can just check the count.
+ */
+export function normalizePackResults(parsed: unknown): PackResult[] {
+  if (Array.isArray(parsed)) {
+    return parsed as PackResult[];
+  }
+  if (parsed !== null && typeof parsed === 'object') {
+    return Object.values(parsed) as PackResult[];
+  }
+  return [];
+}
