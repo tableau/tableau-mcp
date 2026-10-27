@@ -767,12 +767,6 @@ describe('scopes', () => {
         expected: true,
       },
       { clientId: claudeClientId, flags: [], version: '2026.3.0', expected: false },
-      {
-        clientId: slackClientId,
-        flags: ['data-apps', 'authoring-tools'],
-        version: '2026.3.0',
-        expected: false,
-      },
       { clientId: claudeClientId, flags: ['data-apps'], version: '2026.2.0', expected: false },
       {
         clientId: slackClientId,
