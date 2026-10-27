@@ -768,7 +768,7 @@ discretion.
 
 ## `CSP_ALLOWED_DOMAINS`
 
-A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
+A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps.
 
 - Default: `https://*.online.tableau.com,https://*.tableau.com`
 - The configured [`SERVER`](#server) origin is automatically appended to this list.
@@ -792,8 +792,6 @@ presigned URL (as a `resource_link` content block) instead of inlining the image
 client fetches the image bytes directly from S3, so the image never streams back through the MCP
 server on read.
 
-- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
-  disabled, this variable has no effect and the tools return inline base64.
 - Default: unset (feature disabled — tools return inline base64, the original behavior).
 - When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
 - AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
