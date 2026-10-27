@@ -8,16 +8,9 @@ import {
   allowedPackageRootFiles,
   findMissingPackageTargets,
   findUnexpectedNonBuildFiles,
+  normalizePackResults,
+  type PackResult,
 } from './packedPackageTargets.js';
-
-interface PackFile {
-  path: string;
-}
-
-interface PackResult {
-  filename: string;
-  files: PackFile[];
-}
 
 interface PackedPackage {
   main?: string;
@@ -53,14 +46,14 @@ if (!packJsonPath) {
 
 let packResults: PackResult[];
 try {
-  packResults = JSON.parse(readFileSync(packJsonPath, 'utf8')) as PackResult[];
+  packResults = normalizePackResults(JSON.parse(readFileSync(packJsonPath, 'utf8')));
 } catch (error) {
   fail(
     `could not parse ${packJsonPath}: ${error instanceof Error ? error.message : String(error)}`,
   );
 }
 
-if (!Array.isArray(packResults) || packResults.length !== 1) {
+if (packResults.length !== 1) {
   fail('npm pack must report exactly one artifact');
 }
 
