@@ -12,10 +12,15 @@ import {
 
 const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
+  mockGetTableauServerInfo: vi.fn(),
 }));
 
 vi.mock('../../config.js', () => ({
   getConfig: vi.fn(),
+}));
+
+vi.mock('../../getTableauServerInfo.js', () => ({
+  getTableauServerInfo: mocks.mockGetTableauServerInfo,
 }));
 
 vi.mock('../../features/init.js', () => ({
@@ -38,6 +43,9 @@ describe('scopes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+    mocks.mockGetTableauServerInfo.mockResolvedValue({
+      productVersion: { value: '2026.3.0', build: '' },
+    });
   });
 
   describe('datasource publishing scopes', () => {
@@ -747,6 +755,47 @@ describe('scopes', () => {
       const scopes = await getSupportedApiScopes(claudeClientId);
       expect(scopes).toContain('tableau:workbooks:update');
     });
+
+    it.each([
+      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.3.0', expected: true },
+      { clientId: undefined, flags: ['data-apps'], version: '2026.3.0', expected: true },
+      { clientId: slackClientId, flags: ['data-apps'], version: '2026.3.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-with-slack'],
+        version: '2026.3.0',
+        expected: true,
+      },
+      { clientId: claudeClientId, flags: [], version: '2026.3.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-tools'],
+        version: '2026.3.0',
+        expected: false,
+      },
+      { clientId: claudeClientId, flags: ['data-apps'], version: '2026.2.0', expected: false },
+      {
+        clientId: slackClientId,
+        flags: ['data-apps', 'authoring-with-slack'],
+        version: '2026.2.0',
+        expected: false,
+      },
+    ])(
+      'advertises scaffold-data-app scope: $clientId, flags=$flags, version=$version',
+      async ({ clientId, flags, version, expected }) => {
+        mocks.mockIsFeatureEnabled.mockImplementation(async (flag: string) => flags.includes(flag));
+        mocks.mockGetTableauServerInfo.mockResolvedValue({
+          productVersion: { value: version, build: '' },
+        });
+        mockGetConfig.mockReturnValue({
+          adminToolsEnabled: false,
+          server: 'https://my-tableau-server.com',
+        } as any);
+
+        const scopes = await getSupportedApiScopes(clientId);
+        expect(scopes.includes('tableau:packages:read')).toBe(expected);
+      },
+    );
 
     it('should require base publish scopes plus projects read, excluding optional permissions read', () => {
       const scopes = getRequiredApiScopesForTool('publish-workbook');
