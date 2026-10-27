@@ -19,7 +19,7 @@ describe('retargetDataAppPackage', () => {
 
   it('copies into a new package id and leaves the source unchanged', async () => {
     const source = join(root, 'source');
-    await copyPackageTree(resolveTemplatePackageDir()!, source);
+    await copyPackageTree((await resolveTemplatePackageDir())!, source);
     const appPath = join(source, 'content', 'src', 'app.js');
     const originalApp = await readFile(appPath, 'utf8');
     await writeFile(

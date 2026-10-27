@@ -18,7 +18,7 @@ describe('exportDataAppPackage', () => {
   });
 
   it('archives manifest, extensions, and content at the zip root and keeps the source', async () => {
-    const template = resolveTemplatePackageDir()!;
+    const template = (await resolveTemplatePackageDir())!;
     const source = join(root, 'pkg');
     await copyPackageTree(template, source);
     await replaceTokensInTree(source, (_path, text) =>
@@ -45,7 +45,7 @@ describe('exportDataAppPackage', () => {
   });
 
   it('rejects a symlink inside the package', async () => {
-    const template = resolveTemplatePackageDir()!;
+    const template = (await resolveTemplatePackageDir())!;
     const source = join(root, 'pkg');
     await copyPackageTree(template, source);
     await mkdir(join(root, 'outside'));
