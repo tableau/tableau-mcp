@@ -26,7 +26,7 @@ describe('prepareDesktopDataApp', () => {
   });
 
   it('binds the selected datasource and does not pick the first source', async () => {
-    const template = resolveTemplatePackageDir();
+    const template = await resolveTemplatePackageDir();
     expect(template).toBeTruthy();
     const result = await prepareDesktopDataApp({
       workspaceRoot: workspace,
@@ -52,7 +52,7 @@ describe('prepareDesktopDataApp', () => {
   });
 
   it('keeps a second app when the display name collides', async () => {
-    const template = resolveTemplatePackageDir()!;
+    const template = (await resolveTemplatePackageDir())!;
     const first = await prepareDesktopDataApp({
       workspaceRoot: workspace,
       worksheetFile: join(cache, 'a.xml'),
@@ -77,7 +77,7 @@ describe('prepareDesktopDataApp', () => {
   });
 
   it('rejects a relative workspace and an unknown datasource', async () => {
-    const template = resolveTemplatePackageDir()!;
+    const template = (await resolveTemplatePackageDir())!;
     const relative = await prepareDesktopDataApp({
       workspaceRoot: 'relative/dir',
       worksheetFile: join(cache, 'sheet.xml'),
