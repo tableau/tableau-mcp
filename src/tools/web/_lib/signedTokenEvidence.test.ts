@@ -90,3 +90,64 @@ describe('SignedTokenEvidence', () => {
     expect(evidence.describeEvidence().detail).not.toContain(evidence.getEstablishedNonce()!);
   });
 });
+
+describe('SignedTokenEvidence signing key', () => {
+  const PEM = '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n';
+
+  // A fresh module graph stands in for a separate replica process.
+  async function replica(
+    oauth: Record<string, string>,
+    file?: string,
+  ): Promise<typeof import('./signedTokenEvidence.js')> {
+    vi.resetModules();
+    vi.doMock('../../../config.js', () => ({ getConfig: () => ({ oauth }) }));
+    vi.doMock('node:fs', () => ({
+      readFileSync: () => {
+        if (file === undefined) throw new Error('ENOENT');
+        return file;
+      },
+    }));
+    return import('./signedTokenEvidence.js');
+  }
+
+  afterEach(() => {
+    vi.doUnmock('../../../config.js');
+    vi.doUnmock('node:fs');
+    vi.resetModules();
+  });
+
+  async function crossVerifies(
+    a: Awaited<ReturnType<typeof replica>>,
+    b: Awaited<ReturnType<typeof replica>>,
+  ): Promise<boolean> {
+    const ctx = makeCtx();
+    const minter = new a.SignedTokenEvidence();
+    await minter.establish(ctx);
+    return new b.SignedTokenEvidence().verify({
+      ...ctx,
+      confirmationToken: minter.getEstablishedNonce(),
+    });
+  }
+
+  it('interoperates across replicas using an inline key with escaped newlines', async () => {
+    const inline = { jwePrivateKey: PEM.replace(/\n/g, '\n'), jwePrivateKeyPath: '' };
+    expect(await crossVerifies(await replica(inline), await replica(inline))).toBe(true);
+  });
+
+  it('interoperates across replicas using a path-only key', async () => {
+    const pathOnly = { jwePrivateKey: '', jwePrivateKeyPath: '/keys/jwe.pem' };
+    expect(await crossVerifies(await replica(pathOnly, PEM), await replica(pathOnly, PEM))).toBe(
+      true,
+    );
+  });
+
+  it('does not interoperate without a shared key', async () => {
+    const none = { jwePrivateKey: '', jwePrivateKeyPath: '' };
+    expect(await crossVerifies(await replica(none), await replica(none))).toBe(false);
+  });
+
+  it('fails rather than using a random key when the configured key file is unreadable', async () => {
+    const mod = await replica({ jwePrivateKey: '', jwePrivateKeyPath: '/missing.pem' });
+    await expect(new mod.SignedTokenEvidence().establish(makeCtx())).rejects.toThrow('ENOENT');
+  });
+});

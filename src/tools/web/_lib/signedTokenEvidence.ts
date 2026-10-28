@@ -13,15 +13,11 @@ let signingKey: Buffer | null = null;
 // a random key is enough.
 function getSigningKey(): Buffer {
   if (!signingKey) {
-    let pem = '';
-    try {
-      const { oauth } = getConfig();
-      pem = oauth.jwePrivateKey.replace(/\\n/g, '\n');
-      if (!pem && oauth.jwePrivateKeyPath) {
-        pem = readFileSync(oauth.jwePrivateKeyPath, 'utf8');
-      }
-    } catch {
-      // No usable OAuth key.
+    const { oauth } = getConfig();
+    let pem = oauth.jwePrivateKey.replace(/\\n/g, '\n');
+    if (!pem && oauth.jwePrivateKeyPath) {
+      // A configured but unreadable key must fail, not fall back to a key the other replicas lack.
+      pem = readFileSync(oauth.jwePrivateKeyPath, 'utf8');
     }
     signingKey = pem
       ? createHmac('sha256', pem).update('mutation-confirmation-token-v1').digest()
