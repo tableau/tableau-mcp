@@ -1,14 +1,17 @@
-import { afterEach, beforeEach } from 'vitest';
+import { afterEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { EvidenceContext } from './evidence.js';
 import { SignedTokenEvidence } from './signedTokenEvidence.js';
 
+// Spent signatures are module state, so each test gets its own target.
+let n = 0;
+
 function makeCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
   return {
     restApi: { siteId: 'site-1' } as unknown as RestApi,
     siteId: 'site-1',
-    target: { id: 'flow-1' },
+    target: { id: `flow-${n}` },
     tool: 'run-flow',
     userLuid: 'user-1',
     ...overrides,
@@ -21,56 +24,56 @@ async function mint(ctx: EvidenceContext): Promise<string> {
   return evidence.getEstablishedNonce()!;
 }
 
+// A fresh instance stands in for another replica.
+const verify = (ctx: EvidenceContext): Promise<boolean> => new SignedTokenEvidence().verify(ctx);
+
 describe('SignedTokenEvidence', () => {
   beforeEach(() => {
-    vi.resetModules();
+    n++;
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('verifies a token minted by a DIFFERENT instance (simulates another replica)', async () => {
+  it('verifies a token minted by another instance', async () => {
     const token = await mint(makeCtx());
-    expect(await new SignedTokenEvidence().verify(makeCtx({ confirmationToken: token }))).toBe(
-      true,
-    );
+    expect(await verify(makeCtx({ confirmationToken: token }))).toBe(true);
   });
 
-  it('is single-use on the same process', async () => {
-    const token = await mint(makeCtx());
-    const confirm = makeCtx({ confirmationToken: token });
-    expect(await new SignedTokenEvidence().verify(confirm)).toBe(true);
-    expect(await new SignedTokenEvidence().verify(confirm)).toBe(false);
+  it('accepts a token once per process', async () => {
+    const confirm = makeCtx({ confirmationToken: await mint(makeCtx()) });
+    expect(await verify(confirm)).toBe(true);
+    expect(await verify(confirm)).toBe(false);
   });
 
   it.each([
     ['site', { siteId: 'site-2' }],
     ['user', { userLuid: 'user-2' }],
     ['tool', { tool: 'cancel-flow-run' as const }],
-    ['target', { target: { id: 'flow-2' } }],
+    ['target', { target: { id: 'other' } }],
     ['binding', { binding: 'other' }],
-  ])('rejects a token replayed against a different %s', async (_name, override) => {
+  ])('rejects a token used for a different %s', async (_name, override) => {
     const token = await mint(makeCtx({ binding: 'b' }));
-    const ctx = makeCtx({ binding: 'b', ...override, confirmationToken: token });
-    expect(await new SignedTokenEvidence().verify(ctx)).toBe(false);
+    expect(await verify(makeCtx({ binding: 'b', ...override, confirmationToken: token }))).toBe(
+      false,
+    );
   });
 
-  it('rejects missing, malformed, and tampered tokens', async () => {
+  it('rejects missing, malformed and tampered tokens', async () => {
     const token = await mint(makeCtx());
-    const [expiry, sig] = token.split('-');
-    for (const bad of [
+    const [expiry, signature] = token.split('-');
+    const bad = [
       undefined,
       '',
       'garbage',
       `${expiry}-`,
       `${expiry}-${'0'.repeat(64)}`,
-      `${Number(expiry) + 1}-${sig}`,
+      `${Number(expiry) + 1}-${signature}`,
       `${token}-x`,
-    ]) {
-      expect(await new SignedTokenEvidence().verify(makeCtx({ confirmationToken: bad }))).toBe(
-        false,
-      );
+    ];
+    for (const confirmationToken of bad) {
+      expect(await verify(makeCtx({ confirmationToken }))).toBe(false);
     }
   });
 
@@ -78,12 +81,10 @@ describe('SignedTokenEvidence', () => {
     vi.useFakeTimers();
     const token = await mint(makeCtx());
     vi.advanceTimersByTime(6 * 60 * 1000);
-    expect(await new SignedTokenEvidence().verify(makeCtx({ confirmationToken: token }))).toBe(
-      false,
-    );
+    expect(await verify(makeCtx({ confirmationToken: token }))).toBe(false);
   });
 
-  it('never leaks the token in the audit descriptor', async () => {
+  it('keeps the token out of the audit descriptor', async () => {
     const evidence = new SignedTokenEvidence();
     await evidence.establish(makeCtx());
     expect(evidence.describeEvidence().detail).not.toContain(evidence.getEstablishedNonce()!);
