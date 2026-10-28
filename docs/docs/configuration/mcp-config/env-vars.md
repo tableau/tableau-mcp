@@ -661,8 +661,20 @@ the preview.
 
 The flow tools (`run-flow`, `run-flow-task`, `cancel-flow-run`) sign their tokens with a key derived from
 `OAUTH_JWE_PRIVATE_KEY` (or `OAUTH_JWE_PRIVATE_KEY_PATH`), so preview and confirm can land on
-different replicas as long as every replica has the same key. Without either, each process signs with
-its own random key, and confirm must reach the process that ran the preview.
+different replicas when every replica has the same key **and** uses the same shared
+[`SESSION_STORE_PROVIDER=custom`](oauth.md#session_store_provider) backend. Preview registers the
+signature in the `flow-mutation-confirmations-v1` namespace; confirm atomically consumes it before
+executing the mutation. Providers must implement atomic `consume` across replicas and apply the
+namespace TTL supplied through `configureNamespace`.
+
+The default `memory` store is intended for a single process: confirmations routed to another process
+or sent after a restart are rejected and require a new preview. Without either OAuth key setting,
+each process also signs with its own random key. A shared signing key alone does not enable
+cross-replica confirmations.
+
+Key changes take effect on process restart. After key rotation or an upgrade from registry tokens
+to signed tokens, obtain a new preview once the rollout completes; in-flight tokens can be rejected
+when replicas use different keys or token formats. Old tokens never bypass confirmation checks.
 
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.

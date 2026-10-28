@@ -40,6 +40,7 @@ vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowWriteToolsEnabled: true,
     oauth: { jwePrivateKey: '', jwePrivateKeyPath: '' },
+    sessionStore: { provider: 'memory' },
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),

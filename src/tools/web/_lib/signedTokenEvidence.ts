@@ -2,7 +2,8 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { getConfig } from '../../../config.js';
-import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { createNamespacedStore } from '../../../sessionStore/init.js';
+import { SessionStore } from '../../../sessionStore/sessionStore.js';
 import { EvidenceContext, EvidenceStrategy, getMutationPreviewTtlMs } from './evidence.js';
 import { MutationTarget } from './mutationGuard.js';
 
@@ -26,59 +27,73 @@ function getSigningKey(): Buffer {
   return signingKey;
 }
 
-let spent: ExpiringMap<string, true> | null = null;
+let pending: SessionStore<true> | null = null;
 
-function getSpent(): ExpiringMap<string, true> {
-  return (spent ??= new ExpiringMap<string, true>({
-    defaultExpirationTimeMs: getMutationPreviewTtlMs(),
+function getPending(): SessionStore<true> {
+  return (pending ??= createNamespacedStore<true>('flow-mutation-confirmations-v1', {
+    ttlMs: getMutationPreviewTtlMs(),
   }));
 }
 
-function sign(ctx: EvidenceContext, expiresAtMs: number): string {
+function sign(ctx: EvidenceContext, expiresAtMs: number, nonce: string): string {
   const { siteId, userLuid, tool, target, binding = '' } = ctx;
   // JSON keeps a delimiter inside one field from shifting into the next.
   return createHmac('sha256', getSigningKey())
-    .update(JSON.stringify([siteId, userLuid, tool, target.id, binding, expiresAtMs]))
+    .update(JSON.stringify([siteId, userLuid, tool, target.id, binding, expiresAtMs, nonce]))
     .digest('hex');
 }
 
 /**
- * Drop-in for RegistryEvidence that keeps no state between preview and confirm, so the two calls can
- * hit different replicas. The token is `<expiresAtMs>-<hmac>`; the HMAC covers site, user, tool,
- * target, binding and expiry.
+ * Signed preview evidence with atomic single-use consumption through the configured session store.
+ * The token is `<expiresAtMs>-<nonce>-<hmac>`; the HMAC covers site, user, tool, target, binding,
+ * expiry and nonce. Only its signature is stored, never the raw confirmation token.
  *
- * A token is single-use per process only. Another replica accepts a replay until it expires.
+ * Replicas need both a shared signing key and a shared session store with atomic consume(). With
+ * the memory provider, a confirmation routed to another process is safely rejected.
  */
 export class SignedTokenEvidence implements EvidenceStrategy<MutationTarget> {
   private lastNonce?: string;
 
   async establish(ctx: EvidenceContext): Promise<void> {
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
-    this.lastNonce = `${expiresAtMs}-${sign(ctx, expiresAtMs)}`;
+    // Randomness keeps previews in the same millisecond independent, including after consumption.
+    const nonce = randomBytes(16).toString('hex');
+    const signature = sign(ctx, expiresAtMs, nonce);
+    this.lastNonce = undefined;
+    await getPending().set(signature, true);
+    this.lastNonce = `${expiresAtMs}-${nonce}-${signature}`;
   }
 
   async verify(ctx: EvidenceContext): Promise<boolean> {
-    const [expiry, signature, ...rest] = (ctx.confirmationToken ?? '').split('-');
+    const [expiry, nonce, signature, ...rest] = (ctx.confirmationToken ?? '').split('-');
     const expiresAtMs = Number(expiry);
-    if (!signature || rest.length || !(expiresAtMs >= Date.now())) {
+    if (
+      !/^\d+$/.test(expiry) ||
+      !/^[0-9a-f]{32}$/.test(nonce ?? '') ||
+      !/^[0-9a-f]{64}$/.test(signature ?? '') ||
+      rest.length ||
+      !Number.isSafeInteger(expiresAtMs) ||
+      expiresAtMs <= Date.now()
+    ) {
       return false;
     }
 
-    const expected = Buffer.from(sign(ctx, expiresAtMs));
+    const expected = Buffer.from(sign(ctx, expiresAtMs, nonce));
     const actual = Buffer.from(signature);
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
       return false;
     }
 
-    if (getSpent().has(signature)) {
-      return false;
-    }
-    getSpent().set(signature, true);
-    return true;
+    // Never recreate a missing entry at confirm time: absent, evicted or consumed proof rejects.
+    const consumed = await getPending().consume(signature);
+    return consumed === true && expiresAtMs > Date.now();
   }
 
   describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
-    return { kind: 'registry-nonce', detail: 'stateless signed single-use confirmation token' };
+    return {
+      kind: 'registry-nonce',
+      detail: 'signed single-use confirmation token (session store)',
+    };
   }
 
   /** Never audited. */
