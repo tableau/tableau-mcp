@@ -82,6 +82,15 @@ export function buildCachedImageToolResult({
   };
 }
 
+function describeImageSize({ width, height }: ImageResult): string {
+  if (width === undefined || height === undefined) {
+    return '';
+  }
+  return width < 0 || height < 0
+    ? ' (vector output; pixel size not applicable)'
+    : ` (${width}x${height})`;
+}
+
 /**
  * Translates a Desktop image-export envelope into an MCP tool result.
  *
@@ -106,10 +115,7 @@ export function buildSheetImageToolResult({
   image,
   config,
 }: BuildSheetImageToolResultArgs): CallToolResult {
-  const dims =
-    image.width !== undefined && image.height !== undefined
-      ? ` (${image.width}x${image.height})`
-      : '';
+  const dims = describeImageSize(image);
 
   // (1) Desktop persisted the bytes (caller passed filePath); project the path.
   if (image.filePath) {

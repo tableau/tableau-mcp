@@ -49,7 +49,7 @@ export const getRefreshDashboardAutoUpdatesTool = (
     minApiVersion: '0.2.19',
     title,
     description:
-      'Run pending automatic updates for every worksheet controller in one dashboard now without activating it.',
+      "Run pending automatic updates for every worksheet in one dashboard's current device layout now, without changing the active sheet. If a worksheet fails, the error result reports a PARTIAL or FAILED outcome per worksheet.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -92,7 +92,13 @@ export const getRefreshDashboardAutoUpdatesTool = (
                 ),
               ).toErr();
             }
-            return new DesktopCommandExecutionError(result.error).toErr();
+            return new DesktopCommandExecutionError(
+              result.error,
+              result.error.type === 'command-failed' &&
+                result.error.error?.code === 'dashboard-refresh-now-failed'
+                ? 'Desktop failed before refreshing any worksheet in the dashboard; nothing was refreshed.'
+                : undefined,
+            ).toErr();
           }
 
           const dashboardRef = { id: target.id, name: target.name };

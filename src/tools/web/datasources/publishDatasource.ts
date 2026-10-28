@@ -75,7 +75,7 @@ export const getPublishDatasourceTool = (server: WebMcpServer): WebTool<typeof p
     },
     disabled: new Provider(
       async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        !(await getFeatureGate().isFeatureEnabled('datasource-authoring')) ||
         !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async (

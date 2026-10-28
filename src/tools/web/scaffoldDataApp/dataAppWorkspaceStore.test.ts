@@ -9,6 +9,7 @@ import { buildTemplateZip, TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildT
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { createDataAppWorkspace } from './dataAppWorkspaceStore.js';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -24,6 +25,11 @@ vi.mock('../../../blobStorage/init.js', () => ({
   getBlobStorageProvider: vi.fn(() => ({ upload: mocks.mockUpload })),
   isBlobStorageEnabled: mocks.mockIsBlobStorageEnabled,
 }));
+
+const wiring = buildDatasourceWiringInfo({
+  serverUrl: 'https://10ax.online.tableau.com',
+  siteName: 'mcp-test',
+});
 
 describe('createDataAppWorkspace', () => {
   beforeEach(() => {
@@ -49,11 +55,13 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
       expect(value.requestedOrigins).toEqual(
         buildRequestedOriginsGuide(deriveIdentity('Sales Demo')),
       );
@@ -193,11 +201,13 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
       });
 
       invariant(result.isOk(), result.isErr() ? result.error.message : '');
       const value = result.value;
       expect(value.allowedOrigins).toEqual(['https://example.com']);
+      expect(value.wiring).toEqual(wiring);
 
       expect(value.downloadUrl).toBe('https://blob.example.com/signed-template-url');
       expect(value.filePath).toBeUndefined();
@@ -231,6 +241,7 @@ describe('createDataAppWorkspace', () => {
       const result = await createDataAppWorkspace({
         datappName: 'Sales Demo',
         allowedOrigins: ['https://example.com'],
+        wiring,
       });
 
       invariant(result.isErr());

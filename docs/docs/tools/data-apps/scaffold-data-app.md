@@ -90,6 +90,17 @@ It also includes `requestedOrigins`: the path of the finalized `manifest.json` (
 unzip directory, after `postUnzip`) and instructions for declaring the app's external origins in
 it. See [Package manifest](#package-manifest).
 
+It also includes `wiring`: the connection values for the Tableau site this session is signed in
+to, which every published datasource wired into the app needs. They come from the server's own
+configuration and the session's site, so no other tool call is needed to learn them.
+
+- **`server`**: the Tableau host only, with no scheme or port (for example
+  `10ax.online.tableau.com`).
+- **`site`**: the site's content URL, which can differ from its display name. `""` for the Default
+  site.
+- **`channel`**: `https` or `http`, from the server URL.
+- **`port`**: the server URL's port, or `443`/`80` when it uses the default for its channel.
+
 The result is a single object. Both output modes return the same static, un-substituted template
 zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping — they
 differ only in transport, never in when substitution happens (always client-side, after unzipping):
@@ -107,7 +118,7 @@ differ only in transport, never in when substitution happens (always client-side
 In both cases, `postUnzip` describes the literal find/replace edits and path renames to apply
 after unzipping to finalize the workspace. Datasource wiring is never performed by this tool in
 either mode — it is the caller's responsibility, applied to the finalized workbook after this tool
-returns.
+returns, using the values in `wiring`.
 
 ## Example result (disk output)
 
@@ -119,6 +130,12 @@ returns.
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
+  },
+  "wiring": {
+    "server": "10ax.online.tableau.com",
+    "site": "mcp-test",
+    "channel": "https",
+    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
@@ -170,6 +187,12 @@ returns.
   "requestedOrigins": {
     "file": "Sales Demo/Packages/com.tableau.mcp.sales-demo/manifest.json",
     "instructions": "`requestedOrigins` in this manifest is scaffolded empty. If the app fetches from external origins, set it to a space-separated list of them (e.g. \"https://api.example.com https://cdn.example.com\"). Each one should also be in `allowedOrigins`."
+  },
+  "wiring": {
+    "server": "10ax.online.tableau.com",
+    "site": "mcp-test",
+    "channel": "https",
+    "port": 443
   },
   "postUnzip": {
     "instructions": "Finalize the workspace after unzipping: first apply every `edits` entry (a literal find/replace on the file at `file`), then apply `renames` in order. Every path is relative to the unzip directory.",
