@@ -278,4 +278,21 @@ describe('SignedTokenEvidence signing key', () => {
     const mod = await replica({ jwePrivateKey: '', jwePrivateKeyPath: '/missing.pem' });
     await expect(new mod.SignedTokenEvidence().establish(makeCtx())).rejects.toThrow('ENOENT');
   });
+
+  it.each(['', ' \n\t'])(
+    'fails rather than using an empty or blank configured key file (%j)',
+    async (file) => {
+      const mod = await replica({ jwePrivateKey: '', jwePrivateKeyPath: '/empty.pem' }, file);
+      await expect(new mod.SignedTokenEvidence().establish(makeCtx())).rejects.toThrow(
+        'Configured OAuth JWE private key is empty',
+      );
+    },
+  );
+
+  it('rejects a whitespace-only inline key', async () => {
+    const mod = await replica({ jwePrivateKey: ' \n\t', jwePrivateKeyPath: '' });
+    await expect(new mod.SignedTokenEvidence().establish(makeCtx())).rejects.toThrow(
+      'Configured OAuth JWE private key is empty',
+    );
+  });
 });

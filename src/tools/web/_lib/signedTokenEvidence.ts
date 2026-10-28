@@ -20,6 +20,9 @@ function getSigningKey(): Buffer {
       // A configured but unreadable key must fail, not fall back to a key the other replicas lack.
       pem = readFileSync(oauth.jwePrivateKeyPath, 'utf8');
     }
+    if ((oauth.jwePrivateKey || oauth.jwePrivateKeyPath) && !pem.trim()) {
+      throw new Error('Configured OAuth JWE private key is empty');
+    }
     signingKey = pem
       ? createHmac('sha256', pem).update('mutation-confirmation-token-v1').digest()
       : randomBytes(32);
