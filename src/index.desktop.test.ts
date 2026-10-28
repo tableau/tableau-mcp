@@ -1,6 +1,7 @@
 const startupState = vi.hoisted(() => ({
   profile: 'web' as 'desktop' | 'web',
   webConfigShouldThrow: false,
+  httpHost: '',
   connectPromise: Promise.resolve(),
   serverInfoPromise: Promise.resolve({}),
   sessionStoreConnected: false,
@@ -33,6 +34,7 @@ vi.mock('./config.js', () => ({
       transport: 'http',
       server: 'https://tableau.example.com',
       oauth: { enabled: true },
+      httpHost: startupState.httpHost,
       defaultNotificationLevel: 'info',
       loggers: new Set<string>(),
       fileLoggerDirectory: '/tmp',
@@ -145,6 +147,7 @@ describe('desktop binary startup', () => {
     vi.clearAllMocks();
     startupState.profile = 'web';
     startupState.webConfigShouldThrow = false;
+    startupState.httpHost = '';
     startupState.connectPromise = Promise.resolve();
     startupState.serverInfoPromise = Promise.resolve({});
     startupState.sessionStoreConnected = false;
@@ -179,6 +182,18 @@ describe('desktop binary startup', () => {
     await startupState.shutdownHandlers.get('SIGINT')!();
     expect(startupState.sessionStoreDisconnected).toBe(true);
     expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it.each([
+    ['', '127.0.0.1'],
+    ['10.0.0.5', '10.0.0.5'],
+  ])('web profile with httpHost %j binds %j', async (httpHost, expected) => {
+    startupState.httpHost = httpHost;
+
+    await import('./index.desktop.js');
+    await vi.waitFor(() => expect(startupState.expressStarted).toBe(true));
+
+    expect(startExpressServer).toHaveBeenCalledWith(expect.objectContaining({ host: expected }));
   });
 
   it('fails closed before opening HTTP when the session store cannot connect', async () => {
