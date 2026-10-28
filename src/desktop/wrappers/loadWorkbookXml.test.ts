@@ -630,9 +630,29 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     it.each([
       ['edited', '<!DOCTYPE x><workbook />', validXml, 'edited workbook document'],
       ['open', validXml, '<!DOCTYPE x><workbook />', 'open workbook'],
+      ['open', validXml, '', 'open workbook'],
+      ['open', validXml, '<workbook>', 'open workbook'],
+      ['open', validXml, '<html><error>bad</error></html>', 'open workbook'],
+      ['open', validXml, '<workbook/><workbook/>', 'open workbook'],
+      [
+        'open',
+        validXml,
+        "<workbook><worksheets><worksheet name='A'/></worksheets><worksheets><worksheet name='Sheet 1'/></worksheets></workbook>",
+        'open workbook',
+      ],
+      [
+        'open',
+        validXml,
+        '<workbook><worksheets><worksheet/></worksheets></workbook>',
+        'open workbook',
+      ],
     ])(
       'fails closed naming the %s document when it cannot be parsed',
       async (_which, xml, liveXml, phrase) => {
+        const actual = await vi.importActual<typeof validationRegistry>(
+          '../validation/registry.js',
+        );
+        vi.spyOn(validationRegistry, 'runValidation').mockImplementation(actual.runValidation);
         const applyWorkbookDocument = vi.fn();
         const getWorkbookDocument = vi.fn().mockResolvedValue(Ok({ xml: liveXml }));
 

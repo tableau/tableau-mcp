@@ -282,6 +282,31 @@ describe('liveSheetNamesMissingFrom', () => {
     },
   );
 
+  it.each([
+    '',
+    '<html><error>bad</error></html>',
+    '<workbook>',
+    '<workbook><worksheets></workbook>',
+    '<workbook/><workbook/>',
+    wb(ws('A') + ws('B')),
+    wb(db('A') + db('B')),
+    wb('<worksheets><worksheet/></worksheets>'),
+    wb('<dashboards><dashboard/></dashboards>'),
+  ])('refuses an unreadable or ambiguous inventory on either side: %s', (invalid) => {
+    const valid = wb(ws('B'));
+    expect(liveSheetNamesMissingFrom(valid, invalid).unwrapErr()).toMatchObject({
+      document: 'open',
+    });
+    expect(liveSheetNamesMissingFrom(invalid, valid).unwrapErr()).toMatchObject({
+      document: 'edited',
+    });
+  });
+
+  it('allows a legitimate empty workbook inventory', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('A')), '<workbook/>').unwrap()).toEqual([]);
+    expect(liveSheetNamesMissingFrom('<workbook/>', wb(ws('A'))).unwrap()).toEqual(['A']);
+  });
+
   it('reads the real Desktop fixture sheet inventory (4 worksheets + 1 dashboard)', () => {
     const real = readFileSync(REAL_FIXTURE, 'utf8');
     expect(liveSheetNamesMissingFrom(wb(ws('nothing')), real).unwrap()).toEqual([

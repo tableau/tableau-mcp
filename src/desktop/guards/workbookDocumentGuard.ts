@@ -1,3 +1,4 @@
+import { XMLValidator } from 'fast-xml-parser';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { normalizeArray, parseXML } from '../metadata/parser.js';
@@ -17,24 +18,46 @@ type Sheet = { kind: 'worksheet' | 'dashboard' | 'story'; name: string };
 
 export type SheetCheckError = { document: 'edited' | 'open'; cause: unknown };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sheetElements(container: unknown, tag: string): Record<string, unknown>[] {
+  if (container === undefined || container === '') return [];
+  if (!isRecord(container)) throw new Error(`Ambiguous ${tag} container in workbook XML`);
+  return normalizeArray<unknown>(container[tag]).map((sheet) => {
+    if (
+      !isRecord(sheet) ||
+      typeof sheet['@_name'] !== 'string' ||
+      normalizeParsedXmlName(sheet['@_name']) === ''
+    ) {
+      throw new Error(`Missing or invalid ${tag} name in workbook XML`);
+    }
+    return sheet;
+  });
+}
+
 function readSheets(xml: string): Sheet[] {
-  const { workbook } = parseXML(xml);
-  const sheets = [
-    ...normalizeArray<{ '@_name'?: string }>(workbook?.worksheets?.worksheet).map((sheet) => ({
+  const parsed = parseXML(xml);
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) throw new Error(`Invalid workbook XML: ${validation.err.msg}`);
+  const roots = Object.keys(parsed).filter((key) => !key.startsWith('?'));
+  const workbook: unknown = parsed.workbook;
+  if (roots.length !== 1 || roots[0] !== 'workbook' || (workbook !== '' && !isRecord(workbook))) {
+    throw new Error('Expected a single workbook root in workbook XML');
+  }
+  if (workbook === '') return [];
+  return [
+    ...sheetElements(workbook.worksheets, 'worksheet').map((sheet) => ({
       kind: 'worksheet' as const,
-      name: sheet['@_name'],
+      name: sheet['@_name'] as string,
     })),
     // Stories are <dashboard type='storyboard'>.
-    ...normalizeArray<{ '@_name'?: string; '@_type'?: string }>(
-      workbook?.dashboards?.dashboard,
-    ).map((sheet) => ({
+    ...sheetElements(workbook.dashboards, 'dashboard').map((sheet) => ({
       kind: sheet['@_type'] === 'storyboard' ? ('story' as const) : ('dashboard' as const),
-      name: sheet['@_name'],
+      name: sheet['@_name'] as string,
     })),
   ];
-  return sheets.filter(
-    (sheet): sheet is Sheet => typeof sheet.name === 'string' && sheet.name !== '',
-  );
 }
 
 function sheetKey(sheet: Sheet): string {
