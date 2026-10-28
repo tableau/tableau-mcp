@@ -549,12 +549,10 @@ const toolScopeMap: Record<
     api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
   // Reports the current connection (auth method, server, site, user). GET /sessions/current
-  // requires no scope; for oauth/passthrough the existing bearer token is reused, and for
-  // uat/direct-trust a fresh JWT is minted with content:read (the universal read baseline).
-  // The tool degrades gracefully, so a scope mismatch only drops enrichment, never fails.
+  // requires no scope.
   whoami: {
     mcp: [],
-    api: new Set<TableauApiScope>(['tableau:content:read']),
+    api: new Set<TableauApiScope>(),
   },
 };
 

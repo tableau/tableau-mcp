@@ -109,6 +109,7 @@ export const activityLogObjectSources: Record<WebToolName, ObjectSource | null> 
   'inspect-knowledge-context': null,
   'manage-knowledge-context': null,
   'scaffold-data-app': null,
+  whoami: null,
 };
 
 /**

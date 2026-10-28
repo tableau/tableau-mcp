@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
 
@@ -51,6 +52,7 @@ export const getWhoamiTool = (server: WebMcpServer): WebTool<typeof paramsSchema
   const whoamiTool = new WebTool({
     server,
     name: 'whoami',
+    minRequiredRole: SiteRole.VIEWER,
     description: `Reports where the current session is connected to Tableau: the authentication method, server, site, and authorized user.
 
 Use this tool to confirm the active connection — for example when a user asks "where am I connected?", "which Tableau site is this?", or "who am I signed in as?".
@@ -60,6 +62,8 @@ This tool requires no input. It always reports the configured connection details
     annotations: {
       title: 'Who Am I',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (_args, extra): Promise<CallToolResult> => {
