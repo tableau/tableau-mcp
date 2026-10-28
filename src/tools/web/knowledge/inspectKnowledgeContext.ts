@@ -157,11 +157,12 @@ change anything.
                 switch (args.action) {
                   case 'status': {
                     const graphs = await methods.listGraphs();
+                    const returnedGraphs = graphs.slice(0, limit);
                     return {
                       action: args.action,
-                      graphs: graphs.slice(0, limit),
+                      graphs: returnedGraphs,
                       primaryGraph: graphs.find((graph) => graph.is_primary) ?? null,
-                      resultInfo: listResultInfo('Graph', graphs.length, limit),
+                      resultInfo: listResultInfo('Graph', graphs.length, returnedGraphs.length),
                     };
                   }
                   case 'list': {
@@ -199,7 +200,6 @@ change anything.
                       resultInfo: listResultInfo(
                         'Suggestion',
                         report.summary.total,
-                        limit,
                         suggestions.length,
                       ),
                     };
@@ -220,8 +220,7 @@ change anything.
 function listResultInfo(
   label: string,
   original: number,
-  limit: number,
-  returned = Math.min(original, limit),
+  returned: number,
 ): Record<string, number | boolean> {
   return {
     [`original${label}Count`]: original,

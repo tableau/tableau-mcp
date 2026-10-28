@@ -147,6 +147,29 @@ describe('inspectKnowledgeContextTool', () => {
     expect(out.primaryGraph.id).toBe('g1');
   });
 
+  it('reports graph truncation when graphs exceed the limit', async () => {
+    mocks.listGraphs.mockResolvedValue(
+      Array.from({ length: 30 }, (_, index) => ({
+        id: `g${index}`,
+        name: `Graph ${index}`,
+        description: null,
+        status: 'active',
+        is_primary: index === 0,
+        created_at: null,
+        updated_at: null,
+      })),
+    );
+
+    const out = payload(await getResult({ action: 'status', limit: 25 }));
+
+    expect(out.graphs).toHaveLength(25);
+    expect(out.resultInfo).toEqual({
+      originalGraphCount: 30,
+      returnedGraphCount: 25,
+      truncated: true,
+    });
+  });
+
   it('lists semantic contexts while capping flattened statements', async () => {
     mocks.listSemanticStatements.mockResolvedValue([context(['First', 'Second'])]);
 
