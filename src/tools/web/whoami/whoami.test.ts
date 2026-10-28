@@ -53,11 +53,26 @@ describe('whoamiTool', () => {
     mocks.mockUseRestApi.mockImplementation(defaultUseRestApiImpl);
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const whoamiTool = getWhoamiTool(new WebMcpServer());
+    const annotations = await Provider.from(whoamiTool.annotations);
     expect(whoamiTool.name).toBe('whoami');
     expect(whoamiTool.description).toContain('connected');
-    expect(whoamiTool.paramsSchema).toMatchObject({});
+    expect(whoamiTool.paramsSchema).toEqual({});
+    expect(annotations?.readOnlyHint).toBe(true);
+    expect(annotations?.destructiveHint).toBe(false);
+    expect(annotations?.idempotentHint).toBe(true);
+    expect(annotations?.openWorldHint).toBe(false);
+  });
+
+  it('should require no API scopes, since GET /sessions/current needs none', async () => {
+    mocks.mockGetCurrentServerSession.mockResolvedValue(new Ok(mockSession));
+
+    expect(getWhoamiTool(new WebMcpServer()).requiredApiScopes).toEqual([]);
+
+    await getToolResult();
+
+    expect(mocks.mockUseRestApi).toHaveBeenCalledWith(expect.objectContaining({ jwtScopes: [] }));
   });
 
   it('should report connection info enriched by the live session', async () => {
