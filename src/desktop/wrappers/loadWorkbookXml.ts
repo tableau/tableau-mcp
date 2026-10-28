@@ -8,7 +8,7 @@ import {
   WithExecutorAndAbortSignal,
 } from '../externalApi/executorTypes.js';
 import type { WorkbookDiagnostics } from '../externalApi/types.js';
-import { readSheetNames } from '../guards/workbookDocumentGuard.js';
+import { liveSheetNamesMissingFrom } from '../guards/workbookDocumentGuard.js';
 import {
   blockingValidationIssues,
   introducedBlockingValidationIssues,
@@ -24,7 +24,6 @@ export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
   | { type: 'workbook-drift'; message?: string }
-  // The document leaves out sheets Desktop would delete.
   | { type: 'sheets-removed'; sheetNames: string[]; message: string }
   | { type: 'sheet-check-failed'; message: string }
   // The workbook document POST reported transport-level completion, but Tableau
@@ -178,7 +177,7 @@ const MAX_LISTED_SHEETS = 10;
 function sheetCheckFailed(which: 'edited' | 'open', error: unknown): LoadWorkbookXmlResult {
   log({
     level: 'error',
-    message: `Sheet check could not parse the ${which} workbook document — XML not sent to Tableau`,
+    message: `Sheet check could not parse the ${which} workbook document. XML not sent to Tableau`,
     logger: 'workbookCommands',
     data: { error: error instanceof Error ? error.message : String(error) },
   });
@@ -198,20 +197,11 @@ function sheetCheckFailed(which: 'edited' | 'open', error: unknown): LoadWorkboo
 }
 
 function rejectRemovedSheets(xml: string, liveXml: string): LoadWorkbookXmlResult | undefined {
-  let submittedNames: string[];
-  try {
-    submittedNames = readSheetNames(xml);
-  } catch (error) {
-    return sheetCheckFailed('edited', error);
+  const missingSheets = liveSheetNamesMissingFrom(xml, liveXml);
+  if (missingSheets.isErr()) {
+    return sheetCheckFailed(missingSheets.error.document, missingSheets.error.cause);
   }
-  let liveNames: string[];
-  try {
-    liveNames = readSheetNames(liveXml);
-  } catch (error) {
-    return sheetCheckFailed('open', error);
-  }
-  const submitted = new Set(submittedNames);
-  const names = [...new Set(liveNames)].filter((name) => !submitted.has(name));
+  const names = missingSheets.value;
   if (names.length === 0) return undefined;
 
   const listed = names

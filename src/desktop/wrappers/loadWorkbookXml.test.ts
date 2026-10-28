@@ -521,6 +521,58 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       expect(applyWorkbookDocument).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['worksheet', 'dashboard', "<worksheet name='A'/>", "<dashboard name='A'/>"],
+      ['dashboard', 'worksheet', "<dashboard name='A'/>", "<worksheet name='A'/>"],
+      ['dashboard', 'story', "<dashboard name='A'/>", "<dashboard name='A' type='storyboard'/>"],
+      ['story', 'dashboard', "<dashboard name='A' type='storyboard'/>", "<dashboard name='A'/>"],
+    ])('refuses a same-name %s -> %s replacement before POST', async (_from, _to, live, edited) => {
+      const actual = await vi.importActual<typeof validationRegistry>('../validation/registry.js');
+      vi.spyOn(validationRegistry, 'runValidation').mockImplementation(actual.runValidation);
+      const document = (sheet: string): string =>
+        "<workbook><datasources><datasource name='ds'/></datasources>" +
+        `<worksheets><worksheet name='B'/>${sheet.startsWith('<worksheet ') ? sheet : ''}</worksheets>` +
+        `<dashboards>${sheet.startsWith('<dashboard ') ? sheet : ''}</dashboards></workbook>`;
+      const liveXml = document(live);
+      const applyWorkbookDocument = vi.fn();
+      const result = await loadWorkbookXml({
+        xml: document(edited),
+        expectedSourceHash: sourceSha256(liveXml),
+        cachedLiveRelative: true,
+        executor: makeExecutorMock({
+          applyWorkbookDocument,
+          getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        }),
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expectRemoved(result, ['A']);
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    });
+
+    it('POSTs an equivalent NFC sheet name without a false removal', async () => {
+      const liveXml = validXml.replace('Sheet 1', 'Cafe\u0301');
+      const xml = validXml.replace('Sheet 1', ' Caf\u00e9 ');
+      const applyWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' }));
+      const result = await loadWorkbookXml({
+        xml,
+        cachedLiveRelative: true,
+        expectedSourceHash: sourceSha256(liveXml),
+        executor: makeExecutorMock({
+          applyWorkbookDocument,
+          getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+        }),
+        signal: mockSignal,
+        focus: NO_FOCUS,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    });
+
     it('still refuses with skipValidation and with no expectedSourceHash', async () => {
       const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
 
