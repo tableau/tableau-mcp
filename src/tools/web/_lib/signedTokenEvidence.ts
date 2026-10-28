@@ -6,23 +6,26 @@ import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { EvidenceContext, EvidenceStrategy, getMutationPreviewTtlMs } from './evidence.js';
 import { MutationTarget } from './mutationGuard.js';
 
-let signingKey: string | null = null;
+let signingKey: Buffer | null = null;
 
-// Replicas must share the key, so reuse the OAuth JWE private key they already share. Without OAuth
-// there is one process, and a random key is enough.
-function getSigningKey(): string {
-  if (signingKey === null) {
-    signingKey = '';
+// Replicas must share the key, so derive it from the OAuth JWE private key they already share. The
+// derivation keeps that key from signing anything directly. Without OAuth there is one process, and
+// a random key is enough.
+function getSigningKey(): Buffer {
+  if (!signingKey) {
+    let pem = '';
     try {
       const { oauth } = getConfig();
-      signingKey = oauth.jwePrivateKey.replace(/\n/g, '\n');
-      if (!signingKey && oauth.jwePrivateKeyPath) {
-        signingKey = readFileSync(oauth.jwePrivateKeyPath, 'utf8');
+      pem = oauth.jwePrivateKey.replace(/\\n/g, '\n');
+      if (!pem && oauth.jwePrivateKeyPath) {
+        pem = readFileSync(oauth.jwePrivateKeyPath, 'utf8');
       }
     } catch {
       // No usable OAuth key.
     }
-    signingKey ||= randomBytes(32).toString('hex');
+    signingKey = pem
+      ? createHmac('sha256', pem).update('mutation-confirmation-token-v1').digest()
+      : randomBytes(32);
   }
   return signingKey;
 }
@@ -38,7 +41,7 @@ function getSpent(): ExpiringMap<string, true> {
 function sign(ctx: EvidenceContext, expiresAtMs: number): string {
   const { siteId, userLuid, tool, target, binding = '' } = ctx;
   return createHmac('sha256', getSigningKey())
-    .update(['mutation-confirm', siteId, userLuid, tool, target.id, binding, expiresAtMs].join(':'))
+    .update([siteId, userLuid, tool, target.id, binding, expiresAtMs].join(':'))
     .digest('hex');
 }
 
