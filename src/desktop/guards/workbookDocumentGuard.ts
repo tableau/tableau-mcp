@@ -38,7 +38,7 @@ function sheetElements(container: unknown, tag: string): Record<string, unknown>
 }
 
 function readSheets(xml: string): Sheet[] {
-  const parsed = parseXML(xml);
+  const parsed = parseXML(xml, { normalizeAttributeWhitespace: true });
   const validation = XMLValidator.validate(xml);
   if (validation !== true) throw new Error(`Invalid workbook XML: ${validation.err.msg}`);
   const roots = Object.keys(parsed).filter((key) => !key.startsWith('?'));

@@ -269,6 +269,31 @@ describe('liveSheetNamesMissingFrom', () => {
     expect(liveSheetNamesMissingFrom(submitted, live).unwrap()).toEqual(['A &lt; B']);
   });
 
+  it.each([
+    ['\t', '&#9;', '\t'],
+    ['\n', '&#10;', '\n'],
+    ['\r', '&#13;', '\r'],
+    ['\r\n', '&#10;', '\n'],
+    ['\t', '&#x9;', '\t'],
+  ])('distinguishes literal %j from character reference %s', (literal, reference, decoded) => {
+    const literalXml = wb(ws(`A${literal}B`));
+    const referenceXml = wb(ws(`A${reference}B`));
+
+    expect(liveSheetNamesMissingFrom(literalXml, referenceXml).unwrap()).toEqual([`A${decoded}B`]);
+    expect(liveSheetNamesMissingFrom(referenceXml, literalXml).unwrap()).toEqual(['A B']);
+    expect(liveSheetNamesMissingFrom(wb(ws('A B')), literalXml).unwrap()).toEqual([]);
+    expect(liveSheetNamesMissingFrom(referenceXml, referenceXml).unwrap()).toEqual([]);
+  });
+
+  it('normalizes attribute whitespace with either quote style and ignores raw XML sections', () => {
+    const literalXml = wb(
+      '<!-- name="Unrelated\tcomment" -->' +
+        '<worksheets><worksheet caption="A > B" name="A\r\nB"/></worksheets>' +
+        '<text><![CDATA[name="Unrelated\ttext"]]></text>',
+    );
+    expect(liveSheetNamesMissingFrom(wb(ws('A B')), literalXml).unwrap()).toEqual([]);
+  });
+
   it.each(['edited', 'open'] as const)(
     'returns the %s parse failure with its cause',
     (document) => {

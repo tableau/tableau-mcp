@@ -573,6 +573,75 @@ describe('loadWorkbookXml (External Client API transport)', () => {
       expect(applyWorkbookDocument).toHaveBeenCalledOnce();
     });
 
+    it.each([
+      ['\t', '&#9;'],
+      ['\n', '&#10;'],
+      ['\r', '&#13;'],
+      ['\r\n', '&#10;'],
+    ])(
+      'refuses literal %j replacing %s with either validation setting',
+      async (literal, reference) => {
+        const actual = await vi.importActual<typeof validationRegistry>(
+          '../validation/registry.js',
+        );
+        vi.spyOn(validationRegistry, 'runValidation').mockImplementation(actual.runValidation);
+        const liveXml = realLiveXml.replace('stage-encore-canon', `A${reference}B`);
+        const xml = liveXml.replace(`A${reference}B`, `A${literal}B`);
+        const decoded = reference === '&#9;' ? '\t' : reference === '&#13;' ? '\r' : '\n';
+
+        for (const skipValidation of [false, true]) {
+          const applyWorkbookDocument = vi.fn();
+          const result = await loadWorkbookXml({
+            xml,
+            cachedLiveRelative: true,
+            expectedSourceHash: sourceSha256(liveXml),
+            skipValidation,
+            executor: makeExecutorMock({
+              applyWorkbookDocument,
+              getWorkbookDocument: vi.fn().mockResolvedValue(Ok({ xml: liveXml })),
+            }),
+            signal: mockSignal,
+            focus: NO_FOCUS,
+          });
+
+          expectRemoved(result, [`A${decoded}B`]);
+          expect(applyWorkbookDocument).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it.each(['edited', 'open'] as const)(
+      'does not log parser input from the %s document',
+      async (document) => {
+        const marker = 'synthetic_sensitive_marker';
+        const malformed = `<workbook password="${marker}/>`;
+        const applyWorkbookDocument = vi.fn();
+        const result = await loadWorkbookXml({
+          xml: document === 'edited' ? malformed : validXml,
+          cachedLiveRelative: true,
+          executor: makeExecutorMock({
+            applyWorkbookDocument,
+            getWorkbookDocument: vi
+              .fn()
+              .mockResolvedValue(Ok({ xml: document === 'open' ? malformed : validXml })),
+          }),
+          signal: mockSignal,
+          focus: NO_FOCUS,
+        });
+
+        expect(result.unwrapErr()).toMatchObject({
+          type: 'load-workbook-xml-error',
+          error: { type: 'sheet-check-failed' },
+        });
+        expect(loggerModule.log).toHaveBeenCalledWith(
+          expect.objectContaining({ level: 'error', logger: 'workbookCommands' }),
+        );
+        expect(JSON.stringify(vi.mocked(loggerModule.log).mock.calls)).not.toContain(marker);
+        expect(JSON.stringify(result)).not.toContain(marker);
+        expect(applyWorkbookDocument).not.toHaveBeenCalled();
+      },
+    );
+
     it('still refuses with skipValidation and with no expectedSourceHash', async () => {
       const xml = realLiveXml.replace(/<dashboards>[\s\S]*?<\/dashboards>/, '');
 

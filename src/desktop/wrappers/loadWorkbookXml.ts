@@ -174,12 +174,12 @@ export async function loadWorkbookXml({
 
 const MAX_LISTED_SHEETS = 10;
 
-function sheetCheckFailed(which: 'edited' | 'open', error: unknown): LoadWorkbookXmlResult {
+function sheetCheckFailed(which: 'edited' | 'open'): LoadWorkbookXmlResult {
   log({
     level: 'error',
     message: `Sheet check could not parse the ${which} workbook document. XML not sent to Tableau`,
     logger: 'workbookCommands',
-    data: { error: error instanceof Error ? error.message : String(error) },
+    data: { document: which, reason: 'invalid-sheet-inventory' },
   });
   return Err({
     type: 'load-workbook-xml-error',
@@ -199,7 +199,7 @@ function sheetCheckFailed(which: 'edited' | 'open', error: unknown): LoadWorkboo
 function rejectRemovedSheets(xml: string, liveXml: string): LoadWorkbookXmlResult | undefined {
   const missingSheets = liveSheetNamesMissingFrom(xml, liveXml);
   if (missingSheets.isErr()) {
-    return sheetCheckFailed(missingSheets.error.document, missingSheets.error.cause);
+    return sheetCheckFailed(missingSheets.error.document);
   }
   const names = missingSheets.value;
   if (names.length === 0) return undefined;
