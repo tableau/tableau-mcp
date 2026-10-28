@@ -548,6 +548,12 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set(SCAFFOLD_DATA_APP_API_SCOPES),
   },
+  // Reports the current connection (auth method, server, site, user). GET /sessions/current
+  // requires no scope.
+  whoami: {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
 };
 
 async function getEnabledToolNames(clientId?: string): Promise<Set<WebToolName>> {
