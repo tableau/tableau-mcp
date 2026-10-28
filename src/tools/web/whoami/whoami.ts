@@ -141,6 +141,8 @@ This tool requires no input. It always reports the configured connection details
             });
           }
 
+          result.site.luid ??= extra.getSiteLuid() || undefined;
+          result.user.luid ??= extra.getUserLuid() || undefined;
           return Ok(result);
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
