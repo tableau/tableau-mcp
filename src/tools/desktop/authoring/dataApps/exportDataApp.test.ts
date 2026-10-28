@@ -37,4 +37,15 @@ describe('selectExportExtension', () => {
     expect((selected as McpToolError).message).toContain('instanceId');
     expect((selected as McpToolError).message).toContain('a, b');
   });
+
+  it('rejects an instanceId that belongs to a different sheet', () => {
+    const selected = selectExportExtension(
+      [extension('a', 'dash-1'), extension('b', 'dash-2')],
+      'dash-1',
+      'b',
+    );
+    expect(selected).toBeInstanceOf(McpToolError);
+    expect((selected as McpToolError).message).toContain('dash-2');
+    expect((selected as McpToolError).message).toContain('dash-1');
+  });
 });

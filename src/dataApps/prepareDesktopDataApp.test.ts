@@ -33,19 +33,21 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'sheet.xml'),
       templatePackageDir: template!,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-1}',
       datasourceId: '100%25',
       datasources,
     });
     expect(result.isOk()).toBe(true);
     if (result.isErr()) return;
     expect(result.value.datasourceId).toBe('100%');
+    expect(result.value.worksheetId).toBe('{SHEET-GUID-1}');
     expect(result.value.packageId).toMatch(/^com\.tableau\.mcp\.sales-demo\.[0-9a-f]+$/);
     expect(result.value.sourceDir.startsWith(workspace)).toBe(true);
     const xml = await readFile(result.value.worksheetFile, 'utf8');
     expect(xml).toContain("caption='One Hundred Percent'");
     expect(xml).toContain("name='100%'");
     expect(xml).toContain('tableauunzippedpackagesrc:///');
-    expect(xml).not.toContain('simple-id');
+    expect(xml).toContain("<simple-id uuid='{SHEET-GUID-1}' />");
     expect(xml).toContain(result.value.sourceDir.replace(/\\/g, '/'));
     const appJs = await readFile(join(result.value.sourceDir, 'content', 'src', 'app.js'), 'utf8');
     expect(appJs).toContain('var BOUND_DATASOURCE_ID = "100%";');
@@ -59,6 +61,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'sheet.xml'),
       templatePackageDir: template,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'Sales%20West',
       datasources: [{ id: 'Sales%20West', name: 'Sales West' }],
     });
@@ -74,6 +77,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'a.xml'),
       templatePackageDir: template,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-A}',
       datasourceId: 'Sales%20West',
       datasources,
     });
@@ -82,6 +86,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'b.xml'),
       templatePackageDir: template,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-B}',
       datasourceId: '%E5%A3%B2%E4%B8%8A',
       datasources,
     });
@@ -99,6 +104,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'sheet.xml'),
       templatePackageDir: template,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'Sales%20West',
       datasources,
     });
@@ -108,6 +114,7 @@ describe('prepareDesktopDataApp', () => {
       worksheetFile: join(cache, 'sheet.xml'),
       templatePackageDir: template,
       datappName: 'Sales Demo',
+      worksheetId: '{SHEET-GUID-1}',
       datasourceId: 'not-a-source',
       datasources,
     });

@@ -22,6 +22,7 @@ export type PreparedDesktopDataApp = {
   sourceDir: string;
   worksheetFile: string;
   datasourceId: string;
+  worksheetId: string;
   worksheetName: string;
 };
 
@@ -55,6 +56,7 @@ function boundDatasource(
 
 function worksheetXml(args: {
   worksheetName: string;
+  worksheetId: string;
   packageId: string;
   version: string;
   sourceDir: string;
@@ -62,6 +64,7 @@ function worksheetXml(args: {
   caption: string;
 }): string {
   const name = escapeXml(args.worksheetName);
+  const worksheetId = escapeXml(args.worksheetId);
   const datasource = escapeXml(args.extensionsDatasourceId);
   const caption = escapeXml(args.caption);
   const url = escapeXml(unzippedPackageSrcUrl(args.sourceDir));
@@ -74,7 +77,7 @@ function worksheetXml(args: {
     "<mark class='VizExtension' />" +
     `<add-in add-in-id='${escapeXml(args.packageId)}' extension-url='${url}' extension-version='${escapeXml(args.version)}' instance-id='${instanceId}'>` +
     '<instance-settings /><type-settings><worksheet /></type-settings></add-in>' +
-    '</pane></panes><rows /><cols /></table></worksheet>'
+    `</pane></panes><rows /><cols /></table><simple-id uuid='${worksheetId}' /></worksheet>`
   );
 }
 
@@ -83,6 +86,7 @@ export async function prepareDesktopDataApp(args: {
   worksheetFile: string;
   templatePackageDir: string;
   datappName: string;
+  worksheetId: string;
   datasourceId: string;
   datasources: LiveDatasource[];
 }): Promise<Result<PreparedDesktopDataApp, McpToolError>> {
@@ -144,6 +148,7 @@ export async function prepareDesktopDataApp(args: {
 
   const xml = worksheetXml({
     worksheetName: identity.displayName,
+    worksheetId: args.worksheetId,
     packageId,
     version: identity.version,
     sourceDir,
@@ -158,6 +163,7 @@ export async function prepareDesktopDataApp(args: {
     sourceDir,
     worksheetFile: args.worksheetFile,
     datasourceId: selected.value.extensionsDatasourceId,
+    worksheetId: args.worksheetId,
     worksheetName: identity.displayName,
   });
 }
