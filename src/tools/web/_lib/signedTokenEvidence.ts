@@ -9,8 +9,8 @@ import { MutationTarget } from './mutationGuard.js';
 let signingKey: Buffer | null = null;
 
 // Replicas must share the key, so derive it from the OAuth JWE private key they already share. The
-// derivation keeps that key from signing anything directly. Without OAuth there is one process, and
-// a random key is enough.
+// derivation keeps that key from signing anything directly. Without a configured key each process
+// signs with its own random key, so preview and confirm must reach the same process.
 function getSigningKey(): Buffer {
   if (!signingKey) {
     const { oauth } = getConfig();
@@ -36,8 +36,9 @@ function getSpent(): ExpiringMap<string, true> {
 
 function sign(ctx: EvidenceContext, expiresAtMs: number): string {
   const { siteId, userLuid, tool, target, binding = '' } = ctx;
+  // JSON keeps a delimiter inside one field from shifting into the next.
   return createHmac('sha256', getSigningKey())
-    .update([siteId, userLuid, tool, target.id, binding, expiresAtMs].join(':'))
+    .update(JSON.stringify([siteId, userLuid, tool, target.id, binding, expiresAtMs]))
     .digest('hex');
 }
 

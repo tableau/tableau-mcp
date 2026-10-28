@@ -60,6 +60,15 @@ describe('SignedTokenEvidence', () => {
     );
   });
 
+  it('rejects a token whose fields shift across a delimiter', async () => {
+    const token = await mint(makeCtx({ target: { id: `flow-${n}:x` }, binding: 'y' }));
+    expect(
+      await verify(
+        makeCtx({ target: { id: `flow-${n}` }, binding: 'x:y', confirmationToken: token }),
+      ),
+    ).toBe(false);
+  });
+
   it('rejects missing, malformed and tampered tokens', async () => {
     const token = await mint(makeCtx());
     const [expiry, signature] = token.split('-');
@@ -129,9 +138,10 @@ describe('SignedTokenEvidence signing key', () => {
     });
   }
 
-  it('interoperates across replicas using an inline key with escaped newlines', async () => {
-    const inline = { jwePrivateKey: PEM.replace(/\n/g, '\n'), jwePrivateKeyPath: '' };
-    expect(await crossVerifies(await replica(inline), await replica(inline))).toBe(true);
+  it('treats an inline key with escaped newlines the same as one with real newlines', async () => {
+    const escaped = { jwePrivateKey: PEM.replace(/\n/g, '\\n'), jwePrivateKeyPath: '' };
+    const literal = { jwePrivateKey: PEM, jwePrivateKeyPath: '' };
+    expect(await crossVerifies(await replica(escaped), await replica(literal))).toBe(true);
   });
 
   it('interoperates across replicas using a path-only key', async () => {
