@@ -392,6 +392,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  HTTP_HOST: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'HTTP Host',
+    description:
+      'The network interface address the HTTP server binds to. Defaults to all interfaces.',
+    required: false,
+    sensitive: false,
+  },
   CORS_ORIGIN_CONFIG: {
     includeInUserConfig: false,
     type: 'string',
