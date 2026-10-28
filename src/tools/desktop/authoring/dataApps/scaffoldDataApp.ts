@@ -30,7 +30,7 @@ const paramsSchema = {
   worksheetId: z
     .string()
     .min(1)
-    .describe('Stable worksheet id from list-worksheets; stamped as <simple-id> for apply.'),
+    .describe('Stable External API worksheet id; stamped as <simple-id> for apply.'),
   datasourceId: z.string().min(1).describe('External API datasource id.'),
 };
 

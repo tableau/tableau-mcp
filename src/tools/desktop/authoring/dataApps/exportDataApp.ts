@@ -21,7 +21,7 @@ const paramsSchema = {
     .min(1)
     .optional()
     .describe(
-      'AddIn instance id from get-workbook-extensions. Required when the sheet hosts more than one extension.',
+      'AddIn instance id of the placed extension. Required when the sheet hosts more than one extension.',
     ),
 };
 
@@ -57,7 +57,7 @@ export const selectExportExtension = (
       message:
         matches.length === 0
           ? `Select one extension sheet. Requested "${sheet}". Matches: 0.`
-          : `Select one extension sheet. Requested "${sheet}". Matches: ${matches.length}. Pass instanceId from get-workbook-extensions (${instanceIds}).`,
+          : `Select one extension sheet. Requested "${sheet}". Matches: ${matches.length}. Pass instanceId (${instanceIds}).`,
       statusCode: 400,
     });
   }
@@ -73,7 +73,7 @@ export const getExportDataAppTool = (
     minApiVersion: '0.2.26',
     title: 'Export a data app package',
     description:
-      'Writes a .tpkg for the selected sheet. Returns filePath, packageId, and version. Leaves the source files in place. When a sheet hosts multiple extensions, pass instanceId from get-workbook-extensions.',
+      'Writes a .tpkg for the selected sheet. Returns filePath, packageId, and version. Leaves the source files in place. When a sheet hosts multiple extensions, pass instanceId.',
     paramsSchema,
     annotations: {
       readOnlyHint: true,

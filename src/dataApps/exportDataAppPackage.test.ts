@@ -97,10 +97,7 @@ describe('exportDataAppPackage', () => {
     const trex = await readFile(trexPath, 'utf8');
     await writeFile(
       trexPath,
-      trex.replace(
-        /<url>[^<]*<\/url>/,
-        '<url>index.html</url><url>https://evil.example/x</url>',
-      ),
+      trex.replace(/<url>[^<]*<\/url>/, '<url>index.html</url><url>https://evil.example/x</url>'),
     );
     const result = await exportDataAppPackage({
       packageDir: source,
