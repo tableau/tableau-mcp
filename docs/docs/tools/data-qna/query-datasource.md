@@ -79,6 +79,22 @@ Example:
 
 ## Optional arguments
 
+### `interpretFieldCaptionsAsFieldNames`
+
+Requires Tableau 2025.3 or later. Set to `true` to use the exact `fieldName` and `parameterName`
+values returned by [Get Datasource Metadata](get-datasource-metadata.md), for example when several
+logical tables contain fields with the same display caption. Choose the intended logical table; do
+not invent or qualify names yourself.
+
+Use underlying names consistently for existing fields in selections, filters, calculations and
+parameters. The VDS request properties remain `fieldCaption` and `parameterCaption`; their values
+are interpreted as underlying names when this option is enabled.
+
+Omit or set to `false` to retain display-caption queries. Earlier Tableau versions reject `true`
+before datasource requests, including when supplementary query validation is disabled.
+
+<hr />
+
 ### `limit`
 
 The maximum number of rows to return. The tool will return at most this many rows.

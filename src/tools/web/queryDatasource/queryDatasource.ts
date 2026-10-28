@@ -54,6 +54,12 @@ const paramsSchema = {
       'Required to access an embedded (workbook) data source: the LUID of the workbook it belongs to, e.g. the workbook LUID passed to get-workbook. Omit for published data sources.',
     ),
   query: querySchema,
+  interpretFieldCaptionsAsFieldNames: z
+    .boolean()
+    .optional()
+    .describe(
+      'Requires Tableau 2025.3 or later. Set true to query using exact fieldName and parameterName values from get-datasource-metadata. Use this for duplicate display names, choosing the intended logical table. In this mode use internal names consistently in fields, filters, calculations and parameters; do not invent names. Omit or set false to use display captions.',
+    ),
   limit: z
     .number()
     .int()
@@ -106,14 +112,19 @@ export const getQueryDatasourceTool = (
       openWorldHint: false,
     },
     callback: async (
-      { datasourceLuid, workbookLuid, query, limit },
+      { datasourceLuid, workbookLuid, query, limit, interpretFieldCaptionsAsFieldNames },
       extra,
     ): Promise<CallToolResult> => {
       const { getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
-        args: { datasourceLuid, workbookLuid, query },
+        args: { datasourceLuid, workbookLuid, query, interpretFieldCaptionsAsFieldNames },
         callback: async () => {
+          if (interpretFieldCaptionsAsFieldNames && rules.fieldNamesAreUnavailable) {
+            return new ArgsValidationError(
+              'Querying by internal field names requires Tableau 2025.3 or later. Omit interpretFieldCaptionsAsFieldNames or set it to false and use display captions on this server.',
+            ).toErr();
+          }
           try {
             validateQuery({ datasourceLuid, query, rules });
           } catch (error) {
@@ -142,6 +153,9 @@ export const getQueryDatasourceTool = (
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
+            ...(interpretFieldCaptionsAsFieldNames
+              ? { interpretFieldCaptionsAsFieldNames: true }
+              : {}),
             ...(rules.dontSpecifyRowLimits || rowLimit === undefined
               ? {}
               : { rowLimit: rowLimit + 1 }),
@@ -168,6 +182,7 @@ export const getQueryDatasourceTool = (
                   query,
                   restApi.vizqlDataServiceMethods,
                   datasource,
+                  interpretFieldCaptionsAsFieldNames,
                 );
 
                 if (metadataValidationResult.isErr()) {
@@ -182,6 +197,7 @@ export const getQueryDatasourceTool = (
                   query,
                   restApi.vizqlDataServiceMethods,
                   datasource,
+                  interpretFieldCaptionsAsFieldNames,
                 );
 
                 if (filterValidationResult.isErr()) {
@@ -269,13 +285,18 @@ export const getQueryDatasourceTool = (
 };
 
 function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
-  return getResultForTableauVersion({
+  return getResultForTableauVersion<ToolRules>({
     productVersion,
     mappings: {
       '2026.1.0': {},
+      '2025.3.0': {
+        dontSpecifyRowLimits: true,
+        restrictFunctionsAndCalculationsInFilters: true,
+      },
       default: {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
+        fieldNamesAreUnavailable: true,
       },
     },
   });

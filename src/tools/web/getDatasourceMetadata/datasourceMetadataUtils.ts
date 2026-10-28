@@ -9,6 +9,7 @@ import {
 export const fieldSchema = z
   .object({
     name: z.string(),
+    fieldName: z.string(),
     columnClass: z.string(),
     logicalTableId: z.string().nullable(),
     dataType: z.string().nullable(),
@@ -38,6 +39,7 @@ export const logicalTableGroupSchema = z.object({
 export const parameterSchema = z
   .object({
     name: z.string(),
+    parameterName: z.string(),
     parameterType: z.string(),
     dataType: z.string().nullable(),
     value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
@@ -140,6 +142,7 @@ export function simplifyReadMetadataResult(
   for (const field of readMetadataResult.data) {
     const toPush: Field = {
       name: field.fieldCaption,
+      fieldName: field.fieldName,
       dataType: field.dataType,
       columnClass: field.columnClass,
       logicalTableId: normalizeLogicalTableId(field.logicalTableId),
@@ -161,6 +164,7 @@ export function simplifyReadMetadataResult(
     for (const parameter of readMetadataResult.extraData.parameters) {
       const toPush: Parameter = {
         name: parameter.parameterCaption,
+        parameterName: parameter.parameterName,
         parameterType: parameter.parameterType,
         dataType: parameter.dataType,
         value: parameter.value,
@@ -239,6 +243,7 @@ export function combineFields(
     // only keeping essential field properties.
     const toPush: Field = {
       name: field.fieldCaption,
+      fieldName: field.fieldName,
       dataType: field.dataType,
       columnClass: field.columnClass,
       logicalTableId: normalizeLogicalTableId(field.logicalTableId),
@@ -260,6 +265,7 @@ export function combineFields(
     for (const parameter of readMetadataResult.extraData.parameters) {
       const toPush: Parameter = {
         name: parameter.parameterCaption,
+        parameterName: parameter.parameterName,
         parameterType: parameter.parameterType,
         dataType: parameter.dataType,
         value: parameter.value,

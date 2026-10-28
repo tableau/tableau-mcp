@@ -114,6 +114,7 @@ const getDatasourceMetadataToolDescription = `
     This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    name is the display caption; fieldName is the internal query name. On Tableau 2025.3 or later, for duplicate captions, choose the intended logical table and use exact fieldName values with query-datasource's interpretFieldCaptionsAsFieldNames option. parameterName is the corresponding internal parameter name.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `;
 
@@ -121,6 +122,7 @@ const getDatasourceMetadataToolDescription20263 = `
     This tool retrieves metadata for a datasource specified by its datasourceLuid, which may be a published or an embedded (workbook) data source. It takes the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType. The richer Metadata API context (descriptions, dataCategories, roles, etc.) is only available for published data sources and may be absent for embedded ones.
+    name is the display caption; fieldName is the internal query name. On Tableau 2025.3 or later, for duplicate captions, choose the intended logical table and use exact fieldName values with query-datasource's interpretFieldCaptionsAsFieldNames option. parameterName is the corresponding internal parameter name.
     For an embedded data source, also pass workbookLuid: the LUID of the workbook it belongs to. The server configuration may restrict access to embedded data sources based on their workbook.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau data sources.
     `;
