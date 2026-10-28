@@ -180,13 +180,21 @@ change anything.
                     };
                   }
                   case 'suggestions': {
+                    // Older servers count the whole graph in summary.total whatever the
+                    // filters, so it is only trusted when none is set. A filtered request
+                    // asks for the whole list and counts it instead.
+                    const isFiltered =
+                      args.severity !== undefined || args.suggestionType !== undefined;
                     const report = await methods.getKnowledgeSuggestions({
                       graphId: args.graphId,
                       pdsId: args.pdsId,
                       severity: args.severity,
                       type: args.suggestionType,
-                      limit,
+                      limit: isFiltered ? undefined : limit,
                     });
+                    const found = isFiltered
+                      ? report.suggestions.length
+                      : Math.max(report.summary.total, report.suggestions.length);
                     return {
                       action: args.action,
                       healthScore: report.health_score ?? null,
@@ -195,7 +203,12 @@ change anything.
                       summary: report.summary,
                       suggestions: report.suggestions.slice(0, limit),
                       errors: report.errors.slice(0, limit),
-                      resultInfo: listResultInfo('Suggestion', report.suggestions.length, limit),
+                      resultInfo: listResultInfo(
+                        'Suggestion',
+                        found,
+                        limit,
+                        report.suggestions.length,
+                      ),
                     };
                   }
                 }
@@ -215,10 +228,12 @@ function listResultInfo(
   label: string,
   original: number,
   limit: number,
+  available = original,
 ): Record<string, number | boolean> {
+  const returned = Math.min(available, limit);
   return {
     [`original${label}Count`]: original,
-    [`returned${label}Count`]: Math.min(original, limit),
-    truncated: original > limit,
+    [`returned${label}Count`]: returned,
+    truncated: original > returned,
   };
 }

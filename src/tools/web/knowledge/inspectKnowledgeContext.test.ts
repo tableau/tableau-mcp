@@ -210,6 +210,98 @@ describe('inspectKnowledgeContextTool', () => {
     expect(out).not.toHaveProperty('topics');
   });
 
+  describe('suggestions truncation', () => {
+    const suggestion = (id: string): Record<string, unknown> => ({
+      id,
+      type: 'coverage',
+      category: 'context',
+      topic: 'definitions',
+      title: 'Add definitions',
+      detail: 'Missing definitions',
+      recommended_action: 'Add context',
+      severity: 'medium',
+      target_ids: ['pds-1'],
+      metadata: {},
+    });
+
+    const report = (returned: number, total: number): Record<string, unknown> => ({
+      health_score: 52,
+      stats: { total_nodes: 10, total_relationships: 4, connected_sources: 1, workbooks: 2 },
+      metrics: [],
+      suggestions: Array.from({ length: returned }, (_, i) => suggestion(`sg-${i}`)),
+      categories: [],
+      topics: [],
+      summary: {
+        total,
+        by_severity: { medium: total },
+        by_type: { coverage: total },
+        by_category: { context: total },
+        by_topic: { definitions: total },
+        errors: 0,
+      },
+      errors: [],
+    });
+
+    it('sends the limit and reports truncated when summary.total is above the returned count', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(25, 51));
+
+      const out = payload(await getResult({ action: 'suggestions' }));
+
+      expect(mocks.getKnowledgeSuggestions).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 25 }),
+      );
+      expect(out.resultInfo).toMatchObject({
+        originalSuggestionCount: 51,
+        returnedSuggestionCount: 25,
+        truncated: true,
+      });
+    });
+
+    it('reports truncated when the server row cap hid suggestions', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(50, 80));
+
+      const out = payload(await getResult({ action: 'suggestions', limit: 100 }));
+
+      expect(out.resultInfo).toMatchObject({
+        originalSuggestionCount: 80,
+        returnedSuggestionCount: 50,
+        truncated: true,
+      });
+    });
+
+    it('does not report truncated when everything was returned', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(10, 10));
+
+      const out = payload(await getResult({ action: 'suggestions' }));
+
+      expect(out.resultInfo).toMatchObject({ originalSuggestionCount: 10, truncated: false });
+    });
+
+    it('counts the returned list instead of summary.total when a filter is set', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(51, 500));
+
+      const out = payload(await getResult({ action: 'suggestions', severity: 'medium' }));
+
+      expect(mocks.getKnowledgeSuggestions).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: undefined }),
+      );
+      expect(out.suggestions).toHaveLength(25);
+      expect(out.resultInfo).toMatchObject({
+        originalSuggestionCount: 51,
+        returnedSuggestionCount: 25,
+        truncated: true,
+      });
+    });
+
+    it('does not report truncated for a filtered list that fits, whatever summary.total says', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(10, 500));
+
+      const out = payload(await getResult({ action: 'suggestions', suggestionType: 'coverage' }));
+
+      expect(out.resultInfo).toMatchObject({ originalSuggestionCount: 10, truncated: false });
+    });
+  });
+
   it('preserves global scope for graph-wide and node listings', async () => {
     mocks.listSemanticStatements.mockResolvedValue([context()]);
 
