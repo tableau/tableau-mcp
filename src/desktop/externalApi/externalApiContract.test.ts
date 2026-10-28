@@ -161,8 +161,8 @@ const KNOWN_READ_REQUIREDNESS_EXCEPTIONS: Readonly<Record<string, readonly strin
 };
 
 describe('external client API contract (captured openapi fixture)', () => {
-  it('tracks the 0.2.25 producer contract', () => {
-    expect(spec.info.version).toBe('0.2.25');
+  it('tracks the 0.2.26 producer contract', () => {
+    expect(spec.info.version).toBe('0.2.26');
   });
 
   describe('Operation ↔ operationEnvelopeSchema', () => {
@@ -699,6 +699,13 @@ describe('external client API contract (captured openapi fixture)', () => {
       } finally {
         await server.close();
       }
+    });
+
+    it('documents getWorkbookExtensions at 0.2.26', () => {
+      const item = spec.paths[EXTERNAL_API_ROUTES.workbookExtensions] as {
+        get?: { operationId?: string };
+      };
+      expect(item.get?.operationId).toBe('getWorkbookExtensions');
     });
 
     it('documents the new 0.2.25 operations by operationId', () => {

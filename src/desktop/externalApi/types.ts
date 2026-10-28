@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
  * Contract derived from the External Client API rollout, then tightened against the
- * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.25), derived from
+ * producer OpenAPI contract (OpenAPI 3.1, `info.version` 0.2.26), derived from
  * the production registry/generator harness. The dialog contract was canonical-JSON
  * compared on 2026-09-08.
  * Envelope fields the spec marks required are required here; everything else stays
@@ -35,6 +35,7 @@ export const EXTERNAL_API_ROUTES = {
   workbookDocumentValidate: '/v0/workbook/document:validate',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookStoryboardsNew: '/v0/workbook/storyboards:new',
+  workbookExtensions: '/v0/workbook/extensions',
   workbookWorksheets: '/v0/workbook/worksheets',
   workbookWorksheetsNew: '/v0/workbook/worksheets:new',
   workbookUndo: '/v0/workbook:undo',
@@ -975,6 +976,40 @@ export const datasourceListSchema = z
   })
   .passthrough();
 export type DatasourceList = z.infer<typeof datasourceListSchema>;
+
+export const workbookExtensionSheetSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(['worksheet', 'dashboard']),
+  })
+  .passthrough();
+
+export const workbookExtensionKeySchema = z
+  .object({
+    id: z.string(),
+    version: z.string(),
+    url: z.string(),
+  })
+  .passthrough();
+
+export const workbookExtensionSchema = z
+  .object({
+    instanceId: z.string(),
+    sheet: workbookExtensionSheetSchema,
+    extension: workbookExtensionKeySchema,
+    packagePath: z.string().nullable(),
+  })
+  .passthrough();
+
+/** Extensions placed in the open workbook, from `GET /v0/workbook/extensions`. */
+export const workbookExtensionListSchema = z
+  .object({
+    extensions: z.array(workbookExtensionSchema),
+  })
+  .passthrough();
+export type WorkbookExtensionList = z.infer<typeof workbookExtensionListSchema>;
+export type WorkbookExtension = z.infer<typeof workbookExtensionSchema>;
+export type WorkbookExtensionKey = z.infer<typeof workbookExtensionKeySchema>;
 
 /** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
 export const summaryDataSchema = z
