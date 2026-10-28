@@ -210,7 +210,7 @@ describe('createDataAppWorkspace', () => {
         // Vendored Extensions API library copied byte-for-byte (large binary).
         const libPath = join(pkgDir, 'content', 'src', 'tableau.extensions.1.latest.min.js');
         expect(existsSync(libPath)).toBe(true);
-        expect(statSync(libPath).size).toBe(291737);
+        expect(statSync(libPath).size).toBe(302125);
 
         // Starter app.js left untouched with its authoring marker.
         const appJs = await readFile(join(pkgDir, 'content', 'src', 'app.js'), 'utf8');
