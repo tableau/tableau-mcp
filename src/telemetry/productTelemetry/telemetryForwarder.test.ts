@@ -106,17 +106,13 @@ describe('DirectTelemetryForwarder', () => {
     expect(request.headers.get('Accept')).toBe('application/json');
 
     const event = await sentEvent();
-    expect(event).toEqual(
-      expect.objectContaining({
-        type: 'tool_call',
-        service_name: 'tableau-mcp',
-        // podname + is_hyperforce are stamped by the forwarder from resolved env.
-        properties: { action: 'click', count: 42, podname: server, is_hyperforce: false },
-        pod: server,
-        host_name: expect.any(String),
-        host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
-      }),
-    );
+    expect(event).toEqual({
+      type: 'tool_call',
+      service_name: 'tableau-mcp',
+      // podname + is_hyperforce are stamped by the forwarder from resolved env.
+      properties: { action: 'click', count: 42, podname: server, is_hyperforce: false },
+      host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+    });
   });
 
   it('stamps every event with the resolved pod and is_hyperforce', async () => {
@@ -125,22 +121,15 @@ describe('DirectTelemetryForwarder', () => {
     forwarder.send('tool_call', { foo: 'bar' });
 
     const event = await sentEvent();
-    expect(event.pod).toBe(server);
     expect(event.properties.podname).toBe(server);
     expect(event.properties.is_hyperforce).toBe(true);
-    expect(event.host_name).toBeDefined();
+    // The UIP table maps only properties.*, so the pod is sent there, not top-level.
+    expect(event).not.toHaveProperty('pod');
   });
 
-  it('stamps host_name with os.hostname() by default (web)', async () => {
-    vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
-    getProductTelemetry().send('tool_call', { foo: 'bar' });
-
-    expect((await sentEvent()).host_name).toBe('sentinel-host');
-  });
-
-  it('omits host_name and never reads os.hostname() when includeHostName is false (desktop)', async () => {
+  it('never sends host_name or reads os.hostname()', async () => {
     const hostnameSpy = vi.spyOn(os, 'hostname').mockReturnValue('sentinel-host');
-    getProductTelemetry().send('tool_call', { foo: 'bar' }, { includeHostName: false });
+    getProductTelemetry().send('tool_call', { foo: 'bar' });
 
     const request = mockFetch.mock.calls[0][0] as Request;
     expect(await request.clone().text()).not.toContain('sentinel-host');
@@ -151,7 +140,6 @@ describe('DirectTelemetryForwarder', () => {
     expect(event).toEqual({
       type: 'tool_call',
       service_name: 'tableau-mcp',
-      pod: server,
       properties: { foo: 'bar', podname: server, is_hyperforce: false },
       host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
     });
@@ -187,8 +175,8 @@ describe('DirectTelemetryForwarder', () => {
     desktopFirst.send('tool_call', { from: 'desktop' });
     webSecond.send('tool_call', { from: 'web' });
 
-    expect((await sentEvent(0)).pod).toBe(server);
-    expect((await sentEvent(1)).pod).toBe(server);
+    expect((await sentEvent(0)).properties.podname).toBe(server);
+    expect((await sentEvent(1)).properties.podname).toBe(server);
   });
 
   it('does not throw when the endpoint is invalid', () => {
