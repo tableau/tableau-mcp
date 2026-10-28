@@ -1,4 +1,10 @@
-import { validateWorkbookDocumentApply } from './workbookDocumentGuard.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import {
+  liveSheetNamesMissingFrom,
+  validateWorkbookDocumentApply,
+} from './workbookDocumentGuard.js';
 
 const LIVE_WORKBOOK_XML = `<workbook>
   <datasources>
@@ -26,6 +32,11 @@ const SPLICED_WORKBOOK_XML = LIVE_WORKBOOK_XML.replace(
 const REAL_HEAD_WORKBOOK_XML =
   "<?xml version='1.0' encoding='utf-8' ?>\n\n<!-- build main.26.0715.2311                                -->\n" +
   LIVE_WORKBOOK_XML;
+
+const REAL_FIXTURE = join(
+  process.cwd(),
+  'src/tools/desktop/authoring/datasource/__fixtures__/real-superstore-document.twb.xml',
+);
 
 describe('validateWorkbookDocumentApply', () => {
   it('accepts a real document head (prolog + build comment before the root)', () => {
@@ -65,7 +76,7 @@ describe('validateWorkbookDocumentApply', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
-    expect(result.message).toContain('DROP worksheet(s) B');
+    expect(result.message).toContain('DROP sheet(s) B');
     expect(result.message).toContain('a separate request');
   });
 
@@ -86,7 +97,7 @@ describe('validateWorkbookDocumentApply', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
-    expect(result.message).toContain('DROP worksheet(s) B');
+    expect(result.message).toContain('DROP sheet(s) B');
   });
 
   it('accepts a spliced whole workbook document that preserves live worksheets', () => {
@@ -127,5 +138,209 @@ describe('validateWorkbookDocumentApply', () => {
 </workbook>`;
 
     expect(validateWorkbookDocumentApply(workbookXml, workbookXml)).toEqual({ ok: true });
+  });
+
+  it('rejects an apply missing a dashboard from the live document', () => {
+    const live = LIVE_WORKBOOK_XML.replace(
+      '</workbook>',
+      "<dashboards><dashboard name='D'><zones /></dashboard></dashboards></workbook>",
+    );
+
+    const result = validateWorkbookDocumentApply(LIVE_WORKBOOK_XML + '<!-- pad -->', live);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.message).toContain('DROP sheet(s) D');
+  });
+
+  it('accepts an edit that keeps a live dashboard', () => {
+    const live = LIVE_WORKBOOK_XML.replace(
+      '</workbook>',
+      "<dashboards><dashboard name='D'><zones /></dashboard></dashboards></workbook>",
+    );
+
+    expect(validateWorkbookDocumentApply(live, live)).toEqual({ ok: true });
+  });
+
+  it('rejects replacing a worksheet with a dashboard of the same name', () => {
+    const submitted = LIVE_WORKBOOK_XML.replace(
+      "    <worksheet name='B'>\n      <table><view /></table>\n    </worksheet>\n",
+      '',
+    ).replace('</workbook>', "<dashboards><dashboard name='B'/></dashboards></workbook>");
+
+    const result = validateWorkbookDocumentApply(submitted, LIVE_WORKBOOK_XML);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.message).toContain('DROP sheet(s) B');
+  });
+
+  it('fails closed when the live document cannot be parsed', () => {
+    const result = validateWorkbookDocumentApply(LIVE_WORKBOOK_XML, '<!DOCTYPE x><workbook/>');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.message).toContain('could not read');
+  });
+});
+
+describe('liveSheetNamesMissingFrom', () => {
+  const wb = (inner: string): string => `<workbook>${inner}</workbook>`;
+  const ws = (...names: string[]): string =>
+    `<worksheets>${names.map((n) => `<worksheet name='${n}'/>`).join('')}</worksheets>`;
+  const db = (...names: string[]): string =>
+    `<dashboards>${names.map((n) => `<dashboard name='${n}'/>`).join('')}</dashboards>`;
+
+  it('names a dropped worksheet', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('A')), wb(ws('A', 'B'))).unwrap()).toEqual(['B']);
+  });
+
+  it('names a dropped dashboard', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('A')), wb(ws('A') + db('D'))).unwrap()).toEqual(['D']);
+  });
+
+  it('names a dropped story (dashboard type=storyboard)', () => {
+    const live = wb(ws('A') + "<dashboards><dashboard name='S' type='storyboard'/></dashboards>");
+    expect(liveSheetNamesMissingFrom(wb(ws('A')), live).unwrap()).toEqual(['S']);
+  });
+
+  it('allows an added sheet', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('A', 'B', 'C')), wb(ws('A', 'B'))).unwrap()).toEqual([]);
+  });
+
+  it.each([
+    [ws('A'), db('A')],
+    [db('A'), ws('A')],
+    [db('A'), "<dashboards><dashboard name='A' type='storyboard'/></dashboards>"],
+    ["<dashboards><dashboard name='A' type='storyboard'/></dashboards>", db('A')],
+  ])('rejects a same-name replacement across sheet kinds: %s -> %s', (live, submitted) => {
+    expect(liveSheetNamesMissingFrom(wb(submitted), wb(live)).unwrap()).toEqual(['A']);
+  });
+
+  it('compares parsed names using trim and NFC without decoding entities again', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws(' Caf\u00e9 ')), wb(ws('Cafe\u0301'))).unwrap()).toEqual(
+      [],
+    );
+  });
+
+  it('reports missing names in their original live spelling', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('B')), wb(ws('Cafe\u0301'))).unwrap()).toEqual([
+      'Cafe\u0301',
+    ]);
+  });
+
+  it('returns missing names in live order, deduped', () => {
+    const live = wb(ws('Z', 'A', 'Z', 'M'));
+    expect(liveSheetNamesMissingFrom(wb(ws('M')), live).unwrap()).toEqual(['Z', 'A']);
+  });
+
+  it('handles a single worksheet (parser yields an object, not an array)', () => {
+    expect(liveSheetNamesMissingFrom(wb(db('D')), wb(ws('A'))).unwrap()).toEqual(['A']);
+  });
+
+  it('accepts either quote style for the same name', () => {
+    const submitted = wb('<worksheets><worksheet name="A"/></worksheets>');
+    expect(liveSheetNamesMissingFrom(submitted, wb(ws('A'))).unwrap()).toEqual([]);
+  });
+
+  it('ignores windows, zones and attributes that only end in name', () => {
+    const live = wb(
+      ws('A') +
+        "<windows><window class='worksheet' name='W'/></windows>" +
+        "<dashboards><dashboard name='D'><zones><zone name='Z' x-name='Q'/></zones></dashboard></dashboards>",
+    );
+    expect(liveSheetNamesMissingFrom(live, live).unwrap()).toEqual([]);
+    expect(liveSheetNamesMissingFrom(wb(ws('A') + db('D')), live).unwrap()).toEqual([]);
+  });
+
+  it('matches <worksheet name=...> with name as the first attribute', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('B')), wb(ws('A', 'B'))).unwrap()).toEqual(['A']);
+  });
+
+  it('treats an entity-encoded name and its literal spelling as the same name', () => {
+    const live = wb('<worksheets><worksheet name="It\'s &amp; &gt; &#65;"/></worksheets>');
+    const submitted = wb("<worksheets><worksheet name='It&apos;s &amp; &gt; A'/></worksheets>");
+    expect(liveSheetNamesMissingFrom(submitted, live).unwrap()).toEqual([]);
+  });
+
+  it('decodes &amp;lt; once: "A &lt; B" literal text differs from "A < B"', () => {
+    const live = wb("<worksheets><worksheet name='A &amp;lt; B'/></worksheets>");
+    const submitted = wb("<worksheets><worksheet name='A &lt; B'/></worksheets>");
+    expect(liveSheetNamesMissingFrom(submitted, live).unwrap()).toEqual(['A &lt; B']);
+  });
+
+  it.each([
+    ['\t', '&#9;', '\t'],
+    ['\n', '&#10;', '\n'],
+    ['\r', '&#13;', '\r'],
+    ['\r\n', '&#10;', '\n'],
+    ['\t', '&#x9;', '\t'],
+  ])('distinguishes literal %j from character reference %s', (literal, reference, decoded) => {
+    const literalXml = wb(ws(`A${literal}B`));
+    const referenceXml = wb(ws(`A${reference}B`));
+
+    expect(liveSheetNamesMissingFrom(literalXml, referenceXml).unwrap()).toEqual([`A${decoded}B`]);
+    expect(liveSheetNamesMissingFrom(referenceXml, literalXml).unwrap()).toEqual(['A B']);
+    expect(liveSheetNamesMissingFrom(wb(ws('A B')), literalXml).unwrap()).toEqual([]);
+    expect(liveSheetNamesMissingFrom(referenceXml, referenceXml).unwrap()).toEqual([]);
+  });
+
+  it('normalizes attribute whitespace with either quote style and ignores raw XML sections', () => {
+    const literalXml = wb(
+      '<!-- name="Unrelated\tcomment" -->' +
+        '<worksheets><worksheet caption="A > B" name="A\r\nB"/></worksheets>' +
+        '<text><![CDATA[name="Unrelated\ttext"]]></text>',
+    );
+    expect(liveSheetNamesMissingFrom(wb(ws('A B')), literalXml).unwrap()).toEqual([]);
+  });
+
+  it.each(['edited', 'open'] as const)(
+    'returns the %s parse failure with its cause',
+    (document) => {
+      const valid = wb(ws('A'));
+      const invalid = '<!DOCTYPE x><workbook/>';
+      const result = liveSheetNamesMissingFrom(
+        document === 'edited' ? invalid : valid,
+        document === 'open' ? invalid : valid,
+      );
+      expect(result.unwrapErr()).toEqual({ document, cause: expect.any(Error) });
+    },
+  );
+
+  it.each([
+    '',
+    '<html><error>bad</error></html>',
+    '<workbook>',
+    '<workbook><worksheets></workbook>',
+    '<workbook/><workbook/>',
+    wb(ws('A') + ws('B')),
+    wb(db('A') + db('B')),
+    wb('<worksheets><worksheet/></worksheets>'),
+    wb('<dashboards><dashboard/></dashboards>'),
+  ])('refuses an unreadable or ambiguous inventory on either side: %s', (invalid) => {
+    const valid = wb(ws('B'));
+    expect(liveSheetNamesMissingFrom(valid, invalid).unwrapErr()).toMatchObject({
+      document: 'open',
+    });
+    expect(liveSheetNamesMissingFrom(invalid, valid).unwrapErr()).toMatchObject({
+      document: 'edited',
+    });
+  });
+
+  it('allows a legitimate empty workbook inventory', () => {
+    expect(liveSheetNamesMissingFrom(wb(ws('A')), '<workbook/>').unwrap()).toEqual([]);
+    expect(liveSheetNamesMissingFrom('<workbook/>', wb(ws('A'))).unwrap()).toEqual(['A']);
+  });
+
+  it('reads the real Desktop fixture sheet inventory (4 worksheets + 1 dashboard)', () => {
+    const real = readFileSync(REAL_FIXTURE, 'utf8');
+    expect(liveSheetNamesMissingFrom(wb(ws('nothing')), real).unwrap()).toEqual([
+      'Monthly Sales Funnel',
+      'Profit by Sub-Category: Standouts vs Everyone Else',
+      'Profit by category as a bar chart, sorted descending by profit (most profitable',
+      'stage-encore-canon',
+      'Sales by Region',
+    ]);
+    expect(liveSheetNamesMissingFrom(real, real).unwrap()).toEqual([]);
   });
 });
