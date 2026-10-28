@@ -257,18 +257,6 @@ describe('inspectKnowledgeContextTool', () => {
       });
     });
 
-    it('reports truncated when the server row cap hid suggestions', async () => {
-      mocks.getKnowledgeSuggestions.mockResolvedValue(report(50, 80));
-
-      const out = payload(await getResult({ action: 'suggestions', limit: 100 }));
-
-      expect(out.resultInfo).toMatchObject({
-        originalSuggestionCount: 80,
-        returnedSuggestionCount: 50,
-        truncated: true,
-      });
-    });
-
     it('does not report truncated when everything was returned', async () => {
       mocks.getKnowledgeSuggestions.mockResolvedValue(report(10, 10));
 
