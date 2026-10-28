@@ -14,6 +14,7 @@ import { DataAppTemplateUnavailableError, McpToolError } from '../../../errors/m
 import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { readSeaAssetBytes, runningAsSea } from '../../../utils/sea.js';
+import { DatasourceWiringInfo } from './datasourceWiring.js';
 import {
   buildPostUnzipPlan,
   buildRequestedOriginsGuide,
@@ -32,12 +33,13 @@ import {
  *  - blob storage: `downloadUrl` is a URL (from the configured BlobStorageProvider) for the
  *    (un-substituted) template zip — download it first, then unzip and apply `postUnzip`.
  * Both also return `requestedOrigins`: where the finalized manifest.json is and how to declare the
- * app's external origins in it.
+ * app's external origins in it, and `wiring`: the server/site values every datasource descriptor needs.
  */
 export type DataAppWorkspaceResult = {
   datappName: string;
   allowedOrigins: string[];
   requestedOrigins: RequestedOriginsGuide;
+  wiring: DatasourceWiringInfo;
   filePath?: string;
   downloadUrl?: string;
   postUnzip?: PostUnzipPlan;
@@ -123,9 +125,11 @@ export const exportedForTesting = {
 export async function createDataAppWorkspace({
   datappName,
   allowedOrigins,
+  wiring,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
   const identity = deriveIdentity(datappName);
 
@@ -140,7 +144,13 @@ export async function createDataAppWorkspace({
   }
 
   if (isBlobStorageEnabled()) {
-    return await createBlobStorageWorkspace({ datappName, allowedOrigins, identity, source });
+    return await createBlobStorageWorkspace({
+      datappName,
+      allowedOrigins,
+      wiring,
+      identity,
+      source,
+    });
   }
 
   let zipPath: string;
@@ -151,17 +161,19 @@ export async function createDataAppWorkspace({
       `Failed to prepare the data app template: ${getExceptionMessage(error)}.`,
     ).toErr();
   }
-  return createLocalWorkspace({ datappName, allowedOrigins, identity, zipPath });
+  return createLocalWorkspace({ datappName, allowedOrigins, wiring, identity, zipPath });
 }
 
 async function createBlobStorageWorkspace({
   datappName,
   allowedOrigins,
+  wiring,
   identity,
   source,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
   identity: DataAppIdentity;
   source: TemplateSource;
 }): Promise<Result<DataAppWorkspaceResult, McpToolError>> {
@@ -192,6 +204,7 @@ async function createBlobStorageWorkspace({
     datappName,
     allowedOrigins,
     requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
     downloadUrl,
     postUnzip: buildPostUnzipPlan(identity),
   });
@@ -200,11 +213,13 @@ async function createBlobStorageWorkspace({
 function createLocalWorkspace({
   datappName,
   allowedOrigins,
+  wiring,
   identity,
   zipPath,
 }: {
   datappName: string;
   allowedOrigins: string[];
+  wiring: DatasourceWiringInfo;
   identity: DataAppIdentity;
   zipPath: string;
 }): Result<DataAppWorkspaceResult, McpToolError> {
@@ -215,6 +230,7 @@ function createLocalWorkspace({
     datappName,
     allowedOrigins,
     requestedOrigins: buildRequestedOriginsGuide(identity),
+    wiring,
     filePath: zipPath,
     postUnzip: buildPostUnzipPlan(identity),
   });

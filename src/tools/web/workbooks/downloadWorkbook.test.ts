@@ -72,28 +72,27 @@ describe('downloadWorkbookTool', () => {
     });
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled for ChatGPT', async () => {
     const tool = getDownloadWorkbookTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled for a non-Slack client', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON for an unknown client', async () => {
+  it('is enabled for an unknown client', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://example.com/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools flag is ON for Slack', async () => {
+  it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     const tool = getDownloadWorkbookTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -101,7 +100,7 @@ describe('downloadWorkbookTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when the authoring-tools and authoring-with-slack flags are ON', async () => {
+  it('is enabled for Slack when the authoring-with-slack flag is ON', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     const tool = getDownloadWorkbookTool(
@@ -112,19 +111,10 @@ describe('downloadWorkbookTool', () => {
     expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-with-slack');
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when there is no OAuth client id (stdio)', async () => {
     const tool = getDownloadWorkbookTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-  });
-
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
-    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
-
-    const tool = getDownloadWorkbookTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
-
-    expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
   });
 
   it('should write workbook bytes to a temp path when blob storage is not configured', async () => {

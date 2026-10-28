@@ -57,16 +57,16 @@ describe('requestDatasourceUploadTool', () => {
     });
   });
 
-  it('is enabled when the authoring-tools flag is ON for ChatGPT', async () => {
+  it('is enabled when the datasource-authoring flag is ON for ChatGPT', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://chatgpt.com/connector' }),
     );
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled when the datasource-authoring flag is ON for a non-Slack client', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://claude.ai/mcp' }),
     );
@@ -76,7 +76,7 @@ describe('requestDatasourceUploadTool', () => {
 
   it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     mocks.mockIsFeatureEnabled.mockImplementation(
-      async (featureName: string) => featureName === 'authoring-tools',
+      async (featureName: string) => featureName === 'datasource-authoring',
     );
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
@@ -85,7 +85,7 @@ describe('requestDatasourceUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when both authoring flags are enabled', async () => {
+  it('is enabled for Slack when the datasource-authoring and authoring-with-slack flags are ON', async () => {
     const tool = getRequestDatasourceUploadTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -93,13 +93,13 @@ describe('requestDatasourceUploadTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is enabled when the authoring-tools flag is ON and there is no OAuth client id (stdio)', async () => {
+  it('is enabled when the datasource-authoring flag is ON and there is no OAuth client id (stdio)', async () => {
     const tool = getRequestDatasourceUploadTool(new WebMcpServer());
 
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
+  it('is disabled when the datasource-authoring feature flag is OFF even for a non-Slack client', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getRequestDatasourceUploadTool(
@@ -107,7 +107,7 @@ describe('requestDatasourceUploadTool', () => {
     );
 
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
   it('returns a staged upload URL when blob storage is configured', async () => {

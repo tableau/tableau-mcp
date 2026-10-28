@@ -2,7 +2,7 @@
   "mcp-apps": false,
   "enforce-role-requirements": false,
   "enforce-registration-conditions": false,
-  "authoring-tools": true,
+  "datasource-authoring": false,
   "flow-read-tools": true,
   "flow-write-tools": true,
   "knowledge-tools": false,

@@ -56,7 +56,7 @@ export async function fetchWorksheetSummaryData({
   maxRows: number;
   columns?: string[];
   materializeEmpty?: boolean;
-  /** Return underlying values instead of display aliases; omitted keeps the API default. */
+  /** API 0.2.25 and later always return raw values and ignore this; earlier builds honor it. */
   ignoreAliases?: boolean;
 }): Promise<Result<WorksheetSummaryData, WorksheetSummaryDataError>> {
   const worksheetsResult = await read(

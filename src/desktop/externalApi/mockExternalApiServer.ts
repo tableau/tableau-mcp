@@ -376,6 +376,7 @@ export async function startMockExternalApiServer(
   const operations = new Map<string, MockOperation>();
   const operationCursors = new Map<string, number>();
   let isStartPageVisible = false;
+  let isDataSourcePageActive = false;
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -437,7 +438,27 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.health) {
-      sendJson(res, 200, { status: 'ok' });
+      sendJson(res, 200, { status: 'OK' });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.capabilities) {
+      sendJson(res, 200, {
+        capabilities: {
+          getHealth: { requiresServer: false },
+          getApp: { requiresServer: false },
+          refreshDatasourceData: { requiresServer: true },
+          refreshDatasourceExtract: { requiresServer: true },
+        },
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.oauthProtectedResource) {
+      sendJson(res, 200, {
+        resource: 'http://127.0.0.1',
+        bearer_methods_supported: ['header'],
+      });
       return;
     }
 
@@ -467,8 +488,9 @@ export async function startMockExternalApiServer(
         repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
         logLocation: '/Users/tableau/Library/Logs/Tableau',
         isStartPageVisible,
-        isDataSourcePageActive: false,
+        isDataSourcePageActive,
         isPresentationMode: false,
+        isFocusMode: false,
       });
       return;
     }
@@ -1148,6 +1170,67 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const reloadExtensionMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+):reloadExtension$/,
+    );
+    if (method === 'POST' && reloadExtensionMatch) {
+      const worksheetId = decodeURIComponent(reloadExtensionMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendOperation(res, 'reload-worksheet-extension');
+      return;
+    }
+
+    const reloadExtensionsMatch = path.match(
+      /^\/v0\/workbook\/dashboards\/([^/]+):reloadExtensions$/,
+    );
+    if (method === 'POST' && reloadExtensionsMatch) {
+      const dashboardId = decodeURIComponent(reloadExtensionsMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendOperation(res, 'reload-dashboard-extensions');
+      return;
+    }
+
+    const validateCalculatedFieldMatch = path.match(
+      /^\/v0\/workbook\/worksheets\/([^/]+):validateCalculatedField$/,
+    );
+    if (method === 'POST' && validateCalculatedFieldMatch) {
+      const worksheetId = decodeURIComponent(validateCalculatedFieldMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      let parsed: { formula?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.formula !== 'string') {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'validateCalculatedField requires a string `formula`.',
+        );
+        return;
+      }
+      const isBalanced = parsed.formula.split('(').length === parsed.formula.split(')').length;
+      sendJson(res, 200, {
+        isValid: isBalanced,
+        errors: isBalanced
+          ? []
+          : [{ position: parsed.formula.length, length: 0, message: 'Unbalanced parentheses.' }],
+      });
+      return;
+    }
+
     const storyboardRefreshNowMatch = path.match(
       /^\/v0\/workbook\/storyboards\/([^/]+):refreshNow$/,
     );
@@ -1232,6 +1315,28 @@ export async function startMockExternalApiServer(
       }
       isStartPageVisible = parsed.isStartPageVisible;
       sendJson(res, 200, { isStartPageVisible });
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.appToggleDataSourcePage) {
+      let parsed: { isDataSourcePageActive?: unknown };
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendProblem(res, 400, 'invalid-request-body', 'Body was not valid JSON.');
+        return;
+      }
+      if (typeof parsed.isDataSourcePageActive !== 'boolean') {
+        sendProblem(
+          res,
+          400,
+          'invalid-request-body',
+          'toggleDataSourcePage requires a boolean `isDataSourcePageActive`.',
+        );
+        return;
+      }
+      isDataSourcePageActive = parsed.isDataSourcePageActive;
+      sendOperation(res, 'toggle-data-source-page');
       return;
     }
 
@@ -1340,7 +1445,16 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '1.0' },
+        info: { title: 'Tableau External Client API', version: '0.2.25' },
+        paths: {
+          [EXTERNAL_API_ROUTES.health]: {
+            get: { operationId: 'getHealth', summary: 'Liveness probe' },
+          },
+          [EXTERNAL_API_ROUTES.app]: {
+            get: { operationId: 'getApp', summary: 'Get Tableau Desktop application info' },
+          },
+        },
+        components: {},
       });
       return;
     }

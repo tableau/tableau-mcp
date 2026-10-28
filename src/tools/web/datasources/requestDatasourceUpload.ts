@@ -41,7 +41,7 @@ export const getRequestDatasourceUploadTool = (
     },
     disabled: new Provider(
       async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
+        !(await getFeatureGate().isFeatureEnabled('datasource-authoring')) ||
         !(await isAuthoringAllowedForClient(server.clientId)),
     ),
     callback: async ({ fileName }, extra): Promise<CallToolResult> => {

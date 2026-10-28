@@ -6,6 +6,7 @@ import { TEMPLATE_ZIP_FILENAME } from '../../../scripts/buildTemplateZip.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import { _setSeaApiForTest } from '../../../utils/sea.js';
 import { createDataAppWorkspace, exportedForTesting } from './dataAppWorkspaceStore.js';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 
 const mocks = vi.hoisted(() => ({
   hideDiskZip: false,
@@ -63,6 +64,7 @@ async function create(): ReturnType<typeof createDataAppWorkspace> {
   return createDataAppWorkspace({
     datappName: 'Sales Demo',
     allowedOrigins: [],
+    wiring: buildDatasourceWiringInfo({ serverUrl: 'https://my-tableau-server.com', siteName: '' }),
   });
 }
 
