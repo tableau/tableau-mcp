@@ -88,7 +88,12 @@ function manifestIdentity(files: PackageFile[]): { packageId: string; version: s
     .join('\n');
   const urls = [...trexText.matchAll(/<url>([^<]*)<\/url>/g)].map((match) => match[1].trim());
   for (const url of urls) {
-    if (!url || url.includes('..') || url.startsWith('/') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
+    if (
+      !url ||
+      url.includes('..') ||
+      url.startsWith('/') ||
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)
+    ) {
       throw new Error('Extension content URL must be a relative package path.');
     }
   }
