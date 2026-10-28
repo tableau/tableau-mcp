@@ -144,11 +144,7 @@ export const getPublishWorkbookTool = (
       idempotentHint: false,
       openWorldHint: true,
     },
-    disabled: new Provider(
-      async () =>
-        !(await getFeatureGate().isFeatureEnabled('authoring-tools')) ||
-        !(await isAuthoringAllowedForClient(server.clientId)),
-    ),
+    disabled: new Provider(async () => !(await isAuthoringAllowedForClient(server.clientId))),
     callback: async (args, extra): Promise<CallToolResult> => {
       const {
         workbookUploadId,

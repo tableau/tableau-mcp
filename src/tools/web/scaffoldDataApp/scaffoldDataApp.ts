@@ -1,20 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { isAuthoringAllowedForClient } from '../../../features/authoringAccess.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { SiteRole } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { SCAFFOLD_DATA_APP_API_SCOPES } from '../../../server/oauth/scopes.js';
-import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
+import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
+import { isDataAppVersionSupported } from './dataAppVersion.js';
 import { createDataAppWorkspace, DataAppWorkspaceResult } from './dataAppWorkspaceStore.js';
-
-// Data apps are hosted extension packages, which Tableau can only host on 2026.3.0+.
-// Below this floor the scaffolded app can never be published, so the tool is not registered.
-const DATA_APP_MIN_PRODUCT_VERSION = '2026.3.0';
+import { buildDatasourceWiringInfo } from './datasourceWiring.js';
 
 const paramsSchema = {
   datappName: z
@@ -40,7 +39,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     minRequiredRole: SiteRole.EXPLORER_CAN_PUBLISH,
     description:
-      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into, and a manifest.json). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If blob storage is configured, the zip is served as a URL in `downloadUrl` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. The tool requires a successful allowed-origins lookup and includes `allowedOrigins` in every successful result — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
+      "Scaffolds a new Tableau data app workspace: a starter Tableau viz (worksheet) extension that queries a published datasource live via the Extensions API. Provide `datappName`; the tool derives the package id and display name and returns a workspace (a workbook plus an extension package containing index.html and a src/app.js starter you author the query and visualization into, and a manifest.json). Both output modes return the same static, un-substituted template zip plus a `postUnzip` plan describing the identity edits/renames to apply after unzipping; they differ only in transport. If blob storage is configured, the zip is served as a URL in `downloadUrl` (download it first). Otherwise a local `filePath` to the zip is returned (skip the download). In both cases the client unzips and applies `postUnzip` to finalize. The tool requires a successful allowed-origins lookup and includes `allowedOrigins` in every successful result — the site's external allowed-origins allow-list — so you can align the app's outbound fetch and CSP targets with what the Tableau host will permit. Every successful result also includes `wiring` — the `server` host, `site` contentUrl (empty for the Default site), `channel`, and `port` of the Tableau site this session is signed in to — to copy into each datasource descriptor when you wire a datasource in. This tool only scaffolds and names the app — it does not wire a datasource, author query logic, build, publish, or embed data.",
     paramsSchema,
     annotations: {
       title: 'Scaffold Data App',
@@ -51,11 +50,8 @@ export const getScaffoldDataAppTool = (
     },
     disabled: new Provider(async () => {
       const flagOn = await getFeatureGate().isFeatureEnabled('data-apps');
-      const versionAllowed = getResultForTableauVersion({
-        productVersion,
-        mappings: { [DATA_APP_MIN_PRODUCT_VERSION]: true, default: false },
-      });
-      return !(flagOn && versionAllowed);
+      const versionAllowed = isDataAppVersionSupported(productVersion);
+      return !(flagOn && versionAllowed && (await isAuthoringAllowedForClient(server.clientId)));
     }),
     callback: async ({ datappName }, extra): Promise<CallToolResult> => {
       return await scaffoldDataAppTool.logAndExecute<DataAppWorkspaceResult>({
@@ -71,9 +67,18 @@ export const getScaffoldDataAppTool = (
               restApi.packagesMethods.getAllowedOrigins({ siteId: restApi.siteId }),
           });
 
+          // Same resolution useRestApi uses, so the wiring targets the site the session is on.
+          const server = extra.config.server || extra.tableauAuthInfo?.server;
+          invariant(server, 'Tableau server could not be determined');
+          const wiring = buildDatasourceWiringInfo({
+            serverUrl: server,
+            siteName: extra.getSiteName(),
+          });
+
           return await createDataAppWorkspace({
             datappName,
             allowedOrigins,
+            wiring,
           });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),

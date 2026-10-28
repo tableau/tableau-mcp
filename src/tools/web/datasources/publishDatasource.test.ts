@@ -166,16 +166,16 @@ describe('publishDatasourceTool', () => {
     }
   });
 
-  it('is enabled when the authoring-tools flag is ON for a non-Slack client', async () => {
+  it('is enabled when the datasource-authoring flag is ON for a non-Slack client', async () => {
     const tool = getPublishDatasourceTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(false);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
   it('is disabled for Slack unless authoring-with-slack is enabled', async () => {
     mocks.mockIsFeatureEnabled.mockImplementation(
-      async (featureName: string) => featureName === 'authoring-tools',
+      async (featureName: string) => featureName === 'datasource-authoring',
     );
     const tool = getPublishDatasourceTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
@@ -184,7 +184,7 @@ describe('publishDatasourceTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('is enabled for Slack when both authoring flags are enabled', async () => {
+  it('is enabled for Slack when the datasource-authoring and authoring-with-slack flags are ON', async () => {
     const tool = getPublishDatasourceTool(
       new WebMcpServer({ clientId: 'https://mcp.slack.com/connector' }),
     );
@@ -192,13 +192,13 @@ describe('publishDatasourceTool', () => {
     expect(await Provider.from(tool.disabled)).toBe(false);
   });
 
-  it('is disabled when the authoring-tools feature flag is OFF even for a non-Slack client', async () => {
+  it('is disabled when the datasource-authoring feature flag is OFF even for a non-Slack client', async () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
 
     const tool = getPublishDatasourceTool(new WebMcpServer({ clientId: 'https://claude.ai/mcp' }));
 
     expect(await Provider.from(tool.disabled)).toBe(true);
-    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('authoring-tools');
+    expect(mocks.mockIsFeatureEnabled).toHaveBeenCalledWith('datasource-authoring');
   });
 
   it('uploads and publishes a staged TDS to the requested project and returns the datasource', async () => {

@@ -407,7 +407,7 @@ describe('server', () => {
         mocks.mockIsBlobStorageEnabled.mockReturnValue(blobStorage);
         vi.stubEnv('INCLUDE_TOOLS', publishingNames.join(','));
         mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(
-          (featureName: string) => featureName === 'authoring-tools',
+          (featureName: string) => featureName === 'datasource-authoring',
         );
         const server = getServer();
         await server.registerTools(auth);
