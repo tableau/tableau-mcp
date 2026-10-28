@@ -83,7 +83,14 @@ This tool requires no input. It always reports the configured connection details
               luid: extra.getSiteLuid() || undefined,
             },
             user: {
-              username: tableauAuthInfo?.username || undefined,
+              username:
+                (tableauAuthInfo?.type !== 'Passthrough' &&
+                (config.auth === 'direct-trust' || config.auth === 'uat')
+                  ? config.jwtUsername.replaceAll(
+                      '{OAUTH_USERNAME}',
+                      () => tableauAuthInfo?.username ?? '',
+                    )
+                  : tableauAuthInfo?.username) || undefined,
               luid: extra.getUserLuid() || undefined,
             },
             liveSessionVerified: false,
