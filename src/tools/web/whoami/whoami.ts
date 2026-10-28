@@ -75,7 +75,7 @@ This tool requires no input. It always reports the configured connection details
 
           // Context block — always available, never fails.
           const result: WhoamiResult = {
-            authMethod: config.auth,
+            authMethod: tableauAuthInfo?.type === 'Passthrough' ? 'passthrough' : config.auth,
             credentialType: tableauAuthInfo?.type,
             server: config.server || tableauAuthInfo?.server || '',
             site: {
