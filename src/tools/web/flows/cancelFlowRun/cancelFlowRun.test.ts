@@ -31,6 +31,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
 vi.mock('../../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     flowWriteToolsEnabled: true,
+    oauth: { jwePrivateKey: '', jwePrivateKeyPath: '' },
     productTelemetryEndpoint: 'https://test.com',
     server: 'https://test.tableau.com',
   })),
