@@ -30,9 +30,7 @@ const paramsSchema = {
   worksheetId: z
     .string()
     .min(1)
-    .describe(
-      'Stable External API worksheet id from list-worksheets. Written as <simple-id> so apply-worksheet replaces that sheet.',
-    ),
+    .describe('Stable worksheet id from list-worksheets; stamped as <simple-id> for apply.'),
   datasourceId: z.string().min(1).describe('External API datasource id.'),
 };
 
@@ -108,7 +106,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     title: 'Scaffold a Desktop data app',
     description:
-      'Prepares a worksheet data app package and a worksheetFile for an existing open worksheet. Place it with apply-worksheet, passing worksheetId as worksheetName (that argument accepts the stable External API id). The call replaces that sheet and does not create or rename one. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, and worksheetName.',
+      'Prepares a data app package and worksheetFile for open sheet. Apply with apply-worksheet; pass worksheetId as worksheetName (stable id). Replaces that sheet; does not create or rename. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, worksheetName.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
