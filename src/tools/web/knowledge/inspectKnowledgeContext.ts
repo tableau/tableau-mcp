@@ -180,34 +180,27 @@ change anything.
                     };
                   }
                   case 'suggestions': {
-                    // Older servers count the whole graph in summary.total whatever the
-                    // filters, so it is only trusted when none is set. A filtered request
-                    // asks for the whole list and counts it instead.
-                    const isFiltered =
-                      args.severity !== undefined || args.suggestionType !== undefined;
                     const report = await methods.getKnowledgeSuggestions({
                       graphId: args.graphId,
                       pdsId: args.pdsId,
                       severity: args.severity,
                       type: args.suggestionType,
-                      limit: isFiltered ? undefined : limit,
+                      limit,
                     });
-                    const found = isFiltered
-                      ? report.suggestions.length
-                      : Math.max(report.summary.total, report.suggestions.length);
+                    const suggestions = report.suggestions.slice(0, limit);
                     return {
                       action: args.action,
                       healthScore: report.health_score ?? null,
                       stats: report.stats,
                       metrics: report.metrics.slice(0, limit),
                       summary: report.summary,
-                      suggestions: report.suggestions.slice(0, limit),
+                      suggestions,
                       errors: report.errors.slice(0, limit),
                       resultInfo: listResultInfo(
                         'Suggestion',
-                        found,
+                        report.summary.total,
                         limit,
-                        report.suggestions.length,
+                        suggestions.length,
                       ),
                     };
                   }
@@ -228,9 +221,8 @@ function listResultInfo(
   label: string,
   original: number,
   limit: number,
-  available = original,
+  returned = Math.min(original, limit),
 ): Record<string, number | boolean> {
-  const returned = Math.min(available, limit);
   return {
     [`original${label}Count`]: original,
     [`returned${label}Count`]: returned,

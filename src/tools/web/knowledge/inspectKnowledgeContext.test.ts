@@ -277,28 +277,32 @@ describe('inspectKnowledgeContextTool', () => {
       expect(out.resultInfo).toMatchObject({ originalSuggestionCount: 10, truncated: false });
     });
 
-    it('counts the returned list instead of summary.total when a filter is set', async () => {
-      mocks.getKnowledgeSuggestions.mockResolvedValue(report(51, 500));
+    it('sends the limit when a filter is set', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(25, 40));
 
       const out = payload(await getResult({ action: 'suggestions', severity: 'medium' }));
 
       expect(mocks.getKnowledgeSuggestions).toHaveBeenCalledWith(
-        expect.objectContaining({ limit: undefined }),
+        expect.objectContaining({ limit: 25, severity: 'medium' }),
       );
+      expect(out.resultInfo).toMatchObject({
+        originalSuggestionCount: 40,
+        returnedSuggestionCount: 25,
+        truncated: true,
+      });
+    });
+
+    it('never returns more than the limit, even if the server does', async () => {
+      mocks.getKnowledgeSuggestions.mockResolvedValue(report(51, 51));
+
+      const out = payload(await getResult({ action: 'suggestions' }));
+
       expect(out.suggestions).toHaveLength(25);
       expect(out.resultInfo).toMatchObject({
         originalSuggestionCount: 51,
         returnedSuggestionCount: 25,
         truncated: true,
       });
-    });
-
-    it('does not report truncated for a filtered list that fits, whatever summary.total says', async () => {
-      mocks.getKnowledgeSuggestions.mockResolvedValue(report(10, 500));
-
-      const out = payload(await getResult({ action: 'suggestions', suggestionType: 'coverage' }));
-
-      expect(out.resultInfo).toMatchObject({ originalSuggestionCount: 10, truncated: false });
     });
   });
 
