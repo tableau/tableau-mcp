@@ -18,8 +18,9 @@ import { RunFlowJob } from '../../../../sdks/tableau/types/job.js';
 import { SiteRole } from '../../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { Provider } from '../../../../utils/provider.js';
-import { EvidenceContext, RegistryEvidence } from '../../_lib/evidence.js';
+import { EvidenceContext } from '../../_lib/evidence.js';
 import { renderPreviewNotRunMessage, renderTokenConfirmNextStep } from '../../_lib/hitlText.js';
+import { SignedTokenEvidence } from '../../_lib/signedTokenEvidence.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
 import { mapFlowWriteError } from '../flowWriteErrors.js';
@@ -138,7 +139,7 @@ export const getRunFlowTool = (server: WebMcpServer): WebTool<typeof paramsSchem
               ...extra,
               jwtScopes: runFlowTool.requiredApiScopes,
               callback: async (restApi) => {
-                const evidence = new RegistryEvidence();
+                const evidence = new SignedTokenEvidence();
                 const target = { id: flowId };
                 const evidenceContext: EvidenceContext = {
                   restApi,

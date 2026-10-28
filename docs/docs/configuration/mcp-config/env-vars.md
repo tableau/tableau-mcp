@@ -659,6 +659,10 @@ the preview.
 - Minimum: `1`
 - Maximum: `1440` (24 hours)
 
+The flow tools (`run-flow`, `run-flow-task`, `cancel-flow-run`) sign their tokens with a key derived from
+`OAUTH_JWE_PRIVATE_KEY`, so preview and confirm can land on different replicas as long as every
+replica has the same key.
+
 Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
 time between preview and confirmation.
 
