@@ -529,12 +529,11 @@ well-formed GUID.
 ## Product telemetry fields
 
 Every event also carries `type`, `host_timestamp` (UTC time of the call), `service_name`
-(`tableau-mcp`), `pod`, `podname` and `is_hyperforce`.
+(`tableau-mcp`), `podname` and `is_hyperforce`.
 
 | Field                                          | Web                                                                                                                                         | Desktop                                                                               |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `tool_name`, `request_id`                      | yes                                                                                                                                         | yes                                                                                   |
-| `host_name`                                    | the machine's hostname                                                                                                                      | not sent                                                                              |
 | `session_id`                                   | MCP session ID, empty on stdio                                                                                                              | `TABLEAU_DESKTOP_SESSION_LUID`, empty if unset                                        |
 | `site_luid`, `user_luid`                       | from the signed-in session                                                                                                                  | `TABLEAU_SITE_LUID`, `TABLEAU_USER_LUID`                                              |
 | `chat_id`                                      | not sent                                                                                                                                    | `TABLEAU_CHAT_ID`                                                                     |
@@ -546,8 +545,7 @@ Every event also carries `type`, `host_timestamp` (UTC time of the call), `servi
 
 The web `record-event` tool (used only by MCP apps, behind the `mcp-apps` feature flag) also sends a
 separate `tableau_mcp_event` with `event_type`, `message` (text supplied by the calling app, cut to
-1024 characters), `site_luid`, `user_luid` and `host_name` (the machine's hostname). Calling it also
-sends the usual `tool_call` event.
+1024 characters), `site_luid` and `user_luid`. Calling it also sends the usual `tool_call` event.
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
