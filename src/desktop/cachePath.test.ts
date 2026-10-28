@@ -3,6 +3,7 @@ import {
   constants,
   fstatSync,
   ftruncateSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -122,6 +123,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(candidate)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'symlink',
     });
   });
 
@@ -135,6 +137,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(join(directory, 'linked', 'datasource.xml'))).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'outside-cache',
     });
   });
 
@@ -159,6 +162,7 @@ describe('readContainedCacheTextFile', () => {
       expect(readContainedCacheTextFile(candidate, operations)).toMatchObject({
         ok: false,
         issue: 'unsafe-file',
+        reason: linkKind === 'final' ? 'symlink' : 'outside-cache',
       });
       expect(read).not.toHaveBeenCalled();
     },
@@ -179,6 +183,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(file, operations)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'changed-during-check',
     });
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
@@ -206,6 +211,7 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(file, operations)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'changed-during-check',
     });
     expect(read).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
@@ -260,6 +266,24 @@ describe('readContainedCacheTextFile', () => {
     expect(readContainedCacheTextFile(nonFile)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'not-regular-file',
+    });
+  });
+
+  it('reports hard-linked inside the cache but outside-cache for a hard link behind a directory symlink', () => {
+    const directory = cacheDirectory('hard-link');
+    const outside = outsideDirectory('hard-link');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+    linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));
+    writeFileSync(join(outside, 'a.xml'), '<a/>');
+    linkSync(join(outside, 'a.xml'), join(outside, 'b.xml'));
+    symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
+
+    expect(readContainedCacheTextFile(join(directory, 'b.xml'))).toMatchObject({
+      reason: 'hard-linked',
+    });
+    expect(readContainedCacheTextFile(join(directory, 'linked', 'b.xml'))).toMatchObject({
+      reason: 'outside-cache',
     });
   });
 });
@@ -380,6 +404,7 @@ describe('writeContainedCacheTextFile', () => {
     expect(writeContainedCacheTextFile(finalLink, '<escaped/>')).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'symlink',
     });
 
     const linkedDirectory = join(directory, 'linked');
@@ -389,6 +414,7 @@ describe('writeContainedCacheTextFile', () => {
     ).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'outside-cache',
     });
     expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
   });
@@ -410,6 +436,7 @@ describe('writeContainedCacheTextFile', () => {
     expect(writeContainedCacheTextFile(file, '<after/>', operations)).toMatchObject({
       ok: false,
       issue: 'unsafe-file',
+      reason: 'changed-during-check',
     });
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
@@ -433,7 +460,7 @@ describe('writeContainedCacheTextFile', () => {
         '<escaped/>',
         defaultOperations({ noFollowFlag: 0, truncate, write }),
       ),
-    ).toMatchObject({ ok: false, issue: 'unsafe-file' });
+    ).toMatchObject({ ok: false, issue: 'unsafe-file', reason: 'outside-cache' });
     expect(truncate).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
     expect(readFileSync(external, 'utf-8')).toBe('<outside/>');
@@ -461,6 +488,36 @@ describe('writeContainedCacheTextFile', () => {
     expect(replaced).toBe(true);
     expect(readFileSync(file, 'utf-8')).toBe('<replacement/>');
     expect(readFileSync(openedFile, 'utf-8')).toBe('<after/>');
+  });
+
+  it('reports hard-linked, or outside-cache behind a directory symlink, without writing', () => {
+    const directory = cacheDirectory('write-hard-link');
+    const outside = outsideDirectory('write-hard-link');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+    linkSync(join(directory, 'a.xml'), join(directory, 'b.xml'));
+    writeFileSync(join(outside, 'a.xml'), '<a/>');
+    linkSync(join(outside, 'a.xml'), join(outside, 'b.xml'));
+    symlinkSync(outside, join(directory, 'linked'), directoryLinkType());
+
+    expect(writeContainedCacheTextFile(join(directory, 'b.xml'), '<x/>')).toMatchObject({
+      reason: 'hard-linked',
+    });
+    expect(writeContainedCacheTextFile(join(directory, 'linked', 'b.xml'), '<x/>')).toMatchObject({
+      reason: 'outside-cache',
+    });
+    for (const file of [join(directory, 'a.xml'), join(outside, 'a.xml')]) {
+      expect(readFileSync(file, 'utf-8')).toBe('<a/>');
+    }
+  });
+
+  it('reports not-regular-file when a path component is a file', () => {
+    const directory = cacheDirectory('enotdir');
+    writeFileSync(join(directory, 'a.xml'), '<a/>');
+
+    expect(writeContainedCacheTextFile(join(directory, 'a.xml', 'b.xml'), '<x/>')).toMatchObject({
+      issue: 'unsafe-file',
+      reason: 'not-regular-file',
+    });
   });
 });
 

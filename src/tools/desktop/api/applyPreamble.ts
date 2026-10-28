@@ -4,6 +4,7 @@ import {
   CONTAINED_CACHE_READ_ISSUE,
   getCacheDir,
   readContainedCacheTextFile,
+  unsafeFileReasonLine,
 } from '../../../desktop/cachePath.js';
 import type { ExecuteCommandWarning } from '../../../desktop/externalApi/executorTypes.js';
 import { containsRedactedCredentialSentinel } from '../../../desktop/limits/datasourceCredentialRedaction.js';
@@ -74,7 +75,7 @@ export function runApplyPreamble({
       case CONTAINED_CACHE_READ_ISSUE.unsafeFile:
         return new ArgsValidationError(
           `Security error: the ${kind} file must be a regular file contained in the Desktop cache directory.\n\n` +
-            `Cache directory: ${getCacheDir()}\nRequested: ${file}`,
+            `Cache directory: ${getCacheDir()}\nRequested: ${file}${unsafeFileReasonLine(readResult)}`,
         ).toErr();
       case CONTAINED_CACHE_READ_ISSUE.missing: {
         const NotFoundError = kind === 'worksheet' ? WorksheetNotFoundError : WorkbookNotFoundError;
