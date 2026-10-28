@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -55,5 +55,59 @@ describe('exportDataAppPackage', () => {
       exportsDir: join(root, 'exports'),
     });
     expect(result.isErr()).toBe(true);
+  });
+
+  async function packageWithTrexUrl(url: string): Promise<string> {
+    const template = (await resolveTemplatePackageDir())!;
+    const source = join(root, 'pkg');
+    await copyPackageTree(template, source);
+    await replaceTokensInTree(source, (_path, text) =>
+      text
+        .replaceAll('TODO-MANIFEST-ID', 'com.example.app')
+        .replaceAll('TODO-MANIFEST-VERSION', '1.2.3'),
+    );
+    const trexDir = join(source, 'extensions');
+    const entries = await readdir(trexDir);
+    const trexName = entries.find((name) => name.endsWith('.trex'));
+    expect(trexName).toBeTruthy();
+    const trexPath = join(trexDir, trexName!);
+    const trex = await readFile(trexPath, 'utf8');
+    await writeFile(trexPath, trex.replace(/<url>[^<]*<\/url>/, `<url>${url}</url>`));
+    return source;
+  }
+
+  it('rejects a file: content URL', async () => {
+    const source = await packageWithTrexUrl('file:///tmp/index.html');
+    const result = await exportDataAppPackage({
+      packageDir: source,
+      exportsDir: join(root, 'exports'),
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('relative package path');
+  });
+
+  it('rejects a later absolute URL when an earlier url is relative', async () => {
+    const source = await packageWithTrexUrl('index.html');
+    const trexDir = join(source, 'extensions');
+    const entries = await readdir(trexDir);
+    const trexName = entries.find((name) => name.endsWith('.trex'));
+    expect(trexName).toBeTruthy();
+    const trexPath = join(trexDir, trexName!);
+    const trex = await readFile(trexPath, 'utf8');
+    await writeFile(
+      trexPath,
+      trex.replace(
+        /<url>[^<]*<\/url>/,
+        '<url>index.html</url><url>https://evil.example/x</url>',
+      ),
+    );
+    const result = await exportDataAppPackage({
+      packageDir: source,
+      exportsDir: join(root, 'exports'),
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) return;
+    expect(result.error.message).toContain('relative package path');
   });
 });

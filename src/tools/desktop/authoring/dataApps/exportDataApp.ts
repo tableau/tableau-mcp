@@ -39,6 +39,13 @@ export const selectExportExtension = (
         statusCode: 400,
       });
     }
+    if (matches[0].sheet.id !== sheet) {
+      return new McpToolError({
+        type: 'data-app-sheet-not-selected',
+        message: `instanceId "${instanceId}" belongs to sheet "${matches[0].sheet.id}", not "${sheet}".`,
+        statusCode: 400,
+      });
+    }
     return matches[0];
   }
 
@@ -101,7 +108,7 @@ export const getExportDataAppTool = (
           if (listed.isErr()) {
             return listed;
           }
-          const selected = selectExportExtension(listed.value.extensions ?? [], sheet, instanceId);
+          const selected = selectExportExtension(listed.value.extensions, sheet, instanceId);
           if (selected instanceof McpToolError) {
             return selected.toErr();
           }

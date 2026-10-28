@@ -27,6 +27,12 @@ import { DesktopTool } from '../../tool.js';
 const paramsSchema = {
   session: sessionParam(),
   datappName: z.string().min(1).max(100).describe('Display name for the new data app.'),
+  worksheetId: z
+    .string()
+    .min(1)
+    .describe(
+      'Stable External API worksheet id from list-worksheets. Written as <simple-id> so apply-worksheet replaces that sheet.',
+    ),
   datasourceId: z.string().min(1).describe('External API datasource id.'),
 };
 
@@ -102,7 +108,7 @@ export const getScaffoldDataAppTool = (
     name: 'scaffold-data-app',
     title: 'Scaffold a Desktop data app',
     description:
-      'Prepares a worksheet data app and does not add a sheet. Returns packageId, sourceDir, worksheetFile, datasourceId, and worksheetName.',
+      'Prepares a worksheet data app package and a worksheetFile for an existing open worksheet. Place it with apply-worksheet, passing worksheetId as worksheetName (that argument accepts the stable External API id). The call replaces that sheet and does not create or rename one. Returns packageId, sourceDir, worksheetFile, datasourceId, worksheetId, and worksheetName.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -110,10 +116,13 @@ export const getScaffoldDataAppTool = (
       idempotentHint: false,
       openWorldHint: false,
     },
-    callback: async ({ session, datappName, datasourceId }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { session, datappName, worksheetId, datasourceId },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute<PreparedDesktopDataApp>({
         extra,
-        args: { session, datappName, datasourceId },
+        args: { session, datappName, worksheetId, datasourceId },
         callback: async () => {
           const name = datappNameSchema.safeParse(datappName);
           if (!name.success) {
@@ -162,6 +171,7 @@ export const getScaffoldDataAppTool = (
             worksheetFile,
             templatePackageDir,
             datappName,
+            worksheetId,
             datasourceId,
             datasources: listed.value.datasources ?? [],
           });
