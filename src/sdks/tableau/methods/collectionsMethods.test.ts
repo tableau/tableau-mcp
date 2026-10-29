@@ -55,6 +55,20 @@ function setup(
 }
 
 describe('CollectionsMethods guarded transport', () => {
+  it('accepts null owner display metadata returned by Cloud collection creation', async () => {
+    const response = { ...fixtures.create, ownerName: null, ownerAlias: null, ownerDomain: null };
+    const { methods, requests } = setup(response);
+    expect(await methods.createCollection({ name: 'Synthetic collection' })).toEqual(response);
+    expect(requests).toHaveLength(1);
+  });
+
+  it.each(['siteId', 'userId'] as const)('still rejects null identity %s', async (field) => {
+    const { methods } = setup({ ...fixtures.create, [field]: null });
+    await expect(methods.createCollection({ name: 'Synthetic collection' })).rejects.toThrow(
+      'response could not be validated safely',
+    );
+  });
+
   it('uses unversioned collections and exact literal TAG query keys', async () => {
     const { methods, requests } = setup(fixtures.page);
     expect(

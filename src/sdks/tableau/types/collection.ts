@@ -5,6 +5,7 @@ import { luidSchema } from '../../routeSafety/ids.js';
 // The TAG OpenAPI marks response-model properties optional. Keep unknown fields for forward
 // compatibility; operations that need an identity or a page perform their own checks.
 const optionalString = z.string().optional();
+const optionalNullableString = z.string().nullable().optional();
 const optionalInteger = z.number().int().optional();
 export const collectionErrorSchema = z
   .object({
@@ -21,12 +22,12 @@ export const collectionErrorSchema = z
 export const collectionSchema = z
   .object({
     createdTime: optionalString,
-    description: z.string().nullable().optional(),
+    description: optionalNullableString,
     luid: optionalString,
     name: optionalString,
-    ownerAlias: optionalString,
-    ownerDomain: optionalString,
-    ownerName: optionalString,
+    ownerAlias: optionalNullableString,
+    ownerDomain: optionalNullableString,
+    ownerName: optionalNullableString,
     siteId: optionalString,
     updatedTime: optionalString,
     userId: optionalString,
