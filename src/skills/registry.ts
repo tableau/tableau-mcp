@@ -6,6 +6,8 @@ import { lookup } from 'mime-types';
 import { fromError } from 'zod-validation-error/v3';
 
 import { log } from '../logging/logger.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { decodeCursor, encodeCursor } from './cursor.js';
 import {
   type SkillEntry as SkillData,
   SkillFrontmatterSchema,
@@ -24,13 +26,16 @@ export type SkillFile = {
  * `getSkillRegistry`). The accessor methods close over the immutable, pre-sorted data.
  */
 export type SkillRegistry = {
-  list: () => { skills: SkillData[] };
+  list: (cursor?: string) => { skills: SkillData[]; nextCursor?: string };
   get: (uri: string) => SkillData | undefined;
   files: () => SkillFile[];
 };
 
 const SKILL_MANIFEST = 'SKILL.md';
 const LOGGER = 'skills';
+
+/** Maximum number of whole skill entries returned by one `skills/list` page. */
+export const MAX_SKILLS_PAGE_SIZE = 50;
 
 // Use mime-types to find the file type for a file path; `lookup` returns `false`
 // for unknown/extensionless files, so fall back to a binary type.
@@ -108,10 +113,80 @@ function byUriAsc(a: { uri: string }, b: { uri: string }): number {
 function makeRegistry(sortedEntries: SkillData[], fileEntries: SkillFile[]): SkillRegistry {
   const byUri = new Map<string, SkillData>(sortedEntries.map((e) => [e.uri, e]));
   return {
-    list: () => ({ skills: sortedEntries }),
+    list: (cursor) => {
+      const offset = cursor === undefined ? 0 : decodeCursor(cursor, sortedEntries.length);
+      const end = offset + MAX_SKILLS_PAGE_SIZE;
+      const skills = sortedEntries.slice(offset, end);
+      return end < sortedEntries.length ? { skills, nextCursor: encodeCursor(end) } : { skills };
+    },
     get: (uri: string) => byUri.get(uri),
     files: () => fileEntries,
   };
+}
+
+// Node filesystem error codes that mean one skill is unreadable, not that the code is broken.
+const SKIPPABLE_FS_ERROR_CODES = new Set([
+  'EACCES',
+  'EPERM',
+  'ENOENT',
+  'ENOTDIR',
+  'EISDIR',
+  'ELOOP',
+  'ENAMETOOLONG',
+  'EMFILE',
+  'ENFILE',
+  'EIO',
+]);
+
+function isSkippableFsError(error: unknown): boolean {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return typeof code === 'string' && SKIPPABLE_FS_ERROR_CODES.has(code);
+}
+
+/**
+ * Enumerate and read every file of one skill. A filesystem failure skips the whole skill
+ * (returns undefined) so a half-read entry or orphan file registration is never published.
+ * Non-filesystem errors are rethrown.
+ */
+function collectSkillFiles(
+  name: string,
+  skillPath: string,
+): { resources: SkillResource[]; files: SkillFile[] } | undefined {
+  const resources: SkillResource[] = [];
+  const files: SkillFile[] = [];
+
+  let absPaths: string[];
+  try {
+    absPaths = walkFiles(skillPath).sort();
+  } catch (error) {
+    return skipOrThrow(name, error);
+  }
+
+  for (const absPath of absPaths) {
+    let bytes: Buffer;
+    try {
+      bytes = readFileSync(absPath);
+    } catch (error) {
+      return skipOrThrow(name, error);
+    }
+    const relPath = relative(skillPath, absPath).split(sep).join('/');
+    const uri = `skill://${name}/${relPath}`;
+    resources.push({ uri, digest: sha256(bytes), size: bytes.byteLength });
+    files.push({ uri, path: absPath, mimeType: mimeTypeFor(absPath) });
+  }
+  return { resources, files };
+}
+
+function skipOrThrow(name: string, error: unknown): undefined {
+  if (!isSkippableFsError(error)) {
+    throw error;
+  }
+  log({
+    level: 'warning',
+    message: `Skill "${name}" could not be read; skipping. ${getExceptionMessage(error)}`,
+    logger: LOGGER,
+  });
+  return undefined;
 }
 
 /**
@@ -172,20 +247,17 @@ export function buildSkillRegistry(skillsDir: string = getSkillsDir()): SkillReg
       continue;
     }
 
-    const skillResources: SkillResource[] = [];
-    for (const absPath of walkFiles(skillPath).sort()) {
-      const relPath = relative(skillPath, absPath).split(sep).join('/');
-      const uri = `skill://${name}/${relPath}`;
-      const bytes = readFileSync(absPath);
-      skillResources.push({ uri, digest: sha256(bytes), size: bytes.byteLength });
-      files.push({ uri, path: absPath, mimeType: mimeTypeFor(absPath) });
+    const collected = collectSkillFiles(name, skillPath);
+    if (!collected) {
+      continue;
     }
 
-    // Add information from a single skill into the list of skillData
+    // Publish a skill's resources and file registrations together, only once all reads succeeded
+    files.push(...collected.files);
     skillData.push({
       uri: `skill://${name}/${SKILL_MANIFEST}`,
       frontmatter: frontmatter.data,
-      resources: skillResources,
+      resources: collected.resources,
     });
   }
 
