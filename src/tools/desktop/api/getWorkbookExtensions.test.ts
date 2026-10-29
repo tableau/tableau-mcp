@@ -7,10 +7,10 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getWorkbookExtensionsTool } from './getWorkbookExtensions.js';
 
 describe('getWorkbookExtensionsTool', () => {
-  it('gates discovery at External API 0.2.26', () => {
+  it('gates discovery at External API 0.2.27', () => {
     const tool = getWorkbookExtensionsTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-workbook-extensions');
-    expect(tool.minApiVersion).toBe('0.2.26');
+    expect(tool.minApiVersion).toBe('0.2.27');
     expect(tool.description).toContain('upgrade Desktop');
   });
 

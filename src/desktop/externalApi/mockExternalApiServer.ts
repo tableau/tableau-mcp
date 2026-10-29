@@ -1450,7 +1450,7 @@ export async function startMockExternalApiServer(
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',
-        info: { title: 'Tableau External Client API', version: '0.2.26' },
+        info: { title: 'Tableau External Client API', version: '0.2.27' },
         paths: {
           [EXTERNAL_API_ROUTES.health]: {
             get: { operationId: 'getHealth', summary: 'Liveness probe' },
