@@ -22,6 +22,9 @@ import type { WebToolName } from '../../tools/web/toolName.js';
  * when authenticating with the MCP server.
  */
 export type McpScope =
+  | 'tableau:mcp:collections:read'
+  | 'tableau:mcp:collections:create'
+  | 'tableau:mcp:collections:update'
   | 'tableau:mcp:content:read'
   | 'tableau:mcp:datasource:read'
   | 'tableau:mcp:datasource:create'
@@ -45,6 +48,9 @@ export type McpScope =
   | 'tableau:mcp:knowledge:write';
 
 export type TableauApiScope =
+  | 'tableau:collections:read'
+  | 'tableau:collections:create'
+  | 'tableau:collections:update'
   | 'tableau:content:read'
   | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
@@ -93,6 +99,9 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
+  'tableau:mcp:collections:read',
+  'tableau:mcp:collections:create',
+  'tableau:mcp:collections:update',
   'tableau:mcp:datasource:read',
   'tableau:mcp:datasource:create',
   'tableau:mcp:tasks:read',
@@ -225,6 +234,36 @@ const toolScopeMap: Record<
     conditionApiScopes?: ReadonlySet<TableauApiScope>;
   }
 > = {
+  'list-collections': {
+    mcp: ['tableau:mcp:collections:read'],
+    api: new Set(['tableau:collections:read', 'tableau:mcp_site_settings:read']),
+  },
+  'list-collection-items': {
+    mcp: ['tableau:mcp:collections:read'],
+    api: new Set(['tableau:collections:read', 'tableau:mcp_site_settings:read']),
+  },
+  'create-collection': {
+    mcp: ['tableau:mcp:collections:create'],
+    api: new Set(['tableau:collections:create']),
+  },
+  // Static OAuth surface includes owner read plus all supported member-checker scopes.
+  // Runtime JWTs mint the membership pair; resource checks mint their own minimum scopes.
+  'add-collection-items': {
+    mcp: ['tableau:mcp:collections:update'],
+    api: new Set([
+      'tableau:collections:read',
+      'tableau:collections:update',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  'remove-collection-items': {
+    mcp: ['tableau:mcp:collections:update'],
+    api: new Set([
+      'tableau:collections:read',
+      'tableau:collections:update',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),

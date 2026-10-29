@@ -1,6 +1,11 @@
 import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
+import { getAddCollectionItemsTool } from './collections/addCollectionItems.js';
+import { getCreateCollectionTool } from './collections/createCollection.js';
+import { getListCollectionItemsTool } from './collections/listCollectionItems.js';
+import { getListCollectionsTool } from './collections/listCollections.js';
+import { getRemoveCollectionItemsTool } from './collections/removeCollectionItems.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getPublishDatasourceTool } from './datasources/publishDatasource.js';
@@ -55,6 +60,11 @@ import { getPublishWorkbookTool } from './workbooks/publishWorkbook.js';
 import { getRequestWorkbookUploadTool } from './workbooks/requestWorkbookUpload.js';
 
 export const webToolFactories = [
+  getListCollectionsTool,
+  getCreateCollectionTool,
+  getListCollectionItemsTool,
+  getAddCollectionItemsTool,
+  getRemoveCollectionItemsTool,
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getRecordEventTool,

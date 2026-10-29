@@ -15,6 +15,7 @@ import {
   AuthenticatedAuthenticationMethods,
   AuthenticationMethods,
 } from './methods/authenticationMethods.js';
+import CollectionsMethods from './methods/collectionsMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import FlowDocumentMethods from './methods/flowDocumentMethods.js';
@@ -155,6 +156,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, authenticatedServerMethods.interceptors);
     return authenticatedServerMethods;
+  }
+
+  get collectionsMethods(): CollectionsMethods {
+    const collectionsMethods = new CollectionsMethods(RestApi.baseUrlWithoutVersion, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrlWithoutVersion, collectionsMethods.interceptors);
+    return collectionsMethods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {
