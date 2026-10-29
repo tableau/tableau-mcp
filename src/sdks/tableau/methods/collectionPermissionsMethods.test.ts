@@ -7,8 +7,12 @@ const collectionId = fixtures.create.luid;
 const siteId = fixtures.create.siteId;
 const ownerId = fixtures.create.userId;
 const sentinel = 'PRIVATE_PERMISSION_SENTINEL';
-function setup(response: unknown, headers: Record<string, string> = {}) {
-  const requests: Array<{ url?: string; method?: string; auth: unknown }> = [];
+type RecordedRequest = { url?: string; method?: string; auth: unknown };
+function setup(
+  response: unknown,
+  headers: Record<string, string> = {},
+): { methods: CollectionPermissionsMethods; requests: RecordedRequest[] } {
+  const requests: RecordedRequest[] = [];
   const config: AxiosRequestConfig = {
     adapter: async (config) => {
       requests.push({
